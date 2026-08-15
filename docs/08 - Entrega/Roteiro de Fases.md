@@ -44,7 +44,7 @@ Motor de collections completo: patterns bidirecionais, frontmatter, hooks, watch
 Daemon chi na :5326 com `/api`, `/mcp`, `/ws`, `/v/*`; gateway com máquina de estados e supervisão.
 
 **Notas:** [[HTTP chi]] · [[Realtime WebSocket]] · [[Gateway (Go)]] · [[Auth (Go)]] · [[ADR-0009 Bind em loopback por padrão]] · [[ADR-0010 Segredos com permissão restrita]]
-**Entrega:** `aos gateway start|stop|status` operando o daemon.
+**Entrega:** `aos gateway start|stop|status` operando o daemon. ✅ `TestTheDeliveryOfPhaseFour`, com os dois binários compilados conversando por socket. HTTP é a quinta superfície da suíte de paridade. `Auth (Go)` fica `em-construcao`: o serviço existe e os comandos que o expõem vêm com a árvore completa da CLI.
 
 ### Fase 5 — Runtime do agente
 `agentloop`, `prompt`, `sandbox`, `toolexec`, providers, hooks, aprovação.

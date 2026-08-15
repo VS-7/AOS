@@ -2,7 +2,7 @@
 tags: [transporte, http, chi, api]
 aliases: [HTTP, API HTTP Go, chi]
 fase: 4
-status: especificado
+status: pronto
 origem: "[[API HTTP]]"
 ---
 
@@ -115,9 +115,43 @@ func recoverer(next http.Handler) http.Handler
 - Streaming não tem o corpo consumido pelo logger
 - Golden do envelope de sucesso e de erro
 
+> [!decision] `command.Mount` virou `mountCommands`, dentro do transporte
+> O esboço desta nota põe o montador em `internal/core/command`. Isso faria a Command Layer conhecer o chi, e a razão de ela existir é não conhecer transporte nenhum. O laço sobre o registry mora aqui.
+
+> [!decision] Tudo é POST, inclusive leitura
+> Uma leitura aqui carrega o mesmo payload JSON que carrega em toda outra superfície, e um GET com corpo é algo que proxy tem direito de descartar.
+
+> [!decision] `_reasoning` não é exigido em HTTP
+> É obrigação de superfície de tool: existe para o modelo dizer por que está chamando, e vale no MCP e no registry do agente. HTTP é o que o terminal e o desktop falam. Travado por `TestReasoningIsNotRequiredOverHTTP`.
+
+> [!decision] O playground continua fechado mesmo com `security.enabled: false`
+> Desligar a autenticação por conveniência num daemon de loopback não é decisão de publicar a superfície inteira. `TestTheDocsRouteStaysGuardedEvenWithSecurityOff`.
+
 ## Critério de pronto
 
-- [ ] Daemon servindo `/api` gerado do registry
-- [ ] Middlewares de identidade, log, recuperação e auth
-- [ ] Playground protegido
-- [ ] Nenhuma credencial aceita por query string
+- [x] Daemon servindo `/api` gerado do registry — `TestEveryCommandOfTheRegistryHasARoute`
+- [x] Middlewares de identidade, log, recuperação e auth
+- [x] Playground protegido — `TestTheDocsRouteIsAuthenticatedAndOptional`
+- [x] Nenhuma credencial aceita por query string — `TestATokenInTheQueryStringIsIgnored`
+
+## Saída dos testes — Fase 4
+
+```
+$ go test -race ./internal/transport/httpapi/
+ok  	github.com/OWNER/aos/internal/transport/httpapi
+```
+
+| Caso da nota | Teste |
+|---|---|
+| Toda rota do registry responde | `TestEveryCommandOfTheRegistryHasARoute` |
+| `X-Request-ID` em toda resposta, inclusive erro | `TestTheRequestIdIsOnEveryResponse` |
+| Panic em handler → 500, servidor continua | `TestAPanicDegradesOneRequest` |
+| Token em query ignorado; em header, aceito | `TestATokenInTheQueryStringIsIgnored`, `TestTheTokenIsAcceptedFromHeadersAndCookie` |
+| `/api/docs` sem token → 401; desabilitado → 404 | `TestTheDocsRouteIsAuthenticatedAndOptional` |
+| CORS: origem não listada é rejeitada | `TestCorsAllowsOnlyTheDeclaredOrigins`, `TestNoOriginIsAllowedByDefault` |
+| Streaming não tem o corpo consumido pelo logger | O logger só observa status e bytes; nunca lê o corpo |
+| Alias deprecado responde no caminho antigo | `TestARenamedCommandKeepsAnsweringAtItsOldPath` |
+
+**Não verificado:** golden do envelope. As asserções hoje são sobre forma e status; o golden entra junto com o do CLI, quando houver saída estável que o justifique.
+
+**Pendente:** `/mcp` sobre HTTP tem ponto de montagem (`Config.MCP`) e nada o preenche — stdio é o único transporte MCP hoje. `/v/*` é da **Fase 8**.

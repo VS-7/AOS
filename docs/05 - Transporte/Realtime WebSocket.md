@@ -2,7 +2,7 @@
 tags: [transporte, websocket, realtime]
 aliases: [Realtime, WebSocket Go]
 fase: 4
-status: especificado
+status: pronto
 origem: "[[Realtime]]"
 ---
 
@@ -117,9 +117,31 @@ O cliente continua sem enviar comandos pelo socket. A **única** mensagem de cli
 - `approval.request` chega ao desktop e a decisão volta por HTTP
 - Nenhuma mensagem de cliente além de `pong` é processada
 
+> [!decision] Workspace sem membros autoriza; workspace inexistente, não
+> Toda instalação local é de um usuário só até existir uma segunda conta, e recusar essas seria impedir a pessoa de abrir um socket na própria máquina. O workspace precisa existir de qualquer jeito — sem essa checagem seria o comportamento do original com passos extras, porque um id desconhecido autorizaria por não ter lista de membros contra a qual falhar.
+
 ## Critério de pronto
 
-- [ ] Autorização no upgrade verificada por teste
-- [ ] Seis tipos de evento entregues
-- [ ] Cliente lento não afeta o publicador
-- [ ] Socket permanece sem superfície de comando
+- [x] Autorização no upgrade verificada por teste — `TestACookieForAnotherWorkspaceIsRefused`, e sobre o daemon real em `TestTheSocketIsAuthorisedAgainstTheWorkspace`
+- [x] Seis tipos de evento declarados e entregues pelo hub
+- [x] Cliente lento não afeta o publicador — `TestASlowSubscriberIsDroppedWithoutBlockingThePublisher`
+- [x] Socket permanece sem superfície de comando — `TestNothingTheClientSendsIsActedOn`
+
+## Saída dos testes — Fase 4
+
+```
+$ go test -race ./internal/transport/realtime/
+ok  	github.com/OWNER/aos/internal/transport/realtime
+```
+
+| Caso da nota | Teste |
+|---|---|
+| Upgrade sem autorização → 403 | `TestACookieForAnotherWorkspaceIsRefused` |
+| Cookie forjado para outro workspace não recebe eventos | idem, e o subscriber não é criado |
+| Origem não listada é rejeitada | `TestAnUnlistedOriginIsRefused` |
+| Cliente lento descartado sem bloquear o publicador | `TestASlowSubscriberIsDroppedWithoutBlockingThePublisher` |
+| Reconexão sem replay | O hub não guarda histórico; um assinante novo começa do agora |
+| Streaming entrega chunks em ordem | `TestEventsArriveInOrder` |
+| Nenhuma mensagem de cliente é processada | `TestNothingTheClientSendsIsActedOn` |
+
+**Não verificado:** `approval.request` chegando ao desktop e a decisão voltando por HTTP — o canal de aprovação é da **Fase 5** e o desktop da **Fase 7**. O tipo de evento existe e é entregue; quem o publica ainda não.

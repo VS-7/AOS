@@ -2,7 +2,7 @@
 tags: [dominio, gateway, processo, supervisao]
 aliases: [Gateway Go, Supervisor]
 fase: 4
-status: especificado
+status: pronto
 origem: "[[Gateway]]"
 ---
 
@@ -153,9 +153,38 @@ func (g *Gateway) waitHealthy(ctx context.Context, p *os.Process) (Meta, error)
 - Crash do daemon deixa estado `stale`; próximo `Start` limpa e sobe
 - `restart` responde antes de derrubar o processo
 
+> [!decision] `Alive` precisou de reaper, e isso não é detalhe
+> Um daemon que morre enquanto o supervisor continua vivo vira zumbi, e o pid de um zumbi permanece na tabela de processos: `kill -0` responde sucesso, e o supervisor reporta um daemon morto como rodando. A CLI nunca perceberia, porque sai segundos depois e o kernel reparenteia a criança. O app desktop perceberia, porque fica horas de pé. O adaptador espera pelo filho em segundo plano; isso não amarra o daemon à vida do supervisor, só o coleta se ele morrer antes.
+
+> [!decision] `status` não toma o lock
+> O comando que a pessoa roda para descobrir o que está acontecendo não pode travar exatamente quando algo está acontecendo. Ler estado é seguro sem exclusão; só as transições a exigem.
+
+> [!decision] Registro corrompido lê como registro ausente
+> Um arquivo que não parseia não nomeia processo nenhum, que é a mesma situação de não haver arquivo. Recusar-se a subir por causa disso exigiria alguém apagar um arquivo à mão.
+
 ## Critério de pronto
 
-- [ ] `aos gateway start|stop|restart|status` operando o daemon
-- [ ] Lockfile impedindo corrida
-- [ ] Health check antes de declarar sucesso
-- [ ] Desktop e CLI usando a mesma supervisão
+- [x] `aos gateway start|stop|restart|status` operando o daemon — `TestTheDeliveryOfPhaseFour`, com os dois binários compilados
+- [x] Lockfile impedindo corrida — `TestTwoConcurrentStartsProduceOneDaemon` e `TestTheLockIsHeldAcrossProcesses`
+- [x] Health check antes de declarar sucesso — `TestADaemonThatNeverServesIsAFailure`
+- [ ] Desktop e CLI usando a mesma supervisão — a CLI usa; o desktop é da **Fase 7**, e vai usar o mesmo `gateway.Service`
+
+## Saída dos testes — Fase 4
+
+```
+$ go test -race ./internal/domain/gateway/ ./internal/adapters/supervise/
+ok  	github.com/OWNER/aos/internal/domain/gateway
+ok  	github.com/OWNER/aos/internal/adapters/supervise
+```
+
+| Caso da nota | Teste |
+|---|---|
+| Três estados detectados, inclusive `stale` | `TestTheThreeStates` |
+| Dois `Start` concorrentes → um processo | `TestTwoConcurrentStartsProduceOneDaemon` |
+| `Start` idempotente quando já rodando | `TestStartIsIdempotent` |
+| Daemon que falha ao bindar é detectado e limpo | `TestADaemonThatNeverServesIsAFailure` |
+| `Stop` escalado para kill | `TestADaemonThatIgnoresTheRequestIsKilled`, e contra processo real em `TestAProcessThatIgnoresTheRequestIsKilled` |
+| Resolução de binário nas estratégias em cascata | `TestAnExplicitPathWins` |
+| Crash deixa `stale`; próximo `Start` limpa | `TestStartClearsAStaleRecord` |
+
+**Não verificado:** pid reciclado por outro processo — o `startedAt` está no registro e a checagem cruzada com ele não foi escrita. Fica anotado como lacuna real, não como coisa feita. E `restart` respondendo antes de derrubar o processo depende do transporte HTTP enfileirar o restart pós-resposta; hoje o `Doc` avisa que a chamada não volta, o que é honesto mas não é a solução.
