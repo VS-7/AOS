@@ -6,7 +6,10 @@
 // that fails on a slow machine.
 package clockx
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 // Clock reports the current time.
 type Clock interface{ Now() time.Time }
@@ -25,13 +28,22 @@ func (f Fixed) Now() time.Time { return f.At }
 
 // Stepping advances by a fixed step on every read, so a sequence of records
 // gets distinct, predictable timestamps.
+//
+// It is safe to read from several goroutines. That is not a nicety: a clock in
+// this system is read by whatever is running, and once a turn runs detached
+// from the request that asked for it, an unguarded counter races on the first
+// test that exercises one.
 type Stepping struct {
 	At   time.Time
 	Step time.Duration
+
+	mu sync.Mutex
 }
 
 // Now returns the current instant and advances.
 func (s *Stepping) Now() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	now := s.At
 	step := s.Step
 	if step == 0 {
