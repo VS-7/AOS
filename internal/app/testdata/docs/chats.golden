@@ -1,0 +1,260 @@
+# tool: Chat
+
+Conversations that persist.
+
+A chat is the front door to execution, not a text box that forgets. Every
+message is stored, every attempt to answer one records what it cost, and the
+transcript of an autonomous run is the same structure in a different place.
+
+## When to use
+- To ask an agent something and have the exchange survive the session
+- To bring a second agent into a thread by addressing it with @slug
+- To read back what was said and what it cost
+
+## When NOT to use
+- Not to store what you learned — that is a memory
+- Not to track work — that is a task
+
+Composite tool `Chat` with 4 actions: create, get, list, send.
+
+Address a specific agent with @slug. With no mention, a direct message goes to
+the one agent in it, and anything else goes to the workspace orchestrator — the
+result says which of the three happened, so a surprising answer is traceable to
+the reason it was routed that way.
+
+## Usage
+Call as `Chat({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### chats_create
+
+Open a conversation.
+
+Open a conversation.
+
+Whoever opens it is in it. A private conversation its own creator could not read
+is not something anyone means to make.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "What to call it."
+    },
+    "kind": {
+      "type": "string",
+      "description": "One of: dm, channel, task, run, external. Defaults to channel."
+    },
+    "visibility": {
+      "type": "string",
+      "description": "private or workspace. Defaults to workspace."
+    },
+    "participants": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "user or agent."
+          },
+          "id": {
+            "type": "string",
+            "description": "User identifier or agent slug."
+          },
+          "role": {
+            "type": "string",
+            "description": "member or admin. Defaults to member."
+          },
+          "joinedAt": {
+            "type": "string",
+            "description": "When they joined."
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "joinedAt"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Who is in it. Empty on a workspace-visible channel means everyone."
+    },
+    "task": {
+      "type": "string",
+      "description": "Task this conversation belongs to."
+    },
+    "routine": {
+      "type": "string",
+      "description": "Routine this conversation belongs to."
+    },
+    "agent": {
+      "type": "string",
+      "description": "Agent that owns this conversation, for run transcripts."
+    },
+    "channel": {
+      "type": [
+        "null",
+        "object"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "description": "Messaging provider slug. Example: \"telegram\"."
+        },
+        "chatId": {
+          "type": "string",
+          "description": "Conversation identifier on the provider."
+        },
+        "userId": {
+          "type": "string",
+          "description": "User identifier on the provider."
+        }
+      },
+      "description": "External messenger to bind it to.",
+      "required": [
+        "provider",
+        "chatId"
+      ],
+      "additionalProperties": false
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "title",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### chats_get
+
+Read one conversation.
+
+Read a conversation with its whole transcript, including what each attempt
+to answer cost in tokens.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "chat": {
+      "type": "string",
+      "description": "Identifier of the conversation."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "chat",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### chats_list
+
+List conversations.
+
+List the conversations, most recently updated first.
+
+The transcripts are left out: this answers what conversations exist, and
+returning every message to answer it would be the most expensive call in the
+system. Read one with `chats get`.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Filter by title, identifier, task or routine."
+    },
+    "kind": {
+      "type": "string",
+      "description": "Narrow to one surface: dm, channel, task, run or external."
+    },
+    "task": {
+      "type": "string",
+      "description": "Only conversations attached to this task."
+    },
+    "routine": {
+      "type": "string",
+      "description": "Only conversations attached to this routine."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Maximum number to return. Defaults to 50."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### chats_send
+
+Write to a conversation.
+
+Append a message and hand the turn to whoever should answer.
+
+The message is persisted before anything is dispatched, so a runtime that dies
+in between loses the answer and not the question. The result says which agent
+was chosen and why, and whether a turn actually started — a message stored with
+nobody to answer it is a real state, and one worth knowing about rather than
+waiting through.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "chat": {
+      "type": "string",
+      "description": "Conversation to write to."
+    },
+    "text": {
+      "type": "string",
+      "description": "What to say. Address a specific agent with @slug."
+    },
+    "agent": {
+      "type": "string",
+      "description": "Answer with this agent regardless of what the text mentions."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "chat",
+    "text",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+

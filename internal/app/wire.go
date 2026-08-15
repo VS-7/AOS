@@ -25,6 +25,7 @@ import (
 	"github.com/OWNER/aos/internal/core/ids"
 	"github.com/OWNER/aos/internal/core/logging"
 	"github.com/OWNER/aos/internal/domain/agent"
+	"github.com/OWNER/aos/internal/domain/chat"
 	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/domain/memory"
 	"github.com/OWNER/aos/internal/domain/workspace"
@@ -57,6 +58,7 @@ type App struct {
 	Agents     *agent.Service
 	Memories   *memory.Service
 	Workspaces *workspace.Service
+	Chats      *chat.Service
 
 	// closers releases what New opened. It is a slice rather than a single
 	// handle because the list grows with each phase, and a caller that has to
@@ -157,6 +159,17 @@ func New(opts Options) (*App, error) {
 		Index: searchIndex,
 		Log:   logger,
 	})
+	chatSvc := chat.NewService(chat.Deps{
+		Repo:      repos.chats,
+		Directory: newDirectory(agentSvc),
+		Clock:     clock,
+		IDs:       idgen,
+		Log:       logger,
+		// No dispatcher yet: a message is persisted and its recipient resolved,
+		// and the turn starts when the agent runtime exists. The result already
+		// reports that nothing was dispatched, so nothing here pretends
+		// otherwise.
+	})
 	workspaceSvc := workspace.NewService(workspace.Deps{
 		Store:    fsworkspace.FromPaths(paths),
 		FS:       fsworkspace.NewFiles(),
@@ -175,6 +188,7 @@ func New(opts Options) (*App, error) {
 	workspace.Register(reg, workspaceSvc)
 	agent.Register(reg, agentSvc)
 	memory.Register(reg, memorySvc)
+	chat.Register(reg, chatSvc)
 	reg.Freeze()
 
 	return &App{
@@ -185,6 +199,7 @@ func New(opts Options) (*App, error) {
 		Agents:     agentSvc,
 		Memories:   memorySvc,
 		Workspaces: workspaceSvc,
+		Chats:      chatSvc,
 		closers:    closers,
 	}, nil
 }
@@ -193,6 +208,7 @@ func New(opts Options) (*App, error) {
 type repoSet struct {
 	agents   *fscollections.Repo[agent.Agent]
 	memories *fscollections.Repo[memory.Memory]
+	chats    *fscollections.Repo[chat.Chat]
 }
 
 func newRepoSet(root string, lock *collections.PathLock, index *fscollections.Index) (repoSet, error) {
@@ -204,6 +220,10 @@ func newRepoSet(root string, lock *collections.PathLock, index *fscollections.In
 	if err != nil {
 		return repoSet{}, err
 	}
+	chatModel, err := collections.ModelOf[chat.Chat]("chats")
+	if err != nil {
+		return repoSet{}, err
+	}
 	return repoSet{
 		agents: fscollections.New(root, agentModel,
 			fscollections.WithLock[agent.Agent](lock),
@@ -212,6 +232,10 @@ func newRepoSet(root string, lock *collections.PathLock, index *fscollections.In
 		memories: fscollections.New(root, memoryModel,
 			fscollections.WithLock[memory.Memory](lock),
 			fscollections.WithIndex[memory.Memory](index),
+		),
+		chats: fscollections.New(root, chatModel,
+			fscollections.WithLock[chat.Chat](lock),
+			fscollections.WithIndex[chat.Chat](index),
 		),
 	}, nil
 }

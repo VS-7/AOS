@@ -122,3 +122,30 @@ func (s *surveyor) Survey(ctx context.Context, root string) ([]workspace.Collect
 	}
 	return out, nil
 }
+
+// directory answers the two questions chat routing asks, over the agent roster.
+//
+// It is a type here rather than a method on the agent service because the chat
+// aggregate declares the port and the agent aggregate should not know that
+// conversations exist.
+type directory struct{ agents *agent.Service }
+
+func newDirectory(agents *agent.Service) directory { return directory{agents: agents} }
+
+func (d directory) IsAgent(ctx context.Context, id string) bool {
+	found, err := d.agents.Get(ctx, agent.GetInput{ID: id})
+	return err == nil && found != nil
+}
+
+func (d directory) Orchestrator(ctx context.Context) (string, error) {
+	found, err := d.agents.List(ctx, agent.ListInput{})
+	if err != nil {
+		return "", err
+	}
+	for _, a := range found.Agents {
+		if a.Orchestrator {
+			return a.ID, nil
+		}
+	}
+	return "", nil
+}

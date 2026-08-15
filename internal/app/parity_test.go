@@ -17,6 +17,7 @@ import (
 	"github.com/OWNER/aos/internal/core/identity"
 	"github.com/OWNER/aos/internal/core/ids"
 	"github.com/OWNER/aos/internal/domain/agent"
+	"github.com/OWNER/aos/internal/domain/chat"
 	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/domain/memory"
 	"github.com/OWNER/aos/internal/domain/workspace"
@@ -95,6 +96,14 @@ func seedWorkspace(t *testing.T, a *app.App) {
 	if _, err := a.Workspaces.Create(parityCtx(), workspace.CreateInput{
 		Name: "Parity", Path: a.Workspace,
 	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func seedChat(t *testing.T, a *app.App) {
+	t.Helper()
+	seedAgent(t, a)
+	if _, err := a.Chats.Create(parityCtx(), chat.CreateInput{Title: "Planning"}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -197,6 +206,22 @@ var scenarios = map[string]scenario{
 	"workspace_introspect": {
 		Payload: workspace.IntrospectInput{Reasoning: reason()},
 		Seed:    seedWorkspace,
+	},
+	"chats_list": {
+		Payload: chat.ListInput{Reasoning: reason()},
+		Seed:    seedChat,
+	},
+	"chats_get": {
+		Payload: chat.GetInput{Chat: "m-1", Reasoning: reason()},
+		Seed:    seedChat,
+	},
+	"chats_create": {
+		Payload: chat.CreateInput{Title: "Another room", Reasoning: reason()},
+		Seed:    seedAgent,
+	},
+	"chats_send": {
+		Payload: chat.SendInput{Chat: "m-1", Text: "@atlas what changed?", Reasoning: reason()},
+		Seed:    seedChat,
 	},
 	"config_get": {
 		Payload: config.GetInput{Reasoning: reason()},
