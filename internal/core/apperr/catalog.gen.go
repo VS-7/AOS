@@ -66,6 +66,8 @@ var Catalog = []Entry{
 	{Code: "AOS_GATEWAY_STATE_UNWRITABLE", Package: "internal/domain/gateway", File: "internal/domain/gateway/errors.go", Line: 32, Status: 500, Causer: "gateway.Service", CTA: false},
 	{Code: "AOS_GIT_COMMAND_FAILED", Package: "internal/adapters/gitcli", File: "internal/adapters/gitcli/git.go", Line: 119, Status: 500, Causer: "<dynamic>", CTA: false, Issues: []string{"dir", "operation"}},
 	{Code: "AOS_GIT_UNAVAILABLE", Package: "internal/adapters/gitcli", File: "internal/adapters/gitcli/git.go", Line: 110, Status: 422, Causer: "gitcli.Git", CTA: true},
+	{Code: "AOS_HOOK_BLOCKED", Package: "internal/domain/event", File: "internal/domain/event/errors.go", Line: 28, Status: 403, Causer: "event.Service.Emit", CTA: true, Issues: []string{"event", "hook"}},
+	{Code: "AOS_HOOK_FAILED", Package: "internal/domain/event", File: "internal/domain/event/errors.go", Line: 10, Status: 500, Causer: "event.Service.Emit", CTA: true, Issues: []string{"event", "hook"}},
 	{Code: "AOS_HTTP_BODY_TOO_LARGE", Package: "internal/transport/httpapi", File: "internal/transport/httpapi/errors.go", Line: 31, Status: 500, Causer: "httpapi.invoke", CTA: true, Issues: []string{"limit"}},
 	{Code: "AOS_HTTP_HANDLER_PANIC", Package: "internal/transport/httpapi", File: "internal/transport/httpapi/errors.go", Line: 20, Status: 500, Causer: "httpapi.recoverer", CTA: true, Issues: []string{"requestId"}},
 	{Code: "AOS_HTTP_INTERNAL", Package: "internal/transport/httpapi", File: "internal/transport/httpapi/server.go", Line: 258, Status: 500, Causer: "httpapi", CTA: false},
