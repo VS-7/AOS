@@ -23,6 +23,12 @@ var floors = map[string]float64{
 	"github.com/OWNER/aos/internal/transport": 60,
 	// Adapters are held to their contract suite, not to a coverage number.
 	"github.com/OWNER/aos/internal/adapters": 0,
+	// Test infrastructure is proven by the tests that use it. A coverage
+	// number on a fake or a fixture measures nothing: the contract suite is
+	// what says whether the fake is right.
+	"github.com/OWNER/aos/internal/domain/fakes":     0,
+	"github.com/OWNER/aos/internal/domain/testsuite": 0,
+	"github.com/OWNER/aos/internal/testx":            0,
 	// Wiring and generators are exercised through the packages they serve.
 	"github.com/OWNER/aos/cmd":                   0,
 	"github.com/OWNER/aos/tools":                 0,
