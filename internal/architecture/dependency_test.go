@@ -166,7 +166,7 @@ func TestFeatureLayout(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
-		if !e.IsDir() || e.Name() == "testsuite" {
+		if !e.IsDir() || architecture.NonFeatureDomainDirs[e.Name()] {
 			continue
 		}
 		for _, required := range architecture.RequiredFeatureFiles {

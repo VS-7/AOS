@@ -50,6 +50,16 @@ var DomainExceptions = []string{
 	Module + "/internal/domain/gateway",
 }
 
+// NonFeatureDomainDirs are the directories under internal/domain that are not
+// features: the executable port contracts and the fakes every domain test runs
+// on. They are here rather than in the domain because they must not be shipped
+// in a binary, and internal/domain is what a domain test can import without
+// breaking the dependency rule.
+var NonFeatureDomainDirs = map[string]bool{
+	"testsuite": true,
+	"fakes":     true,
+}
+
 // RequiredFeatureFiles are the files every domain feature must have.
 //
 // commands.go joins this list in phase 2, when the Command Layer exists to be
