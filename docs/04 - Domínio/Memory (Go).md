@@ -2,7 +2,7 @@
 tags: [dominio, memoria, grafo, core]
 aliases: [Memory Go, Memória, Knowledge Graph]
 fase: 3
-status: especificado
+status: pronto
 origem: "[[Memory]]"
 ---
 
@@ -181,7 +181,18 @@ Memórias **não** entram no prompt. Só contagens por categoria e as regras ger
 > A tool não existe. Apagar um arquivo à mão continua possível — é filesystem — mas nenhuma superfície do sistema oferece isso.
 
 > [!decision] TTL processado por job, não na leitura
-> `expiresAt` vencido vira `ttl_expired` num job diário, não na consulta. Evita escrita durante leitura e mantém `Recall` puro.
+> `expiresAt` vencido vira `ttl_expired` num job diário, não na consulta. Evita escrita durante leitura e mantém `Recall` puro. O job é da **Fase 6**; o campo e o status existem desde já.
+
+> [!decision] `deprecatedBy` guarda a memória, não o agente — defeito do original
+> O schema do original descreve `deprecatedBy` como *"UUID of the memory that replaced this one"*, e o serviço grava `deprecatedBy: agent` — o slug de quem depreciou. Com isso a linhagem registra **quem**, não **o quê**, e a cadeia de substituições não pode ser caminhada, que é a única razão de ela existir.
+>
+> Aqui `deprecatedBy` recebe o id da memória substituta quando a depreciação vem de um supersede, e fica vazio quando vem de um `forget` direto — que é exatamente a informação disponível em cada caso. Travado por `TestSupersedeWritesTheReplacementFirst`.
+
+> [!decision] Globs com doublestar divergem do regex artesanal do original
+> O original traduz `**` para `.*` mantendo as barras ao redor, então `src/**/*.go` **não** casa `src/b.go`. Com doublestar casa, porque `**` cobre zero ou mais segmentos — que é o comportamento de toda ferramenta com globstar. A diferença está tabelada em `TestGlobsBehaveAsExpected`.
+
+> [!decision] O índice ordena, nunca decide pertinência
+> `Recall` filtra sobre os arquivos e usa o índice só para ranquear. Uma memória que o índice ainda não viu continua sendo encontrada. Sem isso, um workspace com índice frio responderia diferente de um com índice quente — e o índice teria virado fonte de comportamento. Ver [[ADR-0013 Bleve para busca full-text]].
 
 > [!decision] Aviso de globalidade preservado
 > A documentação do grupo mantém o alerta do original: *"Memories are GLOBAL across all agent universes. What you store here, every parallel self sees. There is no 'private' flag."* É comportamento, não detalhe — e motiva o CAS de [[ADR-0012 Escrita atômica e lock por arquivo]].
@@ -201,8 +212,32 @@ Memórias **não** entram no prompt. Só contagens por categoria e as regras ger
 
 ## Critério de pronto
 
-- [ ] Gravar e recuperar memórias com grafo funcionando
-- [ ] Protocolo de supersede completo, com linhagem preservada
-- [ ] Scopes com os dois modos
-- [ ] Contagens por categoria alimentando o [[Prompt Assembly]]
-- [ ] Busca full-text sobre memórias via [[ADR-0013 Bleve para busca full-text]]
+- [x] Gravar e recuperar memórias com grafo funcionando — `TestTheDeliveryOfThePhase`
+- [x] Protocolo de supersede completo, com linhagem preservada — `TestSupersedeWritesTheReplacementFirst`
+- [x] Scopes com os dois modos — `TestScopesStrictExcludesTheUnscoped`
+- [x] Contagens por categoria disponíveis no grafo — `TestCountsPerCategoryMatchTheGraph`. O consumo pelo [[Prompt Assembly]] é da Fase 5
+- [x] Busca full-text via [[ADR-0013 Bleve para busca full-text]] — `TestTheIndexChangesTheSpeedAndNotTheAnswer`
+
+## Saída dos testes — Fase 3
+
+```
+$ go test -race ./internal/domain/memory/
+ok  	github.com/OWNER/aos/internal/domain/memory
+```
+
+| Caso da nota | Teste |
+|---|---|
+| Round-trip com todos os campos, inclusive `supersedes` | `TestRoundTripsEveryField` (em `fscollections`) |
+| Supersede: nova criada, antiga com os três campos | `TestSupersedeWritesTheReplacementFirst` |
+| Supersede com alvo inexistente rejeitado antes de escrever | `TestSupersedingSomethingThatIsNotThereWritesNothing` |
+| `forget` com razão de 4 caracteres rejeitado | `TestForgetNeedsARealReason` |
+| Scopes `strict` exclui sem escopo; `lax` inclui | `TestScopesStrictExcludesTheUnscoped` |
+| Glob `src/**/*.go` casa `.go` e não `.ts` | `TestGlobsBehaveAsExpected` |
+| Grafo com nós, as duas arestas, hubs e silos | `TestGraphMapsNodesAndReferenceEdges`, `TestHealthNamesTheHubsAndTheSilos` |
+| Contagem por categoria bate com o grafo | `TestCountsPerCategoryMatchTheGraph` |
+| Concorrência: um sucesso, um `AOS_COLLECTION_CONFLICT` | `TestTwoParallelSelvesCannotBothWin` |
+| Não existe delete em nenhuma superfície | `TestThereIsNoDelete` |
+
+**Não verificado:** o job de TTL (Fase 6) e a busca vetorial sobre `description` (adiada no [[ADR-0013 Bleve para busca full-text]]).
+
+**Supersede parcial:** sem transação entre arquivos, uma falha no meio deixa a nova memória gravada e alguma antiga ativa. O resultado de `store` traz `incomplete` com os ids que não foram depreciados. É a escolha registrada acima — reportar em vez de fingir atomicidade.

@@ -38,7 +38,7 @@ Motor de collections completo: patterns bidirecionais, frontmatter, hooks, watch
 `workspace`, `agent`, `memory`, `chat` completos, com scaffolding e `git init`.
 
 **Notas:** [[Workspace (Go)]] · [[Agent (Go)]] · [[Memory (Go)]] · [[Chat (Go)]] · [[ADR-0013 Bleve para busca full-text]]
-**Entrega:** criar workspace, criar agente orquestrador, gravar e recuperar memórias com grafo.
+**Entrega:** criar workspace, criar agente orquestrador, gravar e recuperar memórias com grafo. ✅ `TestTheDeliveryOfThePhase`, sobre disco real. O chat fica `em-construcao`: persistência e roteamento prontos, execução assíncrona nas Fases 4 e 5.
 
 ### Fase 4 — Servidor e gateway
 Daemon chi na :5326 com `/api`, `/mcp`, `/ws`, `/v/*`; gateway com máquina de estados e supervisão.

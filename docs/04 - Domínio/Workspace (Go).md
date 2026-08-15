@@ -2,7 +2,7 @@
 tags: [dominio, workspace, core]
 aliases: [Workspace Go]
 fase: 3
-status: especificado
+status: pronto
 origem: "[[Workspace]]"
 ---
 
@@ -22,7 +22,7 @@ Pontos herdados:
 - **O orquestrador nasce com o workspace** — criar um workspace já cria seu [[Agent (Go)]] orquestrador, com `tone`, `style` e `autonomy` que viram texto no prompt.
 - **Tipos de task com instruções próprias** — `FractalWorkspaceTaskTypeSchema` aceita `instructions`, então uma task `bug` injeta orientação diferente de uma `docs`.
 - **Scaffolding** cria `.fractal/{agents,skills,instructions,templates,collections}` com `.gitkeep`, roda `git init` e insere bloco gerenciado com `FRACTAL_WORKSPACE_ID` em `.env` e `.env.sample`, por *splice* (preservando o conteúdo do usuário).
-- **`introspect`** dá ao agente o inventário completo.
+- **`introspect`** auto-registra o repositório atual, derivando o nome do remote do Git. **Corrigido na Fase 3:** esta nota afirmava que `introspect` devolve o inventário completo, o que é falso — tanto o fonte extraído quanto a descrição da tool no binário instalado dizem "Auto-register a Fractal workspace from the current Git repository". Ver a decisão abaixo.
 - **`tick`** varre todos os workspaces a cada 15 min, recovery-first.
 
 ## Design em Go
@@ -151,6 +151,17 @@ Ver [[Visão Geral Go]] para `Runtime` e o uso de `singleflight`.
 > [!decision] Tick com concorrência limitada
 > O original faz fan-out sem limite declarado. Ver [[Concorrência e Context]].
 
+> [!decision] `introspect` registra; `inventory` inventaria
+> A nota herdou do vault a afirmação de que `workspace introspect` devolve o inventário do workspace. Não devolve: no original ele auto-registra o diretório atual como workspace. Verificado em `workspace/commands/workspace/introspect.ts` e na descrição publicada da tool `workspace_introspect` do binário instalado.
+>
+> Em vez de escolher em silêncio entre a função real e a que a nota descrevia, os dois existem com nomes distintos: `workspace introspect` mantém a semântica do original ([[ADR-0016 Compatibilidade de nomes com o original]]) e `workspace inventory` é a visão panorâmica que o [[Prompt Assembly]] precisa — a que esta nota chamava de `Introspect`. **Confirmar com o usuário** se `inventory` é o nome definitivo.
+
+> [!decision] Scaffolding atrás de um porto, não com `os` direto
+> O esboço desta nota chama `os.MkdirAll` dentro do serviço, o que a regra de dependência permite. Ficou atrás de `Scaffolder` porque as duas propriedades que importam — o scaffolding é idempotente, e o splice preserva o que o usuário escreveu — seriam provadas contra um diretório temporário em vez de contra a regra. O `Scaffolder` tem suíte de contrato, e o fake e o adaptador real passam pela mesma.
+
+> [!decision] `update` por caminho pontilhado, e não substituição
+> O original faz merge raso do payload inteiro. Aqui `workspace update` recebe `set` com caminhos (`git.branchPrefix`), como `config update` — dois escritores concorrentes mudando campos diferentes não se sobrescrevem. `id`, `path` e `createdAt` são do servidor: um patch que os alcançasse órfãos todo registro que referencia o workspace.
+
 ## Testes
 
 - Round-trip de `Workspace` com todos os campos
@@ -164,7 +175,29 @@ Ver [[Visão Geral Go]] para `Runtime` e o uso de `singleflight`.
 
 ## Critério de pronto
 
-- [ ] Criar workspace apontando para repositório existente injeta `.aos/` sem tocar no resto
-- [ ] Orquestrador nasce com o workspace
-- [ ] `introspect` alimentando o [[Prompt Assembly]]
-- [ ] Tick com relatório observável (`scanned`, `dispatched`, `failed`, `workspaces`)
+- [x] Criar workspace apontando para repositório existente injeta `.aos/` sem tocar no resto — `TestEnvSplicePreservesWhatTheUserWrote`
+- [x] Orquestrador nasce com o workspace — `TestTheOrchestratorIsBornWithTheWorkspace`
+- [x] `inventory` alimentando o [[Prompt Assembly]] — nomes e contagens, nunca corpos
+- [ ] Tick com relatório observável (`scanned`, `dispatched`, `failed`, `workspaces`) — **Fase 6**, junto com a fila
+
+## Saída dos testes — Fase 3
+
+```
+$ go test -race ./internal/domain/workspace/ ./internal/adapters/fsworkspace/
+ok  	github.com/OWNER/aos/internal/domain/workspace
+ok  	github.com/OWNER/aos/internal/adapters/fsworkspace
+```
+
+Os casos que a nota lista, e onde estão:
+
+| Caso da nota | Teste |
+|---|---|
+| Round-trip de `Workspace` com todos os campos | `TestStoreRoundTripsEveryField` |
+| Scaffolding idempotente | `TestScaffoldIsIdempotent` |
+| Splice do `.env` preserva o conteúdo do usuário | `TestEnvSplicePreservesWhatTheUserWrote`, `TestEnvSpliceReplacesOnlyTheManagedBlock` |
+| `git init` ausente → aviso no resultado | `TestGitFailureIsVisibleAndNotFatal` |
+| Orquestrador com tom/estilo/autonomia no `AGENT.md` | `TestOrchestratorDialsBecomeProse` |
+| `Introspect` devolve só nomes, nunca corpos | `TestInventoryCarriesNoBodies` |
+| Entrega ponta a ponta, sobre disco real | `TestTheDeliveryOfThePhase` (em `internal/app`) |
+
+**Não verificado:** `Resolve` concorrente com `singleflight` e `Tick` com um workspace quebrado — as duas dependem do runtime multi-workspace, que chega na Fase 4 com o daemon. O `Runtime` desta fase é um `repoSet` construído por raiz na raiz de composição, sem cache.

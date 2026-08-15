@@ -2,7 +2,7 @@
 tags: [adr, decisao, busca, bleve]
 aliases: [ADR-0013, Bleve, Full-text]
 fase: 3
-status: especificado
+status: pronto
 origem: "[[Memory]]"
 ---
 
@@ -82,4 +82,23 @@ type Query struct {
 
 ## Status
 
-**Aceito.**
+**Aceito e implementado na Fase 3.**
+
+### O que foi construído
+
+`internal/adapters/bleveindex` implementa o porto declarado em `internal/core/search`, e o mesmo porto tem um fake em memória. As duas implementações passam por `testsuite.RunIndexContract` — sem isso, os testes de domínio que rodam sobre o fake não seriam evidência sobre o adaptador.
+
+A prova que interessa não é que o Bleve funciona. É `TestTheIndexChangesTheSpeedAndNotTheAnswer`: o mesmo corpus e as mesmas dez consultas, com e sem índice, comparando ids e totais. Se um dia falhar, o índice virou fonte de comportamento em vez de fonte de velocidade.
+
+Duas consequências da mesma regra, ambas com teste:
+
+- **O índice é consultado para ordenar, nunca para decidir pertinência.** `Recall` filtra sobre os arquivos; o índice só ranqueia. Uma memória que ele não viu continua aparecendo (`TestAMemoryTheIndexHasNotSeenIsStillFound`).
+- **Um índice quebrado degrada para varredura, com aviso.** `TestABrokenIndexDegradesToScanning`. E um índice que não abre no boot não impede o processo de subir.
+
+A tokenização e os pesos vivem em `core/search` e são usados pelos dois caminhos. Uma consulta que tokenizasse diferente conforme o índice estivesse aberto seria a mesma falha por outra porta.
+
+> [!decision] Escrita síncrona; a fila assíncrona chega com o barramento
+> Esta ADR descreve indexação assíncrona com `Strong` drenando a fila pendente. A escrita implementada é síncrona, o que satisfaz os dois níveis trivialmente. A fila entra quando existir quem a alimente — o barramento de eventos da **Fase 4**. Uma fila sem produtor seria maquinário fingindo ser funcionalidade.
+
+> [!decision] `Rebuild` é o procedimento de recuperação, e é testado como tal
+> `TestRebuildIsTheRecoveryProcedure` prova que um registro que não existe mais em disco não sobrevive à reconstrução. O comando `aos workspace reindex` que o expõe entra na Fase 4, junto com o daemon que teria motivo para chamá-lo.

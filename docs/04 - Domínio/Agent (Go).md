@@ -2,7 +2,7 @@
 tags: [dominio, agente, core]
 aliases: [Agent Go, Agente]
 fase: 3
-status: especificado
+status: pronto
 origem: "[[Agent]]"
 ---
 
@@ -116,7 +116,17 @@ type Service interface {
 > Existe por um motivo de ferramenta externa (validação de frontmatter do VS Code) que continua valendo. Parseado em [[Agent Loop]].
 
 > [!decision] Um orquestrador por workspace, aplicado
-> O original diz "deve haver no máximo um" sem impor. Aqui é invariante de serviço.
+> O original diz "deve haver no máximo um" sem impor. Aqui é invariante de serviço: promover o segundo rebaixa o primeiro, na mesma chamada. Sem isso, o roteamento de todo chat sem menção explícita depende de qual arquivo a listagem do diretório devolve primeiro.
+>
+> O registro em [[Activity (Go)]] fica para a **Fase 6**, quando a atividade existir. Hoje o rebaixamento acontece e é observável no registro do agente rebaixado; o que falta é a trilha.
+
+> [!decision] Cadeia de `leader` verificada na escrita, com limite de profundidade
+> Um ciclo no organograma não é cosmético: o [[Prompt Assembly]] caminha a cadeia para dizer a quem o agente reporta, e a delegação caminha para decidir escalonamento. O erro nomeia o laço encontrado.
+>
+> O limite de 32 níveis é a outra metade: o teste de ciclo terminaria sozinho, mas uma cadeia longa o bastante transforma uma escrita em cem leituras de arquivo — negação de serviço escrita como estrutura de dados.
+
+> [!decision] Um líder que ainda não existe é aceito
+> Equipes são montadas na ordem em que a pessoa pensa nelas, e uma referência pendente não fecha laço nenhum. Ela é visível no roster.
 
 ## Testes
 
@@ -131,7 +141,25 @@ type Service interface {
 
 ## Critério de pronto
 
-- [ ] CRUD completo com cascata
-- [ ] `agents me` resolvendo identidade nas três origens (agente interno, MCP, terminal)
-- [ ] Invariante de orquestrador único
-- [ ] Política de sandbox lida e aplicada por [[Sandbox (Go)]]
+- [x] CRUD completo com cascata — a cascata é declaração do modelo (`CascadeDelete`), verificada em [[Collections Engine]]
+- [x] `agents me` resolvendo identidade nas três origens — `TestMeResolvesTheCallingAgent`, `TestMeFromATerminalResolvesTheOrchestrator`
+- [x] Invariante de orquestrador único — `TestPromotingASecondOrchestratorDemotesTheFirst`
+- [ ] Política de sandbox lida e aplicada por [[Sandbox (Go)]] — **Fase 5**
+
+## Saída dos testes — Fase 3
+
+```
+$ go test -race ./internal/domain/agent/
+ok  	github.com/OWNER/aos/internal/domain/agent
+```
+
+| Caso da nota | Teste |
+|---|---|
+| Round-trip com todos os campos, inclusive `channels` | `TestRoundTripsEveryField` (em `fscollections`) |
+| `Me` com e sem `AgentID` no contexto | `TestMeResolvesTheCallingAgent`, `TestMeFromATerminalResolvesTheOrchestrator` |
+| Promover segundo orquestrador rebaixa o primeiro | `TestPromotingASecondOrchestratorDemotesTheFirst`, `TestCreatingASecondOrchestratorAlsoDemotes` |
+| Cadeia de `leader` cíclica é rejeitada | `TestALeaderCycleIsRejectedOnWrite`, `TestAnAgentCannotLeadItself` |
+| ID normalizado para lowercase no create | `TestSlugIsLowercased` |
+| Padrão skill-scoped listado com `skill: x` | `TestSkillScopedRecordsAreReadOnly` (em `collections`) |
+
+**Não verificado:** a diretiva de prompt conforme `orchestrator` — o [[Prompt Assembly]] é da Fase 5. `agents execute` continua fora de escopo, como registrado acima.

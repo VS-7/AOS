@@ -2,7 +2,7 @@
 tags: [dominio, chat, conversa]
 aliases: [Chat Go, Conversa]
 fase: 3
-status: especificado
+status: em-construcao
 origem: "[[Chat]]"
 ---
 
@@ -133,7 +133,16 @@ func resolveTarget(c *Chat, text string, orchestrator string) string
 > Mantido. Uma conversa não tem "corpo Markdown com frontmatter" — a estrutura é a mensagem. Ver [[ADR-0004 Collections em Markdown]].
 
 > [!decision] Custo em USD no `Run`
-> Adição. O original registra tokens; sem custo, o usuário não vê o que está gastando. O cálculo usa uma tabela de preços por modelo, versionada e atualizável.
+> Adição. O original registra tokens; sem custo, o usuário não vê o que está gastando. O campo existe desde a Fase 3; a tabela de preços por modelo que o preenche entra com os providers, na **Fase 5**.
+
+> [!decision] União discriminada plana, sem `UnmarshalJSON` customizado
+> A nota previa um unmarshaler próprio no `Part`. Uma struct plana com discriminador `type` e campos opcionais mantém o tipo dos dois lados e faz round-trip sem código de decodificação — o mesmo resultado com menos superfície. Travado por `TestEveryPartTypeRoundTrips`.
+
+> [!decision] `dispatched: false` é estado, não erro
+> `Send` persiste antes de despachar. Se o despacho falha, ou se não há agente para responder, a mensagem continua gravada e o resultado diz que nada foi enfileirado. Um chamador que assumisse o contrário esperaria por uma resposta que não vem.
+
+> [!decision] O roteamento reporta o porquê
+> `Target` traz `reason`: `mention`, `participant` ou `orchestrator`. Uma resposta inesperada precisa ser rastreável até a regra que a escolheu, e as três são tipos diferentes de evidência — instrução, inferência e default.
 
 ## Testes
 
@@ -146,7 +155,24 @@ func resolveTarget(c *Chat, text string, orchestrator string) string
 
 ## Critério de pronto
 
-- [ ] Conversa real persistida, com histórico recuperável
-- [ ] Execução assíncrona com streaming por WebSocket
-- [ ] Auditoria de tokens e custo por mensagem
-- [ ] Roteamento multi-agente com `@[agent-id]`
+- [x] Conversa real persistida, com histórico recuperável — `TestSendPersistsBeforeItDispatches`, `TestListLeavesTheTranscriptsOut`
+- [ ] Execução assíncrona com streaming por WebSocket — **Fases 4 e 5**
+- [x] Estrutura de auditoria por mensagem — `TestTotalUsageSumsEveryAttempt`. Os valores vêm dos providers, na Fase 5
+- [x] Roteamento multi-agente com `@[agent-id]` — `TestRoutingPrefersAnExplicitMention`
+
+## Saída dos testes — Fase 3
+
+```
+$ go test -race ./internal/domain/chat/
+ok  	github.com/OWNER/aos/internal/domain/chat
+```
+
+| Caso da nota | Teste |
+|---|---|
+| Round-trip com todos os tipos de `Part` | `TestEveryPartTypeRoundTrips` |
+| Roteamento: menção ganha; DM com um agente vai para ele | `TestRoutingPrefersAnExplicitMention` |
+| `Send` persiste antes de enfileirar | `TestSendPersistsBeforeItDispatches` |
+| `Run` acumula uso de tokens de todas as tentativas | `TestTotalUsageSumsEveryAttempt` |
+| Anexo preserva `mediaType` e `uri` | `TestEveryPartTypeRoundTrips` |
+
+**Não verificado nesta fase:** o padrão de run sob `.aos/tasks/{t}/runs/{id}.run.json` — a coleção `runs` existe no registry desde a Fase 1, mas nada a escreve até a Fase 6. O `Dispatcher` é um porto sem implementação: a raiz de composição passa `nil`, e o resultado já reporta `dispatched: false`. A fila e o streaming chegam nas Fases 4 e 5.
