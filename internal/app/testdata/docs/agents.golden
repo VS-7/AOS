@@ -99,6 +99,68 @@ agent rather than two.
       "type": "boolean",
       "description": "Marks the workspace orchestrator fallback for non-direct chats."
     },
+    "reasoning": {
+      "type": "string",
+      "description": "How hard this agent should think: none, low, medium or high. Defaults to the installation's setting."
+    },
+    "sandbox": {
+      "type": [
+        "null",
+        "object"
+      ],
+      "properties": {
+        "permissions": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Any of: read, write, delete, execute. Defaults to read alone."
+        },
+        "exec": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "policy": {
+              "type": "string",
+              "description": "allowlist or deny-all. Defaults to deny-all."
+            },
+            "allow": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "Binary names or absolute paths this agent may run. Example: [\"git\", \"go\"]."
+            },
+            "denyArgs": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "Command lines to refuse even for an allowed binary. Example: [\"git push --force*\"]."
+            },
+            "allowShell": {
+              "type": "boolean",
+              "description": "Whether this agent may reach a shell. A shell makes the allowlist a suggestion, so it takes its own opt-in."
+            }
+          },
+          "description": "Which programs this agent may run.",
+          "additionalProperties": false
+        }
+      },
+      "description": "Filesystem and execution policy. Absent means read-only with no execution at all.",
+      "additionalProperties": false
+    },
     "content": {
       "type": "string",
       "description": "Markdown system instructions for the agent runtime."
@@ -321,6 +383,71 @@ Only the fields you send are changed; the rest are left alone. Sending
         "boolean"
       ],
       "description": "Whether this agent is the workspace orchestrator."
+    },
+    "reasoning": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New reasoning level: none, low, medium or high."
+    },
+    "sandbox": {
+      "type": [
+        "null",
+        "object"
+      ],
+      "properties": {
+        "permissions": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Any of: read, write, delete, execute. Defaults to read alone."
+        },
+        "exec": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "policy": {
+              "type": "string",
+              "description": "allowlist or deny-all. Defaults to deny-all."
+            },
+            "allow": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "Binary names or absolute paths this agent may run. Example: [\"git\", \"go\"]."
+            },
+            "denyArgs": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "Command lines to refuse even for an allowed binary. Example: [\"git push --force*\"]."
+            },
+            "allowShell": {
+              "type": "boolean",
+              "description": "Whether this agent may reach a shell. A shell makes the allowlist a suggestion, so it takes its own opt-in."
+            }
+          },
+          "description": "Which programs this agent may run.",
+          "additionalProperties": false
+        }
+      },
+      "description": "New filesystem and execution policy. Replaces the block entirely.",
+      "additionalProperties": false
     },
     "content": {
       "type": [

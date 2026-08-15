@@ -10,10 +10,22 @@ func errNoProvider() error {
 		Causer("agentloop.Loop.Run").
 		Msgf("this turn has no model provider").
 		Status(apperr.StatusInternalServerError).
-		CTA(apperr.CallToAction{
-			Label:   "configure a provider and a default model",
-			Command: build.Name + " config update --set agents.models.default.provider=openai",
-		})
+		CTA(configureModelCTA())
+}
+
+// configureModelCTA is the one place that says how to point the installation at
+// a model. The slot is a map, so it is set whole rather than by dotted path —
+// which is worth spelling out, because the obvious guess does not work.
+func configureModelCTA() apperr.CallToAction {
+	return apperr.CallToAction{
+		Label: "point the default slot at a provider and a model in " + build.StateDir + "/config.json",
+		Tool:  "config_update",
+		Input: map[string]any{"set": map[string]any{
+			"agents.models": map[string]any{
+				"default": map[string]any{"provider": "openai", "model": "gpt-5"},
+			},
+		}},
+	}
 }
 
 // errProviderNotEnabled is the fifth level of the model cascade: nothing was
@@ -23,11 +35,7 @@ func errProviderNotEnabled(model string) error {
 		Causer("agentloop.Resolve").
 		Msgf("no model provider is configured for this agent").
 		Status(apperr.StatusBadRequest).
-		CTA(apperr.CallToAction{
-			Label:   "set a default provider and model for the installation",
-			Command: build.Name + " config update --set agents.models.default.provider=openai --set agents.models.default.model=gpt-5",
-			Tool:    "config_update",
-		})
+		CTA(configureModelCTA())
 	if model != "" {
 		e = e.Issue("model", model).
 			CTA(apperr.CallToAction{

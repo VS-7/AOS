@@ -36,6 +36,13 @@ var floors = map[string]float64{
 	// The composition root is wiring: what it must prove is that the surfaces
 	// agree, and that is the parity suite, not a percentage.
 	"github.com/OWNER/aos/internal/app": 0,
+	// The session runner is the same kind of thing one layer down: it holds
+	// the pieces of a turn together and owns almost no behaviour of its own.
+	// What it must prove is that a real message produces a real answer, and
+	// that is TestTheDeliveryOfPhaseFive in internal/app. The parts of it that
+	// are logic rather than wiring — the transcript translation and the policy
+	// an agent's file declares — have their own tests beside them.
+	"github.com/OWNER/aos/internal/runtime/session": 0,
 	// Wiring and generators are exercised through the packages they serve.
 	"github.com/OWNER/aos/cmd":                   0,
 	"github.com/OWNER/aos/tools":                 0,

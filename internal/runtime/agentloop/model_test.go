@@ -106,8 +106,14 @@ func TestNothingConfiguredAnywhereSaysWhatToConfigure(t *testing.T) {
 	if !errors.As(err, &app) || app.Code != "AOS_AGENT_PROVIDER_NOT_ENABLED" {
 		t.Fatalf("err = %v", err)
 	}
-	if len(app.Actions) == 0 || !strings.Contains(app.Actions[0].Command, "provider") {
+	// The slot is a map, so the fix is a payload rather than a command line —
+	// and the payload has to be the one that actually works.
+	if len(app.Actions) == 0 || app.Actions[0].Tool != "config_update" {
 		t.Fatalf("the error does not say what to configure: %+v", app.Actions)
+	}
+	set, _ := app.Actions[0].Input.(map[string]any)["set"].(map[string]any)
+	if _, ok := set["agents.models"]; !ok {
+		t.Fatalf("the suggested payload does not set the slot: %+v", set)
 	}
 }
 

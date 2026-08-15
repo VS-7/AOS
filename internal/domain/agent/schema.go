@@ -45,6 +45,8 @@ type CreateInput struct {
 	Voice        string    `json:"voice,omitempty" jsonschema:"Voice name for speech output."`
 	Channels     []Channel `json:"channels,omitempty" jsonschema:"Communication channel bindings for this agent."`
 	Orchestrator bool      `json:"orchestrator,omitempty" jsonschema:"Marks the workspace orchestrator fallback for non-direct chats."`
+	Reasoning_   string    `json:"reasoning,omitempty" jsonschema:"How hard this agent should think: none, low, medium or high. Defaults to the installation's setting."`
+	Sandbox      *Sandbox  `json:"sandbox,omitempty" jsonschema:"Filesystem and execution policy. Absent means read-only with no execution at all."`
 	Content      string    `json:"content,omitempty" jsonschema:"Markdown system instructions for the agent runtime."`
 
 	command.Reasoning
@@ -62,7 +64,14 @@ type UpdateInput struct {
 	Model        *string `json:"model,omitempty" jsonschema:"New LLM model id."`
 	Voice        *string `json:"voice,omitempty" jsonschema:"New voice name."`
 	Orchestrator *bool   `json:"orchestrator,omitempty" jsonschema:"Whether this agent is the workspace orchestrator."`
-	Content      *string `json:"content,omitempty" jsonschema:"New Markdown system instructions. Replaces the body entirely."`
+	Reasoning_   *string `json:"reasoning,omitempty" jsonschema:"New reasoning level: none, low, medium or high."`
+
+	// Sandbox replaces the policy block whole rather than merging into it.
+	// A permission somebody meant to remove has to actually be removed, and a
+	// merge is how a removal silently does nothing.
+	Sandbox *Sandbox `json:"sandbox,omitempty" jsonschema:"New filesystem and execution policy. Replaces the block entirely."`
+
+	Content *string `json:"content,omitempty" jsonschema:"New Markdown system instructions. Replaces the body entirely."`
 
 	command.Reasoning
 }

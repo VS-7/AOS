@@ -36,11 +36,36 @@ type Agent struct {
 	Channels     []Channel `yaml:"channels,omitempty" json:"channels,omitempty" jsonschema:"Communication channel bindings for this agent."`
 	Orchestrator bool      `yaml:"orchestrator" json:"orchestrator" jsonschema:"Marks the workspace orchestrator fallback for non-direct chats."`
 
+	// Reasoning is a divergence from the original, which reads the level only
+	// from the installation's configuration. A reviewer and a triage agent
+	// should not think equally hard, and the global value stays the default.
+	Reasoning string `yaml:"reasoning,omitempty" json:"reasoning,omitempty" jsonschema:"How hard this agent should think: none, low, medium or high. Defaults to the installation's setting."`
+
+	// Sandbox is what this agent may reach. Absent means read-only with no
+	// execution at all, which is stricter than the original's default and is
+	// the point of ADR-0006: the reach of an agent is a decision somebody
+	// makes and writes down, in a file that shows up in a review.
+	Sandbox *Sandbox `yaml:"sandbox,omitempty" json:"sandbox,omitempty" jsonschema:"Filesystem and execution policy for this agent."`
+
 	CreatedAt time.Time `yaml:"createdAt,omitempty" json:"createdAt,omitzero" jsonschema:"When the agent was created."`
 	UpdatedAt time.Time `yaml:"updatedAt,omitempty" json:"updatedAt,omitzero" jsonschema:"When the agent was last changed."`
 
 	// Content is the Markdown body: the system instructions of the agent.
 	Content string `yaml:"-" json:"content,omitempty" collection:"content" jsonschema:"Markdown system instructions for the agent runtime."`
+}
+
+// Sandbox is the policy block of the front matter.
+type Sandbox struct {
+	Permissions []string `yaml:"permissions,omitempty" json:"permissions,omitempty" jsonschema:"Any of: read, write, delete, execute. Defaults to read alone."`
+	Exec        *Exec    `yaml:"exec,omitempty" json:"exec,omitempty" jsonschema:"Which programs this agent may run."`
+}
+
+// Exec is the execution policy: an allowlist, never a blocklist (ADR-0006).
+type Exec struct {
+	Policy     string   `yaml:"policy,omitempty" json:"policy,omitempty" jsonschema:"allowlist or deny-all. Defaults to deny-all."`
+	Allow      []string `yaml:"allow,omitempty" json:"allow,omitempty" jsonschema:"Binary names or absolute paths this agent may run. Example: [\"git\", \"go\"]."`
+	DenyArgs   []string `yaml:"denyArgs,omitempty" json:"denyArgs,omitempty" jsonschema:"Command lines to refuse even for an allowed binary. Example: [\"git push --force*\"]."`
+	AllowShell bool     `yaml:"allowShell,omitempty" json:"allowShell,omitempty" jsonschema:"Whether this agent may reach a shell. A shell makes the allowlist a suggestion, so it takes its own opt-in."`
 }
 
 // DisplayName falls back to the slug, as the original does on create.

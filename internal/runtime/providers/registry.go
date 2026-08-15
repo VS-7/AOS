@@ -121,9 +121,11 @@ func errCapabilityModelMissing(slot string) error {
 		Issue("slot", slot).
 		Status(apperr.StatusBadRequest).
 		CTA(apperr.CallToAction{
-			Label:   "point the slot at a provider and a model",
-			Command: build.Name + " config update --set agents.models." + slot + ".provider=openai --set agents.models." + slot + ".model=...",
-			Tool:    "config_update",
+			Label: "point the " + slot + " slot at a provider and a model in " + build.StateDir + "/config.json",
+			Tool:  "config_update",
+			Input: map[string]any{"set": map[string]any{
+				"agents.models": map[string]any{slot: map[string]any{"provider": "openai", "model": "..."}},
+			}},
 		})
 }
 

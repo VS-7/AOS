@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/identity"
@@ -277,3 +278,85 @@ func hasParticipant(list []Participant, kind ActorType, id string) bool {
 // externalKey is the stable lookup key of a conversation bound to a messenger,
 // so that an inbound message finds its thread without scanning.
 func externalKey(provider, chatID string) string { return "ext:" + provider + ":" + chatID }
+
+// ReplyInput is the runtime handing back what an agent produced.
+//
+// It is not a command and it is not on the registry, deliberately: an agent's
+// answer is written by the runtime that ran the turn, and a surface that could
+// forge one would make the transcript worth nothing as a record of what
+// happened.
+type ReplyInput struct {
+	Chat    string
+	ReplyTo string
+	AgentID string
+
+	Parts []Part
+	Usage TokenUsage
+
+	// Failure records a turn that did not answer. A turn that failed silently
+	// is a conversation where somebody is still waiting.
+	Failure *RunError
+
+	// StartedAt is when the turn began, so the record shows how long it took
+	// rather than only when it ended.
+	StartedAt time.Time
+}
+
+// ReplyOutput is the stored answer.
+type ReplyOutput struct {
+	Message *Message `json:"message,omitempty"`
+	Run     Run      `json:"run"`
+}
+
+// Reply appends an agent's answer and records the attempt on the message that
+// asked for it.
+func (s *Service) Reply(ctx context.Context, in ReplyInput) (ReplyOutput, error) {
+	c, err := s.Get(ctx, GetInput{Chat: in.Chat})
+	if err != nil {
+		return ReplyOutput{}, err
+	}
+	now := s.clock.Now()
+
+	run := Run{
+		AgentID:     in.AgentID,
+		Status:      StatusCompleted,
+		Usage:       in.Usage,
+		StartedAt:   in.StartedAt,
+		CompletedAt: &now,
+	}
+	if in.StartedAt.IsZero() {
+		run.StartedAt = now
+	}
+	if in.Failure != nil {
+		run.Status, run.Error = StatusError, in.Failure
+	}
+
+	var out ReplyOutput
+	if len(in.Parts) > 0 {
+		msg := Message{
+			ID:        s.ids.New(),
+			Role:      RoleAssistant,
+			Author:    &Author{Type: ActorAgent, ID: in.AgentID},
+			Parts:     in.Parts,
+			CreatedAt: now,
+		}
+		c.Messages = append(c.Messages, msg)
+		out.Message = &msg
+	}
+
+	// The attempt is recorded on the message that triggered it, which is the
+	// granularity at which somebody asks why a particular answer was expensive.
+	for i := range c.Messages {
+		if c.Messages[i].ID == in.ReplyTo {
+			c.Messages[i].Runs = append(c.Messages[i].Runs, run)
+			break
+		}
+	}
+
+	c.UpdatedAt = now
+	if err := s.repo.Update(ctx, c, collections.Version{}); err != nil {
+		return ReplyOutput{}, errWriteFailed("Reply", err)
+	}
+	out.Run = run
+	return out, nil
+}

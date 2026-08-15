@@ -1,0 +1,99 @@
+# tool: Approvals
+
+Tool calls an agent is waiting on.
+
+A policy hook can answer "ask" instead of allow or deny, and when it does the
+call stops here until somebody decides. Deciding is not something an agent can
+do: these commands are deliberately outside the agent's own tool registry.
+
+A request that nobody answers becomes a denial when its deadline passes. There
+is no path by which waiting turns into approval.
+
+Composite tool `Approvals` with 2 actions: decide, list.
+
+## Usage
+Call as `Approvals({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### approvals_decide
+
+Allow or refuse a waiting tool call.
+
+Answer a waiting tool call.
+
+The payload may be corrected before approving, which is often what somebody
+actually wants: not "no", but "not like that". Approving once does not approve
+the same call in every future context.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the waiting request."
+    },
+    "approved": {
+      "type": "boolean",
+      "description": "True to let the call run, false to refuse it."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Why. A refusal without one leaves the agent guessing what to try instead."
+    },
+    "updatedInput": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 255
+      },
+      "description": "A corrected payload to run instead of the one proposed."
+    },
+    "remember": {
+      "type": "string",
+      "description": "none, session or always. Defaults to none — approving once is not approving forever."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "approved",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### approvals_list
+
+List the tool calls waiting for a decision.
+
+List the tool calls waiting for a person to allow or refuse them, oldest first.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+

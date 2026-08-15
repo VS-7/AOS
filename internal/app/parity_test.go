@@ -249,6 +249,15 @@ var scenarios = map[string]scenario{
 	"config_get": {
 		Payload: config.GetInput{Reasoning: reason()},
 	},
+	// Nothing is ever waiting in a parity run, which is the point worth
+	// checking on every surface: an answer to a request that is not there
+	// reports that it did not land rather than reporting success.
+	"approvals_list": {
+		Payload: app.PendingInput{Reasoning: reason()},
+	},
+	"approvals_decide": {
+		Payload: app.DecideInput{ID: "nothing-is-waiting", Approved: true, Reasoning: reason()},
+	},
 	"config_update": {
 		Payload: config.UpdateInput{
 			Set:       map[string]any{"region.timezone": "America/Sao_Paulo"},

@@ -95,6 +95,8 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Agent, error) {
 		Voice:        in.Voice,
 		Channels:     in.Channels,
 		Orchestrator: in.Orchestrator,
+		Reasoning:    in.Reasoning_,
+		Sandbox:      in.Sandbox,
 		Content:      in.Content,
 		CreatedAt:    now,
 		UpdatedAt:    now,
@@ -130,6 +132,10 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Agent, error) {
 	applyString(&current.Model, in.Model)
 	applyString(&current.Voice, in.Voice)
 	applyString(&current.Content, in.Content)
+	applyString(&current.Reasoning, in.Reasoning_)
+	if in.Sandbox != nil {
+		current.Sandbox = in.Sandbox
+	}
 	if in.Leader != nil {
 		leader := normalizeID(*in.Leader)
 		if err := s.checkLeaderChain(ctx, id, leader); err != nil {

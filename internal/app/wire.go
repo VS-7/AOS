@@ -8,11 +8,13 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 
 	"github.com/OWNER/aos/internal/adapters/bleveindex"
+	"github.com/OWNER/aos/internal/adapters/eventlog"
 	"github.com/OWNER/aos/internal/adapters/fsauth"
 	"github.com/OWNER/aos/internal/adapters/fscollections"
 	"github.com/OWNER/aos/internal/adapters/fsconfig"
@@ -31,9 +33,13 @@ import (
 	"github.com/OWNER/aos/internal/domain/auth"
 	"github.com/OWNER/aos/internal/domain/chat"
 	"github.com/OWNER/aos/internal/domain/config"
+	"github.com/OWNER/aos/internal/domain/event"
 	"github.com/OWNER/aos/internal/domain/gateway"
 	"github.com/OWNER/aos/internal/domain/memory"
 	"github.com/OWNER/aos/internal/domain/workspace"
+	"github.com/OWNER/aos/internal/runtime/prompt"
+	"github.com/OWNER/aos/internal/runtime/session"
+	"github.com/OWNER/aos/internal/runtime/toolexec"
 	"github.com/OWNER/aos/internal/transport/realtime"
 )
 
@@ -67,6 +73,17 @@ type App struct {
 	Chats      *chat.Service
 	Auth       *auth.Service
 	Gateway    *gateway.Service
+
+	// Hooks is the bus the nine events are emitted on. A skill registers a
+	// handler here; nothing else writes to the audit log.
+	Hooks *event.Service
+
+	// Approvals is the channel a hook's "ask" reaches a person through.
+	Approvals *event.Broker
+
+	// Runtime executes turns. It is exported so a test can run one and assert
+	// on the result rather than on a goroutine it has to wait for.
+	Runtime *session.Runner
 
 	// Events is the server-push hub. It exists whether or not anything is
 	// listening, so a publisher never has to check.
@@ -147,6 +164,7 @@ func New(opts Options) (*App, error) {
 
 	logger := logging.New(logging.Config{})
 	active := resolver.String(env.KeyWorkspaceID, "")
+	events := realtime.NewHub(logger, clock)
 
 	// The search index is per workspace and lives outside the user's repository
 	// so it is never committed (ADR-0013). Without an active workspace there is
@@ -175,16 +193,19 @@ func New(opts Options) (*App, error) {
 		Index: searchIndex,
 		Log:   logger,
 	})
+	// The dispatcher is a late binding on purpose: the runtime needs the chat
+	// service to write an answer back, and the chat service needs the runtime
+	// to start a turn. One of the two has to be handed to the other after both
+	// exist, and a pointer set once at boot is a smaller price than a third
+	// object between them.
+	dispatch := &lateDispatcher{}
 	chatSvc := chat.NewService(chat.Deps{
-		Repo:      repos.chats,
-		Directory: newDirectory(agentSvc),
-		Clock:     clock,
-		IDs:       idgen,
-		Log:       logger,
-		// No dispatcher yet: a message is persisted and its recipient resolved,
-		// and the turn starts when the agent runtime exists. The result already
-		// reports that nothing was dispatched, so nothing here pretends
-		// otherwise.
+		Repo:       repos.chats,
+		Directory:  newDirectory(agentSvc),
+		Dispatcher: dispatch,
+		Clock:      clock,
+		IDs:        idgen,
+		Log:        logger,
 	})
 	workspaceSvc := workspace.NewService(workspace.Deps{
 		Store:    fsworkspace.FromPaths(paths),
@@ -225,14 +246,57 @@ func New(opts Options) (*App, error) {
 		Port:    resolver.Int(env.KeyServerPort, build.Port),
 	})
 
+	// The hook bus and the approval channel. The log is append-only and lives
+	// beside the agent it records, which is what makes it reviewable in the
+	// same place as everything else the agent owns.
+	hookBus := event.NewService(event.Deps{
+		Log:    eventlog.New(root),
+		Clock:  clock,
+		IDs:    idgen,
+		Logger: logger,
+	})
+	broker := event.NewBroker(event.BrokerDeps{
+		Clock: clock, IDs: idgen,
+		Notifier: approvalNotifier{hub: events, workspace: active},
+	})
+	closers = append(closers, func() error { broker.Close(); return nil })
+
 	reg := command.NewRegistry()
 	config.Register(reg, configSvc)
+	registerApprovals(reg, broker)
 	gateway.Register(reg, gatewaySvc)
 	workspace.Register(reg, workspaceSvc)
 	agent.Register(reg, agentSvc)
 	memory.Register(reg, memorySvc)
 	chat.Register(reg, chatSvc)
 	reg.Freeze()
+
+	assembler := prompt.NewAssembler(prompt.Deps{
+		Clock:  promptClock{clock: clock, zone: zoneFrom(configSvc, logger)},
+		Reader: reader{workspaces: workspaceSvc, agents: agentSvc, memories: memorySvc},
+		Log:    logger,
+	})
+	runtime := session.New(session.Deps{
+		Agents:   agentSvc,
+		Chats:    chatSvc,
+		Models:   models{config: configSvc, home: filepath.Dir(paths.Root)},
+		Registry: reg,
+		Bus:      hookBus,
+		// The broker is the interactive channel. A run with nobody present
+		// swaps it for the headless approver, which denies at once and says
+		// that is why — see ADR-0007.
+		Approver:      broker,
+		Prompt:        assembler,
+		Spiller:       toolexec.NewSpiller(paths.Outputs(), logger),
+		Events:        publisher{hub: events},
+		Clock:         clock,
+		IDs:           idgen,
+		Log:           logger,
+		WorkspaceRoot: root,
+		WorkspaceID:   active,
+		TmpDir:        paths.Outputs(),
+	})
+	dispatch.to = runtime
 
 	return &App{
 		Paths:      paths,
@@ -245,10 +309,27 @@ func New(opts Options) (*App, error) {
 		Chats:      chatSvc,
 		Auth:       authSvc,
 		Gateway:    gatewaySvc,
-		Events:     realtime.NewHub(logger, clock),
+		Hooks:      hookBus,
+		Approvals:  broker,
+		Runtime:    runtime,
+		Events:     events,
 		env:        resolver,
 		closers:    closers,
 	}, nil
+}
+
+// lateDispatcher breaks the cycle between the conversation and the runtime.
+//
+// It is a pointer set once at boot and never again, which is why it needs no
+// lock: every read happens on a request, and the write happens before the
+// first one can arrive.
+type lateDispatcher struct{ to chat.Dispatcher }
+
+func (d *lateDispatcher) Dispatch(ctx context.Context, in chat.Turn) (string, error) {
+	if d.to == nil {
+		return "", nil
+	}
+	return d.to.Dispatch(ctx, in)
 }
 
 // repoSet holds the repositories bound to one workspace root.
