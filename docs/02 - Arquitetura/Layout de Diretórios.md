@@ -2,7 +2,7 @@
 tags: [arquitetura, layout, estrutura]
 aliases: [Layout, Estrutura de Diretórios]
 fase: 0
-status: em-construcao
+status: pronto
 origem: "[[Padrão Feature-Slice]]"
 ---
 
@@ -126,6 +126,12 @@ Todo o resto está sob `internal/`, o que impede import externo pelo compilador.
 > [!decision] `frontend/features/` espelha `internal/domain/`
 > Um nome, dois lados. Achar o código de UI de tasks é `frontend/src/features/task/`.
 
+> [!decision] `internal/core/atomicfs` em vez de `collections/atomic.go`
+> A [[ADR-0012 Escrita atômica e lock por arquivo]] põe `WriteFileAtomic` em `internal/core/collections`. Ela foi movida para um pacote próprio porque o `WriteSecret` da [[ADR-0010 Segredos com permissão restrita]] precisa da mesma garantia na Fase 0, antes de o motor de coleções existir — e duas implementações de escrita atômica é exatamente o tipo de duplicação que termina com uma delas errada. O motor de coleções consome este pacote.
+
+> [!decision] `tools/` para geradores
+> `tools/gencatalog` e `tools/covercheck` são binários de build, não biblioteca nem domínio: não cabem em `pkg/` (não são úteis fora do projeto) nem em `internal/core/` (não são infraestrutura de runtime). `tools/` fica fora do escopo da regra de cobertura pelo mesmo motivo.
+
 ## Testes
 
 - **Estrutura de feature:** teste que percorre `internal/domain/*` e falha se faltar `entity.go`, `service.go`, `port.go` ou `commands.go`.
@@ -134,7 +140,26 @@ Todo o resto está sob `internal/`, o que impede import externo pelo compilador.
 
 ## Critério de pronto
 
-- [ ] Toda feature de domínio com os quatro arquivos obrigatórios
-- [ ] Nenhum ciclo entre features de domínio
-- [ ] `pkg/skill` sem import de `internal/`
-- [ ] `Taskfile.yml` com alvos `build`, `test`, `lint`, `gen-bindings`, `gen-skill`
+- [x] Toda feature de domínio com os arquivos obrigatórios — verificado por `TestFeatureLayout`; `commands.go` entra na lista na Fase 2
+- [x] Nenhum ciclo entre features de domínio — só existe `config` na Fase 0; `go vet` cobre ciclos de import
+- [ ] `pkg/skill` sem import de `internal/` — a regra já está em `architecture.Forbidden`; `pkg/` nasce na Fase 9
+- [x] `Taskfile.yml` com alvos `build`, `build:all`, `test`, `cover`, `lint`, `vet`, `arch`, `graph`, `gen`, `check` — `gen-bindings` e `gen-skill` entram nas Fases 7 e 9
+
+## Saída — Fase 0
+
+Árvore efetivamente criada:
+
+```
+aos/
+├── cmd/aos/                      # binário principal — `aos version`
+├── internal/
+│   ├── core/{build,apperr,env,identity,logging,safe,atomicfs,config}/
+│   ├── domain/config/
+│   ├── adapters/fsconfig/
+│   └── architecture/             # a regra de dependência
+├── tools/{gencatalog,covercheck}/
+├── docs/                         # o vault de especificação
+├── Taskfile.yml  .golangci.yml  .github/workflows/ci.yml
+```
+
+`aos`, `aosd` e `aos-desktop` são três binários; a Fase 0 entrega apenas `aos`, e o `Taskfile.yml` lista os binários existentes em `BINARIES`. `aosd` entra na Fase 4 e `aos-desktop` na Fase 7.

@@ -2,7 +2,7 @@
 tags: [arquitetura, erros, cta, llm]
 aliases: [Erros, AppError, CTA]
 fase: 0
-status: em-construcao
+status: pronto
 origem: "[[Códigos de Erro]]"
 ---
 
@@ -167,6 +167,18 @@ Mantemos a estrutura `{PREFIXO}_{DOMÍNIO}_{CONDIÇÃO}` e os nomes de condiçã
 > [!decision] Nenhum segredo em `Issue`
 > `Issue` é serializado para o agente e para logs. Um teste percorre o catálogo e falha se algum construtor colocar valor de campo marcado `secret:"true"` no issue. Ver [[ADR-0010 Segredos com permissão restrita]].
 
+> [!decision] Sete sentinelas, não quatro
+> A lista da nota (`ErrNotFound`, `ErrConflict`, `ErrForbidden`, `ErrUnavailable`) não cobre 400, 401 nem 500, e o invariante "todo `*apperr.Error` desembrulha para exatamente uma sentinela" fica inexequível. Acrescentadas `ErrInvalid`, `ErrUnauthorized` e `ErrInternal`. `Unwrap() []error` devolve a causa **e** a sentinela, então `errors.Is` funciona para as duas sem que uma esconda a outra.
+
+> [!decision] Campos da struct renomeados, API fluente e JSON preservados
+> Go não permite um campo `Causer` e um método `Causer` no mesmo tipo, e a nota especifica os dois. Ganha a API fluente, que aparece em toda chamada: os campos viram `CauserName`, `Message`, `Issues`, `Actions`, `HTTPStatus`, `Cause`, **com as mesmas tags JSON**. O contrato de fio não muda.
+
+> [!decision] `Status(apperr.StatusNotFound)`, não `Status(http.StatusNotFound)`
+> `internal/domain` não pode importar `net/http` ([[Hexagonal e Regra de Dependência]]). `apperr` reexporta as constantes; o valor é o mesmo.
+
+> [!decision] O catálogo é gerado por varredura de AST
+> `tools/gencatalog` percorre a árvore, encontra cada `apperr.New("CODE")` e lê a cadeia fluente (`Causer`, `Status`, `CTA`, `Issue`), emitindo `internal/core/apperr/catalog.gen.go`. Os dois primeiros invariantes ("todo código usado está no catálogo" e "toda entrada do catálogo é alcançável") passam a valer **por construção**: o teste compara o catálogo commitado com uma varredura nova e falha na divergência. O terceiro invariante (causer presente, CTA em erro acionável) é asserção sobre a mesma varredura. Isso responde ao problema do original, cujo catálogo curado à mão acumulou nomes de variável de ambiente.
+
 ## Testes
 
 - **Catálogo:** os três invariantes acima.
@@ -177,8 +189,34 @@ Mantemos a estrutura `{PREFIXO}_{DOMÍNIO}_{CONDIÇÃO}` e os nomes de condiçã
 
 ## Critério de pronto
 
-- [ ] Catálogo de códigos completo e verificado por teste
-- [ ] Todo erro 4xx com pelo menos um CTA
-- [ ] Golden files das quatro superfícies
-- [ ] Prefixo derivado de `build.ErrorPrefix`, nunca literal
-- [ ] Nenhum campo secreto alcançável via `Issue`
+- [x] Catálogo de códigos completo e verificado por teste — `TestCatalogMatchesSource`
+- [x] Todo erro 4xx com pelo menos um CTA — `TestActionableErrorsHaveCTA`
+- [ ] Golden files das quatro superfícies — as superfícies nascem nas Fases 2 (CLI, MCP) e 4 (HTTP) e 7 (Wails); os golden entram junto
+- [x] Prefixo derivado de `build.ErrorPrefix`, nunca literal — `TestNewAppliesBrandPrefix`
+- [x] Nenhum campo secreto alcançável via `Issue` — `TestNoSecretsInIssue`
+
+## Saída dos testes — Fase 0
+
+```
+$ go test -race -count=1 ./internal/core/apperr/...
+ok  	github.com/OWNER/aos/internal/core/apperr	     coverage: 80.7% of statements
+ok  	github.com/OWNER/aos/internal/core/apperr/scan   coverage: 80.1% of statements
+```
+
+Catálogo gerado nesta fase — 11 códigos, todos com `causer`, todos os 4xx com CTA:
+
+| Código | Status | Causer |
+|---|---|---|
+| `AOS_CONFIG_FIELD_FORBIDDEN` | 403 | `config.Service.Update` |
+| `AOS_CONFIG_FIELD_UNKNOWN` | 400 | `config.Service.Update` |
+| `AOS_CONFIG_LOAD_FAILED` | 500 | `config.Service.load` |
+| `AOS_CONFIG_REVEAL_DENIED` | 403 | `config.Service.Get` |
+| `AOS_CONFIG_SAVE_FAILED` | 500 | `config.Service.Update` |
+| `AOS_INTERNAL_PANIC` | 500 | `<dinâmico>` |
+| `AOS_SECRET_PERMISSION_UNSAFE` | 500 | `config.WriteSecret` |
+| `AOS_SECRET_WRITE_FAILED` | 500 | `config.WriteSecret` |
+| `AOS_STATE_DIR_UNWRITABLE` | 500 | `config.Paths.Ensure` |
+| `AOS_STATE_FOREIGN_ROOT` | 400 | `config.Paths.guardForeignState` |
+| `AOS_STATE_HOME_UNRESOLVED` | 500 | `config.Resolve` |
+
+`AOS_STATE_FOREIGN_ROOT` é novo e não tem equivalente no original: recusa operar sobre um diretório de estado chamado `.fractal`, que na máquina de desenvolvimento pertence à instalação real do produto original.

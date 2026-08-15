@@ -136,3 +136,32 @@ func Doctor(ctx context.Context) (Report, error)
 - [ ] Custo por turno, sessão e agente
 - [ ] `aos doctor` cobrindo os pontos de diagnóstico
 - [ ] Telemetria opt-in verificada por teste de rede
+
+## Progresso — Fase 0
+
+> [!warning] Nota parcialmente implementada
+> O [[Roteiro de Fases]] lista esta nota na Fase 0, mas metade do seu conteúdo depende de peças de fases posteriores: métricas exigem o servidor HTTP (Fase 4), custo exige os providers (Fase 5) e `doctor` exige o gateway (Fase 4). Só a camada de logging foi entregue. A nota permanece `em-construcao` em vez de ser declarada pronta com metade do critério em aberto.
+
+**Entregue**
+
+- `internal/core/logging` sobre `log/slog`, com `New(Config)` escolhendo texto em TTY e JSON quando redirecionado
+- `FromContext` injetando `request_id`, `workspace` e `agent` a partir da identidade ambiente, e `Component` acrescentando `component`
+- `redactHandler` cobrindo três caminhos: chave sensível (`password`, `token`, `secret`, `authorization`, …), valor com forma de credencial (`aos_…`, `sk-…`, `ghp_…`, `Bearer …`) e grupos aninhados
+- Cobertura de 100% do pacote
+
+```
+$ go test -race -count=1 ./internal/core/logging/
+ok  	github.com/OWNER/aos/internal/core/logging	coverage: 100.0% of statements
+```
+
+**Pendente, com a fase de destino**
+
+| Item | Fase |
+|---|---|
+| `/api/metrics` em loopback, autenticado | 4 |
+| Contadores e histogramas de `Metrics` | 4–6, conforme cada evento existir |
+| Custo por turno, sessão e agente; `aos usage` | 5 |
+| `aos doctor` | 4 |
+| Teste de rede provando telemetria desligada por default | 4 |
+
+O default de telemetria já é `false` ([[Config (Go)]]), que é a metade da decisão que não depende de rede.

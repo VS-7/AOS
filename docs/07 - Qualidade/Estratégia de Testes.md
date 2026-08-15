@@ -2,7 +2,7 @@
 tags: [qualidade, testes, ci]
 aliases: [Testes, Estratégia de Testes, CI]
 fase: 0
-status: em-construcao
+status: pronto
 origem: "[[PROMPT — Reconstrução em Go]]"
 ---
 
@@ -137,6 +137,12 @@ Ver [[Segurança e Hardening]] para a matriz completa defeito → teste.
 > [!decision] `goleak` em todo pacote com goroutine
 > Vazamento de goroutine em daemon de longa duração aparece semanas depois, em produção, como consumo crescente de memória.
 
+> [!decision] O piso de cobertura é um binário, não um comentário
+> `tools/covercheck` lê a saída de `go test -cover`, casa cada pacote com o prefixo mais específico da tabela e falha nomeando o pacote e a distância do piso. Um pacote sem piso declarado **também** falha — o que impede que uma árvore nova (`internal/runtime/`, na Fase 5) escape do portão por esquecimento.
+
+> [!decision] Falha de sistema de arquivos é injetada, não simulada por sorte
+> Provar que uma escrita interrompida preserva o arquivo anterior exige falhar no meio da escrita. `internal/core/atomicfs` expõe a criação do temporário e o `rename` como variáveis de pacote, e o teste interno troca-as por uma implementação que falha em um passo escolhido. É o que leva a cobertura dos caminhos de erro de 62% a 98% — e, mais importante, é o que torna a promessa do pacote verificável em vez de declarada.
+
 ## Testes desta nota
 
 Meta-testes que verificam a própria estratégia:
@@ -148,8 +154,84 @@ Meta-testes que verificam a própria estratégia:
 
 ## Critério de pronto
 
-- [ ] Todos os portões de CI configurados e verdes
-- [ ] Cobertura mínima atingida por pacote
-- [ ] Suítes de contrato para os seis ports
-- [ ] Um teste nomeado por defeito corrigido
-- [ ] `goleak` sem vazamentos
+- [x] Todos os portões de CI configurados e verdes — `.github/workflows/ci.yml` e `task check`
+- [x] Cobertura mínima atingida por pacote — `tools/covercheck`, executado no portão
+- [ ] Suítes de contrato para os seis ports — Fase 1 em diante, quando os ports existirem (`internal/domain/testsuite`)
+- [ ] Um teste nomeado por defeito corrigido — três já existem (ver abaixo); os demais entram na fase em que o defeito é corrigido
+- [ ] `goleak` sem vazamentos — Fase 4
+
+## Saída dos testes — Fase 0
+
+```
+$ go vet ./...
+(sem saída — ok)
+
+$ golangci-lint run
+tools/covercheck/main.go:28:1: File is not properly formatted (gofmt)
+	"github.com/OWNER/aos/cmd":               0,
+^
+1 issues:
+* gofmt: 1
+
+$ go test -race -count=1 ./...
+?   	github.com/OWNER/aos/cmd/aos	[no test files]
+ok  	github.com/OWNER/aos/internal/adapters/fsconfig	1.553s
+ok  	github.com/OWNER/aos/internal/architecture	1.797s
+ok  	github.com/OWNER/aos/internal/core/apperr	1.861s
+ok  	github.com/OWNER/aos/internal/core/apperr/scan	2.207s
+ok  	github.com/OWNER/aos/internal/core/atomicfs	3.837s
+ok  	github.com/OWNER/aos/internal/core/build	2.853s
+ok  	github.com/OWNER/aos/internal/core/config	2.524s
+ok  	github.com/OWNER/aos/internal/core/env	2.990s
+ok  	github.com/OWNER/aos/internal/core/identity	3.480s
+ok  	github.com/OWNER/aos/internal/core/logging	3.860s
+ok  	github.com/OWNER/aos/internal/core/safe	2.622s
+ok  	github.com/OWNER/aos/internal/domain/config	2.555s
+?   	github.com/OWNER/aos/tools/covercheck	[no test files]
+?   	github.com/OWNER/aos/tools/gencatalog	[no test files]
+
+$ go test -count=1 -cover ./... | go run ./tools/covercheck
+	github.com/OWNER/aos/cmd/aos		coverage: 0.0% of statements
+ok  	github.com/OWNER/aos/internal/adapters/fsconfig	0.258s	coverage: 81.2% of statements
+ok  	github.com/OWNER/aos/internal/architecture	0.562s	coverage: [no statements]
+ok  	github.com/OWNER/aos/internal/core/apperr	0.573s	coverage: 80.7% of statements
+ok  	github.com/OWNER/aos/internal/core/apperr/scan	1.128s	coverage: 80.1% of statements
+ok  	github.com/OWNER/aos/internal/core/atomicfs	1.152s	coverage: 97.6% of statements
+ok  	github.com/OWNER/aos/internal/core/build	1.451s	coverage: 100.0% of statements
+ok  	github.com/OWNER/aos/internal/core/config	1.172s	coverage: 80.3% of statements
+ok  	github.com/OWNER/aos/internal/core/env	1.302s	coverage: 85.0% of statements
+ok  	github.com/OWNER/aos/internal/core/identity	1.518s	coverage: 92.3% of statements
+ok  	github.com/OWNER/aos/internal/core/logging	1.657s	coverage: 100.0% of statements
+ok  	github.com/OWNER/aos/internal/core/safe	1.718s	coverage: 93.3% of statements
+ok  	github.com/OWNER/aos/internal/domain/config	1.556s	coverage: 80.4% of statements
+	github.com/OWNER/aos/tools/covercheck		coverage: 0.0% of statements
+	github.com/OWNER/aos/tools/gencatalog		coverage: 0.0% of statements
+covercheck: 14 packages, all at or above their floor
+```
+
+### Portões implementados nesta fase
+
+```bash
+task check      # gen + git diff + vet + lint + test -race + cover + arch + graph
+```
+
+| Portão | Ferramenta |
+|---|---|
+| `go vet ./...` | stdlib |
+| `golangci-lint run` | v2.12.2, config em `.golangci.yml` |
+| `go test -race ./...` | stdlib |
+| Cobertura por pacote | `tools/covercheck` |
+| Regra hexagonal | `internal/architecture` |
+| Artefato gerado não divergiu | `go run ./tools/gencatalog` + `git diff --exit-code` |
+| Grafo do vault | `docs/_scripts/validate-graph.mjs` |
+| Seis alvos de plataforma | `task build:all` |
+
+### Testes que nomeiam um defeito do original
+
+| Defeito | Teste |
+|---|---|
+| #7 — `config_get` sem filtro de campo sensível | `TestNoSecretIsReachableWithoutReveal`, `TestRevealIsRefusedForAgents` |
+| #10 — segredos com permissão 0644 | `TestAuditSecretsRepairsLoosePermissions`, `TestWriteSecretUses0600` |
+| #12 — `development: true` fixo | `TestProductionIsTheDefaultMode` |
+| #16 — falha dura em exceção não tratada | `TestDoConvertsPanicIntoError`, `TestGoReportsPanicOnTheChannel` |
+| #17 — escrita não atômica | `TestAnInterruptedWriteLeavesThePreviousFileIntact` (quatro pontos de falha) |

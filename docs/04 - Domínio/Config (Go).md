@@ -2,7 +2,7 @@
 tags: [dominio, config, global]
 aliases: [Config Go, Configuração]
 fase: 0
-status: em-construcao
+status: pronto
 origem: "[[Config]]"
 ---
 
@@ -114,6 +114,15 @@ func (s *service) load() (Config, error)
 > [!decision] Telemetria opt-in, não opt-out
 > O original tem `telemetry.enabled: true` e `sentryEnabled: true` por padrão, com um `installationId` identificando a instalação. Invertemos: um produto local-first que promete privacidade não deve enviar nada sem consentimento explícito. O onboarding pergunta uma vez.
 
+> [!decision] `Redact` devolve cópia profunda
+> A primeira implementação copiava a struct e redigia por reflexão no lugar. Um `Config` copiado por valor **compartilha o array de `agents.providers` e o mapa `agents.models`** com o original, então redigir a resposta apagava a chave viva que o daemon usa para alcançar o provider. O teste `TestRedactDoesNotMutateItsInput` fixa isso. É o tipo de defeito que só aparece em produção, na segunda chamada.
+
+> [!decision] `Store` como port, `fsconfig` como adaptador
+> A nota descreve `load()` relendo o disco. Ler disco é I/O, e `internal/domain` não faz I/O ([[Hexagonal e Regra de Dependência]]). O serviço consome um port `Store` de dois métodos; `internal/adapters/fsconfig` implementa o cache por `modtime`+tamanho que dá o comportamento descrito — edição à mão vista sem restart, sem pagar leitura de disco a cada chamada.
+
+> [!decision] `Update` sempre devolve a projeção redigida
+> Inclusive para humano. Quem precisa legitimamente do valor pede por `Get` com `Reveal`, que é o único caminho com confirmação interativa.
+
 ## Testes
 
 - Redação: nenhum campo `secret:"true"` alcançável por `Get` sem `Reveal`
@@ -126,7 +135,29 @@ func (s *service) load() (Config, error)
 
 ## Critério de pronto
 
-- [ ] Redação por tag verificada por teste sobre a struct inteira
-- [ ] Allowlist de escrita por agente aplicada
-- [ ] Defaults seguros
-- [ ] Telemetria opt-in
+- [x] Redação por tag verificada por teste sobre a struct inteira — `TestEverySecretFieldIsRedacted` percorre o tipo, não uma amostra
+- [x] Allowlist de escrita por agente aplicada — `TestAgentMayNotWriteSecurityOrProviderKeys`
+- [x] Defaults seguros — `TestSafeDefaults`
+- [x] Telemetria opt-in — idem
+
+## Saída dos testes — Fase 0
+
+```
+$ go test -race -count=1 ./internal/domain/config/ ./internal/adapters/fsconfig/
+ok  	github.com/OWNER/aos/internal/domain/config      coverage: 80.4% of statements
+ok  	github.com/OWNER/aos/internal/adapters/fsconfig  coverage: 81.2% of statements
+```
+
+Cobertura dos casos que a nota lista:
+
+| Caso da nota | Teste |
+|---|---|
+| Nenhum campo `secret:"true"` alcançável por `Get` sem `Reveal` | `TestNoSecretIsReachableWithoutReveal` |
+| Reflexão cobre aninhados e slices (`providers[].key`) | `TestEverySecretFieldIsRedacted` |
+| `Update` fora da allowlist por agente falha com CTA | `TestAgentMayNotWriteSecurityOrProviderKeys` |
+| Mesmo campo por humano autenticado passa | `TestHumanMayWriteTheSameFieldTheAgentCannot` |
+| Edição manual vista sem restart | `TestHandEditIsPickedUpWithoutRestart` |
+| Migração de config antiga preenche defaults novos | `TestNormalizeFillsNewFieldsWithoutLosingOldValues` |
+| Escrita usa `0600` e escrita atômica | `TestSaveWrites0600` |
+
+`commands.go` — o grupo `config` na Command Layer, com as tools `config_get` e `config_update` — entra na Fase 2, quando `internal/core/command` existe.

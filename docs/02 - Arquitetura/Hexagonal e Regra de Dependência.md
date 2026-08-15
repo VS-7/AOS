@@ -2,7 +2,7 @@
 tags: [arquitetura, hexagonal, ports, dependencias]
 aliases: [Hexagonal, Ports and Adapters, Regra de Dependência]
 fase: 0
-status: em-construcao
+status: pronto
 origem: "[[Padrão Feature-Slice]]"
 ---
 
@@ -174,6 +174,15 @@ Um serviço governa **um agregado**. `MemoryService` não escreve tasks.
 > [!decision] A regra é teste, não convenção
 > Convenção arquitetural sem verificação vira exceção documentada em três meses. O teste custa 80 linhas.
 
+> [!decision] `net/http` proibido no domínio, mesmo para constantes de status
+> A lista de proibidos veta `net/http` em `internal/domain`, mas o exemplo de [[Estratégia de Erros]] escreve `Status(http.StatusNotFound)` dentro de `domain/*/errors.go`. As duas coisas não podem valer juntas. Prevalece a regra, que a nota declara inviolável: `apperr` reexporta as constantes (`apperr.StatusNotFound`), o valor é idêntico e o domínio não importa `net/http`. Registrado em `internal/core/apperr/status.go`.
+
+> [!decision] `internal/runtime` também é proibido no domínio
+> A lista original não o inclui, mas o diagrama coloca `runtime/` fora do hexágono (é motor de execução, não domínio). Sem a proibição, `domain/agent` poderia importar `runtime/agentloop` e inverter a seta. Acrescentado a `Forbidden` em `internal/architecture/rules.go`.
+
+> [!decision] `TestDependencyRule` lê imports com `go/parser`, não com `packages.Load`
+> Mesmo resultado, sem dependência externa em um teste de fundação, e a mensagem de erro aponta arquivo e linha do import — que é o que a nota exige. `TestNoDomainInClients` continua usando o grafo real, via `go list -deps`.
+
 ## Testes
 
 - **`TestDependencyRule`** — a verificação acima, com mensagem que nomeia arquivo e import.
@@ -183,7 +192,24 @@ Um serviço governa **um agregado**. `MemoryService` não escreve tasks.
 
 ## Critério de pronto
 
-- [ ] `TestDependencyRule` verde e no portão de CI
-- [ ] Toda feature de domínio segue o esqueleto de 7 arquivos
-- [ ] Nenhuma interface de port com mais de 6 métodos sem justificativa escrita
-- [ ] Testes de `internal/domain` rodam sem tocar disco nem rede
+- [x] `TestDependencyRule` verde e no portão de CI
+- [x] Toda feature de domínio segue o esqueleto — `commands.go` entra na lista obrigatória na Fase 2, quando a Command Layer existe para ser importada (`architecture.RequiredFeatureFiles`)
+- [x] Nenhuma interface de port com mais de 6 métodos sem justificativa escrita — `TestPortsAreSmall`
+- [x] Testes de `internal/domain` rodam sem tocar disco nem rede — `TestDomainTestsDoNotTouchIO`
+
+## Saída dos testes — Fase 0
+
+```
+$ go test -count=1 ./internal/architecture/...
+ok  	github.com/OWNER/aos/internal/architecture	0.562s
+```
+
+Testes que sustentam a regra, em `internal/architecture/`:
+
+| Teste | O que garante |
+|---|---|
+| `TestDependencyRule` | Nenhum pacote sob um prefixo guardado importa o que lhe é proibido |
+| `TestNoDomainInClients` | `go list -deps ./cmd/aos` não contém `internal/domain` |
+| `TestFeatureLayout` | Toda feature de domínio tem o esqueleto |
+| `TestPortsAreSmall` | Nenhum port com mais de 6 métodos sem justificativa |
+| `TestDomainTestsDoNotTouchIO` | Testes de domínio rodam em fakes |

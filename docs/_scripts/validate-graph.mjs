@@ -15,14 +15,28 @@
  * Saída: 0 se válido, 1 se houver problema.
  */
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join, relative, basename, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..", "..");
 const DOCS = join(ROOT, "docs");
-const RE_VAULT = join(ROOT, "Fractal Vault");
+
+/**
+ * O vault de engenharia reversa não vive no repositório do AOS: é material
+ * proprietário de terceiro e o PROMPT manda copiar apenas `docs/`. Procura-se
+ * em três lugares; se nenhum existir, os links para fora de `docs/` viram
+ * "não verificados" (aviso) em vez de "quebrados" (erro).
+ */
+const RE_VAULT_CANDIDATES = [
+  process.env.AOS_RE_VAULT,
+  join(ROOT, "Fractal Vault"),
+  join(ROOT, "..", "Fractal Reverse Enginner", "Fractal Vault"),
+].filter(Boolean);
+
+const RE_VAULT = RE_VAULT_CANDIDATES.find((p) => existsSync(p)) ?? null;
+const reVaultAvailable = RE_VAULT !== null;
 
 const MOC = "AOS";
 const VALID_STATUS = new Set(["especificado", "em-construcao", "pronto"]);
@@ -86,7 +100,7 @@ function extractLinks(text) {
 // ── Índice de alvos resolvíveis ───────────────────────────────────────────────
 
 const docsFiles = walk(DOCS);
-const reFiles = walk(RE_VAULT);
+const reFiles = reVaultAvailable ? walk(RE_VAULT) : [];
 const allFiles = [...docsFiles, ...reFiles];
 
 /** nome resolvível (lowercase) → caminho canônico */
@@ -111,6 +125,7 @@ for (const file of allFiles) {
 // ── Verificações ──────────────────────────────────────────────────────────────
 
 const broken = [];
+const unverified = [];
 const missingFrontmatter = [];
 const badStatus = [];
 const linkedTo = new Set();
@@ -132,7 +147,7 @@ for (const file of docsFiles) {
   for (const link of note.links) {
     const target = resolvable.get(link.toLowerCase());
     if (!target) {
-      broken.push({ file: rel, link });
+      (reVaultAvailable ? broken : unverified).push({ file: rel, link });
     } else {
       linkedTo.add(target);
     }
@@ -157,6 +172,8 @@ const report = {
   notes: docsFiles.length,
   links: docsFiles.reduce((n, f) => n + notes.get(f).links.length, 0),
   broken,
+  unverified,
+  reVault: RE_VAULT,
   orphans,
   missingFrontmatter,
   badStatus,
@@ -167,6 +184,11 @@ if (jsonOutput) {
 } else {
   console.log(`Notas em docs/: ${report.notes}`);
   console.log(`Wikilinks: ${report.links}`);
+  console.log(
+    reVaultAvailable
+      ? `Vault de RE: ${relative(ROOT, RE_VAULT)}`
+      : "Vault de RE: ausente — links externos não verificados",
+  );
   console.log("");
 
   const section = (title, items, render) => {
@@ -179,6 +201,12 @@ if (jsonOutput) {
   };
 
   section("Links quebrados", broken, (b) => `${b.file} → [[${b.link}]]`);
+  if (!reVaultAvailable && unverified.length > 0) {
+    const alvos = new Set(unverified.map((u) => u.link));
+    console.log(
+      `! Links não verificados: ${unverified.length} (${alvos.size} alvos distintos no vault de RE)`,
+    );
+  }
   section("Notas órfãs", orphans, (o) => o);
   section("Frontmatter faltando", missingFrontmatter, (m) => `${m.file} → ${m.field}`);
   section("Status inválido", badStatus, (s) => `${s.file} → ${s.status}`);

@@ -2,7 +2,7 @@
 tags: [arquitetura, concorrencia, context, goroutines]
 aliases: [Concorrência, Context, Goroutines]
 fase: 0
-status: em-construcao
+status: pronto
 origem: "[[Jobs e Queues]]"
 ---
 
@@ -173,8 +173,29 @@ type Service struct {
 
 ## Critério de pronto
 
-- [ ] Nenhum `go f()` solto fora de `safe.Go` ou `errgroup`
-- [ ] `context.TODO()` ausente de código de produção (linter)
-- [ ] `go test -race ./...` verde no CI
-- [ ] `goleak` sem vazamentos
-- [ ] `SIGTERM` desmonta em menos de 15 s com jobs em voo
+- [x] Nenhum `go f()` solto fora de `safe.Go` ou `errgroup` — `safe.Go` e `safe.Do` implementados; o único `go` do código está dentro de `safe.Go`
+- [x] `context.TODO()` ausente de código de produção — `forbidigo` no `.golangci.yml`, junto com `time.Now` e `math/rand`
+- [x] `go test -race ./...` verde no CI
+- [ ] `goleak` sem vazamentos — entra na Fase 4, com o primeiro pacote que sobe goroutines de longa duração
+- [ ] `SIGTERM` desmonta em menos de 15 s com jobs em voo — Fase 4, com o daemon
+
+## Saída dos testes — Fase 0
+
+```
+$ go test -race -count=1 ./internal/core/safe/ ./internal/core/identity/
+ok  	github.com/OWNER/aos/internal/core/safe      coverage: 93.3% of statements
+ok  	github.com/OWNER/aos/internal/core/identity  coverage: 92.3% of statements
+```
+
+O que existe da nota nesta fase:
+
+| Regra | Estado |
+|---|---|
+| 1 — `ctx` como primeiro parâmetro, identidade ambiente | `internal/core/identity`, com `Actor` preferindo o agente ao usuário |
+| 2 — nenhuma goroutine sem dono | `safe.Go` devolve canal com buffer, nunca vaza por caller ausente |
+| 3 — `recover()` na fronteira | `safe.Do`/`safe.Go`; as três fronteiras concretas (handler, worker, tool) chegam nas Fases 4, 5 e 6 |
+| 4 — cancelamento propaga | verificado no adaptador de config (`TestCancelledContextIsRespected`) |
+| 5 — proteja o estado | `atomicfs` e o cache do `fsconfig.Store` |
+| 6 — `-race` obrigatório | portão de CI |
+
+Os parâmetros configuráveis da tabela de concorrência estão declarados em `internal/core/env/settings.go` com seus defaults; passam a ser lidos por quem os consome, em cada fase.

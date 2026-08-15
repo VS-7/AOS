@@ -170,3 +170,25 @@ A ordem 10 → 11 é intencional e herdada: webhooks do Telegram precisam da URL
 - [ ] Teste de regra de dependência verde no CI
 - [ ] `aos` e `aos-desktop` não linkam nenhum pacote de domínio além de `gateway`
 - [ ] Boot audita permissões de segredo e registra reparos
+
+## Progresso — Fase 0
+
+> [!warning] Nota parcialmente implementada
+> O critério desta nota é topológico: três binários, boot completo do daemon, `Resolve` concorrente. Nada disso existe antes das Fases 3 e 4. A Fase 0 entrega apenas o primeiro binário e a base sobre a qual os outros dois são montados. A nota permanece `em-construcao`.
+
+**Entregue**
+
+- `cmd/aos` compila e roda `aos version`, nos seis alvos de plataforma
+- `internal/core/config.Paths` fixa a árvore de `~/.aos` inteira — `config.json`, `users.json`, `data/jobs.sqlite`, `runtime/gateway/`, `tmp/outputs/`, `workspaces/{id}/index/` — de modo que cada fase seguinte encontra o caminho pronto em vez de inventá-lo
+- Passos 1 e 2 da sequência de boot (`env` em camadas, auditoria de permissão de segredo) e o 3 (logger estruturado) existem como peças; a sequência que os encadeia é da Fase 4
+- A regra de conteúdo dos binários (`aos` não linka domínio) já é portão de CI, com `internal/domain/gateway` na lista de exceções antes mesmo de existir
+
+**Pendente, com a fase de destino**
+
+| Item | Fase |
+|---|---|
+| `aosd` — daemon chi com `/api`, `/mcp`, `/ws`, `/v/*` | 4 |
+| `aos-desktop` — Wails3 | 7 |
+| `workspace.Runtime` e `Resolve` com `singleflight` | 3 |
+| Sequência de boot completa (passos 4–11) | 4 |
+| Boot em `t.TempDir()` com `goleak` e `SIGTERM` | 4 |
