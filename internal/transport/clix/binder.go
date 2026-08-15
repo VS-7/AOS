@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/spf13/pflag"
-
-	"github.com/OWNER/aos/internal/core/command"
 )
 
 // binder maps an input struct to command-line flags and back.
@@ -226,7 +224,3 @@ func jsonName(f reflect.StructField) string {
 	name, _, _ := strings.Cut(tag, ",")
 	return name
 }
-
-// reasoningPresent is a sanity check used by the CLI tests: the field must
-// exist on the type and must not become a flag.
-func reasoningPresent(t reflect.Type) bool { return command.HasReasoning(t) }

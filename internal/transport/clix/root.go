@@ -4,6 +4,7 @@ package clix
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -124,7 +125,7 @@ func BuildCommand(d command.Descriptor, cfg Config) *cobra.Command {
 		out := resolveOutput(cmd, cfg)
 
 		if schemaOnly(cmd) {
-			return writeSchema(cfg.Out, d, out)
+			return writeSchema(cfg.Out, d)
 		}
 
 		raw, err := b.Collect(cmd.Flags(), args)
@@ -134,6 +135,11 @@ func BuildCommand(d command.Descriptor, cfg Config) *cobra.Command {
 		result, err := cfg.Invoker.Invoke(cmd.Context(), d, raw)
 		if err != nil {
 			return writeError(cfg.Err, err, out)
+		}
+		if tokenCountOnly(cmd) {
+			// What the result would cost, without spending it. An agent asks
+			// this before deciding whether to page.
+			return writeTokenCount(cfg.Out, command.Wrap(result, nil), out)
 		}
 		return writeResult(cfg.Out, command.Wrap(result, nil), out)
 	}
@@ -150,18 +156,48 @@ func renderExamples(d command.Descriptor) string {
 		if err != nil {
 			continue
 		}
-		fmt.Fprintf(&b, "  # %s\n  %s %s --json '%s'\n", ex.Description, build.Name,
-			strings.Join(d.Path(), " "), raw)
+		// The example must be a line the reader can paste, which means it has
+		// to be built by the same code that parses it.
+		argv, err := CommandLineFor(d, raw)
+		if err != nil {
+			continue
+		}
+		fmt.Fprintf(&b, "  # %s\n  %s %s\n", ex.Description, build.Name, quoteArgv(argv))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func writeSchema(w io.Writer, d command.Descriptor, out format.Options) error {
+// quoteArgv renders argv as a shell line, quoting only what needs it.
+func quoteArgv(argv []string) string {
+	out := make([]string, 0, len(argv))
+	for _, a := range argv {
+		if a == "" || strings.ContainsAny(a, " \t\"'{}[]$") {
+			out = append(out, "'"+strings.ReplaceAll(a, "'", `'\''`)+"'")
+			continue
+		}
+		out = append(out, a)
+	}
+	return strings.Join(out, " ")
+}
+
+func writeSchema(w io.Writer, d command.Descriptor) error {
 	raw, err := json.MarshalIndent(d.InputSchema(), "", "  ")
 	if err != nil {
 		return err
 	}
 	_, err = fmt.Fprintln(w, string(raw))
+	return err
+}
+
+// writeTokenCount reports the size of the full result instead of the result.
+func writeTokenCount(w io.Writer, envelope command.Envelope, opts format.Options) error {
+	full := opts
+	full.TokenLimit, full.TokenOffset = 0, 0
+	rendered, err := format.Render(envelope, full)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(w, rendered.Tokens)
 	return err
 }
 
@@ -186,7 +222,7 @@ func writeError(w io.Writer, err error, opts format.Options) error {
 	if rerr != nil {
 		return err
 	}
-	fmt.Fprintln(w, rendered.Text)
+	_, _ = fmt.Fprintln(w, rendered.Text)
 	return errSilent{err}
 }
 
@@ -197,6 +233,6 @@ func (e errSilent) Unwrap() error { return e.error }
 
 // Silent reports whether an error was already rendered.
 func Silent(err error) bool {
-	_, ok := err.(errSilent)
-	return ok
+	var rendered errSilent
+	return errors.As(err, &rendered)
 }
