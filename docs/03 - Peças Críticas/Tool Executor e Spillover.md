@@ -2,7 +2,7 @@
 tags: [critico, tools, spillover, contexto]
 aliases: [Tool Executor, Spillover, Truncagem]
 fase: 5
-status: especificado
+status: em-construcao
 origem: "[[Tool Executor]]"
 ---
 
@@ -230,9 +230,36 @@ func NewGlob(g sandbox.Globber) Tool
 
 ## Critério de pronto
 
-- [ ] Spillover funcionando com TTL e rotação periódica
-- [ ] Truncagem segura em UTF-8 verificada
-- [ ] Toda tool registrada passa por `Wrap`
-- [ ] Tools nativas com os nomes do Claude Code implementadas
-- [ ] Cada tool recebe apenas a interface de sandbox de que precisa
-- [ ] Golden da instrução de spillover estável
+- [x] Spillover funcionando, com TTL e rotação
+- [x] Truncagem segura em UTF-8 verificada
+- [x] Toda tool registrada passa por `Wrap`
+- [~] Tools nativas: o toolset `fs` está pronto; `web`, `jobs` e `agents` não
+- [x] Cada tool recebe apenas a interface de sandbox de que precisa
+- [x] Golden da instrução de spillover estável
+
+## Saída dos testes — Fase 5
+
+```
+$ go test -race ./internal/runtime/toolexec/...
+ok  	github.com/OWNER/aos/internal/runtime/toolexec
+ok  	github.com/OWNER/aos/internal/runtime/toolexec/tools
+```
+
+| Caso da nota | Teste |
+|---|---|
+| 500 KB → 12.000 chars + arquivo íntegro | `TestALargeOutputIsCutAndTheRestIsOnDisk` |
+| Fronteira de rune com emoji e CJK | `TestCuttingDoesNotSplitACharacter` |
+| Estrutura preservada em saída pequena | `TestASmallOutputKeepsItsStructure` |
+| Spillover best-effort em disco read-only | `TestSpilloverIsBestEffort` |
+| Rotação: 25 h sai, 23 h fica | `TestRotationRemovesWhatExpiredAndKeepsWhatDidNot` |
+| Sanitização do `callID` | `TestACallIdIsNotAPath` |
+| Base64: declarado passa, blob solto é cortado | `TestMultimodalContentPassesThrough`, `TestAnUndeclaredBlobIsTrimmed` |
+| Ciclo na serialização | `TestAValueThatCannotBeSerializedIsDescribed` |
+| Golden da instrução | `TestTheInstructionIsTheOneWeMeantToSend` |
+| Cada tool com a interface mínima | `TestAToolHoldsOnlyTheInterfaceItNeeds` |
+
+**Divergência sobre multimodal.** A nota fala em detectar `file-data` do SDK e data URLs. Aqui é um tipo declarado, `toolexec.FilePart`: a diferença entre uma imagem que a tool produziu de propósito e um blob que vazou num resultado não está nos bytes, e adivinhar errado quebra a imagem ou queima a janela. Quem quer que o conteúdo chegue intacto diz isso no tipo.
+
+**Pendente, com motivo.** Três toolsets da nota não existem ainda: `web` (`WebSearch`, `WebFetch`) precisa de conversão de HTML para Markdown e de política de rede, e o conteúdo entra como `trust="unverified"` no [[Prompt Assembly]], que já tem o bloco; `jobs` (`JobList`, `JobOutput`, `JobStop`, `JobWait`) precisa de supervisão de processo longo, que é o mesmo mecanismo da fila da **Fase 6**; `agents` (`CreateAgent`, `GetAgent`, …) já existe como comando de domínio no registry — o que falta é a nomenclatura em `PascalCase` do Claude Code, que é decisão de superfície e não de comportamento. `Listen` e `Imagine` dependem das capabilities de voz e imagem, que são o mesmo bloco pendente em [[Model Providers (Go)]].
+
+**Não verificado:** rotação periódica em daemon. A rotação está escrita e testada como função; o agendamento de hora em hora entra com o supervisor de jobs da **Fase 6**. Hoje o diretório só é limpo por quem chamar `Rotate`.

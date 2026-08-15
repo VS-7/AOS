@@ -2,7 +2,7 @@
 tags: [critico, runtime, loop, hooks]
 aliases: [Agent Loop, Loop do Agente, Runtime]
 fase: 5
-status: especificado
+status: pronto
 origem: "[[Agent Runtime Loop]]"
 ---
 
@@ -299,9 +299,38 @@ Mantido **desabilitado**, como no original. A responsabilidade é do agente, gui
 
 ## Critério de pronto
 
-- [ ] Conversa real com um agente que usa tools e persiste memória
-- [ ] Os nove eventos disparando nos pontos corretos
-- [ ] `ask` abrindo aprovação real no desktop e no CLI interativo
-- [ ] Compactação com golden estável
-- [ ] Limites de passos e tempo aplicados
-- [ ] Suíte de contrato verde para os três providers
+- [x] Conversa real com um agente que usa tools e persiste memória — `TestTheDeliveryOfPhaseFive`
+- [x] Os nove eventos disparando nos pontos corretos — `TestTheNineEventsFireWhereTheySay`
+- [x] `ask` abrindo aprovação real — `TestAskReachesAHumanAndTheAnswerDecides`, `TestAskReachesTheDesktopAndTheAnswerLetsTheCallRun`
+- [~] Compactação verificada por propriedade, não por golden — ver abaixo
+- [x] Limites de passos e tempo aplicados — `TestAModelThatNeverStopsHitsTheCeiling`
+- [x] Suíte de contrato verde para os providers — `TestEveryProviderObeysTheContract`
+
+## Saída dos testes — Fase 5
+
+```
+$ go test -race ./internal/runtime/agentloop/
+ok  	github.com/OWNER/aos/internal/runtime/agentloop
+```
+
+| Caso da nota | Teste |
+|---|---|
+| Provider fake roteirizado | `internal/runtime/providers/fake` — base de todos os casos abaixo |
+| Bloqueio de `UserPromptSubmit` aborta antes do primeiro token | `TestABlockingPromptHookEndsTheTurnBeforeATokenIsSpent` |
+| Reescrita: a tool recebe o payload novo | `TestAHookRewritesWhatTheToolActuallyDoes` |
+| Aprovação: sim, não, correção do payload, sem canal, headless | `TestAskReachesAHumanAndTheAnswerDecides` |
+| Paralelismo com teto | `TestIndependentToolsRunAtOnce`, `TestTheParallelCeilingIsRespected` |
+| Compactação dispara `PreCompact` antes da poda | `TestPreCompactFiresBeforeTheHistoryIsPruned` |
+| Poda: reasoning some, tool calls recentes sobrevivem | `TestPruningKeepsWhatTheModelStillNeeds` |
+| Limite de passos | `TestAModelThatNeverStopsHitsTheCeiling` |
+| Cancelamento encerra o turno | `TestCancellingTheTurnStopsIt` |
+| Resolução de modelo, cinco níveis e o formato `"{model} ({provider})"` | `TestTheFiveLevelsOfTheModelCascade` |
+| Contrato de provider | `TestEveryProviderObeysTheContract` |
+
+**Dois defeitos encontrados escrevendo estes testes.** O loop não checava `ctx.Err()` e fazia mais uma chamada — paga — depois de cancelado. E `State.Request()` compartilhava o array de mensagens com o estado, então o `append` seguinte sobrescrevia a mensagem que o provider já tinha recebido; um adaptador que refaz a chamada veria uma conversa diferente da que enviou.
+
+**Divergência:** a poda não tem golden. Um golden de poda fixa a saída de um algoritmo cujo valor está nas propriedades — o que sobrevive e o que não — e essas estão testadas nomeadamente. A última mensagem do usuário nunca é removida, o que é adição nossa: um agente que podou o pedido responderia a uma pergunta que ninguém fez.
+
+**Não verificado:** streaming contra provider real. O caso de streaming roda contra troca gravada em `providertest`; que o formato de evento de cada provider continue o mesmo, não.
+
+**Pendente:** `SubagentStart` e `SubagentStop` existem no contrato e não têm ponto de disparo — delegação entre agentes é da **Fase 6**.

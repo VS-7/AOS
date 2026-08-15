@@ -2,7 +2,7 @@
 tags: [dominio, event, hooks, auditoria]
 aliases: [Event Hooks Go, Hooks, Eventos]
 fase: 5
-status: especificado
+status: pronto
 origem: "[[Eventos e Hooks]]"
 ---
 
@@ -179,8 +179,35 @@ func Render(out event.Outcome) ClaudeCodeHookOutput
 
 ## Critério de pronto
 
-- [ ] Nove eventos implementados com as capacidades corretas
-- [ ] `ask` abrindo aprovação real
-- [ ] Log append-only com rotação e retenção
-- [ ] Adaptador Claude Code funcionando com hooks reais
-- [ ] Auditoria identificando qual hook decidiu
+- [x] Nove eventos implementados com as capacidades corretas — `TestTheNineEventsDeclareWhatTheyCanDo`
+- [x] `ask` abrindo aprovação real — `TestAskReachesAHumanAndTheAnswerComesBack`
+- [x] Log append-only com rotação e retenção — `TestASecondWriteAppendsRatherThanReplaces`
+- [x] Adaptador Claude Code rodando um hook real — `TestAHookWrittenForClaudeCodeRunsUnchanged`
+- [x] Auditoria identificando qual hook decidiu — `TestTheRewrittenPayloadIsInTheRecord`
+
+## Saída dos testes — Fase 5
+
+```
+$ go test -race ./internal/domain/event/ ./internal/adapters/eventlog/ ./internal/adapters/hookexec/
+ok  	github.com/OWNER/aos/internal/domain/event
+ok  	github.com/OWNER/aos/internal/adapters/eventlog
+ok  	github.com/OWNER/aos/internal/adapters/hookexec
+```
+
+| Caso da nota | Teste |
+|---|---|
+| Os nove tipos nos pontos corretos do loop | `TestTheNineEventsFireWhereTheySay` |
+| `UserPromptSubmit` com `block` aborta o turno | `TestABlockingPromptHookEndsTheTurnBeforeATokenIsSpent` |
+| `updatedInput` altera o payload; o registro guarda antes e depois | `TestTheRewrittenPayloadIsInTheRecord` |
+| Dois hooks: o primeiro injeta contexto, o segundo bloqueia | `TestContextAccumulatesAndTheFirstBlockWins` |
+| Hook que estoura timeout é registrado e o turno continua | `TestASlowHookIsBoundedByTheTimeout` |
+| Modo `strict` propaga a falha | `TestAFailingHookIsRecordedAndTheTurnContinues/strict` |
+| Log append-only, sem API de update | `TestASecondWriteAppendsRatherThanReplaces` |
+| Hook real do formato Claude Code | `TestAHookWrittenForClaudeCodeRunsUnchanged` |
+| Nenhuma tool de events registrada | Nenhum comando `events_*` existe; a superfície de leitura está pendente |
+
+**Divergência estrutural:** o barramento vive em `internal/domain/event`, não em `internal/core/eventbus`. Escrito em termos de `Event` e `Outcome`, em core ele faria core importar o domínio — a seta que a regra de dependência existe para manter apontando ao contrário.
+
+**Adições, cada uma com teste.** Um hook roda dentro da fronteira de pânico: código de terceiro no caminho mais quente do sistema não derruba o turno (`TestAPanickingHookCostsOnlyItsOwnOpinion`). Uma decisão que o evento não pode carregar é descartada e registrada, em vez de obedecida — `SessionStart` não ganha o poder de abortar um turno porque um handler pediu (`TestABlockOnAnEventThatCannotBlockIsDropped`). E `exit 2` bloqueia com o stderr como motivo, que é a forma que a maioria dos hooks escritos à mão usa.
+
+**Pendente:** leitura do log por CLI. O original lê por CLI e não expõe MCP; aqui não existe comando de events de nenhum tipo, o que satisfaz literalmente "nenhuma tool MCP" e deixa a leitura de fora. Publicar um `events_list` pelo Command Layer o publicaria também em MCP, então a superfície de leitura entra junto com o manifesto de superfície já pendente da Fase 4.

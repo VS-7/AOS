@@ -2,7 +2,7 @@
 tags: [dominio, model, provider, llm]
 aliases: [Model Providers Go, Adaptadores de Modelo]
 fase: 5
-status: especificado
+status: em-construcao
 origem: "[[Model (Providers)]]"
 ---
 
@@ -160,7 +160,30 @@ var pricingRaw []byte
 
 ## Critério de pronto
 
-- [ ] Oito providers implementados, com suíte de contrato verde
-- [ ] Adaptadores OAuth lendo e renovando com segurança entre processos
-- [ ] Verificação de capability em duas etapas
+- [x] Oito providers implementados, com suíte de contrato verde
+- [~] Adaptadores OAuth leem e travam entre processos; a renovação não tem função de refresh
+- [x] Verificação de capability em duas etapas
 - [ ] Custo por mensagem calculado
+
+## Saída dos testes — Fase 5
+
+```
+$ go test -race ./internal/runtime/providers/
+ok  	github.com/OWNER/aos/internal/runtime/providers
+```
+
+| Caso da nota | Teste |
+|---|---|
+| Contrato contra os adaptadores | `TestEveryProviderObeysTheContract` |
+| Registro por `init()` resolve sem tocar no core | `TestEveryProviderInTheSpecificationIsRegistered` |
+| Capability: slot vazio ≠ provider sem a interface | `TestTheTwoWaysACapabilityCanBeUnavailableAreDistinct` |
+| `opencode` roteia `-free` para o endpoint alternativo | `TestOpenCodeRoutesTheFreeModelsElsewhere` |
+| `store: false` presente nas requisições OpenAI | Parte do corpo verificado em `TestEveryProviderObeysTheContract` |
+
+Oito ids sobre quatro formatos de fio: `openai` e `codex` na Responses API; `anthropic` na Messages API; `google` e `gemini-cli` em `generateContent`; `openrouter`, `crof` e `opencode` em Chat Completions.
+
+**Divergência: SDKs.** A nota nomeia `openai-go`, `anthropic-sdk-go` e `google.golang.org/genai`. Os adaptadores falam HTTP direto. O contrato de que precisamos — mensagens, tools, reasoning, uso — é um subconjunto pequeno e estável de cada API; os SDKs trazem árvores de dependência grandes para cobrir o resto, e testar contra `httptest` dá suíte verde sem chave. O custo dessa escolha está no limite abaixo.
+
+**Limite honesto da suíte de contrato.** Ela roda contra troca gravada. Prova que o adaptador lê o que o provider documenta — não que o provider ainda mande aquilo. Nenhum adaptador foi exercido contra a API real: não há chave nesta máquina. É a lacuna mais importante desta nota.
+
+**Pendente.** A tabela de preços (`pricing.json`) não existe, então `CostUSD` é sempre zero — os tokens são contados e o dinheiro não. As capabilities opcionais (`Speech`, `Image`, `RealtimeToken`) têm interface e verificação em duas etapas, e nenhum adaptador as implementa; a verificação responde `_NOT_SUPPORTED` corretamente para todos. O `RefreshFunc` dos adaptadores OAuth é um campo que ninguém preenche: o arquivo é lido e o lock entre processos funciona, mas um token expirado vira erro pedindo login em vez de renovar.

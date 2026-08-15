@@ -176,3 +176,13 @@ ok  	github.com/OWNER/aos/internal/domain/chat
 | Anexo preserva `mediaType` e `uri` | `TestEveryPartTypeRoundTrips` |
 
 **Não verificado nesta fase:** o padrão de run sob `.aos/tasks/{t}/runs/{id}.run.json` — a coleção `runs` existe no registry desde a Fase 1, mas nada a escreve até a Fase 6. O `Dispatcher` é um porto sem implementação: a raiz de composição passa `nil`, e o resultado já reporta `dispatched: false`. A fila e o streaming chegam nas Fases 4 e 5.
+
+## Adições da Fase 5
+
+O chat ganhou o `Dispatcher` de verdade e o caminho de volta.
+
+`Send` persiste e despacha; o turno roda destacado do request que o pediu, porque uma pessoa fechando a aba não é uma pessoa cancelando o agente. `Reply` é como o runtime escreve a resposta: a mensagem do agente, cada chamada de tool com o que devolveu, e o `Run` registrado na mensagem que pediu — com status, uso e a falha quando houve uma.
+
+`Reply` **não é comando e não está no registry**, deliberadamente. A resposta de um agente é escrita pelo runtime que rodou o turno; uma superfície capaz de forjar uma faria do transcript um registro sem valor.
+
+Um turno que falha aparece na conversa, não só no log: `TestATurnThatFailsIsVisibleInTheConversation`.

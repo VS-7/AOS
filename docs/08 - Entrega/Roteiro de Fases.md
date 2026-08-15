@@ -50,7 +50,7 @@ Daemon chi na :5326 com `/api`, `/mcp`, `/ws`, `/v/*`; gateway com máquina de e
 `agentloop`, `prompt`, `sandbox`, `toolexec`, providers, hooks, aprovação.
 
 **Notas:** [[Agent Loop]] · [[Prompt Assembly]] · [[Sandbox (Go)]] · [[Tool Executor e Spillover]] · [[Model Providers (Go)]] · [[Event Hooks (Go)]] · [[ADR-0005 Loop de agente próprio]] · [[ADR-0006 Allowlist no sandbox]] · [[ADR-0007 Canal real de aprovação de tool]]
-**Entrega:** conversa real com um agente que usa tools e persiste memória.
+**Entrega:** conversa real com um agente que usa tools e persiste memória. ✅ `TestTheDeliveryOfPhaseFive`: a pessoa escreve, o agente lê um arquivo com uma tool, grava o que aprendeu como memória e responde — e tudo fica em disco, com o custo do turno na mensagem que o causou. `Tool Executor e Spillover` e `Model Providers (Go)` ficam `em-construcao`: faltam os toolsets `web` e `jobs`, a tabela de preços, e nenhum adaptador foi exercido contra a API real de um provider.
 
 ### Fase 6 — Continuidade
 `subconscious`, `task` com ciclo de 8 estados e worktree, `routine` com 3 gatilhos, fila SQLite, `activity`.

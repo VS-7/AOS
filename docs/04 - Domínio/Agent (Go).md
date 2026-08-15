@@ -163,3 +163,22 @@ ok  	github.com/OWNER/aos/internal/domain/agent
 | Padrão skill-scoped listado com `skill: x` | `TestSkillScopedRecordsAreReadOnly` (em `collections`) |
 
 **Não verificado:** a diretiva de prompt conforme `orchestrator` — o [[Prompt Assembly]] é da Fase 5. `agents execute` continua fora de escopo, como registrado acima.
+
+## Adições da Fase 5
+
+O frontmatter ganhou dois campos que o runtime lê a cada turno.
+
+```yaml
+reasoning: high          # none | low | medium | high — default vem da config
+sandbox:
+  permissions: [read, write, execute]
+  exec:
+    policy: allowlist
+    allow: [git, go, task]
+    denyArgs: ["git push --force*"]
+    allowShell: false
+```
+
+Ausente o bloco `sandbox`: `permissions: [read]`, `policy: deny-all`. Mais restritivo que o original, e deliberado — ver [[ADR-0006 Allowlist no sandbox]]. O `reasoning` por agente é divergência registrada em [[Model Providers (Go)]]: um revisor crítico e um triador não deveriam pensar igual.
+
+`UpdateInput` substitui o bloco inteiro em vez de mesclar. Uma permissão que alguém quis remover precisa sair de fato, e mesclagem é como uma remoção não faz nada em silêncio.

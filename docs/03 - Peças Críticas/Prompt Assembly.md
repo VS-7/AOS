@@ -2,7 +2,7 @@
 tags: [critico, prompt, contexto, seguranca, xml]
 aliases: [Prompt Assembly, Montagem de Prompt, Trust Levels]
 fase: 5
-status: especificado
+status: pronto
 origem: "[[Montagem de Contexto]]"
 ---
 
@@ -318,9 +318,37 @@ Duas constantes, escolhidas por `agent.Orchestrator`, portadas de [[Agent]]:
 
 ## Critério de pronto
 
-- [ ] Golden do documento completo estável
-- [ ] Testes de injeção (template e XML) verdes
-- [ ] Nenhum corpo de registro no XML montado
-- [ ] Campos de tempo ausentes omitidos, nunca inventados
-- [ ] `BASE_SYSTEM_INSTRUCTIONS` portado com as seções de maior valor íntegras
-- [ ] Diretivas de orquestrador e membro implementadas e testadas
+- [x] Golden do documento completo estável — `testdata/prompt/full.golden`
+- [x] Testes de injeção (template e XML) verdes
+- [x] Nenhum corpo de registro no XML montado
+- [x] Campos de tempo ausentes omitidos, nunca inventados
+- [x] Prompt-mestre portado com as seções de maior valor íntegras
+- [x] Diretivas de orquestrador e membro implementadas e testadas
+
+## Saída dos testes — Fase 5
+
+```
+$ go test -race ./internal/runtime/prompt/
+ok  	github.com/OWNER/aos/internal/runtime/prompt
+```
+
+| Caso da nota | Teste |
+|---|---|
+| Golden do documento completo | `TestTheAssembledDocumentIsWhatWeSaidItWouldBe` |
+| Injeção de template sai literal | `TestATemplateInPersistedDataStaysLiteral` |
+| Injeção de XML sai escapada; um só `<system_instructions>` | `TestAMemoryCannotCloseATagAndOpenATrustedOne` |
+| Só nomes, nenhum corpo | `TestTheDocumentCarriesNamesAndNeverBodies` |
+| Tamanho constante: 10 e 10.000 recursos | `TestTheDocumentDoesNotGrowWithTheWorkspace` |
+| Tempo nunca inventado | `TestTimeIsNeverInvented` |
+| Offset local no `now`, em dois fusos | `TestTheOffsetIsInTheTimestamp` |
+| Falha parcial de inventário produz prompt válido | `TestABrokenInventoryProducesAValidPrompt` |
+| Trust por bloco | `TestEveryBlockDeclaresItsAuthority` |
+| Dialeto XML do original | `TestTheDialect` |
+
+**O teste de injeção só vale porque o motor está instalado.** `TestATemplateInPersistedDataStaysLiteral` verifica as duas metades na mesma passada: a memória sai literal **e** o prompt-mestre renderiza. Sem a segunda, o teste passaria com um motor quebrado.
+
+**Divergências registradas.** O prompt-mestre é um template Liquid confiável porque a marca vive num pacote só (ADR-0000) — renomear o produto não pode significar editar um Markdown embutido. Um mapa Go não tem ordem, então um `map[string]any` numa seção é emitido com as chaves ordenadas; o documento montado usa a árvore ordenada e não depende disso. Uma string com quebra de linha sai em várias linhas mesmo abaixo de 80 caracteres, o que o original não faz.
+
+**Colisão herdada, mantida:** a categoria de memória `context` produz `<context count="0">` dentro do documento cuja raiz é `<context>`. É o que o original faz, é XML válido, e renomear qualquer um dos dois seria pior. Registrado porque parece defeito na primeira leitura.
+
+**Pendente:** as contagens de memória vêm de uma varredura, não de facetas do índice. Ver [[ADR-0013 Bleve para busca full-text]] — a decisão continua de pé, a implementação é da fase que ligar as facetas. O inventário traz hoje coleções e agentes; skills, views, goals, routines, templates, projects e artifacts entram com seus agregados, e o bloco já tem o formato.

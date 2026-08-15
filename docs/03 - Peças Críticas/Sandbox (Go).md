@@ -2,7 +2,7 @@
 tags: [critico, seguranca, sandbox, runtime]
 aliases: [Sandbox Go, Contenção, Permissões]
 fase: 5
-status: especificado
+status: pronto
 origem: "[[Sandbox]]"
 ---
 
@@ -316,9 +316,43 @@ Ausente o bloco: `permissions: [read]`, `policy: deny-all`.
 
 ## Critério de pronto
 
-- [ ] Todos os contornos documentados do original negados, com teste nomeando cada um
-- [ ] Symlinks resolvidos antes da checagem de contenção
-- [ ] Política por agente lida do frontmatter e aplicada
-- [ ] Ambiente filtrado no processo filho
-- [ ] `originalSize` / `omittedSize` presentes em todo resultado de comando
-- [ ] Suíte de contrato verde para as quatro interfaces
+- [x] Todos os contornos documentados do original negados, com teste nomeando cada um
+- [x] Symlinks resolvidos antes da checagem de contenção
+- [x] Política por agente lida do frontmatter e aplicada
+- [x] Ambiente filtrado no processo filho
+- [x] `originalSize` / `omittedSize` presentes em todo resultado de comando
+- [~] Interfaces segregadas verificadas sobre os tipos, não por suíte de contrato
+
+## Saída dos testes — Fase 5
+
+```
+$ go test -race ./internal/runtime/sandbox/
+ok  	github.com/OWNER/aos/internal/runtime/sandbox
+```
+
+| Caso da nota | Teste |
+|---|---|
+| Traversal em três formas | `TestAPathThatLeavesTheRootIsRefused` |
+| Symlink para fora da raiz, na leitura e na escrita | `TestASymlinkIsNotAnEscapeHatch` |
+| Prefixo: `/a/b` não contém `/a/bc` | `TestARootIsNotAPrefix` |
+| `.git` legível, não gravável, inclusive em subdiretório | `TestTheGitDirectoryIsReadableAndNotWritable` |
+| Spillover legível, não gravável | `TestTheSpilloverDirectoryIsReadableAndNotWritable` |
+| Os contornos do original, um por linha | `TestTheDocumentedBypassesOfTheOriginalAreAllRefused` |
+| `./rm` e `/bin/rm` são o mesmo alvo | `TestTheSameBinaryUnderTwoNamesIsOneTarget` |
+| `denyArgs` com binário permitido | `TestADenialPatternSpansPathSeparators` |
+| Shell negado sem `allowShell`, permitido com, ainda sujeito a `denyArgs` | `TestAShellNeedsItsOwnPermission` |
+| Timeout mata o filho | `TestACommandThatOverrunsIsKilled` |
+| Truncagem com `omittedSize` | `TestTheAgentIsToldHowMuchItDidNotSee` |
+| Fronteira de rune | `TestTruncationDoesNotSplitACharacter` |
+| Env filtrado | `TestTheChildCannotReadTheDaemonSecrets` |
+| Default: só leitura, sem execução | `TestAnAgentWithNoPolicyCanOnlyRead` |
+
+**Defeito encontrado escrevendo o teste do shell.** Casar padrão de negação com glob de path faz `*` parar na barra: `"* --no-verify*"` não pegaria `git -C /srv/repo commit --no-verify`, que é a forma em que a linha aparece de verdade. Uma linha de comando não é um path; o casamento agora é próprio, e `TestADenialPatternSpansPathSeparators` fixa isso.
+
+**Adição não prevista:** `delete` tem permissão própria, separada de `write`. Sobrescrever um arquivo e remover uma árvore são erros de tamanhos diferentes.
+
+**Divergência sobre a suíte de contrato.** A nota pede contrato para as quatro interfaces contra o sandbox real e um fake em memória. O fake não existe: as quatro interfaces são satisfeitas por um único `*Sandbox`, e o que a nota quer garantir — que quem só lê não escreve — é uma propriedade dos tipos, verificada em `TestAToolHoldsOnlyTheInterfaceItNeeds` por reflexão sobre as interfaces. Um fake acrescentaria uma segunda implementação a manter sem responder à mesma pergunta.
+
+**Não verificado:** o comportamento em Windows. Os testes de execução e de symlink são pulados lá, e o PATH mínimo do Windows está escrito e nunca foi exercido.
+
+**Continua verdadeiro, e vale repetir:** isto não é fronteira de segurança dura. Um binário permitido faz o que sabe fazer. Isolamento real exige sandbox do SO ou container — registrado em [[Segurança e Hardening]].
