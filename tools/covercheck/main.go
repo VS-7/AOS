@@ -23,6 +23,10 @@ var floors = map[string]float64{
 	"github.com/OWNER/aos/internal/transport": 60,
 	// Adapters are held to their contract suite, not to a coverage number.
 	"github.com/OWNER/aos/internal/adapters": 0,
+	// Model providers are adapters too, and the same reasoning applies: what
+	// says an adapter is right is providertest running the same conversation
+	// through it, not the fraction of its translation table a test touched.
+	"github.com/OWNER/aos/internal/runtime/providers": 0,
 	// Test infrastructure is proven by the tests that use it. A coverage
 	// number on a fake or a fixture measures nothing: the contract suite is
 	// what says whether the fake is right.

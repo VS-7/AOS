@@ -12,6 +12,7 @@ import "net/http"
 const (
 	StatusBadRequest          = http.StatusBadRequest
 	StatusUnauthorized        = http.StatusUnauthorized
+	StatusRequestTimeout      = http.StatusRequestTimeout
 	StatusForbidden           = http.StatusForbidden
 	StatusNotFound            = http.StatusNotFound
 	StatusMethodNotAllowed    = http.StatusMethodNotAllowed
