@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # git describe needs the tags for the build stamp
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          check-latest: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.12.2
+
+      # Generated artefacts must match what is committed. A diff here means the
+      # documentation, the schema or the catalog is lying about the code.
+      - name: generated artefacts are up to date
+        run: |
+          go run ./tools/gencatalog
+          gofmt -w internal/core/apperr/catalog.gen.go
+          git diff --exit-code
+
+      - name: tests
+        run: go test -race -count=1 ./...
+
+      - name: coverage floors
+        run: go test -count=1 -cover ./... | go run ./tools/covercheck
+
+      - name: dependency rule
+        run: go test -count=1 -run 'TestDependencyRule|TestNoDomainInClients|TestFeatureLayout|TestPortsAreSmall' ./internal/architecture/...
+
+      - name: specification graph
+        run: node "docs/_scripts/validate-graph.mjs"
+
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { goos: darwin, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: linux, goarch: amd64 }
+          - { goos: windows, goarch: amd64 }
+          - { goos: windows, goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          check-latest: true
+      - name: build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -trimpath \
+            -ldflags="-s -w -X github.com/OWNER/aos/internal/core/build.Version=$(git describe --tags --always --dirty)" \
+            -o /tmp/out/ ./cmd/...

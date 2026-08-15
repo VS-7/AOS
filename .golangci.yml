@@ -1,0 +1,50 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errorlint
+    - forbidigo
+    - gocritic
+    - misspell
+    - noctx
+    - revive
+    - unconvert
+    - wastedassign
+
+  settings:
+    forbidigo:
+      # context.TODO() must not exist in production code, and neither must the
+      # three sources of non-determinism that would make golden files unstable.
+      # They are injected instead: Clock, IDGen, Rand.
+      forbid:
+        - pattern: ^context\.TODO$
+          msg: "context.TODO is not allowed in production code; take a ctx parameter"
+        - pattern: ^time\.Now$
+          msg: "inject a Clock instead of calling time.Now directly"
+        - pattern: ^rand\.
+          msg: "inject a Rand instead of using math/rand directly"
+      analyze-types: true
+    revive:
+      rules:
+        - name: context-as-argument
+        - name: exported
+          disabled: true
+
+  exclusions:
+    rules:
+      # Tests may call time.Now and build their own clocks.
+      - path: _test\.go
+        linters: [forbidigo]
+      # The clock adapter is where time.Now is allowed to exist.
+      - path: internal/core/clockx/
+        linters: [forbidigo]
+
+formatters:
+  enable:
+    - gofmt

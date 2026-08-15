@@ -1,0 +1,100 @@
+version: '3'
+
+vars:
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo none
+  DATE:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
+  LDFLAGS: >-
+    -s -w
+    -X github.com/OWNER/aos/internal/core/build.Version={{.VERSION}}
+    -X github.com/OWNER/aos/internal/core/build.Commit={{.COMMIT}}
+    -X github.com/OWNER/aos/internal/core/build.Date={{.DATE}}
+  # Six platform combinations. "Build e Cross-Compile" tabulates five;
+  # windows/arm64 is the sixth, and Go supports it with CGO_ENABLED=0.
+  TARGETS: darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64 windows/arm64
+  # The binaries that exist. Each phase adds its own: aosd in phase 4,
+  # aos-desktop in phase 7.
+  BINARIES: aos
+
+tasks:
+  default:
+    cmds: [task: check]
+
+  gen:
+    desc: Regenerate everything derived from source
+    cmds:
+      - task: gen-catalog
+
+  gen-catalog:
+    desc: Rebuild the error catalog from the apperr.New calls in the tree
+    cmds:
+      - go run ./tools/gencatalog
+      - gofmt -w internal/core/apperr/catalog.gen.go
+
+  vet:
+    cmds: [go vet ./...]
+
+  lint:
+    desc: Run golangci-lint when it is installed
+    cmds:
+      - |
+        if command -v golangci-lint >/dev/null 2>&1; then
+          golangci-lint run
+        else
+          echo "golangci-lint not installed; skipping (install: https://golangci-lint.run)" >&2
+        fi
+
+  test:
+    cmds: [go test -race ./...]
+
+  cover:
+    desc: Per-package coverage, enforcing the floor each package must clear
+    cmds:
+      - go test -count=1 -cover ./... | go run ./tools/covercheck
+
+  arch:
+    desc: The hexagonal dependency rule
+    cmds: [go test ./internal/architecture/...]
+
+  graph:
+    desc: Validate the specification vault
+    cmds: [node "docs/_scripts/validate-graph.mjs"]
+
+  check:
+    desc: Every gate that must be green to close a phase
+    cmds:
+      - task: gen
+      - git diff --exit-code -- internal/core/apperr/catalog.gen.go
+      - task: vet
+      - task: lint
+      - task: test
+      - task: cover
+      - task: arch
+      - task: graph
+
+  build:
+    cmds:
+      - for: {var: BINARIES}
+        cmd: CGO_ENABLED=0 go build -trimpath -ldflags="{{.LDFLAGS}}" -o dist/{{.ITEM}} ./cmd/{{.ITEM}}
+
+  build:all:
+    desc: Cross-compile every binary for every supported platform
+    cmds:
+      - for: {var: TARGETS}
+        cmd: |
+          set -e
+          GOOS={{splitList "/" .ITEM | first}}
+          GOARCH={{splitList "/" .ITEM | last}}
+          for bin in {{.BINARIES}}; do
+            ext=""
+            if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
+            GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=0 go build -trimpath \
+              -ldflags="{{.LDFLAGS}}" \
+              -o dist/{{.ITEM}}/${bin}${ext} ./cmd/${bin}
+          done
+
+  clean:
+    cmds: [rm -rf dist coverage.out]
