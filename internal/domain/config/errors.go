@@ -34,6 +34,23 @@ func errUnknownField(path string) error {
 		})
 }
 
+// errBadValue names the field that could not take the value, rather than
+// reporting that "the update" failed. A caller setting four fields at once
+// should not have to bisect its own payload to find out which one was wrong.
+func errBadValue(path string, err error) error {
+	return apperr.New("CONFIG_FIELD_INVALID").
+		Causer("config.Service.Update").
+		Msgf("the value given for %q is not of the right type", path).
+		Issue("field", path).
+		Status(apperr.StatusBadRequest).
+		Wrap(err).
+		CTA(apperr.CallToAction{
+			Label:   "read the current configuration to see the type this field holds",
+			Command: build.Name + " config get",
+			Tool:    "config_get",
+		})
+}
+
 func errRevealDenied() error {
 	return apperr.New("CONFIG_REVEAL_DENIED").
 		Causer("config.Service.Get").

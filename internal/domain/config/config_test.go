@@ -215,6 +215,46 @@ func TestUnknownFieldIsRejected(t *testing.T) {
 	}
 }
 
+// TestAFieldThatWasNeverSetCanBeSet is a regression. security.password is
+// omitempty, so it is absent from the marshalled configuration until it holds a
+// value. The first patcher required the key to already be in the tree, which
+// meant the password could never be set a first time — that is, never.
+func TestAFieldThatWasNeverSetCanBeSet(t *testing.T) {
+	if config.Default().Security.Password != "" {
+		t.Fatal("this test is meaningless unless the field starts empty")
+	}
+	svc, store := newService(config.Default())
+	if _, err := svc.Update(humanCtx(), config.UpdateInput{
+		Set: map[string]any{"security.password": "correct horse battery staple"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if store.lastSave.Security.Password != "correct horse battery staple" {
+		t.Fatalf("password = %q", store.lastSave.Security.Password)
+	}
+}
+
+// TestAWrongTypedValueNamesTheOffendingField: an update carrying two fields
+// where one has the wrong type has to say which one, or the caller is left
+// bisecting its own payload.
+func TestAWrongTypedValueNamesTheOffendingField(t *testing.T) {
+	svc, store := newService(config.Default())
+	_, err := svc.Update(humanCtx(), config.UpdateInput{Set: map[string]any{
+		"region.city":      "Salvador",
+		"security.enabled": "not a boolean",
+	}})
+	if err == nil || !errors.Is(err, apperr.ErrInvalid) {
+		t.Fatalf("error = %v", err)
+	}
+	e, _ := apperr.As(err)
+	if got := e.Issues["field"]; got != "security.enabled" {
+		t.Errorf("the error blames %v, want security.enabled", got)
+	}
+	if store.saves != 0 {
+		t.Error("a rejected update must not write")
+	}
+}
+
 func TestUpdateNeverReturnsSecrets(t *testing.T) {
 	original := configured()
 	svc, store := newService(original)

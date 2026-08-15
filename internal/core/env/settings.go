@@ -9,6 +9,8 @@ const (
 	KeyEnv              = "ENV"               // production disables the API playground (ADR-0009)
 	KeyHome             = "HOME_DIR"          // overrides ~/.aos; used by every test
 	KeyWorkspacePath    = "WORKSPACE_PATH"    // the directory that holds .aos/; defaults to the working directory
+	KeyWorkspaceID      = "WORKSPACE_ID"      // which workspace a command addresses; written into the repository's .env
+	KeyAgentID          = "AGENT_ID"          // the acting agent, when the caller is one
 	KeyServerHost       = "SERVER_HOSTNAME"   //
 	KeyServerPort       = "SERVER_PORT"       //
 	KeyToken            = "TOKEN"             //

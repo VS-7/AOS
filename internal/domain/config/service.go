@@ -2,11 +2,11 @@ package config
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"sort"
-	"strings"
 
 	"github.com/OWNER/aos/internal/core/identity"
+	"github.com/OWNER/aos/internal/core/patch"
 )
 
 // Service is the configuration API of the domain.
@@ -84,49 +84,22 @@ func sortedKeys(m map[string]any) []string {
 	return out
 }
 
-// applyPatch sets dotted paths on a copy of c. It round-trips through the JSON
-// representation so that the paths a caller writes are the same paths the file
-// shows — there is no second naming scheme to keep in sync.
+// applyPatch sets dotted paths on a copy of c.
+//
+// The paths a caller writes are the paths the file shows, because both come
+// from the same JSON tags — there is no second naming scheme to keep in sync.
 func applyPatch(c Config, set map[string]any) (Config, error) {
-	raw, err := json.Marshal(c)
-	if err != nil {
-		return Config{}, err
+	out, err := patch.Apply(c, set)
+	if err == nil {
+		return out, nil
 	}
-	var tree map[string]any
-	if err := json.Unmarshal(raw, &tree); err != nil {
-		return Config{}, err
+	var unknown *patch.UnknownPathError
+	if errors.As(err, &unknown) {
+		return Config{}, errUnknownField(unknown.Path)
 	}
-	for _, path := range sortedKeys(set) {
-		if err := setPath(tree, strings.Split(path, "."), set[path], path); err != nil {
-			return Config{}, err
-		}
+	var bad *patch.ValueError
+	if errors.As(err, &bad) {
+		return Config{}, errBadValue(bad.Path, bad)
 	}
-	merged, err := json.Marshal(tree)
-	if err != nil {
-		return Config{}, err
-	}
-	var out Config
-	if err := json.Unmarshal(merged, &out); err != nil {
-		return Config{}, errUnknownField(strings.Join(sortedKeys(set), ", "))
-	}
-	return out, nil
-}
-
-func setPath(tree map[string]any, parts []string, value any, full string) error {
-	if len(parts) == 0 {
-		return errUnknownField(full)
-	}
-	head := parts[0]
-	if len(parts) == 1 {
-		if _, ok := tree[head]; !ok {
-			return errUnknownField(full)
-		}
-		tree[head] = value
-		return nil
-	}
-	child, ok := tree[head].(map[string]any)
-	if !ok {
-		return errUnknownField(full)
-	}
-	return setPath(child, parts[1:], value, full)
+	return Config{}, err
 }
