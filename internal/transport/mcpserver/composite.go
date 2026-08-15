@@ -82,6 +82,11 @@ func compositeName(g command.Group) string {
 	return strings.Join(parts, "")
 }
 
+// DescriptionOf renders the composite description of a group. It is exported
+// because the documentation generator and the golden files must show the exact
+// text an MCP client receives, not a second rendering of it.
+func DescriptionOf(g command.Group) string { return compositeDescription(compositeName(g), g) }
+
 // compositeDescription assembles the tool description the way the original
 // does: the group documentation, the action list, an optional hint, and the
 // usage block — in that order.
@@ -194,12 +199,63 @@ func compositeHandler(tool string, g command.Group) mcp.ToolHandler {
 			return successResult(detailOf(tool, d), nil), nil
 		}
 
-		out, err := d.Invoke(ctx, command.SurfaceMCP, in.Input)
+		// `_reasoning` travels on the outer payload, not inside `input`: the
+		// original builds the per-action input schema without it and carries it
+		// next to `action`. The handler still expects it in its own input, so
+		// the two are spliced back together here — which also keeps a call
+		// through the composite shape byte-identical to the flat one.
+		payload, err := withReasoning(in.Input, in.Reasoning)
+		if err != nil {
+			return errorResult(errInvalidComposite(tool, err)), nil
+		}
+		out, err := d.Invoke(ctx, command.SurfaceMCP, payload)
 		if err != nil {
 			return errorResult(err), nil
 		}
 		return successResult(out, nil), nil
 	}
+}
+
+// withReasoning splices the outer reasoning into the action payload.
+func withReasoning(input json.RawMessage, reasoning string) (json.RawMessage, error) {
+	fields := map[string]json.RawMessage{}
+	if len(input) > 0 && string(input) != "null" {
+		if err := json.Unmarshal(input, &fields); err != nil {
+			return nil, err
+		}
+	}
+	raw, err := json.Marshal(reasoning)
+	if err != nil {
+		return nil, err
+	}
+	fields[command.ReasoningField] = raw
+	return json.Marshal(fields)
+}
+
+// actionInputSchema is the per-action schema published by schema:true: the
+// command's own schema without `_reasoning`, because on this shape the field
+// belongs to the composite payload rather than to the action.
+func actionInputSchema(d command.Descriptor) *jsonschema.Schema {
+	original := d.InputSchema()
+	if original == nil {
+		return nil
+	}
+	trimmed := *original
+	trimmed.Properties = make(map[string]*jsonschema.Schema, len(original.Properties))
+	for name, prop := range original.Properties {
+		if name == command.ReasoningField {
+			continue
+		}
+		trimmed.Properties[name] = prop
+	}
+	trimmed.Required = nil
+	for _, name := range original.Required {
+		if name == command.ReasoningField {
+			continue
+		}
+		trimmed.Required = append(trimmed.Required, name)
+	}
+	return &trimmed
 }
 
 func detailOf(tool string, d command.Descriptor) ActionDetail {
@@ -208,7 +264,7 @@ func detailOf(tool string, d command.Descriptor) ActionDetail {
 		Action:      d.Name(),
 		Description: d.Doc(),
 		Examples:    d.Examples(),
-		InputSchema: d.InputSchema(),
+		InputSchema: actionInputSchema(d),
 	}
 	detail.Tokens = estimateOf(detail)
 	return detail
