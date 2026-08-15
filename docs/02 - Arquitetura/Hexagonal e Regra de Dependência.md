@@ -2,7 +2,7 @@
 tags: [arquitetura, hexagonal, ports, dependencias]
 aliases: [Hexagonal, Ports and Adapters, Regra de Dependência]
 fase: 0
-status: especificado
+status: em-construcao
 origem: "[[Padrão Feature-Slice]]"
 ---
 

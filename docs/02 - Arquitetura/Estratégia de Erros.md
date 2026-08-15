@@ -2,7 +2,7 @@
 tags: [arquitetura, erros, cta, llm]
 aliases: [Erros, AppError, CTA]
 fase: 0
-status: especificado
+status: em-construcao
 origem: "[[Códigos de Erro]]"
 ---
 

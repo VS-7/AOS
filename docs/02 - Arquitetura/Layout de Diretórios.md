@@ -2,7 +2,7 @@
 tags: [arquitetura, layout, estrutura]
 aliases: [Layout, Estrutura de Diretórios]
 fase: 0
-status: especificado
+status: em-construcao
 origem: "[[Padrão Feature-Slice]]"
 ---
 

@@ -2,7 +2,7 @@
 tags: [qualidade, testes, ci]
 aliases: [Testes, Estratégia de Testes, CI]
 fase: 0
-status: especificado
+status: em-construcao
 origem: "[[PROMPT — Reconstrução em Go]]"
 ---
 

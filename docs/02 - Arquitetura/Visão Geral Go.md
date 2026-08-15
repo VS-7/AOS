@@ -2,7 +2,7 @@
 tags: [arquitetura, visao-geral, go]
 aliases: [Visão Geral, Arquitetura Go, Os Três Binários]
 fase: 0
-status: especificado
+status: em-construcao
 origem: "[[Visão Geral da Arquitetura]]"
 ---
 

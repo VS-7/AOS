@@ -2,7 +2,7 @@
 tags: [dominio, config, global]
 aliases: [Config Go, Configuração]
 fase: 0
-status: especificado
+status: em-construcao
 origem: "[[Config]]"
 ---
 

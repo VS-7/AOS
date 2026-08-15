@@ -2,7 +2,7 @@
 tags: [qualidade, observabilidade, logging, metricas]
 aliases: [Observabilidade, Logging, Métricas]
 fase: 0
-status: especificado
+status: em-construcao
 origem: "[[Camada @core]]"
 ---
 

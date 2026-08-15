@@ -2,7 +2,7 @@
 tags: [arquitetura, concorrencia, context, goroutines]
 aliases: [Concorrência, Context, Goroutines]
 fase: 0
-status: especificado
+status: em-construcao
 origem: "[[Jobs e Queues]]"
 ---
 
