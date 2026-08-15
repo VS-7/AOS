@@ -2,7 +2,7 @@
 tags: [transporte, cli, cobra]
 aliases: [CLI Go, cobra]
 fase: 2
-status: especificado
+status: pronto
 origem: "[[Camada @cli]]"
 ---
 
@@ -131,6 +131,21 @@ func isAgent() bool { return !term.IsTerminal(int(os.Stdout.Fd())) }
 > [!decision] Default `toon`, mas `json` sem TTY
 > O original usa `toon` sempre. Sem TTY, o consumidor é um programa, e JSON é mais previsível de parsear.
 
+> [!decision] O encoder TOON foi escrito contra o binário original, não contra uma especificação
+> Não existe implementação Go, e o `@toon-format/toon` não está nas fontes extraídas: é dependência npm, e os source maps não a incluem. As regras foram lidas da saída do binário instalado nesta máquina, comparando `--format toon` com `--format json` no mesmo comando. Quatro regras saíram daí, e cada uma tem um teste que cita a saída observada:
+> 1. objeto é `chave: valor`, dois espaços por nível, **na ordem de declaração**
+> 2. array declara o tamanho: `chave[N]:`
+> 3. array de objetos com as mesmas chaves vira tabela: `commands[1]{command,description}:` seguido de linhas separadas por vírgula — é onde o formato ganha o nome, os nomes de campo aparecem uma vez em vez de N
+> 4. array não uniforme cai para lista `- chave: valor`
+>
+> Aspas só quando o valor seria ambíguo: `"Suggested command:"` leva aspas (dois-pontos), `0.1.400` não leva (dois pontos decimais não são número), `5326` levaria.
+
+> [!decision] A ordem dos campos é a de declaração, não a alfabética
+> O original imprime `status, pid, port, startedAt, version` — a ordem da struct. Renderizar por `map[string]any` embaralharia, e todo golden derivado de uma listagem dependeria de nada. O renderizador normaliza para uma árvore que lembra a ordem das chaves, atravessando o JSON, que é onde as tags `json` já são o contrato.
+
+> [!decision] `CommandLineFor` é a única construtora de linha de comando
+> Os exemplos do `--help` precisam ser linhas coláveis, e a suíte de paridade precisa dirigir o terminal com o mesmo payload que as outras superfícies recebem. Construir a linha à mão em dois lugares é como os dois divergem.
+
 ## Testes
 
 - Toda entrada do registry vira comando; `--help` renderiza `Doc`
@@ -145,7 +160,31 @@ func isAgent() bool { return !term.IsTerminal(int(os.Stdout.Fd())) }
 
 ## Critério de pronto
 
-- [ ] Árvore de comandos derivada do registry
-- [ ] Sete flags globais implementadas
-- [ ] TOON com golden estável
-- [ ] Sem colisão entre builtins e domínio
+- [x] Árvore de comandos derivada do registry
+- [x] Sete flags globais implementadas — `--format`, `--filter-output`, `--token-limit`, `--token-offset`, `--token-count`, `--schema`, mais as quatro de transporte nos comandos não-locais
+- [x] TOON estável, verificado contra a saída do binário original em três formas (objeto plano, array tabular, array não uniforme)
+- [x] Sem colisão entre builtins e domínio — `TestBuiltinsCannotShadowADomainGroup`
+
+## Saída dos testes — Fase 2
+
+```
+$ go test -race ./internal/transport/clix/...
+ok  	github.com/OWNER/aos/internal/transport/clix
+ok  	github.com/OWNER/aos/internal/transport/clix/format
+```
+
+Os casos que a nota lista, e onde estão:
+
+| Caso da nota | Teste |
+|---|---|
+| Toda entrada do registry vira comando; `--help` renderiza `Doc` | `TestEveryCommandOfTheRegistryBecomesACommand`, `TestHelpRendersDocumentationAndPasteableExamples` |
+| Round-trip de tipo complexo por flag JSON | `TestComplexTypesTravelAsJSON`, `TestTheSamePayloadProducesTheSameInputThroughBothPaths` |
+| TOON comparado com amostras do original | `TestTOONMatchesTheOriginalFlatObject`, `TestTOONMatchesTheOriginalTabularArray`, `TestTOONFallsBackToAListWhenTheArrayIsNotUniform` |
+| `--filter-output` com as três formas de caminho | `TestFilterSelectsPaths` |
+| `--token-limit`/`--token-offset` sem cortar linha | `TestTokenPaginationCutsOnALineBoundary`, `TestSliceCutsOnALineBoundary` |
+| `--schema` emite o JSON Schema | `TestSchemaFlagPrintsTheContractWithoutRunning` |
+| Sem TTY: formato default vira json | `TestDefaultFormatFollowsTheConsumer` |
+| Grupo de domínio acessível apesar dos builtins | `TestBuiltinsCannotShadowADomainGroup` |
+| Completions para os quatro shells | `TestCompletionsAreGeneratedForFourShells` |
+
+**Pendente:** o golden por formato de saída (`testdata/cli/{cmd}.{format}.golden`) entra quando houver um comando cuja saída seja estável o bastante para valer um golden — hoje as asserções são sobre a forma, que é o que muda quando o encoder muda. `--llms`/`--llms-full` existem sob `aos self llms`; o manifesto completo ganha golden na Fase 9, junto com a `SKILL.md`.

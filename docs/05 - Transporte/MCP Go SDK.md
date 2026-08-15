@@ -2,7 +2,7 @@
 tags: [transporte, mcp, protocolo]
 aliases: [MCP Go, Servidor MCP]
 fase: 2
-status: especificado
+status: em-construcao
 origem: "[[MCP - Model Context Protocol]]"
 ---
 
@@ -103,6 +103,15 @@ func Doctor(ctx context.Context) (Report, error)
 > [!decision] Duas projeções, selecionáveis
 > Ver [[ADR-0011 Superfície de tools versionada]].
 
+> [!decision] `Server.AddTool` de baixo nível, não o `AddTool` genérico
+> O SDK oferece um `AddTool` genérico que infere o schema do tipo `In` do handler. Não serve aqui: o registry é heterogêneo e o handler recebe `json.RawMessage`, então a inferência produziria o schema de `json.RawMessage`. Usamos a forma de baixo nível, que aceita o schema já computado no registro — o mesmo objeto que o CLI usa para `--schema` e que a documentação publica.
+
+> [!decision] Erro de tool, não erro de protocolo
+> Um erro de protocolo encerra a chamada; um erro de tool chega ao modelo, que lê o código, os `issue` e o CTA e pode agir. Devolver `apperr` como falha de transporte jogaria fora a razão inteira de o erro ser estruturado. Os handlers retornam `IsError: true` com o JSON do erro.
+
+> [!decision] Os testes falam o protocolo
+> A suíte conecta um cliente MCP real a um servidor real pelo transporte em memória do SDK, em vez de chamar a função handler. O que se testa é o que um cliente recebe — nomes, ordem, schema publicado, anotações — e não o que a nossa função devolve.
+
 ## Testes
 
 - Paridade stdio × HTTP: a mesma lista de tools, na mesma ordem alfabética
@@ -116,7 +125,33 @@ func Doctor(ctx context.Context) (Report, error)
 
 ## Critério de pronto
 
-- [ ] `aos --mcp` expondo o registry completo
-- [ ] `/mcp` com paridade verificada por teste
-- [ ] `mcp add` e `mcp doctor` operando
-- [ ] Duas projeções de tool disponíveis
+- [x] `--mcp` expondo o registry completo — no binário `aosd`; ver a decisão em [[Command Layer]]
+- [ ] `/mcp` com paridade verificada por teste — o transporte HTTP é da Fase 4; a paridade entre as duas projeções de tool já é verificada
+- [ ] `mcp add` e `mcp doctor` operando — dependem do gateway, Fase 4
+- [x] Duas projeções de tool disponíveis — plana, composta e as duas juntas
+
+## Saída dos testes — Fase 2
+
+```
+$ go test -race ./internal/transport/mcpserver/
+ok  	github.com/OWNER/aos/internal/transport/mcpserver
+```
+
+| Caso | Teste |
+|---|---|
+| Uma tool por comando, nome = caminho com `_`, ordem alfabética | `TestFlatShapePublishesOneToolPerCommand` |
+| O schema publicado carrega `_reasoning` e o marca obrigatório | `TestPublishedSchemaCarriesTheReasoningField` |
+| Anotações chegam ao cliente | `TestAnnotationsTravelToTheClient` |
+| Uma tool por grupo, com a descrição montada como no original | `TestCompositeShapePublishesOneToolPerGroup` |
+| Anotações compostas: read-only só se todas forem | `TestCompositeMergesAnnotations` |
+| `schema: true` devolve `ActionDetail` **sem executar** | `TestSchemaTrueInspectsWithoutExecuting` |
+| `_reasoning` fora de `input`, como um cliente real envia | `TestCompositeCarriesReasoningOutsideTheActionInput` |
+| O schema por ação não repete `_reasoning` | `TestActionSchemaOmitsReasoning` |
+| Ação desconhecida lista as que existem | `TestCompositeRejectsAnUnknownAction` |
+| Razão em branco é chamada rejeitada, com a mensagem do original | `TestCompositeRejectsAMissingReasoning` |
+| Erro de tool chega ao modelo com o CTA de introspecção | `TestAToolErrorReachesTheModel` |
+| As duas formas coexistem | `TestBothShapesCoexist` |
+| Alias funciona e ensina o nome novo | `TestAnAliasKeepsWorkingAndTeachesTheNewName` |
+| A fronteira de privilégio é do agente, não do MCP | `TestThePrivilegeBoundaryIsNotAnMCPBoundary` |
+
+**Pendente para a Fase 4:** o transporte HTTP streamable, a paridade stdio × HTTP, o progresso por `progressToken`, a identidade por requisição, `mcp add` e `mcp doctor`. A nota permanece `em-construcao` por isso.

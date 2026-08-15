@@ -2,7 +2,7 @@
 tags: [critico, command, superficies, mcp, cli]
 aliases: [Command Layer, Ponte de Superfícies, Registry de Comandos]
 fase: 2
-status: especificado
+status: pronto
 origem: "[[Ponte CLI para MCP]]"
 ---
 
@@ -318,6 +318,24 @@ Herdada do original e explícita no tipo: `Registry: false` mantém `gateway`, `
 > [!decision] As duas projeções coexistem
 > Plana e composta, por configuração. Evita repetir a quebra de integrações que o original causou ao migrar de uma para outra ([[ADR-0011 Superfície de tools versionada]]).
 
+> [!decision] `_reasoning` é exigido nas superfícies de tool, não no terminal
+> A nota põe o campo em `In` e diz que é obrigatório em toda tool. O original é mais preciso: o schema de CLI é `args + options`, e o schema de tool é isso **mais** `_reasoning` (`AgentSchema.object`). Pedir a um humano que justifique o comando que ele acabou de digitar seria absurdo. `Invoke` recebe a superfície e valida o campo apenas em MCP e no registry do agente; o binder do CLI ignora todo campo cujo nome JSON começa com `_`.
+
+> [!decision] `command.Reasoning` embutido, e registro que falha sem ele
+> A nota escreve o campo por extenso em cada struct de entrada. Embutir um tipo faz com que o texto, a regra de validação e a descrição do schema existam uma vez só. `Register` **falha** se o tipo de entrada não tiver o campo — é mais forte que o teste que a nota pede, porque transforma a classe inteira de esquecimento em falha de boot.
+
+> [!decision] O schema inferido é reparado e conferido no registro
+> **A biblioteca de inferência descarta silenciosamente os campos de uma struct embutida.** Um tipo que embute `command.Reasoning` volta de `jsonschema.For` sem nenhuma propriedade `_reasoning` — e sem erro. O efeito seria uma superfície inteira publicando um schema que não menciona o único campo que toda chamada precisa carregar, e nenhum modelo o enviaria. `completeSchema` injeta a propriedade quando falta (é o que "injetado automaticamente por reflexão sobre `In` no registro" significa na prática) **e** confere que todo campo visível em JSON está no schema, para que o próximo campo descartado quebre o build em vez de sumir do contrato.
+
+> [!decision] `_reasoning` viaja fora de `input` na tool composta
+> Como no original: o schema por ação é construído sem o campo, e ele fica ao lado de `action`. O handler continua esperando-o na própria entrada, então o servidor emenda os dois antes de invocar — o que também é o que faz uma chamada pela forma composta produzir exatamente o mesmo resultado que pela forma plana.
+
+> [!decision] Uma string em branco não é uma razão
+> `validate:"required,min=1"` aceita `"   "`. O original usa `.trim().min(1)`. Registramos a regra `notblank`, porque aproximar com `min=1` deixaria passar exatamente a chamada que a mensagem do original diz rejeitar.
+
+> [!decision] `Registry.Freeze()` fecha o registro depois do boot
+> Adição. Tudo é declarado na montagem; uma superfície capaz de acrescentar um comando depois tornaria a lista publicada um alvo móvel, e a lista é contrato.
+
 ## Testes
 
 - **Paridade de superfície:** para cada comando, executar via CLI, MCP plano, MCP composto, HTTP e registry interno produz o **mesmo** efeito e a mesma saída normalizada. Teste tabular sobre o registry inteiro.
@@ -332,9 +350,120 @@ Herdada do original e explícita no tipo: `Registry: false` mantém `gateway`, `
 
 ## Critério de pronto
 
-- [ ] `aos agents list` e `aos --mcp` expondo `agents_list` funcionam sobre a mesma definição
-- [ ] Teste de paridade das cinco superfícies verde para todos os comandos registrados
-- [ ] Nenhum campo de entrada sem `json` + `jsonschema`
-- [ ] `_reasoning` presente e validado em toda tool
-- [ ] Projeções plana e composta implementadas e testadas
-- [ ] `SKILL.md` gerada bate com a commitada
+- [x] `agents list` e `--mcp` expondo `agents_list` funcionam sobre a mesma definição — no binário `aosd`, ver a decisão abaixo
+- [x] Teste de paridade verde para **todos** os comandos registrados — quatro superfícies, e um comando sem cenário reprova a suíte
+- [x] Nenhum campo de entrada sem `json` + `jsonschema` — verificado no registro, não por convenção
+- [x] `_reasoning` presente e validado em toda tool — exigido no registro e no schema publicado
+- [x] Projeções plana e composta implementadas e testadas — contra um cliente MCP real, por transporte em memória
+- [ ] `SKILL.md` gerada bate com a commitada — `pkg/skill` é da Fase 9
+
+## Saída dos testes — Fase 2
+
+```
+$ go vet ./...
+(sem saída — ok)
+
+$ golangci-lint run
+0 issues.
+
+$ go test -race -count=1 ./...
+ok  	github.com/OWNER/aos/internal/adapters/fscollections	5.008s
+ok  	github.com/OWNER/aos/internal/adapters/fsconfig	1.665s
+ok  	github.com/OWNER/aos/internal/app	2.221s
+ok  	github.com/OWNER/aos/internal/architecture	1.575s
+ok  	github.com/OWNER/aos/internal/core/apperr	1.873s
+ok  	github.com/OWNER/aos/internal/core/apperr/scan	1.854s
+ok  	github.com/OWNER/aos/internal/core/atomicfs	2.598s
+ok  	github.com/OWNER/aos/internal/core/build	2.055s
+ok  	github.com/OWNER/aos/internal/core/clockx	2.246s
+ok  	github.com/OWNER/aos/internal/core/collections	2.413s
+ok  	github.com/OWNER/aos/internal/core/command	1.561s
+ok  	github.com/OWNER/aos/internal/core/config	1.434s
+ok  	github.com/OWNER/aos/internal/core/env	1.201s
+ok  	github.com/OWNER/aos/internal/core/identity	1.390s
+ok  	github.com/OWNER/aos/internal/core/logging	1.327s
+ok  	github.com/OWNER/aos/internal/core/safe	1.447s
+ok  	github.com/OWNER/aos/internal/core/tokens	1.392s
+ok  	github.com/OWNER/aos/internal/domain/agent	1.354s
+ok  	github.com/OWNER/aos/internal/domain/config	1.521s
+ok  	github.com/OWNER/aos/internal/domain/fakes	1.587s
+ok  	github.com/OWNER/aos/internal/testx	1.599s
+ok  	github.com/OWNER/aos/internal/transport/clix	1.728s
+ok  	github.com/OWNER/aos/internal/transport/clix/format	1.653s
+ok  	github.com/OWNER/aos/internal/transport/mcpserver	1.785s
+
+$ go test -count=1 -cover ./... | go run ./tools/covercheck
+covercheck: 29 packages, all at or above their floor
+
+$ go test -v -run TestSurfaceParity ./internal/app/
+=== RUN   TestEveryCommandHasAParityScenario
+--- PASS: TestEveryCommandHasAParityScenario (0.00s)
+=== RUN   TestSurfaceParity
+=== RUN   TestSurfaceParity/agents_update
+=== RUN   TestSurfaceParity/agents_delete
+=== RUN   TestSurfaceParity/config_get
+=== RUN   TestSurfaceParity/config_update
+=== RUN   TestSurfaceParity/agents_list
+=== RUN   TestSurfaceParity/agents_get
+=== RUN   TestSurfaceParity/agents_create
+--- PASS: TestSurfaceParity (0.36s)
+ok  	github.com/OWNER/aos/internal/app	0.756s
+```
+
+### A prova da fase
+
+`TestSurfaceParity` roda **cada comando registrado** por quatro superfícies e compara o resultado normalizado:
+
+| Superfície | Como é exercitada |
+|---|---|
+| Registry do agente | `Descriptor.Invoke` em processo, sem transporte |
+| CLI | árvore cobra real, argv construído por `clix.CommandLineFor` |
+| MCP plano | cliente MCP real sobre transporte em memória |
+| MCP composto | o mesmo cliente, `Tool({action, input, _reasoning})` |
+
+```
+--- PASS: TestEveryCommandHasAParityScenario
+--- PASS: TestSurfaceParity/agents_create
+--- PASS: TestSurfaceParity/agents_delete
+--- PASS: TestSurfaceParity/agents_get
+--- PASS: TestSurfaceParity/agents_list
+--- PASS: TestSurfaceParity/agents_update
+--- PASS: TestSurfaceParity/config_get
+--- PASS: TestSurfaceParity/config_update
+```
+
+Cada superfície recebe uma instalação nova, com relógio congelado, de modo que um comando que escreve não contamina a superfície seguinte e dois resultados são comparáveis byte a byte.
+
+### O que a fase entrega, e em qual binário
+
+> [!decision] A composição vive em `cmd/aosd`, não em `cmd/aos`
+> O [[Roteiro de Fases]] descreve a entrega como `aos agents list` e `aos --mcp`. Mas [[Hexagonal e Regra de Dependência]] proíbe o binário de CLI de linkar pacotes de domínio, e essa proibição é um teste (`TestNoDomainInClients`). Construir a árvore de comandos exige os tipos `In`, que vivem no domínio; logo o binário que hospeda a composição é o que carrega o domínio — `aosd`, exatamente como [[Visão Geral Go]] descreve.
+>
+> O que a fase realmente prova é a ponte: uma definição, quatro superfícies, resultado idêntico. `cmd/aos` recebe a mesma árvore na Fase 4, sobre HTTP, e a suíte de paridade ganha a quinta superfície ali.
+
+Verificado à mão, com o binário:
+
+```
+$ aosd agents create atlas --name Atlas --role Orchestrator --orchestrator --format json
+{ "data": { "id": "atlas", "name": "Atlas", "role": "Orchestrator", "orchestrator": true, … } }
+
+$ aosd agents list --format toon
+data:
+  agents[1]{id,name,role,orchestrator,createdAt,updatedAt}:
+    atlas,Atlas,Orchestrator,true,"2026-08-15T15:14:04-03:00","2026-08-15T15:14:04-03:00"
+  total: 1
+
+$ cat .aos/agents/atlas/AGENT.md
+---
+name: Atlas
+role: Orchestrator
+orchestrator: true
+…
+```
+
+### O que não foi feito nesta fase
+
+- **HTTP** — a quinta superfície. `Mount` sobre chi é da Fase 4, com o daemon, a autenticação e o WebSocket. `SurfaceHTTP` já existe no tipo e já é validada como superfície de humano.
+- **`SKILL.md`** — `pkg/skill` é da Fase 9.
+- **`mcp add` e `mcp doctor`** — dependem do gateway, Fase 4.
+- **Aliases em uso** — o mecanismo está pronto e testado, mas nenhum comando foi renomeado ainda; a tabela da [[ADR-0016 Compatibilidade de nomes com o original]] entra com as features que a citam.

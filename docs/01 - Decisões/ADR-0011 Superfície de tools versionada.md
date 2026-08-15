@@ -2,7 +2,7 @@
 tags: [adr, decisao, mcp, compatibilidade]
 aliases: [ADR-0011, Versionamento de Tools, Aliases]
 fase: 2
-status: especificado
+status: em-construcao
 origem: "[[Ferramentas MCP]]"
 ---
 
@@ -93,3 +93,18 @@ E `aos mcp doctor` compara a versão do binário registrado com a do daemon em e
 ## Status
 
 **Aceito.** Ver [[Command Layer]] para a implementação das projeções e [[ADR-0016 Compatibilidade de nomes com o original]] para a escolha dos nomes iniciais.
+
+## Implementação — Fase 2
+
+**Feito.**
+
+- **Regra 1 — nomes são contrato.** `command.Alias` com `From`, `To`, `Since`, `RemoveAt` e `Deprecated`. Chamar um alias funciona, roteia para o comando novo e devolve `_deprecated` no envelope com o nome a usar e a versão em que o antigo para de funcionar. O modelo lê isso e reaprende sozinho. `TestAnAliasKeepsWorkingAndTeachesTheNewName`.
+- **Regra 2 — as duas projeções coexistem.** `flat`, `composite` e `both`, selecionadas por `mcp.toolShape` no config. Default `composite`. `TestBothShapesCoexist`.
+
+**Pendente.**
+
+- **Regra 3 — caminho absoluto no registro MCP.** `aos mcp add` e `aos mcp doctor` dependem do gateway; Fase 4.
+- **O teste que falha quando um alias passa de `RemoveAt`** — não há alias registrado ainda; entra com o primeiro rename real.
+- **A tabela de aliases da migração** — idem.
+
+Um alias sobre um comando real é recusado no registro (`TestAnAliasCannotShadowARealCommand`): esconder um comando existente seria o oposto do que o mecanismo serve.

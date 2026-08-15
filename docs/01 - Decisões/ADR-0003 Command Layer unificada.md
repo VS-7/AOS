@@ -2,7 +2,7 @@
 tags: [adr, decisao, command, superficies]
 aliases: [ADR-0003, Command Layer, Ponte de Superfícies]
 fase: 2
-status: especificado
+status: pronto
 origem: "[[Ponte CLI para MCP]]"
 ---
 
@@ -75,3 +75,15 @@ E projeta-se em cinco superfícies por reflexão sobre `In`:
 ## Status
 
 **Aceito.** É a peça de maior alavancagem do sistema — ver [[Command Layer]] para o design completo.
+
+## Implementação — Fase 2
+
+Aceita e implementada. As três consequências negativas que a ADR previu, com o que realmente aconteceu:
+
+| Risco previsto | O que aconteceu |
+|---|---|
+| "Reflexão sobre struct tags é frágil em silêncio" | Confirmado, e pior do que a ADR imaginava. Não foi só um campo sem tag `json`: **a biblioteca de inferência descarta silenciosamente os campos de uma struct embutida**, o que apagaria `_reasoning` de todo schema publicado. A mitigação prevista (um teste de registry) virou verificação no próprio `Register`, que repara o schema e falha se qualquer campo visível em JSON tiver sumido. |
+| "Tipos complexos em argv" | Resolvido como a ADR prevê e como o original faz: o campo aceita string JSON. `TestComplexTypesTravelAsJSON`. |
+| "O registry heterogêneo precisa de uma interface não-genérica" | Confirmado e contido em `descriptor.go`, com `json.RawMessage` no ponto de invocação. |
+
+A propriedade central — *"o agente nativo e o cliente MCP externo usam exatamente as mesmas ferramentas, com os mesmos schemas e as mesmas descrições"* — é agora um teste que roda cada comando pelas quatro superfícies e compara o resultado normalizado (`TestSurfaceParity`), com um segundo teste que reprova a suíte se um comando for publicado sem cenário.

@@ -2,7 +2,7 @@
 tags: [adr, decisao, compatibilidade, nomes]
 aliases: [ADR-0016, Nomenclatura, Compatibilidade]
 fase: 2
-status: especificado
+status: em-construcao
 origem: "[[Ponte CLI para MCP]]"
 ---
 
@@ -74,3 +74,29 @@ Ao mesmo tempo, há nomes do original que são defeito e não devem ser copiados
 ## Status
 
 **Aceito.**
+
+## Implementação — Fase 2
+
+**Faixa 1 — copiado exatamente.**
+
+| Item | Estado |
+|---|---|
+| Regra de nome de tool: caminho unido por `_` | Implementada e testada (`TestToolNameIsThePathJoinedByUnderscore`) |
+| Campo obrigatório `_reasoning` | Implementado, com a descrição e a mensagem de rejeição **literais** do `AgentSchema.object` do original |
+| Introspecção `schema: true` no mesmo nível de `action` | Implementada (`TestSchemaTrueInspectsWithoutExecuting`) |
+| Tools de filesystem (`Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash`) | Fase 5, com o Tool Executor |
+| Tools de web (`WebSearch`, `WebFetch`) | Fase 5 |
+| Eventos de hook | Fase 5, com Event Hooks |
+
+**Faixa 2 — corrigido.**
+
+| Original | Aqui | Estado |
+|---|---|---|
+| builtin `skills` colidindo com o domínio | builtins sob `aos self …` | **Feito**, com teste que reproduz o defeito #15 |
+| `memories_forgot` | `memories_forget` | Fase 3, com o domínio de memória |
+| `tasks_comment_add` × `tasks comment create` | `tasks_comment_create` nos dois | Fase 6 |
+| `tasks todos transition` × `tasks_todos_set_status` | `tasks_todos_set_status` nos dois | Fase 6 |
+
+**Faixa 3 — herdado sem cerimônia.** `agents` e `config` existem com os nomes do original. Os demais grupos chegam com suas fases.
+
+A nota permanece `em-construcao` até que as três faixas estejam completas.
