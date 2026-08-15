@@ -29,7 +29,11 @@ import (
 	"github.com/OWNER/aos/internal/transport/mcpserver"
 )
 
-func main() {
+func main() { os.Exit(exitCode()) }
+
+// exitCode keeps os.Exit out of the function that defers, so the signal
+// handler is always unregistered before the process leaves.
+func exitCode() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -37,8 +41,9 @@ func main() {
 		if !clix.Silent(err) {
 			fmt.Fprintln(os.Stderr, "error:", err)
 		}
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func run(ctx context.Context, args []string) error {

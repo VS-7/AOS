@@ -29,6 +29,9 @@ var floors = map[string]float64{
 	"github.com/OWNER/aos/internal/domain/fakes":     0,
 	"github.com/OWNER/aos/internal/domain/testsuite": 0,
 	"github.com/OWNER/aos/internal/testx":            0,
+	// The composition root is wiring: what it must prove is that the surfaces
+	// agree, and that is the parity suite, not a percentage.
+	"github.com/OWNER/aos/internal/app": 0,
 	// Wiring and generators are exercised through the packages they serve.
 	"github.com/OWNER/aos/cmd":                   0,
 	"github.com/OWNER/aos/tools":                 0,

@@ -1,0 +1,316 @@
+package app_test
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/OWNER/aos/internal/app"
+	"github.com/OWNER/aos/internal/core/clockx"
+	"github.com/OWNER/aos/internal/core/command"
+	"github.com/OWNER/aos/internal/core/env"
+	"github.com/OWNER/aos/internal/domain/agent"
+	"github.com/OWNER/aos/internal/domain/config"
+	"github.com/OWNER/aos/internal/transport/clix"
+	"github.com/OWNER/aos/internal/transport/mcpserver"
+)
+
+var refTime = time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
+
+// newApp builds an isolated installation: its own state directory, its own
+// workspace, and a frozen clock so two runs of the same command are byte-equal.
+func newApp(t *testing.T) *app.App {
+	t.Helper()
+	home := t.TempDir()
+	workspace := t.TempDir()
+	a, err := app.New(app.Options{
+		Env:           env.New(env.Map(map[string]string{env.KeyHome: home})),
+		WorkspaceRoot: workspace,
+		Clock:         clockx.Fixed{At: refTime},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a
+}
+
+// scenario describes one command well enough to run it on every surface.
+type scenario struct {
+	// Payload is the input, identical on all four surfaces.
+	Payload any
+
+	// Seed prepares the state the command needs. Every surface gets a fresh
+	// installation, so a mutating command does not disturb the next surface.
+	Seed func(t *testing.T, a *app.App)
+}
+
+func seedAgent(t *testing.T, a *app.App) {
+	t.Helper()
+	_, err := a.Agents.Create(context.Background(), agent.CreateInput{
+		ID: "atlas", Name: "Atlas", Role: "Orchestrator",
+		Content: "# Instructions\nCoordinate the team.\n",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// scenarios covers the whole registry. A command without one fails the suite,
+// which is what keeps a new capability from being published untested.
+var scenarios = map[string]scenario{
+	"agents_list": {
+		Payload: agent.ListInput{Reasoning: reason()},
+		Seed:    seedAgent,
+	},
+	"agents_get": {
+		Payload: agent.GetInput{ID: "atlas", Reasoning: reason()},
+		Seed:    seedAgent,
+	},
+	"agents_create": {
+		Payload: agent.CreateInput{
+			ID: "reviewer", Name: "Reviewer", Role: "Quality Assurance Specialist",
+			Provider: "openai", Model: "gpt-5.5", Reasoning: reason(),
+		},
+	},
+	"agents_update": {
+		Payload: agent.UpdateInput{ID: "atlas", Role: ptr("Lead"), Reasoning: reason()},
+		Seed:    seedAgent,
+	},
+	"agents_delete": {
+		Payload: agent.DeleteInput{ID: "atlas", Reasoning: reason()},
+		Seed:    seedAgent,
+	},
+	"config_get": {
+		Payload: config.GetInput{Reasoning: reason()},
+	},
+	"config_update": {
+		Payload: config.UpdateInput{
+			Set:       map[string]any{"region.timezone": "America/Sao_Paulo"},
+			Reasoning: reason(),
+		},
+	},
+}
+
+func reason() command.Reasoning {
+	return command.Reasoning{Reasoning: "surface parity check"}
+}
+
+func ptr[T any](v T) *T { return &v }
+
+// TestEveryCommandHasAParityScenario is the gate that keeps the suite honest:
+// publishing a capability without covering it here fails the build.
+func TestEveryCommandHasAParityScenario(t *testing.T) {
+	a := newApp(t)
+	for _, d := range a.Registry.Sorted() {
+		if _, ok := scenarios[d.Key()]; !ok {
+			t.Errorf("%s is registered but has no parity scenario", d.Key())
+		}
+	}
+	for key := range scenarios {
+		if _, _, ok := a.Registry.Lookup(key); !ok {
+			t.Errorf("the parity scenario %q covers a command that no longer exists", key)
+		}
+	}
+}
+
+// TestSurfaceParity is the claim of the whole phase: one definition, four
+// surfaces, the same effect and the same normalised result.
+//
+// Without it, ~140 capabilities times five surfaces are 700 points of manual
+// synchronisation, and they diverge in weeks.
+func TestSurfaceParity(t *testing.T) {
+	for key, sc := range scenarios {
+		t.Run(key, func(t *testing.T) {
+			payload, err := json.Marshal(sc.Payload)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			viaAgent := runInternal(t, sc, key, payload)
+			viaCLI := runCLI(t, sc, key, payload)
+			viaFlat := runMCP(t, sc, key, payload, mcpserver.ShapeFlat)
+			viaComposite := runMCP(t, sc, key, payload, mcpserver.ShapeComposite)
+
+			for _, other := range []struct {
+				name string
+				got  string
+			}{
+				{"cli", viaCLI},
+				{"mcp flat", viaFlat},
+				{"mcp composite", viaComposite},
+			} {
+				if other.got != viaAgent {
+					t.Errorf("%s differs from the agent registry.\n--- agent ---\n%s\n--- %s ---\n%s",
+						other.name, viaAgent, other.name, other.got)
+				}
+			}
+		})
+	}
+}
+
+// runInternal is the agent's own registry: the descriptor invoked in process,
+// with no transport at all.
+func runInternal(t *testing.T, sc scenario, key string, payload json.RawMessage) string {
+	t.Helper()
+	a := newApp(t)
+	if sc.Seed != nil {
+		sc.Seed(t, a)
+	}
+	d, _, ok := a.Registry.Lookup(key)
+	if !ok {
+		t.Fatalf("%s is not registered", key)
+	}
+	out, err := d.Invoke(context.Background(), command.SurfaceAgent, payload)
+	if err != nil {
+		t.Fatalf("invoke: %v", err)
+	}
+	return canonical(t, out)
+}
+
+func runCLI(t *testing.T, sc scenario, key string, payload json.RawMessage) string {
+	t.Helper()
+	a := newApp(t)
+	if sc.Seed != nil {
+		sc.Seed(t, a)
+	}
+	d, _, ok := a.Registry.Lookup(key)
+	if !ok {
+		t.Fatalf("%s is not registered", key)
+	}
+	argv, err := clix.CommandLineFor(d, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	root := clix.NewRoot(clix.Config{
+		Registry: a.Registry,
+		Out:      &stdout,
+		Err:      &stderr,
+		IsTTY:    func() bool { return false }, // a program is watching: JSON
+	})
+	root.SetArgs(append(argv, "--format", "json"))
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("cli %v: %v\nstderr: %s", argv, err, stderr.String())
+	}
+
+	var envelope struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("cli output is not an envelope: %v\n%s", err, stdout.String())
+	}
+	return canonicalRaw(t, envelope.Data)
+}
+
+func runMCP(t *testing.T, sc scenario, key string, payload json.RawMessage, shape mcpserver.Shape) string {
+	t.Helper()
+	a := newApp(t)
+	if sc.Seed != nil {
+		sc.Seed(t, a)
+	}
+	ctx := context.Background()
+
+	server := mcpserver.New(mcpserver.Config{Registry: a.Registry, Shape: shape})
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = serverSession.Wait() }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "parity", Version: "test"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = session.Close() }()
+
+	name, args := key, payload
+	if shape == mcpserver.ShapeComposite {
+		d, _, _ := a.Registry.Lookup(key)
+		group, _ := a.Registry.GroupOf(d.Group())
+		name = group.Tool
+		// A real client puts `_reasoning` next to `action`, not inside
+		// `input`: the per-action schema does not contain it.
+		args, err = json.Marshal(mcpserver.CompositeInput{
+			Action:    d.Name(),
+			Input:     withoutReasoning(t, payload),
+			Reasoning: "surface parity check",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
+	if err != nil {
+		t.Fatalf("call %s: %v", name, err)
+	}
+	if res.IsError {
+		t.Fatalf("call %s returned an error: %s", name, textOf(res))
+	}
+
+	var envelope struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(textOf(res)), &envelope); err != nil {
+		t.Fatalf("mcp output is not an envelope: %v\n%s", err, textOf(res))
+	}
+	return canonicalRaw(t, envelope.Data)
+}
+
+// withoutReasoning strips the field that belongs to the composite payload
+// rather than to the action.
+func withoutReasoning(t *testing.T, payload json.RawMessage) json.RawMessage {
+	t.Helper()
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		t.Fatal(err)
+	}
+	delete(fields, command.ReasoningField)
+	out, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func textOf(res *mcp.CallToolResult) string {
+	var b strings.Builder
+	for _, c := range res.Content {
+		if tc, ok := c.(*mcp.TextContent); ok {
+			b.WriteString(tc.Text)
+		}
+	}
+	return b.String()
+}
+
+// canonical renders a result the same way regardless of the Go type it came
+// back as, so two surfaces are compared on what they say, not on how they say it.
+func canonical(t *testing.T, v any) string {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return canonicalRaw(t, raw)
+}
+
+func canonicalRaw(t *testing.T, raw json.RawMessage) string {
+	t.Helper()
+	var v any
+	if err := json.Unmarshal(raw, &v); err != nil {
+		t.Fatalf("result is not JSON: %v\n%s", err, raw)
+	}
+	out, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out)
+}

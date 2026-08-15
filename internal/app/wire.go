@@ -11,8 +11,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/OWNER/aos/internal/adapters/fsconfig"
 	"github.com/OWNER/aos/internal/adapters/fscollections"
+	"github.com/OWNER/aos/internal/adapters/fsconfig"
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/command"

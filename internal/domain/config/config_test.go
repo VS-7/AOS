@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/OWNER/aos/internal/core/apperr"
+	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/core/identity"
 	"github.com/OWNER/aos/internal/domain/config"
 )
@@ -291,5 +292,49 @@ func TestLoadFailurePropagatesAsAppError(t *testing.T) {
 	}
 	if e, ok := apperr.As(err); !ok || e.CauserName == "" {
 		t.Fatalf("error is not a classified app error: %v", err)
+	}
+}
+
+// TestRegisterPublishesTheGroup: the domain declares the commands and every
+// surface is derived from that declaration.
+func TestRegisterPublishesTheGroup(t *testing.T) {
+	svc, _ := newService(config.Default())
+	reg := command.NewRegistry()
+	config.Register(reg, svc)
+
+	want := []string{"config_get", "config_update"}
+	got := make([]string, 0, len(want))
+	for _, d := range reg.Sorted() {
+		got = append(got, d.Key())
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("commands = %v, want %v", got, want)
+	}
+
+	doc, ok := reg.GroupOf("config")
+	if !ok || doc.Tool != "Config" {
+		t.Fatalf("group = %+v", doc)
+	}
+	for _, d := range reg.Sorted() {
+		if d.Key() == "config_get" && !d.Annotations().ReadOnlyHint {
+			t.Error("reading the configuration must be announced read-only")
+		}
+	}
+}
+
+// TestAgentWritablePathsAreTheDeclaredOnes keeps the allowlist and its published
+// form from drifting apart.
+func TestAgentWritablePathsAreTheDeclaredOnes(t *testing.T) {
+	paths := config.AgentWritablePaths()
+	if len(paths) == 0 {
+		t.Fatal("the allowlist is empty")
+	}
+	for _, p := range paths {
+		if !config.AgentWritable(p) {
+			t.Errorf("%q is listed but not allowed", p)
+		}
+	}
+	if config.AgentWritable("security.enabled") {
+		t.Error("security must never be agent-writable")
 	}
 }

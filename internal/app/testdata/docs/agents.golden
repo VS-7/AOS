@@ -1,0 +1,313 @@
+# tool: Agent
+
+Manage the agents of this workspace.
+
+An agent is a persistent identity: a slug, a role, a model, and Markdown
+instructions that shape how it works. It is stored as `.aos/agents/{id}/AGENT.md`,
+which means an agent is versionable in Git and editable by hand.
+
+## When to use
+- To see who is available before delegating work
+- To read an agent's instructions before changing them
+- To create a specialist for a recurring kind of task
+
+## When NOT to use
+- Not to store knowledge — that is what memories are for
+- Not to track work — that is what tasks are for
+
+Composite tool `Agent` with 5 actions: create, delete, get, list, update.
+
+Deleting an agent removes its memories and routines with it. Read before you delete.
+
+## Usage
+Call as `Agent({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### agents_create
+
+Create an agent.
+
+Create an agent in this workspace.
+
+The slug is the identity: it names the directory, and it is what every other
+record refers to. It is lowercased on write, so "Atlas" and "atlas" are the same
+agent rather than two.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique agent identifier (slug). Lowercase, no spaces. Example: \"atlas\"."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable display name. Defaults to the slug."
+    },
+    "description": {
+      "type": "string",
+      "description": "Orchestrator-facing summary of when to delegate to this agent."
+    },
+    "role": {
+      "type": "string",
+      "description": "Functional role label shown in delegation prompts."
+    },
+    "leader": {
+      "type": "string",
+      "description": "Slug of the leader agent in a hierarchical team."
+    },
+    "provider": {
+      "type": "string",
+      "description": "LLM provider slug for this agent. Example: \"openai\"."
+    },
+    "model": {
+      "type": "string",
+      "description": "LLM model id for this agent. Example: \"gpt-4o\"."
+    },
+    "voice": {
+      "type": "string",
+      "description": "Voice name for speech output."
+    },
+    "channels": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "description": "Channel provider slug registered for this agent. Example: \"telegram\"."
+          },
+          "data": {
+            "description": "Provider-specific configuration payload. Pass structured JSON. Example: { \"chatId\": \"123\" }."
+          }
+        },
+        "required": [
+          "provider",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Communication channel bindings for this agent."
+    },
+    "orchestrator": {
+      "type": "boolean",
+      "description": "Marks the workspace orchestrator fallback for non-direct chats."
+    },
+    "content": {
+      "type": "string",
+      "description": "Markdown system instructions for the agent runtime."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### agents_delete
+
+Delete an agent and everything under it.
+
+Delete an agent.
+
+This removes the agent's whole directory: its memories, its routines and its
+event log go with it. There is no undo other than Git.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Agent slug to delete. This removes the agent's memories and routines with it."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### agents_get
+
+Read one agent, instructions included.
+
+Read one agent by slug.
+
+Returns the whole record: identity, model binding, channels and the Markdown
+body that is the agent's system instruction.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Agent slug to retrieve. Example: \"neo\"."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### agents_list
+
+List the agents of the workspace.
+
+List every agent in the workspace, including the ones a skill shipped.
+
+Returns the identity of each agent, not its instructions: use `agents get` for
+the full record. Ordered by slug, so the list is stable between calls.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "skill": {
+      "type": "string",
+      "description": "Only agents shipped by this skill. Omit to list the workspace's own agents and every skill's."
+    },
+    "role": {
+      "type": "string",
+      "description": "Only agents with this functional role label."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Maximum number of agents to return. 0 means no limit."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### agents_update
+
+Change an agent.
+
+Change one or more fields of an agent.
+
+Only the fields you send are changed; the rest are left alone. Sending
+`content` replaces the instructions entirely — read them first.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Agent slug to update."
+    },
+    "name": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New display name."
+    },
+    "description": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New orchestrator-facing summary."
+    },
+    "role": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New functional role label."
+    },
+    "leader": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New leader slug."
+    },
+    "provider": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New LLM provider slug."
+    },
+    "model": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New LLM model id."
+    },
+    "voice": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New voice name."
+    },
+    "orchestrator": {
+      "type": [
+        "null",
+        "boolean"
+      ],
+      "description": "Whether this agent is the workspace orchestrator."
+    },
+    "content": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New Markdown system instructions. Replaces the body entirely."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
