@@ -89,6 +89,8 @@ var Catalog = []Entry{
 	{Code: "AOS_SEARCH_INDEX_UNAVAILABLE", Package: "internal/adapters/bleveindex", File: "internal/adapters/bleveindex/index.go", Line: 291, Status: 500, Causer: "bleveindex.Open", CTA: false, Issues: []string{"path"}},
 	{Code: "AOS_SECRET_PERMISSION_UNSAFE", Package: "internal/core/config", File: "internal/core/config/secure.go", Line: 50, Status: 500, Causer: "config.WriteSecret", CTA: false, Issues: []string{"mode", "path"}},
 	{Code: "AOS_SECRET_WRITE_FAILED", Package: "internal/core/config", File: "internal/core/config/secure.go", Line: 34, Status: 500, Causer: "config.WriteSecret", CTA: false, Issues: []string{"path"}},
+	{Code: "AOS_SERVER_CANNOT_LISTEN", Package: "internal/app", File: "internal/app/serve.go", Line: 169, Status: 500, Causer: "app.Serve", CTA: true, Issues: []string{"addr"}},
+	{Code: "AOS_SERVER_EXPOSED_WITHOUT_AUTH", Package: "internal/app", File: "internal/app/serve.go", Line: 183, Status: 400, Causer: "app.guardExposure", CTA: true, Issues: []string{"host"}},
 	{Code: "AOS_STATE_DIR_UNWRITABLE", Package: "internal/core/config", File: "internal/core/config/paths.go", Line: 99, Status: 500, Causer: "config.Paths.Ensure", CTA: false, Issues: []string{"path"}},
 	{Code: "AOS_STATE_FOREIGN_ROOT", Package: "internal/core/config", File: "internal/core/config/paths.go", Line: 60, Status: 400, Causer: "config.Paths.guardForeignState", CTA: true, Issues: []string{"root"}},
 	{Code: "AOS_STATE_HOME_UNRESOLVED", Package: "internal/core/config", File: "internal/core/config/paths.go", Line: 31, Status: 500, Causer: "config.Resolve", CTA: true},

@@ -13,10 +13,13 @@ import (
 	"path/filepath"
 
 	"github.com/OWNER/aos/internal/adapters/bleveindex"
+	"github.com/OWNER/aos/internal/adapters/fsauth"
 	"github.com/OWNER/aos/internal/adapters/fscollections"
 	"github.com/OWNER/aos/internal/adapters/fsconfig"
 	"github.com/OWNER/aos/internal/adapters/fsworkspace"
 	"github.com/OWNER/aos/internal/adapters/gitcli"
+	"github.com/OWNER/aos/internal/adapters/supervise"
+	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/command"
@@ -25,8 +28,10 @@ import (
 	"github.com/OWNER/aos/internal/core/ids"
 	"github.com/OWNER/aos/internal/core/logging"
 	"github.com/OWNER/aos/internal/domain/agent"
+	"github.com/OWNER/aos/internal/domain/auth"
 	"github.com/OWNER/aos/internal/domain/chat"
 	"github.com/OWNER/aos/internal/domain/config"
+	"github.com/OWNER/aos/internal/domain/gateway"
 	"github.com/OWNER/aos/internal/domain/memory"
 	"github.com/OWNER/aos/internal/domain/workspace"
 )
@@ -59,6 +64,12 @@ type App struct {
 	Memories   *memory.Service
 	Workspaces *workspace.Service
 	Chats      *chat.Service
+	Auth       *auth.Service
+	Gateway    *gateway.Service
+
+	// env is kept so that Serve reads the same layered settings the rest of
+	// the wiring did, rather than a second resolver that could disagree.
+	env *env.Resolver
 
 	// closers releases what New opened. It is a slice rather than a single
 	// handle because the list grows with each phase, and a caller that has to
@@ -183,8 +194,35 @@ func New(opts Options) (*App, error) {
 		WorkingDir:    root,
 	})
 
+	authSvc := auth.NewService(auth.Deps{
+		Store: fsauth.FromPaths(paths),
+		Clock: clock,
+		IDs:   idgen,
+	})
+
+	// Supervision is bound to the same installation the rest of the process
+	// serves: the record, the lock and the log all live under the state
+	// directory, so two installations on one machine do not fight.
+	gatewaySvc := gateway.NewService(gateway.Deps{
+		Processes: supervise.NewProcesses(),
+		Health:    supervise.NewHealth(),
+		Store:     supervise.NewStore(filepath.Join(paths.GatewayDir(), "gateway.json")),
+		Locker:    supervise.NewLock(paths.GatewayLock()),
+		Resolver: supervise.Resolver{
+			Explicit: resolver.String("DAEMON_PATH", ""),
+			Args:     []string{"serve"},
+			Log:      filepath.Join(paths.GatewayDir(), "gateway.log"),
+		},
+		Clock:   clock,
+		Sleeper: supervise.Sleeper{},
+		Log:     logger,
+		Host:    resolver.String(env.KeyServerHost, env.DefaultServerHost),
+		Port:    resolver.Int(env.KeyServerPort, build.Port),
+	})
+
 	reg := command.NewRegistry()
 	config.Register(reg, configSvc)
+	gateway.Register(reg, gatewaySvc)
 	workspace.Register(reg, workspaceSvc)
 	agent.Register(reg, agentSvc)
 	memory.Register(reg, memorySvc)
@@ -200,6 +238,9 @@ func New(opts Options) (*App, error) {
 		Memories:   memorySvc,
 		Workspaces: workspaceSvc,
 		Chats:      chatSvc,
+		Auth:       authSvc,
+		Gateway:    gatewaySvc,
+		env:        resolver,
 		closers:    closers,
 	}, nil
 }

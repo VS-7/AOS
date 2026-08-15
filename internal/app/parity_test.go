@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -19,9 +23,11 @@ import (
 	"github.com/OWNER/aos/internal/domain/agent"
 	"github.com/OWNER/aos/internal/domain/chat"
 	"github.com/OWNER/aos/internal/domain/config"
+	"github.com/OWNER/aos/internal/domain/gateway"
 	"github.com/OWNER/aos/internal/domain/memory"
 	"github.com/OWNER/aos/internal/domain/workspace"
 	"github.com/OWNER/aos/internal/transport/clix"
+	"github.com/OWNER/aos/internal/transport/httpapi"
 	"github.com/OWNER/aos/internal/transport/mcpserver"
 )
 
@@ -55,6 +61,15 @@ func newApp(t *testing.T) *app.App {
 		}
 	})
 	return a
+}
+
+// excluded lists the commands the parity suite deliberately does not run, with
+// the reason. It is a map rather than a silence: a command that is not covered
+// has to be visible as a decision, and the reason has to survive review.
+var excluded = map[string]string{
+	"gateway_start": "spawns an operating-system process; running it on five surfaces " +
+		"would start five daemons. Covered end to end by TestTheDeliveryOfPhaseFour.",
+	"gateway_restart": "stops and spawns; same reason as gateway_start.",
 }
 
 // scenario describes one command well enough to run it on every surface.
@@ -223,6 +238,14 @@ var scenarios = map[string]scenario{
 		Payload: chat.SendInput{Chat: "m-1", Text: "@atlas what changed?", Reasoning: reason()},
 		Seed:    seedChat,
 	},
+	// The two read-only halves of supervision are safe to run five times over:
+	// neither spawns anything. The two that do are in `excluded`.
+	"gateway_status": {
+		Payload: gateway.StatusInput{Reasoning: reason()},
+	},
+	"gateway_stop": {
+		Payload: gateway.StopInput{Reasoning: reason()},
+	},
 	"config_get": {
 		Payload: config.GetInput{Reasoning: reason()},
 	},
@@ -245,13 +268,26 @@ func ptr[T any](v T) *T { return &v }
 func TestEveryCommandHasAParityScenario(t *testing.T) {
 	a := newApp(t)
 	for _, d := range a.Registry.Sorted() {
-		if _, ok := scenarios[d.Key()]; !ok {
-			t.Errorf("%s is registered but has no parity scenario", d.Key())
+		if _, ok := scenarios[d.Key()]; ok {
+			continue
 		}
+		if reason, ok := excluded[d.Key()]; ok {
+			t.Logf("%s is not covered: %s", d.Key(), reason)
+			continue
+		}
+		t.Errorf("%s is registered but has no parity scenario", d.Key())
 	}
 	for key := range scenarios {
 		if _, _, ok := a.Registry.Lookup(key); !ok {
 			t.Errorf("the parity scenario %q covers a command that no longer exists", key)
+		}
+		if _, both := excluded[key]; both {
+			t.Errorf("%q is both covered and excluded", key)
+		}
+	}
+	for key := range excluded {
+		if _, _, ok := a.Registry.Lookup(key); !ok {
+			t.Errorf("the exclusion %q names a command that no longer exists", key)
 		}
 	}
 }
@@ -271,6 +307,7 @@ func TestSurfaceParity(t *testing.T) {
 
 			viaAgent := runInternal(t, sc, key, payload)
 			viaCLI := runCLI(t, sc, key, payload)
+			viaHTTP := runHTTP(t, sc, key, payload)
 			viaFlat := runMCP(t, sc, key, payload, mcpserver.ShapeFlat)
 			viaComposite := runMCP(t, sc, key, payload, mcpserver.ShapeComposite)
 
@@ -279,6 +316,7 @@ func TestSurfaceParity(t *testing.T) {
 				got  string
 			}{
 				{"cli", viaCLI},
+				{"http", viaHTTP},
 				{"mcp flat", viaFlat},
 				{"mcp composite", viaComposite},
 			} {
@@ -342,6 +380,65 @@ func runCLI(t *testing.T, sc scenario, key string, payload json.RawMessage) stri
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
 		t.Fatalf("cli output is not an envelope: %v\n%s", err, stdout.String())
+	}
+	return stabilise(a, canonicalRaw(t, envelope.Data))
+}
+
+// runHTTP is the fifth surface: the same payload posted to the route the
+// registry generated, through a real HTTP server and a real client.
+//
+// Authentication is off here for the same reason the other runners carry no
+// credential — this suite asks whether the surfaces agree about what a command
+// does, and the answer must not depend on who is asking. Whether the door is
+// locked is the HTTP transport's own suite.
+func runHTTP(t *testing.T, sc scenario, key string, payload json.RawMessage) string {
+	t.Helper()
+	a := newApp(t)
+	if sc.Seed != nil {
+		sc.Seed(t, a)
+	}
+	d, _, ok := a.Registry.Lookup(key)
+	if !ok {
+		t.Fatalf("%s is not registered", key)
+	}
+
+	server := httptest.NewServer(httpapi.New(httpapi.Config{
+		Registry:        a.Registry,
+		SecurityEnabled: func() bool { return false },
+		Log:             slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}).Handler())
+	defer server.Close()
+
+	req, err := http.NewRequestWithContext(parityCtx(), http.MethodPost,
+		server.URL+httpapi.RouteOf(d), bytes.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	// The ambient identity travels in headers here, where the other surfaces
+	// take it from the context. That is the transport's job, and getting it
+	// wrong is exactly what this suite would catch.
+	req.Header.Set(httpapi.HeaderAgent, "atlas")
+	req.Header.Set(httpapi.HeaderWorkspace, activeWorkspace)
+
+	res, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("http %s returned %d: %s", key, res.StatusCode, body)
+	}
+	var envelope struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		t.Fatalf("http output is not an envelope: %v\n%s", err, body)
 	}
 	return stabilise(a, canonicalRaw(t, envelope.Data))
 }

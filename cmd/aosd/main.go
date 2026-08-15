@@ -31,6 +31,13 @@ import (
 
 func main() { os.Exit(exitCode()) }
 
+// isServeMode reports whether this invocation is the daemon rather than a
+// command. It is a bare word rather than a flag because it is what the
+// supervisor spawns, and a subcommand reads as one in a process listing.
+func isServeMode(args []string) bool {
+	return len(args) > 0 && args[0] == "serve"
+}
+
 // exitCode keeps os.Exit out of the function that defers, so the signal
 // handler is always unregistered before the process leaves.
 func exitCode() int {
@@ -75,6 +82,12 @@ func run(ctx context.Context, args []string) error {
 			Shape:        shapeFrom(cfg),
 			Instructions: instructions(),
 		})
+	}
+
+	if isServeMode(args) {
+		// The daemon runs until the context ends, which happens on SIGTERM —
+		// the signal the gateway sends before it resorts to killing.
+		return application.Serve(ctx, app.ServeOptions{Log: logger})
 	}
 
 	root := clix.NewRoot(clix.Config{Registry: application.Registry, IsTTY: isTTY})
