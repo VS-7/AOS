@@ -5,6 +5,23 @@ package apperr
 // Catalog lists every error code constructed in this tree, with the
 // properties the catalog test asserts on. Regenerate with `task gen-catalog`.
 var Catalog = []Entry{
+	{Code: "AOS_COLLECTION_ALREADY_EXISTS", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 114, Status: 409, Causer: "collections.Repo.Create", CTA: true, Issues: []string{"collection", "record"}},
+	{Code: "AOS_COLLECTION_CONFLICT", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 128, Status: 409, Causer: "collections.Repo.Update", CTA: true, Issues: []string{"actualSize", "collection", "expectedSize", "path"}},
+	{Code: "AOS_COLLECTION_DECODE_FAILED", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 142, Status: 500, Causer: "collections.Decode", CTA: true, Issues: []string{"collection", "path"}},
+	{Code: "AOS_COLLECTION_ENCODE_FAILED", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 155, Status: 500, Causer: "collections.Encode", CTA: false, Issues: []string{"collection"}},
+	{Code: "AOS_COLLECTION_IO_FAILED", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 164, Status: 500, Causer: "<dynamic>", CTA: false, Issues: []string{"path"}},
+	{Code: "AOS_COLLECTION_KEY_INCOMPLETE", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 54, Status: 400, Causer: "collections.Pattern.Build", CTA: true, Issues: []string{"given", "missing", "pattern"}},
+	{Code: "AOS_COLLECTION_KEY_INVALID", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 67, Status: 400, Causer: "collections.Pattern.Build", CTA: true, Issues: []string{"field", "pattern", "value"}},
+	{Code: "AOS_COLLECTION_NOT_FOUND", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 101, Status: 404, Causer: "collections.Repo.Get", CTA: true, Issues: []string{"collection", "record"}},
+	{Code: "AOS_COLLECTION_NOT_WRITABLE", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 88, Status: 500, Causer: "collections.Model.WritePattern", CTA: false, Issues: []string{"collection"}},
+	{Code: "AOS_COLLECTION_PATH_ESCAPES_ROOT", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 173, Status: 403, Causer: "collections.Repo.resolve", CTA: true, Issues: []string{"path", "root"}},
+	{Code: "AOS_COLLECTION_PATH_NOT_OWNED", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 206, Status: 500, Causer: "collections.Repo.readAt", CTA: false, Issues: []string{"collection", "path"}},
+	{Code: "AOS_COLLECTION_PATTERN_INVALID", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 11, Status: 500, Causer: "collections.Compile", CTA: false, Issues: []string{"pattern"}},
+	{Code: "AOS_COLLECTION_PATTERN_INVALID", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 19, Status: 500, Causer: "collections.Compile", CTA: false, Issues: []string{"pattern"}},
+	{Code: "AOS_COLLECTION_PATTERN_INVALID", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 27, Status: 500, Causer: "collections.Compile", CTA: false, Issues: []string{"pattern"}},
+	{Code: "AOS_COLLECTION_PATTERN_INVALID", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 35, Status: 500, Causer: "collections.Compile", CTA: false, Issues: []string{"pattern"}},
+	{Code: "AOS_COLLECTION_PATTERN_NOT_WRITABLE", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 44, Status: 500, Causer: "collections.Pattern.Build", CTA: false, Issues: []string{"pattern"}},
+	{Code: "AOS_COLLECTION_UNKNOWN", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 185, Status: 404, Causer: "collections.ModelOf", CTA: true, Issues: []string{"collection"}},
 	{Code: "AOS_CONFIG_FIELD_FORBIDDEN", Package: "internal/domain/config", File: "internal/domain/config/errors.go", Line: 11, Status: 403, Causer: "config.Service.Update", CTA: true, Issues: []string{"allowed", "field"}},
 	{Code: "AOS_CONFIG_FIELD_UNKNOWN", Package: "internal/domain/config", File: "internal/domain/config/errors.go", Line: 25, Status: 400, Causer: "config.Service.Update", CTA: true, Issues: []string{"field"}},
 	{Code: "AOS_CONFIG_LOAD_FAILED", Package: "internal/domain/config", File: "internal/domain/config/errors.go", Line: 49, Status: 500, Causer: "config.Service.load", CTA: false},
