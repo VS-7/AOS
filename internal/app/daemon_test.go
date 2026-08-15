@@ -16,8 +16,12 @@ import (
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/env"
 	"github.com/OWNER/aos/internal/core/ids"
+	"github.com/coder/websocket"
+
 	"github.com/OWNER/aos/internal/domain/config"
+	"github.com/OWNER/aos/internal/domain/workspace"
 	"github.com/OWNER/aos/internal/transport/httpapi"
+	"github.com/OWNER/aos/internal/transport/realtime"
 )
 
 // configOff switches authentication off, which is the state a loopback-only
@@ -198,4 +202,98 @@ func freePort(t *testing.T) int {
 	}
 	defer func() { _ = l.Close() }()
 	return l.Addr().(*net.TCPAddr).Port
+}
+
+// TestTheSocketIsAuthorisedAgainstTheWorkspace is defect #5, checked against
+// the running daemon rather than against the handler: the original reads the
+// workspace out of a cookie and attaches the socket without asking whether the
+// caller has any claim to it.
+func TestTheSocketIsAuthorisedAgainstTheWorkspace(t *testing.T) {
+	base, a := serving(t, nil)
+	if _, err := a.Config.Update(context.Background(), configOff()); err != nil {
+		t.Fatal(err)
+	}
+	// One workspace exists, with a member who is not the caller.
+	created, err := a.Workspaces.Create(context.Background(), workspace.CreateInput{
+		Name: "Mine", Path: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Workspaces.Update(context.Background(), workspace.UpdateInput{
+		Workspace: created.Workspace.ID,
+		Set: map[string]any{"members": []map[string]any{
+			{"userId": "somebody-else", "role": "owner", "addedAt": refTime},
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	socketURL := "ws" + strings.TrimPrefix(base, "http") + "/ws"
+
+	t.Run("a workspace the caller is not in is refused", func(t *testing.T) {
+		headers := http.Header{}
+		headers.Set(httpapi.HeaderWorkspace, created.Workspace.ID)
+		conn, res, err := websocket.Dial(t.Context(), socketURL, &websocket.DialOptions{HTTPHeader: headers})
+		if err == nil {
+			_ = conn.Close(websocket.StatusNormalClosure, "")
+			t.Fatal("the socket was granted")
+		}
+		if res == nil || res.StatusCode != http.StatusForbidden {
+			t.Fatalf("response = %v", res)
+		}
+	})
+
+	t.Run("a workspace that does not exist is refused", func(t *testing.T) {
+		headers := http.Header{}
+		headers.Set(httpapi.HeaderWorkspace, "invented")
+		conn, res, err := websocket.Dial(t.Context(), socketURL, &websocket.DialOptions{HTTPHeader: headers})
+		if err == nil {
+			_ = conn.Close(websocket.StatusNormalClosure, "")
+			t.Fatal("the socket was granted for a workspace that does not exist")
+		}
+		if res == nil || res.StatusCode != http.StatusForbidden {
+			t.Fatalf("response = %v", res)
+		}
+	})
+
+	t.Run("events arrive on a workspace the caller may read", func(t *testing.T) {
+		// A workspace with no members is a single-user installation, which is
+		// what every local one is until a second account exists.
+		open, err := a.Workspaces.Create(context.Background(), workspace.CreateInput{
+			Name: "Open", Path: t.TempDir(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		headers := http.Header{}
+		headers.Set(httpapi.HeaderWorkspace, open.Workspace.ID)
+
+		conn, _, err := websocket.Dial(t.Context(), socketURL, &websocket.DialOptions{HTTPHeader: headers})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
+
+		channel := realtime.ChannelFor(open.Workspace.ID)
+		deadline := time.Now().Add(5 * time.Second)
+		for a.Events.Subscribers(channel) == 0 && time.Now().Before(deadline) {
+			time.Sleep(5 * time.Millisecond)
+		}
+		a.Events.Publish(t.Context(), channel, realtime.Event{Type: realtime.EventActivity})
+
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer cancel()
+		_, payload, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var e realtime.Event
+		if err := json.Unmarshal(payload, &e); err != nil {
+			t.Fatal(err)
+		}
+		if e.Type != realtime.EventActivity {
+			t.Fatalf("event = %+v", e)
+		}
+	})
 }

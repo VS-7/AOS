@@ -335,3 +335,29 @@ func (s *Service) resolve(ctx context.Context, id string) (*Workspace, error) {
 	}
 	return w, nil
 }
+
+// AuthorizeWorkspace reports whether a caller may read a workspace's events.
+//
+// Membership is the rule, with one deliberate exception: a workspace with no
+// members at all is a single-user installation, which is what every local
+// installation is until somebody adds a second account. Refusing those would
+// mean nobody could open a socket on their own machine.
+//
+// The workspace has to exist either way. Without that check this would be the
+// original's behaviour with extra steps: an unknown id would authorise, because
+// there would be no membership list to fail against.
+func (s *Service) AuthorizeWorkspace(ctx context.Context, workspaceID, userID string) error {
+	w, err := s.store.Get(ctx, strings.TrimSpace(workspaceID))
+	if err != nil || w == nil {
+		return errNotFound(workspaceID)
+	}
+	if len(w.Members) == 0 {
+		return nil
+	}
+	for _, m := range w.Members {
+		if m.UserID == userID && userID != "" {
+			return nil
+		}
+	}
+	return errAccessDenied(workspaceID, userID)
+}

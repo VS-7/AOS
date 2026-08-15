@@ -15,6 +15,7 @@ import (
 	"github.com/OWNER/aos/internal/core/env"
 	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/transport/httpapi"
+	"github.com/OWNER/aos/internal/transport/realtime"
 )
 
 // ServeOptions select where the daemon listens.
@@ -65,9 +66,16 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 		return err
 	}
 
+	origins := allowedOrigins(resolver)
 	server := httpapi.New(httpapi.Config{
 		Registry: a.Registry,
 		Auth:     a.Auth,
+		Realtime: realtime.Upgrade(realtime.Config{
+			Hub:     a.Events,
+			Auth:    a.Workspaces,
+			Origins: origins,
+			Log:     log,
+		}),
 		// Read per request rather than captured: the configuration file is
 		// meant to be edited while the daemon runs.
 		SecurityEnabled: func() bool {
@@ -80,7 +88,7 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 			return c.Security.Enabled
 		},
 		DocsEnabled:    !resolver.IsProduction(),
-		AllowedOrigins: allowedOrigins(resolver),
+		AllowedOrigins: origins,
 		Log:            log,
 	})
 
@@ -118,6 +126,9 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 	}
 
 	log.Info("shutting down", "timeout", timeout.String())
+	// Subscribers see a closed socket rather than a silence they have to time
+	// out on.
+	a.Events.Close()
 	// Not the cancelled context: shutting down needs a live one, or the
 	// graceful wait ends immediately and the whole point is lost.
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)

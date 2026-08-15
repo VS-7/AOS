@@ -114,3 +114,17 @@ func errUnknownField(path string) error {
 			Tool:    "workspace_get",
 		})
 }
+
+func errAccessDenied(workspaceID, userID string) error {
+	return apperr.New("WORKSPACE_ACCESS_DENIED").
+		Causer("workspace.Service.AuthorizeWorkspace").
+		Msgf("this account is not a member of %q", workspaceID).
+		Issue("workspace", workspaceID).
+		Issue("user", userID).
+		Status(apperr.StatusForbidden).
+		CTA(apperr.CallToAction{
+			Label:   "list the workspaces this account can reach",
+			Command: build.Name + " workspace list",
+			Tool:    "workspace_list",
+		})
+}

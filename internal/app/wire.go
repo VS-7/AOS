@@ -34,6 +34,7 @@ import (
 	"github.com/OWNER/aos/internal/domain/gateway"
 	"github.com/OWNER/aos/internal/domain/memory"
 	"github.com/OWNER/aos/internal/domain/workspace"
+	"github.com/OWNER/aos/internal/transport/realtime"
 )
 
 // Options select where the state lives and what time it is.
@@ -66,6 +67,10 @@ type App struct {
 	Chats      *chat.Service
 	Auth       *auth.Service
 	Gateway    *gateway.Service
+
+	// Events is the server-push hub. It exists whether or not anything is
+	// listening, so a publisher never has to check.
+	Events *realtime.Hub
 
 	// env is kept so that Serve reads the same layered settings the rest of
 	// the wiring did, rather than a second resolver that could disagree.
@@ -240,6 +245,7 @@ func New(opts Options) (*App, error) {
 		Chats:      chatSvc,
 		Auth:       authSvc,
 		Gateway:    gatewaySvc,
+		Events:     realtime.NewHub(logger, clock),
 		env:        resolver,
 		closers:    closers,
 	}, nil

@@ -56,6 +56,16 @@ type Config struct {
 	// allowed, which is the right default for a daemon on loopback.
 	AllowedOrigins []string
 
+	// Realtime is the server-push channel, mounted at /ws. It is a plain
+	// handler rather than a typed dependency because the upgrade does its own
+	// authorisation — the workspace it attaches to is not the one this layer
+	// authenticated, and conflating them is defect #5.
+	Realtime http.Handler
+
+	// MCP is the tool surface over HTTP, mounted at /mcp. Nil leaves it
+	// unmounted, which is the state while the only transport is stdio.
+	MCP http.Handler
+
 	Log   *slog.Logger
 	Now   func() time.Time
 	NewID func() string
@@ -108,6 +118,15 @@ func New(cfg Config) *Server {
 			api.With(requireAuth(cfg.Auth)).Get("/docs", s.docs)
 		}
 	})
+
+	if cfg.Realtime != nil {
+		// Outside /api because it is not one: it takes no payload, returns no
+		// envelope, and authorises itself.
+		r.Handle("/ws", cfg.Realtime)
+	}
+	if cfg.MCP != nil {
+		r.Mount("/mcp", cfg.MCP)
+	}
 
 	r.NotFound(s.notFound)
 	r.MethodNotAllowed(s.methodNotAllowed)
