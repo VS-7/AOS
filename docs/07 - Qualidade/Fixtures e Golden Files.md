@@ -2,7 +2,7 @@
 tags: [qualidade, testes, golden, fixtures]
 aliases: [Golden Files, Fixtures]
 fase: 1
-status: especificado
+status: em-construcao
 origem: "[[PROMPT — Reconstrução em Go]]"
 ---
 

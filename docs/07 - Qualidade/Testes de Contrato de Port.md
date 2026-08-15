@@ -2,7 +2,7 @@
 tags: [qualidade, testes, ports, lsp]
 aliases: [Testes de Contrato, Contract Tests]
 fase: 1
-status: especificado
+status: em-construcao
 origem: "[[PROMPT — Reconstrução em Go]]"
 ---
 

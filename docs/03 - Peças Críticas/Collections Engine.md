@@ -2,7 +2,7 @@
 tags: [critico, persistencia, collections, markdown]
 aliases: [Collections Engine, Motor de Coleções, Repository]
 fase: 1
-status: especificado
+status: em-construcao
 origem: "[[Modelo de Persistência]]"
 ---
 

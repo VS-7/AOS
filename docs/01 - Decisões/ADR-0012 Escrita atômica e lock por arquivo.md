@@ -2,7 +2,7 @@
 tags: [adr, decisao, persistencia, concorrencia]
 aliases: [ADR-0012, Escrita Atômica, Lock]
 fase: 1
-status: especificado
+status: em-construcao
 origem: "[[Modelo de Persistência]]"
 ---
 

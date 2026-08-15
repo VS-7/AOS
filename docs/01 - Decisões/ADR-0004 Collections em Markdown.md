@@ -2,7 +2,7 @@
 tags: [adr, decisao, persistencia, markdown]
 aliases: [ADR-0004, Persistência em Markdown]
 fase: 1
-status: especificado
+status: em-construcao
 origem: "[[Modelo de Persistência]]"
 ---
 
