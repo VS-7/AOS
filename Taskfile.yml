@@ -15,9 +15,8 @@ vars:
   # Six platform combinations. "Build e Cross-Compile" tabulates five;
   # windows/arm64 is the sixth, and Go supports it with CGO_ENABLED=0.
   TARGETS: darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64 windows/arm64
-  # The binaries that exist. Each phase adds its own: aosd in phase 4,
-  # aos-desktop in phase 7.
-  BINARIES: aos
+  # The binaries that exist. aos-desktop joins in phase 7.
+  BINARIES: aos aosd
 
 tasks:
   default:
