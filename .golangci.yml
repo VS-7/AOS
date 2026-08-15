@@ -44,6 +44,13 @@ linters:
       # The clock adapter is where time.Now is allowed to exist.
       - path: internal/core/clockx/
         linters: [forbidigo]
+      # And the identifier adapter is where the entropy source is allowed to
+      # exist. The rule above is aimed at math/rand, whose determinism would
+      # break a golden file; this package reads crypto/rand, which is the one
+      # place a random identifier is supposed to come from, and every caller
+      # takes the Generator port instead.
+      - path: internal/core/ids/
+        linters: [forbidigo]
 
 formatters:
   enable:

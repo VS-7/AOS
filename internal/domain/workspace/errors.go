@@ -87,7 +87,7 @@ func errScaffoldFailed(path string, cause error) error {
 
 func errStoreFailed(op string, cause error) error {
 	return apperr.New("WORKSPACE_STORE_FAILED").
-		Causer("workspace.Service." + op).
+		Causer("workspace.Service."+op).
 		Msgf("the workspace registry could not be %s", op).
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)

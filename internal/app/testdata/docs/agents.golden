@@ -15,7 +15,7 @@ which means an agent is versionable in Git and editable by hand.
 - Not to store knowledge — that is what memories are for
 - Not to track work — that is what tasks are for
 
-Composite tool `Agent` with 5 actions: create, delete, get, list, update.
+Composite tool `Agent` with 6 actions: create, delete, get, list, me, update.
 
 Deleting an agent removes its memories and routines with it. Read before you delete.
 
@@ -204,6 +204,38 @@ the full record. Ordered by slug, so the list is stable between calls.
       "type": "integer",
       "description": "Maximum number of agents to return. 0 means no limit."
     },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### agents_me
+
+Resolve your own identity in this workspace.
+
+Return the full record of whoever is calling.
+
+Inside an agent execution that is the agent itself; from a human terminal it is
+the workspace orchestrator. There is no argument: the identity comes from the
+execution context, which is the point — an agent that could name itself could
+name another.
+
+Use it at the start of a session to confirm which instructions are actually
+loaded. Most surprising behaviour turns out to be a different agent than the
+one you thought was running.
+
+```json
+{
+  "type": "object",
+  "properties": {
     "_reasoning": {
       "type": "string",
       "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",

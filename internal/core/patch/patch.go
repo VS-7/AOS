@@ -130,7 +130,7 @@ func collect(t reflect.Type, prefix string, seen map[reflect.Type]bool) []string
 // embedded struct type promotes its exported fields even when the type itself
 // is unexported, so PkgPath alone would wrongly hide them.
 func jsonName(f reflect.StructField) (string, bool) {
-	if f.PkgPath != "" && !(f.Anonymous && structKind(f.Type)) {
+	if f.PkgPath != "" && (!f.Anonymous || !structKind(f.Type)) {
 		return "", false // unexported
 	}
 	tag, tagged := f.Tag.Lookup("json")

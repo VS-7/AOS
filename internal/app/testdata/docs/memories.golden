@@ -1,0 +1,389 @@
+# tool: Memory
+
+Your persistent cognitive layer. Memories survive sessions and parallel
+selves. They are not logs or journal entries — they are first-person traces that
+compound your understanding over time.
+
+A memory carries a category, a confidence score, scopes that anchor it to files,
+and links to related memories. Together those form an associative graph that
+gets more useful the more honestly it is maintained.
+
+## Commands
+- **recall** — scan with filters: status, category, agent, scopes, full text
+- **graph** — map the whole graph, with its hubs, its silos and its health
+- **reflect** — read one memory in full
+- **store** — record new durable knowledge
+- **forget** — deprecate what no longer holds, preserving the lineage
+
+## When to use
+- **At the start of a session:** recall or graph, to reorient
+- **After meaningful work:** store what you learned
+- **Before deciding:** check whether you already decided this once
+- **When knowledge goes stale:** store the replacement, then forget the old one
+
+## When NOT to use
+- Not for knowledge that binds everyone — that is an instruction, not a memory
+- Not for ephemeral session chatter
+- Never for secrets or credentials
+
+Composite tool `Memory` with 5 actions: forget, graph, recall, reflect, store.
+
+Memories are GLOBAL across all your parallel selves. What you store here, every
+one of them sees. There is no private flag.
+
+Before storing: recall first. If a trace already exists, link to it or supersede
+it. Duplicates dilute the graph and confuse retrieval later.
+
+Confidence, honestly: 0.9-1.0 verified, 0.6-0.8 strong inference, below 0.6 a
+guess. Inflated confidence is the main way future-you gets misled.
+
+Scopes are the anchor. Without them a recall returns everything you know, and
+you pay for all of it.
+
+## Usage
+Call as `Memory({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### memories_forget
+
+Deprecate knowledge that no longer holds.
+
+Mark a memory as no longer trustworthy, with your reason attached.
+
+Nothing is deleted. The memory stays readable so that the record of what you
+believed, and why you stopped, survives. That is the difference between changing
+your mind and losing the thread.
+
+Store the replacement first, pointing at this memory with supersedes, and then
+forget it. And if you are unsure whether something is still true, lower its
+confidence instead of forgetting it — uncertainty is knowledge too.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "memory": {
+      "type": "string",
+      "description": "Identifier of the memory to deprecate."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Why this knowledge no longer holds. Be specific: a vague reason confuses your future self."
+    },
+    "agent": {
+      "type": "string",
+      "description": "Whose memory it is. Defaults to your own."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "memory",
+    "reason",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### memories_graph
+
+Map your cognitive graph.
+
+Map what you know and how it connects.
+
+Beyond the nodes and edges this reports the shape of the graph: the hubs that
+other knowledge hangs off, the silos with no links at all, the average
+confidence, and how much of it has been superseded. Those four numbers say
+whether your knowledge is organised or merely large.
+
+Ask for the isolated nodes when you want the list of memories most likely to be
+lost — an unlinked trace is one nobody will find again.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "agent": {
+      "type": "string",
+      "description": "Whose graph to map. Defaults to your own."
+    },
+    "category": {
+      "type": "string",
+      "description": "Narrow the graph to one category."
+    },
+    "scopes": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "Glob patterns narrowing the graph to memories anchored to these files."
+    },
+    "scopesMode": {
+      "type": "string",
+      "description": "strict excludes memories with no scopes; lax includes them. Defaults to lax."
+    },
+    "minConfidence": {
+      "type": "number",
+      "description": "Exclude memories below this confidence."
+    },
+    "isolated": {
+      "type": "boolean",
+      "description": "Return only the memories with no links at all — the ones most likely to be lost."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Maximum number of nodes. Defaults to 1000."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### memories_recall
+
+Scan your memories.
+
+Search and filter what you know.
+
+A text query matches when every one of its words appears somewhere in the title,
+the description, the tags or the body. That is stricter than a relevance search
+on purpose: a result that contains one word out of three is worse than no result,
+because you will act on what comes back.
+
+Deprecated memories are excluded unless you ask for them by status. They are
+never deleted — read one with reflect to see why it was retired.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Full-text search across title, description, tags and body. Every word must appear somewhere."
+    },
+    "category": {
+      "type": "string",
+      "description": "Narrow to one category."
+    },
+    "status": {
+      "type": "string",
+      "description": "Lifecycle status to include. Defaults to active."
+    },
+    "agent": {
+      "type": "string",
+      "description": "Whose memories to read. Defaults to your own."
+    },
+    "scopes": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "Glob patterns anchoring the search to files. Example: [\"internal/domain/**\"]."
+    },
+    "scopesMode": {
+      "type": "string",
+      "description": "strict excludes memories with no scopes; lax includes them. Defaults to lax."
+    },
+    "orderBy": {
+      "type": "string",
+      "description": "One of: relevance, confidence, createdAt, updatedAt. Defaults to relevance when searching, and to createdAt otherwise."
+    },
+    "desc": {
+      "type": "boolean",
+      "description": "Reverse the ordering."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Maximum number of memories to return. Defaults to 10."
+    },
+    "offset": {
+      "type": "integer",
+      "description": "How many matches to skip."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### memories_reflect
+
+Read one memory in full.
+
+Read a single memory: its body, its links, its lineage.
+
+Treat what you read as a reference, not as fact. Check it against the code and
+the situation in front of you before acting on it. If it turns out to be stale,
+store the correction and then forget this one.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "memory": {
+      "type": "string",
+      "description": "Identifier of the memory to read."
+    },
+    "agent": {
+      "type": "string",
+      "description": "Whose memory it is. Defaults to your own."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "memory",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### memories_store
+
+Record durable knowledge.
+
+Store a memory when something leaves a durable trace on how you should
+think, decide or act.
+
+Without this, every session starts from zero: the same mistakes, the same lost
+context, the same rediscovery. Storing is the only mechanism you have to get
+better over time rather than merely faster.
+
+Recall before you store. If a trace already exists, link to it or supersede it.
+Superseding writes the replacement first and then deprecates the old one with
+your reason, so the lineage can be walked later — that is how future-you finds
+out not just what you believe but why you changed your mind.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Sharp, specific headline. It is what you will scan later."
+    },
+    "description": {
+      "type": "string",
+      "description": "Dense, keyword-rich summary written to be found by search."
+    },
+    "category": {
+      "type": "string",
+      "description": "One of: decision, intent, commitment, relationship, event, observation, error, learning, fact, reference, instruction, preference, context."
+    },
+    "content": {
+      "type": "string",
+      "description": "The Markdown body of the memory."
+    },
+    "tags": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "Labels grouping related knowledge."
+    },
+    "scopes": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "Glob patterns anchoring this memory to the files that gave rise to it."
+    },
+    "links": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "Identifiers of related memories. Aim for one or two whenever related traces exist."
+    },
+    "supersedes": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identifier of the memory being superseded."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the older trace no longer applies. Be specific; a vague reason confuses your future self."
+          }
+        },
+        "required": [
+          "id",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Memories this one replaces, each with the reason it no longer applies."
+    },
+    "confidence": {
+      "type": [
+        "null",
+        "number"
+      ],
+      "description": "From 0 to 1. Defaults to 1. Be honest — an inflated number is how future-you gets misled."
+    },
+    "expiresAt": {
+      "type": "string",
+      "description": "RFC 3339 timestamp after which this memory stops applying."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "title",
+    "description",
+    "category",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+

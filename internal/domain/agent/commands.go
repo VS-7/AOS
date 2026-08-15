@@ -72,6 +72,28 @@ body that is the agent's system instruction.`,
 		Handler:     svc.Get,
 	})
 
+	command.MustRegister(reg, command.Command[MeInput, *Agent]{
+		Group:   "agents",
+		Name:    "me",
+		Summary: "Resolve your own identity in this workspace.",
+		Doc: `Return the full record of whoever is calling.
+
+Inside an agent execution that is the agent itself; from a human terminal it is
+the workspace orchestrator. There is no argument: the identity comes from the
+execution context, which is the point — an agent that could name itself could
+name another.
+
+Use it at the start of a session to confirm which instructions are actually
+loaded. Most surprising behaviour turns out to be a different agent than the
+one you thought was running.`,
+		Examples: []command.Example{
+			{Description: "who am I right now", Input: MeInput{}},
+		},
+		Registry:    true,
+		Annotations: command.Annotations{Title: "Resolve your own identity", ReadOnlyHint: true, IdempotentHint: true},
+		Handler:     svc.Me,
+	})
+
 	command.MustRegister(reg, command.Command[CreateInput, *Agent]{
 		Group:   "agents",
 		Name:    "create",

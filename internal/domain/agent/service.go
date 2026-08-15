@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/OWNER/aos/internal/core/collections"
+	"github.com/OWNER/aos/internal/core/identity"
 )
 
 // Service is the agent aggregate. It governs one aggregate and nothing else:
@@ -51,19 +52,44 @@ func (s *Service) Get(ctx context.Context, in GetInput) (*Agent, error) {
 	return got, nil
 }
 
+// Me resolves the caller's own identity.
+//
+// Inside an agent execution it returns that agent; from a human terminal it
+// returns the orchestrator. This is how an external agent — one running in
+// another tool entirely — finds out who it is inside this workspace, without
+// having been told its own slug.
+func (s *Service) Me(ctx context.Context, _ MeInput) (*Agent, error) {
+	if actor, kind := identity.Actor(ctx); kind == identity.ActorAgent {
+		return s.Get(ctx, GetInput{ID: actor})
+	}
+	found, err := s.orchestratorOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if found == nil {
+		return nil, errNoOrchestrator()
+	}
+	return found, nil
+}
+
 // Create writes a new agent.
 func (s *Service) Create(ctx context.Context, in CreateInput) (*Agent, error) {
 	id := normalizeID(in.ID)
 	if id == "" {
 		return nil, errInvalidID(in.ID)
 	}
+	leader := normalizeID(in.Leader)
+	if err := s.checkLeaderChain(ctx, id, leader); err != nil {
+		return nil, err
+	}
+
 	now := s.clock.Now()
 	a := &Agent{
 		ID:           id,
 		Name:         in.Name,
 		Description:  in.Description,
 		Role:         in.Role,
-		Leader:       normalizeID(in.Leader),
+		Leader:       leader,
 		Provider:     in.Provider,
 		Model:        in.Model,
 		Voice:        in.Voice,
@@ -80,6 +106,13 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Agent, error) {
 	if err := s.repo.Create(ctx, a); err != nil {
 		return nil, err
 	}
+	// Demotion happens after the write, so a failure to create does not leave
+	// the workspace with no orchestrator at all.
+	if a.Orchestrator {
+		if _, err := s.demoteOtherOrchestrators(ctx, a.ID); err != nil {
+			return nil, err
+		}
+	}
 	return a, nil
 }
 
@@ -93,11 +126,18 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Agent, error) {
 	applyString(&current.Name, in.Name)
 	applyString(&current.Description, in.Description)
 	applyString(&current.Role, in.Role)
-	applyString(&current.Leader, in.Leader)
 	applyString(&current.Provider, in.Provider)
 	applyString(&current.Model, in.Model)
 	applyString(&current.Voice, in.Voice)
 	applyString(&current.Content, in.Content)
+	if in.Leader != nil {
+		leader := normalizeID(*in.Leader)
+		if err := s.checkLeaderChain(ctx, id, leader); err != nil {
+			return nil, err
+		}
+		current.Leader = leader
+	}
+	promoted := in.Orchestrator != nil && *in.Orchestrator && !current.Orchestrator
 	if in.Orchestrator != nil {
 		current.Orchestrator = *in.Orchestrator
 	}
@@ -105,6 +145,11 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Agent, error) {
 
 	if err := s.repo.Update(ctx, current, collections.Version{}); err != nil {
 		return nil, err
+	}
+	if promoted {
+		if _, err := s.demoteOtherOrchestrators(ctx, current.ID); err != nil {
+			return nil, err
+		}
 	}
 	return current, nil
 }

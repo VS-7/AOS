@@ -1,0 +1,302 @@
+# tool: Workspace
+
+Manage workspaces.
+
+A workspace is a repository this system operates on. Its metadata lives under
+the installation state directory; its data lives inside the repository itself,
+under `.aos/`, so that the state of an agent is committed
+next to the code it works on.
+
+Creating a workspace lays out that directory, puts the repository under version
+control if it is not already, and creates the orchestrator agent that answers
+when no other agent is addressed.
+
+## When to use
+- To register the project you are working in, with `introspect`
+- To find out what a workspace already contains, with `inventory`
+- To change the task taxonomy, the branch prefix or the Git policy
+
+## When NOT to use
+- Not to store knowledge — that is what memories are for
+- Not to configure the installation — that is `config`, which is global
+
+Composite tool `Workspace` with 7 actions: create, delete, get, introspect, inventory, list, update.
+
+One workspace has at most one orchestrator. Registering over an existing layout adopts what is there rather than creating a second one.
+
+## Usage
+Call as `Workspace({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### workspace_create
+
+Register a workspace and lay it out.
+
+Register a repository as a workspace.
+
+The identifier is the slug of the name, so "Project Alpha" becomes
+"project-alpha". Give a path to bind the workspace to a repository you already
+have; omit it and one is created under the state directory.
+
+Three things happen beyond the registry entry: the `.aos/` layout is
+created inside the repository, the repository is put under version control if it
+is not already, and the orchestrator agent is created. The result reports each
+of them, because none of them is guaranteed to have been needed.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Workspace name. The identifier is the slug of this name. Example: \"Project Alpha\"."
+    },
+    "path": {
+      "type": "string",
+      "description": "Absolute path of the repository this workspace operates on. Omit to create one under the state directory."
+    },
+    "logo": {
+      "type": "string",
+      "description": "Optional logo URL."
+    },
+    "color": {
+      "type": "string",
+      "description": "Optional accent colour as a hex code. Example: \"#5E6AD2\"."
+    },
+    "orchestrator": {
+      "type": [
+        "null",
+        "object"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display name of the orchestrator. Defaults to \"Atlas\"."
+        },
+        "tone": {
+          "type": "string",
+          "description": "One of: efficient, friendly, professional, candid."
+        },
+        "style": {
+          "type": "string",
+          "description": "One of: concise, balanced, detailed."
+        },
+        "autonomy": {
+          "type": "number",
+          "description": "How independently the orchestrator acts, from 0 to 1."
+        }
+      },
+      "description": "Tone, style and autonomy of the orchestrator agent created with the workspace.",
+      "additionalProperties": false
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "name",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### workspace_delete
+
+Unregister a workspace.
+
+Unregister a workspace.
+
+This removes the registry entry and the derived state kept under the
+installation directory. It does not touch your repository: the `.aos/`
+directory in it holds agents, memories and instructions that you wrote, and
+unregistering is not a request to delete them.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "workspace": {
+      "type": "string",
+      "description": "Workspace id to unregister."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "workspace",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### workspace_get
+
+Read one workspace.
+
+Read the record of a workspace: its path, its branding, its task taxonomy
+and its Git policy.
+
+With no id, this reads the active workspace — the one named by the environment,
+which is what the managed block in the repository's .env sets.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "workspace": {
+      "type": "string",
+      "description": "Workspace id. Omit to read the active one, taken from the environment."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### workspace_introspect
+
+Register the repository you are standing in.
+
+Register the current repository as a workspace, deriving its name from the
+Git remote and falling back to the directory name.
+
+Running this twice is safe and is the normal thing to do: a repository that is
+already registered is returned unchanged.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Repository to register. Defaults to the working directory."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### workspace_inventory
+
+See what a workspace holds, by collection.
+
+Survey a workspace: how many agents, memories, tasks and instructions it
+holds, and what they are called.
+
+This is the panoramic view to read at the start of a session, before deciding
+what to look at. It returns names and counts, never bodies — reading everything
+to find out what exists is the most expensive way to answer the cheapest
+question.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "workspace": {
+      "type": "string",
+      "description": "Workspace id. Omit to survey the active one."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### workspace_list
+
+List the registered workspaces.
+
+List every workspace registered on this installation.
+
+Archived workspaces are left out unless asked for. Ordered by id, so the list
+is stable between calls.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "includeArchived": {
+      "type": "boolean",
+      "description": "Include archived workspaces in the result. Off by default."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### workspace_update
+
+Change fields of a workspace.
+
+Change one or more fields of a workspace, addressed by dotted path.
+
+Only the paths you send are changed. The identifier, the path and the creation
+timestamp are the server's: a patch that reached them would orphan every record
+that refers to this workspace.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "workspace": {
+      "type": "string",
+      "description": "Workspace id. Omit to update the active one."
+    },
+    "set": {
+      "type": "object",
+      "description": "Fields to change, addressed by dotted path. Example: { \"git.branchPrefix\": \"feat\", \"color\": \"#10b981\" }.",
+      "additionalProperties": true
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "set",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+

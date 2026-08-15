@@ -37,11 +37,29 @@ func addGlobalFlags(fs *pflag.FlagSet) {
 
 // addTransportFlags declares the flags that point a command at a remote daemon.
 // They are absent from commands marked Local, which never talk to an API.
+//
+// A command whose own input already has a field of the same name keeps its
+// own: `memories recall --agent` asks whose memories to read, which is what
+// someone typing it means, and the calling identity comes from the environment
+// on that path anyway. Registering the two directly would not merely be
+// ambiguous — pflag panics on a redefined flag, so the collision would take
+// down the whole command tree at construction rather than confusing one
+// command. AddFlagSet skips what is already declared, which turns a crash into
+// a documented precedence.
 func addTransportFlags(fs *pflag.FlagSet) {
-	fs.String(flagBaseURL, "", "remote API base URL for this execution ["+env.Key(env.KeyServerHost)+"]")
-	fs.String(flagToken, "", "API token used as Bearer authorization for this execution ["+env.Key(env.KeyToken)+"]")
-	fs.String(flagWorkspace, "", "workspace id for this execution")
-	fs.String(flagAgent, "", "agent id (slug), sent as X-Agent-ID")
+	transport := pflag.NewFlagSet("transport", pflag.ContinueOnError)
+	transport.String(flagBaseURL, "", "remote API base URL for this execution ["+env.Key(env.KeyServerHost)+"]")
+	transport.String(flagToken, "", "API token used as Bearer authorization for this execution ["+env.Key(env.KeyToken)+"]")
+	transport.String(flagWorkspace, "", "workspace id for this execution")
+	transport.String(flagAgent, "", "agent id (slug), sent as X-Agent-ID")
+	fs.AddFlagSet(transport)
+}
+
+// TransportFlags are the flag names a command's own input can shadow. It is
+// exported so that the registry can report the shadowing rather than leaving it
+// to be discovered.
+func TransportFlags() []string {
+	return []string{flagBaseURL, flagToken, flagWorkspace, flagAgent}
 }
 
 // resolveOutput reads the global flags into rendering options.

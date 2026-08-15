@@ -24,7 +24,7 @@ type Repo[T any] struct {
 	root  string
 	model collections.Model[T]
 	lock  *collections.PathLock
-	index *memIndex
+	index *Index
 	bus   collections.Publisher
 }
 
@@ -44,7 +44,7 @@ func WithPublisher[T any](p collections.Publisher) Option[T] {
 }
 
 // WithIndex shares one in-memory index between repositories of a workspace.
-func WithIndex[T any](i *memIndex) Option[T] {
+func WithIndex[T any](i *Index) Option[T] {
 	return func(r *Repo[T]) { r.index = i }
 }
 
@@ -57,7 +57,7 @@ func New[T any](root string, model collections.Model[T], opts ...Option[T]) *Rep
 		// between the daemon and the CLI passes a lock with a directory —
 		// see WithLock and cmd/.
 		lock:  collections.NewPathLock(""),
-		index: newMemIndex(),
+		index: NewIndex(),
 		bus:   collections.NopPublisher{},
 	}
 	for _, o := range opts {

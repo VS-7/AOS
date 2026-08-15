@@ -17,6 +17,14 @@ type ListOutput struct {
 	Total  int     `json:"total" jsonschema:"How many agents matched."`
 }
 
+// MeInput is the payload of `agents me`: nothing.
+//
+// The identity is not a parameter. It comes from the execution context, which
+// is the whole point — an agent that could name itself could name another.
+type MeInput struct {
+	command.Reasoning
+}
+
 // GetInput is the payload of `agents get`.
 type GetInput struct {
 	ID string `json:"id" cli:"arg" jsonschema:"Agent slug to retrieve. Example: \"neo\"." validate:"required"`

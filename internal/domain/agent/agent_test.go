@@ -218,7 +218,7 @@ func TestRegisterPublishesTheWholeGroup(t *testing.T) {
 	reg := command.NewRegistry()
 	agent.Register(reg, svc)
 
-	want := []string{"agents_create", "agents_delete", "agents_get", "agents_list", "agents_update"}
+	want := []string{"agents_create", "agents_delete", "agents_get", "agents_list", "agents_me", "agents_update"}
 	got := make([]string, 0, len(want))
 	for _, d := range reg.Sorted() {
 		got = append(got, d.Key())
@@ -236,7 +236,7 @@ func TestRegisterPublishesTheWholeGroup(t *testing.T) {
 	// channel derives its risk level from the annotations.
 	for _, d := range reg.Sorted() {
 		switch d.Key() {
-		case "agents_list", "agents_get":
+		case "agents_list", "agents_get", "agents_me":
 			if !d.Annotations().ReadOnlyHint {
 				t.Errorf("%s must be announced read-only", d.Key())
 			}

@@ -14,8 +14,12 @@ import (
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/core/env"
+	"github.com/OWNER/aos/internal/core/identity"
+	"github.com/OWNER/aos/internal/core/ids"
 	"github.com/OWNER/aos/internal/domain/agent"
 	"github.com/OWNER/aos/internal/domain/config"
+	"github.com/OWNER/aos/internal/domain/memory"
+	"github.com/OWNER/aos/internal/domain/workspace"
 	"github.com/OWNER/aos/internal/transport/clix"
 	"github.com/OWNER/aos/internal/transport/mcpserver"
 )
@@ -27,11 +31,19 @@ var refTime = time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
 func newApp(t *testing.T) *app.App {
 	t.Helper()
 	home := t.TempDir()
-	workspace := t.TempDir()
+	root := t.TempDir()
 	a, err := app.New(app.Options{
-		Env:           env.New(env.Map(map[string]string{env.KeyHome: home})),
-		WorkspaceRoot: workspace,
+		Env: env.New(env.Map(map[string]string{
+			env.KeyHome: home,
+			// Every surface addresses the same workspace, so a command that
+			// takes no identifier resolves to one rather than to nothing.
+			env.KeyWorkspaceID: activeWorkspace,
+		})),
+		WorkspaceRoot: root,
 		Clock:         clockx.Fixed{At: refTime},
+		// Predictable identifiers: a memory created on one surface must be
+		// byte-comparable with the one created on the next.
+		IDs: &ids.Sequence{Prefix: "m"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -49,6 +61,17 @@ type scenario struct {
 	Seed func(t *testing.T, a *app.App)
 }
 
+const activeWorkspace = "parity"
+
+// parityCtx is the ambient identity every surface runs under. Memories belong
+// to an agent, so a surface with no identity would be answering a different
+// question than the others.
+func parityCtx() context.Context {
+	return identity.With(context.Background(), identity.Identity{
+		AgentID: "atlas", WorkspaceID: activeWorkspace,
+	})
+}
+
 func seedAgent(t *testing.T, a *app.App) {
 	t.Helper()
 	_, err := a.Agents.Create(context.Background(), agent.CreateInput{
@@ -56,6 +79,29 @@ func seedAgent(t *testing.T, a *app.App) {
 		Content: "# Instructions\nCoordinate the team.\n",
 	})
 	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// seedWorkspace registers the workspace the commands that take no identifier
+// resolve to.
+func seedWorkspace(t *testing.T, a *app.App) {
+	t.Helper()
+	if _, err := a.Workspaces.Create(parityCtx(), workspace.CreateInput{
+		Name: "Parity", Path: a.Workspace,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func seedMemory(t *testing.T, a *app.App) {
+	t.Helper()
+	if _, err := a.Memories.Store(parityCtx(), memory.StoreInput{
+		Title:       "Gateway restart protocol",
+		Description: "Ask before restarting the gateway after a code change.",
+		Category:    memory.CatInstruction,
+		Content:     "# Rule\nAsk first.\n",
+	}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -84,6 +130,68 @@ var scenarios = map[string]scenario{
 	"agents_delete": {
 		Payload: agent.DeleteInput{ID: "atlas", Reasoning: reason()},
 		Seed:    seedAgent,
+	},
+	"agents_me": {
+		Payload: agent.MeInput{Reasoning: reason()},
+		Seed:    seedAgent,
+	},
+	"memories_recall": {
+		Payload: memory.RecallInput{Reasoning: reason()},
+		Seed:    seedMemory,
+	},
+	"memories_graph": {
+		Payload: memory.GraphInput{Reasoning: reason()},
+		Seed:    seedMemory,
+	},
+	"memories_reflect": {
+		Payload: memory.ReflectInput{Memory: "m-1", Reasoning: reason()},
+		Seed:    seedMemory,
+	},
+	"memories_store": {
+		Payload: memory.StoreInput{
+			Title:       "Parity is checked by running every surface",
+			Description: "One definition, four surfaces, one normalised result.",
+			Category:    memory.CatFact,
+			Reasoning:   reason(),
+		},
+	},
+	"memories_forget": {
+		Payload: memory.ForgetInput{
+			Memory:    "m-1",
+			Reason:    "The protocol changed when the gateway learned to reload itself.",
+			Reasoning: reason(),
+		},
+		Seed: seedMemory,
+	},
+	"workspace_list": {
+		Payload: workspace.ListInput{Reasoning: reason()},
+		Seed:    seedWorkspace,
+	},
+	"workspace_get": {
+		Payload: workspace.GetInput{Reasoning: reason()},
+		Seed:    seedWorkspace,
+	},
+	"workspace_create": {
+		Payload: workspace.CreateInput{Name: "Another", Path: "/tmp/aos-parity-another", Reasoning: reason()},
+	},
+	"workspace_update": {
+		Payload: workspace.UpdateInput{
+			Set:       map[string]any{"git.branchPrefix": "feat"},
+			Reasoning: reason(),
+		},
+		Seed: seedWorkspace,
+	},
+	"workspace_delete": {
+		Payload: workspace.DeleteInput{Workspace: activeWorkspace, Reasoning: reason()},
+		Seed:    seedWorkspace,
+	},
+	"workspace_inventory": {
+		Payload: workspace.InventoryInput{Reasoning: reason()},
+		Seed:    seedWorkspace,
+	},
+	"workspace_introspect": {
+		Payload: workspace.IntrospectInput{Reasoning: reason()},
+		Seed:    seedWorkspace,
 	},
 	"config_get": {
 		Payload: config.GetInput{Reasoning: reason()},
@@ -165,11 +273,11 @@ func runInternal(t *testing.T, sc scenario, key string, payload json.RawMessage)
 	if !ok {
 		t.Fatalf("%s is not registered", key)
 	}
-	out, err := d.Invoke(context.Background(), command.SurfaceAgent, payload)
+	out, err := d.Invoke(parityCtx(), command.SurfaceAgent, payload)
 	if err != nil {
 		t.Fatalf("invoke: %v", err)
 	}
-	return canonical(t, out)
+	return stabilise(a, canonical(t, out))
 }
 
 func runCLI(t *testing.T, sc scenario, key string, payload json.RawMessage) string {
@@ -195,7 +303,7 @@ func runCLI(t *testing.T, sc scenario, key string, payload json.RawMessage) stri
 		IsTTY:    func() bool { return false }, // a program is watching: JSON
 	})
 	root.SetArgs(append(argv, "--format", "json"))
-	if err := root.ExecuteContext(context.Background()); err != nil {
+	if err := root.ExecuteContext(parityCtx()); err != nil {
 		t.Fatalf("cli %v: %v\nstderr: %s", argv, err, stderr.String())
 	}
 
@@ -205,7 +313,7 @@ func runCLI(t *testing.T, sc scenario, key string, payload json.RawMessage) stri
 	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
 		t.Fatalf("cli output is not an envelope: %v\n%s", err, stdout.String())
 	}
-	return canonicalRaw(t, envelope.Data)
+	return stabilise(a, canonicalRaw(t, envelope.Data))
 }
 
 func runMCP(t *testing.T, sc scenario, key string, payload json.RawMessage, shape mcpserver.Shape) string {
@@ -214,7 +322,7 @@ func runMCP(t *testing.T, sc scenario, key string, payload json.RawMessage, shap
 	if sc.Seed != nil {
 		sc.Seed(t, a)
 	}
-	ctx := context.Background()
+	ctx := parityCtx()
 
 	server := mcpserver.New(mcpserver.Config{Registry: a.Registry, Shape: shape})
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
@@ -262,7 +370,19 @@ func runMCP(t *testing.T, sc scenario, key string, payload json.RawMessage, shap
 	if err := json.Unmarshal([]byte(textOf(res)), &envelope); err != nil {
 		t.Fatalf("mcp output is not an envelope: %v\n%s", err, textOf(res))
 	}
-	return canonicalRaw(t, envelope.Data)
+	return stabilise(a, canonicalRaw(t, envelope.Data))
+}
+
+// stabilise replaces the paths that differ between surfaces with placeholders.
+//
+// Each surface gets its own installation and its own repository, so the state
+// directory and the workspace root are necessarily different strings. Those are
+// the environment, not the answer: comparing them would make the suite assert
+// that four temporary directories have the same name, which is both false and
+// beside the point.
+func stabilise(a *app.App, out string) string {
+	out = strings.ReplaceAll(out, a.Workspace, "<workspace>")
+	return strings.ReplaceAll(out, a.Paths.Root, "<state>")
 }
 
 // withoutReasoning strips the field that belongs to the composite payload

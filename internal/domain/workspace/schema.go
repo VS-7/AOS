@@ -103,7 +103,7 @@ type Inventory struct {
 
 // CollectionSummary is one line of the inventory.
 type CollectionSummary struct {
-	Name  string `json:"name" jsonschema:"Collection name. Example: \"memories\"."`
-	Count int    `json:"count" jsonschema:"How many records it holds."`
+	Name  string   `json:"name" jsonschema:"Collection name. Example: \"memories\"."`
+	Count int      `json:"count" jsonschema:"How many records it holds."`
 	Keys  []string `json:"keys,omitempty" jsonschema:"Identifiers of the records, when there are few enough to list."`
 }

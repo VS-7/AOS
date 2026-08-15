@@ -423,3 +423,82 @@ func TestHelpRendersDocumentationAndPasteableExamples(t *testing.T) {
 		t.Errorf("the example is not a pasteable line:\n%s", out)
 	}
 }
+
+// shadowInput has fields whose names collide with the transport flags. Both
+// meanings are legitimate: `--agent` on a transport is "act as", and on
+// `memories recall` it is "whose memories".
+type shadowInput struct {
+	Agent     string `json:"agent,omitempty" jsonschema:"Whose records to read."`
+	Workspace string `json:"workspace,omitempty" jsonschema:"Which workspace to read."`
+
+	command.Reasoning
+}
+
+type shadowOutput struct {
+	Agent     string `json:"agent"`
+	Workspace string `json:"workspace"`
+}
+
+func shadowRegistry(t *testing.T) *command.Registry {
+	t.Helper()
+	reg := command.NewRegistry()
+	err := command.Register(reg, command.Command[shadowInput, shadowOutput]{
+		Group:    "records",
+		Name:     "scan",
+		Summary:  "Scan records.",
+		Doc:      "Scan the records of one agent.",
+		Registry: true,
+		Handler: func(_ context.Context, in shadowInput) (shadowOutput, error) {
+			return shadowOutput{Agent: in.Agent, Workspace: in.Workspace}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.DescribeGroup(command.GroupDoc{Name: "records", Summary: "Records."})
+	return reg
+}
+
+// TestADomainFieldMayShareATransportFlagName is a regression, and it was found
+// by the parity suite rather than reasoned about: `memories forget` has an
+// `agent` field, and registering it beside the `--agent` transport flag made
+// pflag panic. The failure was not a confusing command — it was the whole
+// command tree failing to build, so every command died because one had an
+// ordinary field name.
+func TestADomainFieldMayShareATransportFlagName(t *testing.T) {
+	reg := shadowRegistry(t)
+
+	// Building the tree at all is half the assertion.
+	out, _, err := run(t, reg, "records", "scan", "--agent", "luara", "--format", "json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// And the command's own field is what receives the value.
+	if !strings.Contains(out, `"agent": "luara"`) {
+		t.Fatalf("the domain field did not receive the flag: %s", out)
+	}
+}
+
+// TestTheShadowedFlagKeepsTheDomainDescription: the help is where a person
+// finds out which of the two meanings is in force, so it has to say the right
+// one. The transport flags the input does not claim are untouched.
+func TestTheShadowedFlagKeepsTheDomainDescription(t *testing.T) {
+	out, _, err := run(t, shadowRegistry(t), "records", "scan", "--help")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range clix.TransportFlags() {
+		if !hasFlag(out, name) {
+			t.Errorf("--%s is missing entirely", name)
+		}
+	}
+	if !strings.Contains(out, "Whose records to read") {
+		t.Errorf("--agent does not carry the domain description:\n%s", out)
+	}
+	if strings.Contains(out, "X-Agent-ID") {
+		t.Errorf("--agent still advertises the transport meaning:\n%s", out)
+	}
+	if !strings.Contains(out, "Bearer") {
+		t.Errorf("--token lost its transport description:\n%s", out)
+	}
+}
