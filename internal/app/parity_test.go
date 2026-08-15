@@ -48,6 +48,11 @@ func newApp(t *testing.T) *app.App {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := a.Close(); err != nil {
+			t.Errorf("close: %v", err)
+		}
+	})
 	return a
 }
 

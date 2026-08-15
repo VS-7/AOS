@@ -51,6 +51,9 @@ func run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	// The search index holds an open database. Leaving it open on exit leaves a
+	// lock file behind that the next process has to recover from.
+	defer func() { _ = application.Close() }()
 
 	logger := logging.New(logging.Config{Level: "info", Format: "auto", TTY: isTTY()})
 	ctx = logging.Into(ctx, logger)

@@ -8,9 +8,11 @@
 package app
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 
+	"github.com/OWNER/aos/internal/adapters/bleveindex"
 	"github.com/OWNER/aos/internal/adapters/fscollections"
 	"github.com/OWNER/aos/internal/adapters/fsconfig"
 	"github.com/OWNER/aos/internal/adapters/fsworkspace"
@@ -55,6 +57,27 @@ type App struct {
 	Agents     *agent.Service
 	Memories   *memory.Service
 	Workspaces *workspace.Service
+
+	// closers releases what New opened. It is a slice rather than a single
+	// handle because the list grows with each phase, and a caller that has to
+	// remember which resources exist is a caller that will forget one.
+	closers []func() error
+}
+
+// Close releases everything the application opened.
+//
+// It is safe to call more than once and reports every failure rather than the
+// first: a caller shutting down wants to know about all of them, and stopping
+// at the first would leave the rest open.
+func (a *App) Close() error {
+	var errs []error
+	for _, close := range a.closers {
+		if err := close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	a.closers = nil
+	return errors.Join(errs...)
 }
 
 // New builds the application.
@@ -93,17 +116,37 @@ func New(opts Options) (*App, error) {
 	}
 	root = filepath.Clean(root)
 
-	// One lock and one index per workspace, shared by every repository, so two
-	// collections writing to the same directory serialise against each other.
+	// One lock and one record cache per workspace, shared by every repository,
+	// so two collections writing to the same directory serialise against each
+	// other and read the same parsed front matter.
 	lock := collections.NewPathLock(filepath.Join(paths.Runtime(), "locks"))
-	index := fscollections.NewIndex()
+	cache := fscollections.NewIndex()
 
-	repos, err := newRepoSet(root, lock, index)
+	repos, err := newRepoSet(root, lock, cache)
 	if err != nil {
 		return nil, err
 	}
 
 	logger := logging.New(logging.Config{})
+	active := resolver.String(env.KeyWorkspaceID, "")
+
+	// The search index is per workspace and lives outside the user's repository
+	// so it is never committed (ADR-0013). Without an active workspace there is
+	// nowhere to put it, and recall scans — which is the documented fallback,
+	// not a degraded mode.
+	var searchIndex memory.Index
+	var closers []func() error
+	if active != "" {
+		opened, err := bleveindex.Open(paths.Index(active))
+		if err != nil {
+			// A search index that will not open is a reason to scan, not a
+			// reason to refuse to start.
+			logger.Warn("continuing without a search index", "workspace", active, "err", err)
+		} else {
+			searchIndex = opened
+			closers = append(closers, opened.Close)
+		}
+	}
 
 	configSvc := config.NewService(fsconfig.FromPaths(paths))
 	agentSvc := agent.NewService(repos.agents, clock)
@@ -111,18 +154,19 @@ func New(opts Options) (*App, error) {
 		Repo:  repos.memories,
 		Clock: clock,
 		IDs:   idgen,
+		Index: searchIndex,
 		Log:   logger,
 	})
 	workspaceSvc := workspace.NewService(workspace.Deps{
 		Store:    fsworkspace.FromPaths(paths),
 		FS:       fsworkspace.NewFiles(),
 		Git:      gitcli.New(),
-		Seeder:   newSeeder(lock, index, clock),
-		Surveyor: newSurveyor(lock, index),
+		Seeder:   newSeeder(lock, cache, clock),
+		Surveyor: newSurveyor(lock, cache),
 		Clock:    clock,
 
 		WorkspacesDir: paths.Workspaces(),
-		Active:        resolver.String(env.KeyWorkspaceID, ""),
+		Active:        active,
 		WorkingDir:    root,
 	})
 
@@ -141,6 +185,7 @@ func New(opts Options) (*App, error) {
 		Agents:     agentSvc,
 		Memories:   memorySvc,
 		Workspaces: workspaceSvc,
+		closers:    closers,
 	}, nil
 }
 

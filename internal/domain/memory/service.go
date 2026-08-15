@@ -131,7 +131,7 @@ func (s *Service) rank(ctx context.Context, matched []Memory, in RecallInput, to
 	}
 
 	if order == "relevance" && len(tokens) > 0 {
-		scores := s.scores(ctx, matched, in, tokens)
+		scores, served := s.scores(ctx, matched, in, tokens)
 		sort.SliceStable(matched, func(i, j int) bool {
 			a, b := scores[matched[i].ID], scores[matched[j].ID]
 			if a == b {
@@ -142,7 +142,7 @@ func (s *Service) rank(ctx context.Context, matched []Memory, in RecallInput, to
 		if in.Desc {
 			reverse(matched)
 		}
-		return s.index != nil
+		return served
 	}
 
 	less := func(i, j int) bool { return matched[i].CreatedAt.Before(matched[j].CreatedAt) }
@@ -168,9 +168,12 @@ func (s *Service) rank(ctx context.Context, matched []Memory, in RecallInput, to
 }
 
 // scores asks the index to rank, and falls back to the shared scoring function.
+//
 // Both use the same tokeniser, so the two paths cannot disagree about what a
-// query means — only about how fast the answer arrives.
-func (s *Service) scores(ctx context.Context, matched []Memory, in RecallInput, tokens []string) map[string]float64 {
+// query means — only about how fast the answer arrives. The bool reports which
+// path actually ran, which is what the caller is told: "an index answered this"
+// is a claim, and a broken index that silently degraded must not make it.
+func (s *Service) scores(ctx context.Context, matched []Memory, in RecallInput, tokens []string) (map[string]float64, bool) {
 	out := make(map[string]float64, len(matched))
 	if s.index != nil {
 		hits, err := s.index.Search(ctx, search.Query{
@@ -188,7 +191,7 @@ func (s *Service) scores(ctx context.Context, matched []Memory, in RecallInput, 
 					out[m.ID] = search.Score(m.Document(), tokens)
 				}
 			}
-			return out
+			return out, true
 		}
 		// ADR-0013: a broken index degrades to scanning, with a warning, rather
 		// than taking the whole search down.
@@ -197,7 +200,7 @@ func (s *Service) scores(ctx context.Context, matched []Memory, in RecallInput, 
 	for _, m := range matched {
 		out[m.ID] = search.Score(m.Document(), tokens)
 	}
-	return out
+	return out, false
 }
 
 // Reflect reads one memory in full.
