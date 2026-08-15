@@ -15,6 +15,7 @@ const (
 	StatusForbidden           = http.StatusForbidden
 	StatusNotFound            = http.StatusNotFound
 	StatusMethodNotAllowed    = http.StatusMethodNotAllowed
+	StatusPayloadTooLarge     = http.StatusRequestEntityTooLarge
 	StatusConflict            = http.StatusConflict
 	StatusGone                = http.StatusGone
 	StatusPreconditionFailed  = http.StatusPreconditionFailed

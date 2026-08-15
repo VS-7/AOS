@@ -41,6 +41,12 @@ linters:
       # Tests may call time.Now and build their own clocks.
       - path: _test\.go
         linters: [forbidigo]
+      # The HTTP tests go through a helper that registers the close with
+      # t.Cleanup, which bodyclose cannot follow. Closing again at the call
+      # site would be the change the linter is asking for, and it would be
+      # noise around a response that is already closed.
+      - path: _test\.go
+        linters: [bodyclose]
       # The clock adapter is where time.Now is allowed to exist.
       - path: internal/core/clockx/
         linters: [forbidigo]
