@@ -87,6 +87,8 @@ var Catalog = []Entry{
 	{Code: "AOS_MEMORY_REASON_TOO_SHORT", Package: "internal/domain/memory", File: "internal/domain/memory/errors.go", Line: 95, Status: 400, Causer: "memory.Service.Forget", CTA: true, Issues: []string{"memory"}},
 	{Code: "AOS_MEMORY_SUPERSEDE_TARGET_MISSING", Package: "internal/domain/memory", File: "internal/domain/memory/errors.go", Line: 79, Status: 404, Causer: "memory.Service.Store", CTA: true, Issues: []string{"memory"}},
 	{Code: "AOS_MEMORY_WRITE_FAILED", Package: "internal/domain/memory", File: "internal/domain/memory/errors.go", Line: 121, Status: 500, Causer: "<dynamic>", CTA: false},
+	{Code: "AOS_PROMPT_NO_RENDERER", Package: "internal/runtime/prompt", File: "internal/runtime/prompt/render.go", Line: 63, Status: 500, Causer: "prompt.Builder.Build", CTA: true},
+	{Code: "AOS_PROMPT_TEMPLATE_FAILED", Package: "internal/runtime/prompt", File: "internal/runtime/prompt/render.go", Line: 73, Status: 500, Causer: "prompt.Builder.Build", CTA: true, Issues: []string{"section"}},
 	{Code: "AOS_SEARCH_INDEX_CLOSED", Package: "internal/adapters/bleveindex", File: "internal/adapters/bleveindex/index.go", Line: 300, Status: 500, Causer: "bleveindex.Index", CTA: false},
 	{Code: "AOS_SEARCH_INDEX_UNAVAILABLE", Package: "internal/adapters/bleveindex", File: "internal/adapters/bleveindex/index.go", Line: 291, Status: 500, Causer: "bleveindex.Open", CTA: false, Issues: []string{"path"}},
 	{Code: "AOS_SECRET_PERMISSION_UNSAFE", Package: "internal/core/config", File: "internal/core/config/secure.go", Line: 50, Status: 500, Causer: "config.WriteSecret", CTA: false, Issues: []string{"mode", "path"}},
