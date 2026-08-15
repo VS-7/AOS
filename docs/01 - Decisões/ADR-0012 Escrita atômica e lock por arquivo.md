@@ -2,7 +2,7 @@
 tags: [adr, decisao, persistencia, concorrencia]
 aliases: [ADR-0012, Escrita Atômica, Lock]
 fase: 1
-status: em-construcao
+status: pronto
 origem: "[[Modelo de Persistência]]"
 ---
 
@@ -110,3 +110,14 @@ func (l *PathLock) With(ctx context.Context, path string, fn func() error) error
 ## Status
 
 **Aceito.** Corrige os defeitos #17 e #18.
+
+## Implementação — Fase 1
+
+Duas divergências de localização em relação ao que a ADR escreve, ambas registradas nas notas correspondentes:
+
+1. **`WriteFileAtomic` mora em `internal/core/atomicfs`**, não em `internal/core/collections/atomic.go`. O `WriteSecret` da [[ADR-0010 Segredos com permissão restrita]] precisa da mesma garantia na Fase 0, antes de o motor de coleções existir. Ver [[Layout de Diretórios]].
+2. **Os lockfiles advisory ficam fora do repositório do usuário.** `{registro}.lock` ao lado do registro polui o Git de quem usa o produto. Vão para um diretório próprio, nomeados pelo hash do caminho canônico. Ver [[Collections Engine]].
+
+O lockfile do gateway (`~/.aos/runtime/gateway/gateway.lock`, defeito #18) é da Fase 4.
+
+Provas: `TestAnInterruptedWriteLeavesThePreviousFileIntact` injeta falha em cada um dos quatro pontos (write, chmod, sync, close) e verifica que o arquivo anterior sobrevive inteiro e que nenhum `.tmp-*` fica órfão; `TestFiftyConcurrentWritersNeverCorruptARecord` roda 50 escritores e 50 leitores sob `-race`; `TestConflictIsDetected` prova o CAS com o cenário dos dois *agent universes*.

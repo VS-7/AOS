@@ -2,7 +2,7 @@
 tags: [critico, persistencia, collections, markdown]
 aliases: [Collections Engine, Motor de Coleções, Repository]
 fase: 1
-status: em-construcao
+status: pronto
 origem: "[[Modelo de Persistência]]"
 ---
 
@@ -308,6 +308,21 @@ O índice em memória cobre workspaces até ~50.000 registros com folga. Acima d
 > [!decision] `Build` falha em placeholder ausente
 > Preferimos erro explícito a caminho parcialmente resolvido. É a diferença entre uma falha visível e um registro gravado no lugar errado.
 
+> [!decision] O lockfile advisory vive fora do repositório do usuário
+> A [[ADR-0012 Escrita atômica e lock por arquivo]] não diz onde. A primeira implementação pôs `{registro}.lock` ao lado do registro — e isso grava lixo dentro do repositório Git do usuário, que aparece em `git status`, entra em code review e precisa de `.gitignore`. Os lockfiles passam a viver num diretório próprio (`~/.aos/runtime/locks`), nomeados pelo hash do caminho canônico do registro. Dois processos concordam sobre o nome sem coordenação, porque ambos derivam do mesmo caminho. `NewPathLock("")` desliga o lock inter-processo, que é o modo dos testes e de um processo único.
+
+> [!decision] `List` não carrega o corpo; `Get` sempre carrega
+> A nota decide não cachear o corpo, o que implica esta consequência que ela não enuncia: uma listagem devolve registros com `Content` vazio. Isso vira contrato explícito — `List` responde "o que existe aqui", `Get` responde "o que diz". Quem precisa dos corpos pede `Query.IncludeContent`, e paga por isso.
+
+> [!decision] `KeyOf` ignora placeholder vazio
+> Um tipo de registro pode declarar campos de path de mais de um padrão. Só os preenchidos identificam aquele registro; incluir os vazios produziria chaves como `agent=,id=x` em mensagem de erro e em índice.
+
+> [!decision] O motor exporta o vocabulário de erro
+> `NotFoundError`, `AlreadyExistsError`, `ConflictError`, `IOError`, `OutsideRootError` e `NotOwnedError` são exportados por `internal/core/collections`, não construídos no adaptador. Um segundo adaptador que inventasse os próprios códigos quebraria a suíte de contrato e todo chamador que ramifica por comportamento.
+
+> [!decision] O watcher varre a subárvore recém-criada
+> `mkdir -p a/b/c && cp registro a/b/c/` notifica apenas sobre `a`; quando a watch em `a/b/c` existe, o arquivo já está lá. Registrar a watch não basta — a subárvore nova também é varrida, e o que já estiver dentro é reportado. Sem isso, o primeiro registro de um agente novo é invisível até a próxima escrita.
+
 ## Testes
 
 - **Round-trip por modelo (13):** criar → ler → comparar campo a campo, incluindo corpo Markdown com whitespace inicial e caracteres não-ASCII.
@@ -323,9 +338,91 @@ O índice em memória cobre workspaces até ~50.000 registros com folga. Acima d
 
 ## Critério de pronto
 
-- [ ] Criar, ler, atualizar e deletar um agente em Markdown pelo código
-- [ ] Testes de round-trip verdes para os 13 modelos nativos
-- [ ] Escrita atômica e lock verificados com `-race`
-- [ ] Watcher recarregando schema dinâmico em menos de 1 s
-- [ ] `Refresh()` de um workspace com 10.000 registros abaixo de 2 s
-- [ ] Conflito de escrita concorrente detectado e reportado com CTA
+- [x] Criar, ler, atualizar e deletar um agente em Markdown pelo código — `TestRoundTripForEveryNativeCollection/agents`
+- [x] Testes de round-trip verdes para os 13 modelos nativos — o mesmo teste, uma subprova por coleção
+- [x] Escrita atômica e lock verificados com `-race` — `TestFiftyConcurrentWritersNeverCorruptARecord`, `TestWriteIsAtomicAndLeavesNoTemporaryFile`, `TestLockSerialisesWritersOnTheSamePath`
+- [x] Watcher recarregando schema dinâmico em menos de 1 s — `TestWatcherReloadsADynamicSchemaInUnderASecond` mede e falha acima de 1 s
+- [x] `Refresh()` de um workspace com 10.000 registros abaixo de 2 s — **268 ms** para 10.005 memórias
+- [x] Conflito de escrita concorrente detectado e reportado com CTA — `TestConflictIsDetected`
+
+## Saída dos testes — Fase 1
+
+```
+$ go vet ./...
+(sem saída — ok)
+
+$ golangci-lint run
+0 issues.
+
+$ go test -race -count=1 ./...
+ok  	github.com/OWNER/aos/internal/adapters/fscollections	9.032s
+ok  	github.com/OWNER/aos/internal/adapters/fsconfig	2.149s
+ok  	github.com/OWNER/aos/internal/architecture	1.814s
+ok  	github.com/OWNER/aos/internal/core/apperr	2.487s
+ok  	github.com/OWNER/aos/internal/core/apperr/scan	1.353s
+ok  	github.com/OWNER/aos/internal/core/atomicfs	3.327s
+ok  	github.com/OWNER/aos/internal/core/build	2.893s
+ok  	github.com/OWNER/aos/internal/core/collections	3.421s
+ok  	github.com/OWNER/aos/internal/core/config	3.815s
+ok  	github.com/OWNER/aos/internal/core/env	3.084s
+ok  	github.com/OWNER/aos/internal/core/identity	2.561s
+ok  	github.com/OWNER/aos/internal/core/logging	2.317s
+ok  	github.com/OWNER/aos/internal/core/safe	2.242s
+ok  	github.com/OWNER/aos/internal/domain/config	2.207s
+ok  	github.com/OWNER/aos/internal/domain/fakes	2.147s
+ok  	github.com/OWNER/aos/internal/testx	2.285s
+
+$ go test -count=1 -cover ./... | go run ./tools/covercheck
+ok  	github.com/OWNER/aos/internal/adapters/fscollections	4.839s	coverage: 76.9% of statements
+ok  	github.com/OWNER/aos/internal/core/collections	1.357s	coverage: 86.5% of statements
+ok  	github.com/OWNER/aos/internal/domain/fakes	0.836s	coverage: 69.0% of statements
+ok  	github.com/OWNER/aos/internal/testx	0.935s	coverage: 50.0% of statements
+	github.com/OWNER/aos/internal/testx/fixture		coverage: 0.0% of statements
+covercheck: 20 packages, all at or above their floor
+
+$ go test -v -run TestRefreshOfALargeWorkspace ./internal/adapters/fscollections/
+    repo_test.go:751: generated 11525 records in 740.238167ms
+    repo_test.go:761: Refresh indexed 10005 memories in 268.32575ms
+    repo_test.go:776: warm List of 50 records in 38.153083ms
+--- PASS: TestRefreshOfALargeWorkspaceIsUnderTwoSeconds (1.55s)
+PASS
+ok  	github.com/OWNER/aos/internal/adapters/fscollections	1.878s
+```
+
+### Round-trip das 13 coleções
+
+`TestRoundTripForEveryNativeCollection` cria, lê, atualiza, lista e apaga um registro de cada modelo, no filesystem real:
+
+```
+--- PASS: TestRoundTripForEveryNativeCollection/agents
+--- PASS: TestRoundTripForEveryNativeCollection/chats
+--- PASS: TestRoundTripForEveryNativeCollection/comments
+--- PASS: TestRoundTripForEveryNativeCollection/goals
+--- PASS: TestRoundTripForEveryNativeCollection/instructions
+--- PASS: TestRoundTripForEveryNativeCollection/memories
+--- PASS: TestRoundTripForEveryNativeCollection/projects
+--- PASS: TestRoundTripForEveryNativeCollection/routines
+--- PASS: TestRoundTripForEveryNativeCollection/runs
+--- PASS: TestRoundTripForEveryNativeCollection/skills
+--- PASS: TestRoundTripForEveryNativeCollection/tasks
+--- PASS: TestRoundTripForEveryNativeCollection/templates
+--- PASS: TestRoundTripForEveryNativeCollection/todos
+```
+
+Os padrões vieram literalmente de `_extracted/v401/server/src/features/*/collections/*.collection.ts`, com `.fractal/` trocado por `.aos/` e nada mais. `runs` é a única separação: o original dobra os transcritos de execução dentro da coleção `chats`; aqui têm coleção própria porque têm ciclo de vida e retenção próprios.
+
+### Escala medida
+
+| Medida | Resultado | Orçamento |
+|---|---|---|
+| Geração da fixture `Large` (11.525 arquivos) | 740 ms | 5 s |
+| `Refresh()` de 10.005 memórias | **268 ms** | 2 s |
+| `List` morno de 50 registros | 38 ms | — |
+
+O gatilho para reabrir a decisão do espelho SQLite ([[ADR-0004 Collections em Markdown]]) é `Refresh()` passar de 2 s. Está em 13% do orçamento.
+
+### O que não foi feito nesta fase
+
+- **Reindexação no Bleve** a partir do evento do watcher — o índice de busca é da Fase 3 ([[ADR-0013 Bleve para busca full-text]]). O watcher já publica o evento; falta o assinante.
+- **Publicação em [[Realtime WebSocket]]** — Fase 4, pelo mesmo motivo: o `Publisher` é um port e hoje só o barramento de teste o implementa.
+- **Hooks das 13 coleções** — o motor executa `OnCreated`/`OnUpdated`/`OnDeleted` e o teste prova a ordem e a normalização; as regras concretas de cada coleção pertencem à feature de domínio que as define, nas Fases 3, 6 e 8.

@@ -96,6 +96,12 @@ Exemplos reais que a suíte cobre e que um teste por implementação normalmente
 > [!decision] Meta-teste de cobertura de contrato
 > Um teste percorre as implementações de port conhecidas e falha se alguma não tiver contrato associado. Impede que um adaptador novo entre sem suíte.
 
+> [!decision] O contrato recebe uma descrição, não só uma fábrica
+> A assinatura da nota (`factory`, `sample`) não basta: a suíte precisa de registros com chaves distintas para testar listagem, de uma mutação para testar update, e de um campo filtrável para testar filtro. Vira uma struct `RepositoryContract[T]` com `New`, `Sample(i)`, `KeyOf`, `Mutate`, `Changed` e `Filter`. O nome exportado da nota (`RunRepositoryContract`) é preservado.
+
+> [!decision] Os fakes vivem em `internal/domain/fakes`
+> Não em cada feature. Um fake por feature divergiria por feature; um `Repo[T]` genérico que passa o contrato serve a todas. `fakes` e `testsuite` estão em `NonFeatureDomainDirs`, fora da exigência do esqueleto de sete arquivos e fora do piso de cobertura — o que prova um fake é o contrato, não uma porcentagem.
+
 ## Testes
 
 - As seis suítes rodando contra todas as implementações
@@ -105,7 +111,41 @@ Exemplos reais que a suíte cobre e que um teste por implementação normalmente
 
 ## Critério de pronto
 
-- [ ] Seis suítes implementadas
-- [ ] Toda implementação de port coberta
-- [ ] Cassettes de provider gravadas e versionadas
-- [ ] Meta-teste impedindo adaptador sem contrato
+- [ ] Seis suítes implementadas — **1 de 6**: `Repository`. As outras cinco (`LLMProvider`, `ToolsetAdapter`, `Queue`, `Index`, `Approver`) nascem com seus ports, nas Fases 3 a 6
+- [x] Toda implementação de port coberta — as duas implementações de `Repository` (`fscollections` e o fake) rodam a mesma suíte
+- [ ] Cassettes de provider gravadas e versionadas — Fase 5
+- [ ] Meta-teste impedindo adaptador sem contrato — Fase 5, quando houver mais de um port com mais de uma implementação
+
+## Saída dos testes — Fase 1
+
+O contrato de `Repository` roda contra as duas implementações, com o mesmo corpo:
+
+```
+$ go test -race -run 'Contract' ./internal/adapters/fscollections/ ./internal/domain/fakes/
+--- PASS: TestRepositoryContract                                  (fscollections)
+    --- PASS: /create_then_get_round-trips
+    --- PASS: /get_missing_returns_not_found
+    --- PASS: /create_duplicate_returns_conflict
+    --- PASS: /update_persists_the_change
+    --- PASS: /update_missing_returns_not_found
+    --- PASS: /update_with_stale_version_returns_conflict
+    --- PASS: /update_with_current_version_succeeds
+    --- PASS: /delete_is_idempotent
+    --- PASS: /list_returns_everything_created
+    --- PASS: /list_applies_filters
+    --- PASS: /list_ordering_is_stable
+    --- PASS: /list_paginates
+    --- PASS: /concurrent_writers_do_not_corrupt
+    --- PASS: /cancelled_context_is_respected
+--- PASS: TestFakeRepositoryContract                              (fakes)
+    (as mesmas 14 subprovas)
+```
+
+Casos que só o contrato pegou, exatamente como a nota previu:
+
+| Caso | O que teria divergido |
+|---|---|
+| `delete is idempotent` | O fake devolvia sucesso e o real, `not found`. A suíte fixou: sucesso. |
+| `update missing returns not found` | O real precisava distinguir "arquivo ausente" de "conflito de versão". |
+| `cancelled context is respected` | O fake não checava `ctx.Err()`; o real sim. Um teste de domínio com timeout se comportaria diferente do produto. |
+| `list ordering is stable` | Nenhuma das duas ordenava por desempate; duas execuções devolviam ordens diferentes, e qualquer golden derivado de uma listagem seria instável. |

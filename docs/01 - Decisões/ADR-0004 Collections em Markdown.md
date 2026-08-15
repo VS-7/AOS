@@ -2,7 +2,7 @@
 tags: [adr, decisao, persistencia, markdown]
 aliases: [ADR-0004, Persistência em Markdown]
 fase: 1
-status: em-construcao
+status: pronto
 origem: "[[Modelo de Persistência]]"
 ---
 
@@ -67,3 +67,20 @@ Elementos **adicionados**, que o original não tem:
 ## Status
 
 **Aceito.** Ver [[Collections Engine]] para o design do motor.
+
+## Implementação — Fase 1
+
+Aceita e implementada. Os oito elementos da decisão, com onde vivem:
+
+| Elemento | Onde | Prova |
+|---|---|---|
+| 1. Padrões com placeholders bidirecionais | `internal/core/collections/pattern.go` | `TestBuildIsTheInverseOfMatch` |
+| 2. Frontmatter validado; corpo é `Content` | `codec.go`, tags `collection:"path"` e `collection:"content"` | `TestMarkdownRoundTrip` |
+| 3. Múltiplos patterns por coleção | `registry.go` | `TestSkillScopedRecordsAreReadable` |
+| 4. Hooks de ciclo de vida | `Model.OnCreated/OnUpdated/OnDeleted` | `TestHooksRunInTheRightOrder` |
+| 5. Watcher sobre `.aos/` | `fscollections/watch.go` | `TestWatcherReloadsADynamicSchemaInUnderASecond` |
+| 6. Escrita atômica | `internal/core/atomicfs` | `TestAnInterruptedWriteLeavesThePreviousFileIntact` |
+| 7. Lock por caminho | `internal/core/collections/lock.go` | `TestLockSerialisesWritersOnTheSamePath` |
+| 8. Índice em memória com invalidação | `fscollections/index.go` | `TestAnExternalEditIsSeenImmediately` |
+
+A alternativa adiada — espelho SQLite — continua adiada, agora com número: `Refresh()` de 10.005 registros custa 268 ms contra um gatilho de 2 s.

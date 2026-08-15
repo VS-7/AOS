@@ -105,6 +105,12 @@ func MarshalStable(v any) ([]byte, error)
 > [!decision] Fixture `Large` gerada, não commitada
 > 10.000 memórias em `testdata/` inflaria o repositório. É gerada deterministicamente a partir de uma semente fixa.
 
+> [!decision] Determinismo por índice, não por semente aleatória
+> A nota fala em semente fixa. A implementação não usa aleatoriedade alguma: cada campo deriva do índice do registro (`stamp(i)`, `categories[i%7]`). É mais forte que uma semente — não depende do algoritmo de PRNG da versão do Go — e é o que faz `TestFixtureIsByteIdentical` valer entre máquinas.
+
+> [!decision] As fixtures escrevem arquivos, não entidades
+> Na Fase 1 as entidades de domínio ainda não existem. A fixture materializa Markdown e JSON diretamente, no formato que o motor lê — o que é suficiente para medir `Refresh()` e para o round-trip, e continua válido quando as entidades chegarem: elas leem os mesmos arquivos.
+
 ## Testes
 
 - Golden estável: rodar duas vezes produz o mesmo resultado
@@ -114,7 +120,22 @@ func MarshalStable(v any) ([]byte, error)
 
 ## Critério de pronto
 
-- [ ] Helper de golden com `-update`
-- [ ] Todos os artefatos da tabela com golden
-- [ ] Três fixtures de workspace determinísticas
-- [ ] Serialização estável verificada
+- [x] Helper de golden com `-update` — `internal/testx.Assert`, com mensagem que ensina o fluxo
+- [ ] Todos os artefatos da tabela com golden — nenhum dos oito artefatos existe ainda (prompt: Fase 5; `SKILL.md`: Fase 9; saída de CLI e erros por superfície: Fases 2 e 4)
+- [x] Três fixtures de workspace determinísticas — `Minimal`, `Typical`, `Large`, com `TestFixtureIsByteIdentical`
+- [x] Serialização estável verificada — `TestMarshalStableIsStable`, 100 execuções idênticas
+
+## Saída dos testes — Fase 1
+
+```
+$ go test -race ./internal/testx/...
+ok  	github.com/OWNER/aos/internal/testx
+```
+
+| Fixture | Arquivos | Tempo de geração |
+|---|---|---|
+| `Minimal` | 8 | < 5 ms |
+| `Typical` | 105 | ~20 ms |
+| `Large` | 11.525 | 740 ms (orçamento: 5 s) |
+
+O helper de golden está pronto e exercitado (`testdata/hello.golden`), mas a tabela de artefatos continua vazia porque nenhum deles existe nesta fase. É a razão de a nota permanecer `em-construcao`.
