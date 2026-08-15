@@ -42,16 +42,16 @@ type descriptor[In, Out any] struct {
 	reason string // validator path of the reasoning field
 }
 
-func (d *descriptor[In, Out]) Key() string           { return strings.Join(d.Path(), "_") }
-func (d *descriptor[In, Out]) Path() []string        { return []string{d.cmd.Group, d.cmd.Name} }
-func (d *descriptor[In, Out]) Group() string         { return d.cmd.Group }
-func (d *descriptor[In, Out]) Name() string          { return d.cmd.Name }
-func (d *descriptor[In, Out]) Aliases() []string     { return d.cmd.Aliases }
-func (d *descriptor[In, Out]) Summary() string       { return d.cmd.Summary }
-func (d *descriptor[In, Out]) Doc() string           { return d.cmd.Doc }
-func (d *descriptor[In, Out]) Examples() []Example   { return d.cmd.Examples }
-func (d *descriptor[In, Out]) Local() bool           { return d.cmd.Local }
-func (d *descriptor[In, Out]) InRegistry() bool      { return d.cmd.Registry }
+func (d *descriptor[In, Out]) Key() string         { return strings.Join(d.Path(), "_") }
+func (d *descriptor[In, Out]) Path() []string      { return []string{d.cmd.Group, d.cmd.Name} }
+func (d *descriptor[In, Out]) Group() string       { return d.cmd.Group }
+func (d *descriptor[In, Out]) Name() string        { return d.cmd.Name }
+func (d *descriptor[In, Out]) Aliases() []string   { return d.cmd.Aliases }
+func (d *descriptor[In, Out]) Summary() string     { return d.cmd.Summary }
+func (d *descriptor[In, Out]) Doc() string         { return d.cmd.Doc }
+func (d *descriptor[In, Out]) Examples() []Example { return d.cmd.Examples }
+func (d *descriptor[In, Out]) Local() bool         { return d.cmd.Local }
+func (d *descriptor[In, Out]) InRegistry() bool    { return d.cmd.Registry }
 func (d *descriptor[In, Out]) Annotations() Annotations {
 	return d.cmd.Annotations
 }

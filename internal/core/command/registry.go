@@ -62,6 +62,9 @@ func Register[In, Out any](r *Registry, c Command[In, Out]) error {
 	if err != nil {
 		return fmt.Errorf("%s_%s: cannot infer the input schema: %w", c.Group, c.Name, err)
 	}
+	if err := completeSchema(inType, schema); err != nil {
+		return fmt.Errorf("%s_%s: %w", c.Group, c.Name, err)
+	}
 
 	d := &descriptor[In, Out]{cmd: c, schema: schema, inType: inType, reason: reason}
 	return r.add(d)

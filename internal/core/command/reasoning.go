@@ -28,7 +28,7 @@ const ReasoningRejection = "_reasoning is MANDATORY — explain why this specifi
 // — and a struct that forgets to embed it fails at registration rather than at
 // the first tool call.
 type Reasoning struct {
-	Reasoning string `json:"_reasoning" jsonschema:"MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty." validate:"required,min=1"`
+	Reasoning string `json:"_reasoning" jsonschema:"MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty." validate:"required,notblank"`
 }
 
 // reasoningFieldPath returns the validator path of the reasoning field inside
@@ -65,10 +65,3 @@ func jsonNameOf(f reflect.StructField) string {
 	name, _, _ := strings.Cut(tag, ",")
 	return name
 }
-
-// isSurfacePrivate reports whether a field belongs to the tool surface only and
-// must not become a CLI flag. `_reasoning` is the only one today: asking a human
-// at a terminal to justify their own command would be absurd, and the original
-// does not do it either — its CLI schema is args plus options, and the tool
-// schema is that plus `_reasoning`.
-func isSurfacePrivate(name string) bool { return strings.HasPrefix(name, "_") }

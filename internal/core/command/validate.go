@@ -1,6 +1,7 @@
 package command
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -10,6 +11,14 @@ import (
 
 var validate = func() *validator.Validate {
 	v := validator.New(validator.WithRequiredStructEnabled())
+	// The original trims before checking the length: "   " is not a reason.
+	// go-playground has no built-in for that, so the rule is registered here
+	// rather than approximated with min=1, which whitespace would satisfy.
+	if err := v.RegisterValidation("notblank", func(fl validator.FieldLevel) bool {
+		return strings.TrimSpace(fl.Field().String()) != ""
+	}); err != nil {
+		panic(err)
+	}
 	// Report violations by the JSON name, because that is the name every
 	// surface uses: the CLI flag, the schema property and the HTTP body field.
 	v.RegisterTagNameFunc(func(f reflect.StructField) string {
@@ -102,6 +111,8 @@ func describeRule(f validator.FieldError) string {
 		return "is required"
 	case "min":
 		return "must be at least " + f.Param()
+	case "notblank":
+		return "must not be blank"
 	case "max":
 		return "must be at most " + f.Param()
 	case "gte":
@@ -120,17 +131,9 @@ func describeRule(f validator.FieldError) string {
 }
 
 func asInvalid(err error, target **validator.InvalidValidationError) bool {
-	v, ok := err.(*validator.InvalidValidationError)
-	if ok {
-		*target = v
-	}
-	return ok
+	return errors.As(err, target)
 }
 
 func asValidationErrors(err error, target *validator.ValidationErrors) bool {
-	v, ok := err.(validator.ValidationErrors)
-	if ok {
-		*target = v
-	}
-	return ok
+	return errors.As(err, target)
 }
