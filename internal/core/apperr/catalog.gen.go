@@ -5,6 +5,7 @@ package apperr
 // Catalog lists every error code constructed in this tree, with the
 // properties the catalog test asserts on. Regenerate with `task gen-catalog`.
 var Catalog = []Entry{
+	{Code: "AOS_AGENT_INVALID_ID", Package: "internal/domain/agent", File: "internal/domain/agent/errors.go", Line: 9, Status: 400, Causer: "agent.Service.Create", CTA: true, Issues: []string{"id"}},
 	{Code: "AOS_COLLECTION_ALREADY_EXISTS", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 114, Status: 409, Causer: "collections.Repo.Create", CTA: true, Issues: []string{"collection", "record"}},
 	{Code: "AOS_COLLECTION_CONFLICT", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 128, Status: 409, Causer: "collections.Repo.Update", CTA: true, Issues: []string{"actualSize", "collection", "expectedSize", "path"}},
 	{Code: "AOS_COLLECTION_DECODE_FAILED", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 142, Status: 500, Causer: "collections.Decode", CTA: true, Issues: []string{"collection", "path"}},
@@ -22,11 +23,20 @@ var Catalog = []Entry{
 	{Code: "AOS_COLLECTION_PATTERN_INVALID", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 35, Status: 500, Causer: "collections.Compile", CTA: false, Issues: []string{"pattern"}},
 	{Code: "AOS_COLLECTION_PATTERN_NOT_WRITABLE", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 44, Status: 500, Causer: "collections.Pattern.Build", CTA: false, Issues: []string{"pattern"}},
 	{Code: "AOS_COLLECTION_UNKNOWN", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 185, Status: 404, Causer: "collections.ModelOf", CTA: true, Issues: []string{"collection"}},
+	{Code: "AOS_COMMAND_ACTION_UNKNOWN", Package: "internal/core/command", File: "internal/core/command/errors.go", Line: 51, Status: 400, Causer: "<dynamic>", CTA: true, Issues: []string{"action", "actions", "tool"}},
+	{Code: "AOS_COMMAND_ACTION_UNKNOWN", Package: "internal/transport/mcpserver", File: "internal/transport/mcpserver/errors.go", Line: 38, Status: 400, Causer: "mcpserver.composite", CTA: true, Issues: []string{"action", "actions", "tool"}},
+	{Code: "AOS_COMMAND_ALIAS_SHADOWS", Package: "internal/core/command", File: "internal/core/command/alias.go", Line: 74, Status: 500, Causer: "command.Registry.Alias", CTA: false, Issues: []string{"alias"}},
+	{Code: "AOS_COMMAND_INVALID_INPUT", Package: "internal/core/command", File: "internal/core/command/errors.go", Line: 11, Status: 400, Causer: "<dynamic>", CTA: true, Issues: []string{"tool"}},
+	{Code: "AOS_COMMAND_INVALID_INPUT", Package: "internal/transport/mcpserver", File: "internal/transport/mcpserver/errors.go", Line: 11, Status: 400, Causer: "mcpserver.composite", CTA: true, Issues: []string{"tool"}},
+	{Code: "AOS_COMMAND_NOT_FOUND", Package: "internal/core/command", File: "internal/core/command/errors.go", Line: 38, Status: 404, Causer: "command.Registry.Lookup", CTA: true, Issues: []string{"didYouMean", "tool"}},
+	{Code: "AOS_COMMAND_REASONING_REQUIRED", Package: "internal/transport/mcpserver", File: "internal/transport/mcpserver/errors.go", Line: 25, Status: 400, Causer: "mcpserver.composite", CTA: true, Issues: []string{"field", "tool"}},
+	{Code: "AOS_COMMAND_VALIDATION_FAILED", Package: "internal/core/command", File: "internal/core/command/errors.go", Line: 25, Status: 400, Causer: "<dynamic>", CTA: true, Issues: []string{"tool"}},
 	{Code: "AOS_CONFIG_FIELD_FORBIDDEN", Package: "internal/domain/config", File: "internal/domain/config/errors.go", Line: 11, Status: 403, Causer: "config.Service.Update", CTA: true, Issues: []string{"allowed", "field"}},
 	{Code: "AOS_CONFIG_FIELD_UNKNOWN", Package: "internal/domain/config", File: "internal/domain/config/errors.go", Line: 25, Status: 400, Causer: "config.Service.Update", CTA: true, Issues: []string{"field"}},
 	{Code: "AOS_CONFIG_LOAD_FAILED", Package: "internal/domain/config", File: "internal/domain/config/errors.go", Line: 49, Status: 500, Causer: "config.Service.load", CTA: false},
 	{Code: "AOS_CONFIG_REVEAL_DENIED", Package: "internal/domain/config", File: "internal/domain/config/errors.go", Line: 38, Status: 403, Causer: "config.Service.Get", CTA: true},
 	{Code: "AOS_CONFIG_SAVE_FAILED", Package: "internal/domain/config", File: "internal/domain/config/errors.go", Line: 57, Status: 500, Causer: "config.Service.Update", CTA: false},
+	{Code: "AOS_INTERNAL", Package: "internal/transport/mcpserver", File: "internal/transport/mcpserver/result.go", Line: 36, Status: 500, Causer: "mcpserver", CTA: false},
 	{Code: "AOS_INTERNAL_PANIC", Package: "internal/core/safe", File: "internal/core/safe/safe.go", Line: 67, Status: 500, Causer: "<dynamic>", CTA: false},
 	{Code: "AOS_SECRET_PERMISSION_UNSAFE", Package: "internal/core/config", File: "internal/core/config/secure.go", Line: 50, Status: 500, Causer: "config.WriteSecret", CTA: false, Issues: []string{"mode", "path"}},
 	{Code: "AOS_SECRET_WRITE_FAILED", Package: "internal/core/config", File: "internal/core/config/secure.go", Line: 34, Status: 500, Causer: "config.WriteSecret", CTA: false, Issues: []string{"path"}},

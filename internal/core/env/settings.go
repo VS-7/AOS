@@ -8,6 +8,7 @@ import "time"
 const (
 	KeyEnv              = "ENV"               // production disables the API playground (ADR-0009)
 	KeyHome             = "HOME_DIR"          // overrides ~/.aos; used by every test
+	KeyWorkspacePath    = "WORKSPACE_PATH"    // the directory that holds .aos/; defaults to the working directory
 	KeyServerHost       = "SERVER_HOSTNAME"   //
 	KeyServerPort       = "SERVER_PORT"       //
 	KeyToken            = "TOKEN"             //
