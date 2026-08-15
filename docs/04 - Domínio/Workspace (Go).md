@@ -154,7 +154,7 @@ Ver [[Visão Geral Go]] para `Runtime` e o uso de `singleflight`.
 > [!decision] `introspect` registra; `inventory` inventaria
 > A nota herdou do vault a afirmação de que `workspace introspect` devolve o inventário do workspace. Não devolve: no original ele auto-registra o diretório atual como workspace. Verificado em `workspace/commands/workspace/introspect.ts` e na descrição publicada da tool `workspace_introspect` do binário instalado.
 >
-> Em vez de escolher em silêncio entre a função real e a que a nota descrevia, os dois existem com nomes distintos: `workspace introspect` mantém a semântica do original ([[ADR-0016 Compatibilidade de nomes com o original]]) e `workspace inventory` é a visão panorâmica que o [[Prompt Assembly]] precisa — a que esta nota chamava de `Introspect`. **Confirmar com o usuário** se `inventory` é o nome definitivo.
+> Em vez de escolher em silêncio entre a função real e a que a nota descrevia, os dois existem com nomes distintos: `workspace introspect` mantém a semântica do original ([[ADR-0016 Compatibilidade de nomes com o original]]) e `workspace inventory` é a visão panorâmica que o [[Prompt Assembly]] precisa — a que esta nota chamava de `Introspect`. Nome confirmado com o usuário na Fase 3.
 
 > [!decision] Scaffolding atrás de um porto, não com `os` direto
 > O esboço desta nota chama `os.MkdirAll` dentro do serviço, o que a regra de dependência permite. Ficou atrás de `Scaffolder` porque as duas propriedades que importam — o scaffolding é idempotente, e o splice preserva o que o usuário escreveu — seriam provadas contra um diretório temporário em vez de contra a regra. O `Scaffolder` tem suíte de contrato, e o fake e o adaptador real passam pela mesma.
