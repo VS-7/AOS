@@ -27,8 +27,8 @@ linters:
           msg: "context.TODO is not allowed in production code; take a ctx parameter"
         - pattern: ^time\.Now$
           msg: "inject a Clock instead of calling time.Now directly"
-        - pattern: ^rand\.
-          msg: "inject a Rand instead of using math/rand directly"
+        - pattern: ^math/rand(/v2)?\.
+          msg: "inject a Rand instead of using math/rand directly — it would make a golden unstable"
       analyze-types: true
     revive:
       rules:
@@ -43,13 +43,6 @@ linters:
         linters: [forbidigo]
       # The clock adapter is where time.Now is allowed to exist.
       - path: internal/core/clockx/
-        linters: [forbidigo]
-      # And the identifier adapter is where the entropy source is allowed to
-      # exist. The rule above is aimed at math/rand, whose determinism would
-      # break a golden file; this package reads crypto/rand, which is the one
-      # place a random identifier is supposed to come from, and every caller
-      # takes the Generator port instead.
-      - path: internal/core/ids/
         linters: [forbidigo]
 
 formatters:
