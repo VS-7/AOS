@@ -1,0 +1,70 @@
+/*
+ * The token contract.
+ *
+ * Every custom property the interface reads is declared here once, with a
+ * fallback that makes the page legible before a theme has been applied. The Go
+ * side generates internal/domain/theme/tokens.txt from this file, so a property
+ * a component consumes and no theme produces fails the build rather than
+ * rendering something invisible.
+ *
+ * The values below are the house theme's dark palette, hard-coded as the
+ * pre-paint default. The inline script in index.html replaces them with the
+ * stored choice before the first paint, which is what keeps a reload from
+ * flashing.
+ */
+:root {
+  --background: oklch(0.180 0.0080 60.00);
+  --foreground: oklch(0.940 0.0100 80.00);
+  --primary: oklch(0.760 0.1400 60.00);
+  --primary-foreground: oklch(0.000 0.0000 0.00);
+  --radius: 1rem;
+
+  --muted: oklch(0.230 0.0090 65.00);
+  --muted-foreground: oklch(0.940 0.0100 80.00 / 0.55);
+  --accent: oklch(0.250 0.0100 65.00);
+  --accent-foreground: oklch(0.940 0.0100 80.00);
+  --popover: oklch(0.190 0.0080 60.00);
+  --popover-foreground: oklch(0.940 0.0100 80.00);
+  --card: oklch(0.220 0.0090 62.00);
+  --card-foreground: oklch(0.940 0.0100 80.00);
+
+  --border: oklch(0.940 0.0100 80.00 / 0.08);
+  --input: oklch(0.940 0.0100 80.00 / 0.12);
+  --ring: oklch(0.760 0.1400 60.00);
+
+  --secondary: oklch(0.240 0.0200 60.00);
+  --secondary-foreground: oklch(0.940 0.0100 80.00);
+
+  --destructive: oklch(0.600 0.2000 25.00);
+  --destructive-foreground: oklch(0.980 0.0100 25.00);
+
+  --sidebar: oklch(0.180 0.0080 60.00);
+  --sidebar-foreground: oklch(0.940 0.0100 80.00);
+  --sidebar-primary: oklch(0.760 0.1400 60.00);
+  --sidebar-primary-foreground: oklch(0.000 0.0000 0.00);
+  --sidebar-border: oklch(0.940 0.0100 80.00 / 0.1);
+  --sidebar-accent: oklch(0.250 0.0100 65.00);
+  --sidebar-accent-foreground: oklch(0.940 0.0100 80.00);
+  --sidebar-ring: oklch(0.760 0.1400 60.00);
+
+  --chart-1: oklch(0.760 0.1400 60.00);
+  --chart-2: oklch(0.760 0.1400 220.00);
+  --chart-3: oklch(0.760 0.1400 90.00);
+  --chart-4: oklch(0.760 0.1400 260.00);
+  --chart-5: oklch(0.760 0.1400 150.00);
+
+  /* One per memory category, so the graph is legible in every theme. */
+  --category-decision: oklch(0.700 0.1400 60.00);
+  --category-intent: oklch(0.700 0.1400 87.69);
+  --category-commitment: oklch(0.700 0.1400 115.38);
+  --category-relationship: oklch(0.700 0.1400 143.08);
+  --category-event: oklch(0.700 0.1400 170.77);
+  --category-observation: oklch(0.700 0.1400 198.46);
+  --category-error: oklch(0.700 0.1400 226.15);
+  --category-learning: oklch(0.700 0.1400 253.85);
+  --category-fact: oklch(0.700 0.1400 281.54);
+  --category-reference: oklch(0.700 0.1400 309.23);
+  --category-instruction: oklch(0.700 0.1400 336.92);
+  --category-preference: oklch(0.700 0.1400 4.62);
+  --category-context: oklch(0.700 0.1400 32.31);
+}

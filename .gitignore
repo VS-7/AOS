@@ -7,3 +7,8 @@
 .DS_Store
 /testdata/**/large/
 /coverage.out
+
+# The desktop's copy of the frontend bundle. `task build:desktop` puts it there
+# because a Go embed pattern cannot reach outside its own package; committing a
+# build output would put a stale interface in the history.
+/cmd/aos-desktop/dist/

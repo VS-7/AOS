@@ -111,6 +111,10 @@ func New(cfg Config) *Server {
 
 		api.Group(func(guarded chi.Router) {
 			guarded.Use(authenticate(cfg.Auth, cfg.SecurityEnabled))
+			// What this build publishes. A client that can ask is a client that
+			// can say "the window and the daemon are different versions"
+			// instead of failing halfway through a screen.
+			guarded.Get("/_commands", s.commands)
 			s.mountCommands(guarded)
 		})
 
@@ -131,6 +135,30 @@ func New(cfg Config) *Server {
 	r.NotFound(s.notFound)
 	r.MethodNotAllowed(s.methodNotAllowed)
 	return s
+}
+
+// commands answers with the registry, as a client reads it.
+func (s *Server) commands(w http.ResponseWriter, r *http.Request) {
+	type info struct {
+		Key      string `json:"key"`
+		Group    string `json:"group"`
+		Name     string `json:"name"`
+		Summary  string `json:"summary"`
+		ReadOnly bool   `json:"readOnly"`
+	}
+	all := s.cfg.Registry.Sorted()
+	out := make([]info, 0, len(all))
+	for _, d := range all {
+		out = append(out, info{
+			Key: d.Key(), Group: d.Group(), Name: d.Name(),
+			Summary: d.Summary(), ReadOnly: d.Annotations().ReadOnlyHint,
+		})
+	}
+	w.Header().Set("content-type", "application/json")
+	if err := json.NewEncoder(w).Encode(out); err != nil {
+		s.cfg.Log.Warn("the command listing could not be written", "err", err)
+	}
+	_ = r
 }
 
 // Handler returns the router.

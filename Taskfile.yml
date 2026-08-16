@@ -26,12 +26,24 @@ tasks:
     desc: Regenerate everything derived from source
     cmds:
       - task: gen-catalog
+      - task: gen-tokens
+      - task: gen-schema
 
   gen-catalog:
     desc: Rebuild the error catalog from the apperr.New calls in the tree
     cmds:
       - go run ./tools/gencatalog
       - gofmt -w internal/core/apperr/catalog.gen.go
+
+  gen-tokens:
+    desc: Rebuild the theme token contract from the CSS the frontend reads
+    cmds:
+      - go run ./tools/gentokens
+
+  gen-schema:
+    desc: Rebuild the TypeScript types from the Go command registry
+    cmds:
+      - go run ./tools/genschema
 
   vet:
     cmds: [go vet ./...]
@@ -73,6 +85,25 @@ tasks:
       - task: cover
       - task: arch
       - task: graph
+
+  frontend:
+    desc: Build the single-page application
+    dir: frontend
+    cmds:
+      - npm ci --silent || npm install --silent
+      - npx tsc --noEmit
+      - npx vite build
+
+  build:desktop:
+    desc: Build the desktop application for this platform
+    deps: [frontend]
+    cmds:
+      # The embed pattern cannot reach outside cmd/aos-desktop, so the bundle
+      # is copied in first. The copy is generated and ignored by Git.
+      - rm -rf cmd/aos-desktop/dist
+      - mkdir -p cmd/aos-desktop/dist
+      - cp -R frontend/dist/. cmd/aos-desktop/dist/
+      - CGO_ENABLED=1 go build -trimpath -ldflags="{{.LDFLAGS}}" -o dist/aos-desktop ./cmd/aos-desktop
 
   build:
     cmds:

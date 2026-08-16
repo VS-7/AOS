@@ -1,0 +1,169 @@
+@import "./tokens.css";
+
+/*
+ * There is no Tailwind here yet, and the reason is worth writing down: the
+ * design system of the original is 121 shadcn components, and porting them is
+ * the bulk of the frontend rather than a detail of it. What exists now is the
+ * layout the three screens need, written against the same tokens those
+ * components will read — so the port replaces markup and not the palette.
+ */
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The desktop window is translucent; the browser has nothing behind it. */
+:root[data-windows="blur"] body { background: transparent; }
+
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 0.5);
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+button:hover { background: var(--accent); }
+button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+button[disabled] { opacity: 0.5; cursor: default; }
+
+input, textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 0.5);
+  padding: 0.5rem 0.7rem;
+  width: 100%;
+}
+input:focus-visible, textarea:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+a { color: var(--primary); }
+
+.app { display: grid; grid-template-columns: 15rem 1fr; height: 100%; }
+
+.sidebar {
+  background: var(--sidebar);
+  color: var(--sidebar-foreground);
+  border-right: 1px solid var(--sidebar-border);
+  padding: 1rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  /* The frameless window's traffic lights sit here on macOS. */
+  padding-top: 2.5rem;
+}
+.sidebar h1 { font-size: 0.95rem; margin: 0 0 0.75rem 0.4rem; letter-spacing: 0.02em; }
+.sidebar nav { display: flex; flex-direction: column; gap: 0.15rem; }
+.sidebar nav button { background: transparent; border-color: transparent; text-align: left; }
+.sidebar nav button[aria-current="page"] {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-accent-foreground);
+}
+.sidebar footer { margin-top: auto; display: flex; flex-direction: column; gap: 0.5rem; }
+
+.main { overflow: auto; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; min-height: 0; }
+.main > header { margin-bottom: 1rem; }
+.main h2 { margin: 0; font-size: 1.1rem; }
+.main .subtitle { color: var(--muted-foreground); margin: 0.25rem 0 0; }
+
+.card {
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+}
+
+.empty {
+  color: var(--muted-foreground);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 2rem;
+  text-align: center;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+}
+.status .dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--muted-foreground); }
+.status[data-state="open"] .dot { background: var(--primary); }
+.status[data-state="reconnecting"] .dot { background: var(--destructive); }
+
+/* Chat */
+.chat { display: grid; grid-template-rows: 1fr auto; gap: 1rem; flex: 1; min-height: 0; }
+.messages { overflow: auto; display: flex; flex-direction: column; gap: 0.75rem; padding-right: 0.5rem; }
+.message { display: flex; flex-direction: column; gap: 0.35rem; }
+.message .who { font-size: 0.75rem; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.05em; }
+.message .body { white-space: pre-wrap; }
+.message[data-role="user"] .body { background: var(--secondary); border-radius: var(--radius); padding: 0.6rem 0.85rem; align-self: flex-start; }
+
+/* Reasoning is collapsed by default: the prompt asks the agent for a decision,
+   not a transcript of its thinking, and the interface says the same thing. */
+.message details.reasoning summary { cursor: pointer; color: var(--muted-foreground); font-size: 0.8rem; }
+.message details.reasoning .body { color: var(--muted-foreground); font-size: 0.85rem; }
+
+.toolcall { border: 1px solid var(--border); border-radius: calc(var(--radius) * 0.5); padding: 0.5rem 0.7rem; }
+.toolcall summary { cursor: pointer; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+.toolcall pre { margin: 0.5rem 0 0; overflow: auto; font-size: 0.8rem; color: var(--muted-foreground); }
+.toolcall .truncated { color: var(--destructive); font-size: 0.75rem; }
+
+.composer { display: flex; gap: 0.5rem; align-items: flex-end; }
+.composer textarea { resize: vertical; min-height: 3.5rem; }
+
+/* Board */
+.board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(14rem, 1fr); gap: 0.75rem; overflow-x: auto; flex: 1; min-height: 0; }
+.column { display: flex; flex-direction: column; gap: 0.5rem; min-height: 0; }
+.column > h3 { margin: 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-foreground); }
+.column .cards { display: flex; flex-direction: column; gap: 0.5rem; overflow: auto; padding: 0.25rem; border-radius: var(--radius); min-height: 4rem; }
+.column .cards[data-over="true"] { background: var(--accent); outline: 2px dashed var(--ring); }
+.task { cursor: grab; }
+.task h4 { margin: 0 0 0.25rem; font-size: 0.9rem; }
+.task .meta { display: flex; gap: 0.5rem; flex-wrap: wrap; color: var(--muted-foreground); font-size: 0.75rem; }
+.task .progress { height: 0.25rem; background: var(--input); border-radius: 999px; overflow: hidden; margin-top: 0.5rem; }
+.task .progress > span { display: block; height: 100%; background: var(--primary); }
+
+/* Memory graph */
+.graph { display: grid; grid-template-columns: 1fr 18rem; gap: 1rem; flex: 1; min-height: 0; }
+.graph svg { width: 100%; height: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.graph .node { cursor: pointer; }
+.graph .node:focus-visible { outline: 2px solid var(--ring); }
+.graph .edge { stroke: var(--border); stroke-width: 1; }
+.graph .edge[data-kind="supersedes"] { stroke: var(--destructive); stroke-dasharray: 4 3; }
+.graph aside { overflow: auto; display: flex; flex-direction: column; gap: 0.75rem; }
+.legend { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.legend span { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; color: var(--muted-foreground); }
+.legend i { width: 0.6rem; height: 0.6rem; border-radius: 50%; display: inline-block; }
+
+/* The approval modal, which is the interface half of ADR-0007. */
+.approval-backdrop {
+  position: fixed; inset: 0; display: grid; place-items: center;
+  background: oklch(0 0 0 / 0.5); z-index: 50; padding: 1rem;
+}
+.approval {
+  background: var(--popover); color: var(--popover-foreground);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 1.25rem; width: min(34rem, 100%);
+  display: flex; flex-direction: column; gap: 0.75rem;
+}
+.approval pre { background: var(--muted); padding: 0.6rem; border-radius: calc(var(--radius) * 0.5); overflow: auto; font-size: 0.8rem; margin: 0; }
+.approval .actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+.approval .risk { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.approval .risk[data-risk="high"] { color: var(--destructive); }
+
+.error { color: var(--destructive); }
+.error .cta { color: var(--muted-foreground); font-size: 0.85rem; }
