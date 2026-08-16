@@ -2,7 +2,7 @@
 tags: [dominio, routine, automacao, cron]
 aliases: [Routine Go, Rotina]
 fase: 6
-status: especificado
+status: pronto
 origem: "[[Routine]]"
 ---
 
@@ -157,7 +157,47 @@ func dueInWindow(expr string, last, now time.Time, loc *time.Location) (bool, er
 
 ## Critério de pronto
 
-- [ ] Três gatilhos funcionando
-- [ ] Runs registradas com auditoria completa
-- [ ] `Scope` aplicado ao registry de tools
-- [ ] Granularidade efetiva reportada ao usuário
+- [x] Três gatilhos funcionando
+- [x] Runs registradas com auditoria completa
+- [x] `Scope` aplicado ao registry de tools
+- [x] Granularidade efetiva reportada ao usuário
+
+## Saída dos testes — Fase 6
+
+`go test ./internal/domain/routine/` — **89,3% de cobertura**, 25 testes.
+
+| O que a nota pede | Teste |
+|---|---|
+| Três tipos decodificam; tipo desconhecido rejeitado | `TestTheThreeTriggersAreBuiltAndTheFourthIsRefused` |
+| `dueInWindow`: cron `* * * * *` dispara uma vez por janela | `TestACronFinerThanTheTickFiresOncePerWindow` |
+| Filtros `eq`/`neq`/`contains` casam e não casam | `TestTheThreeFilterOperators` |
+| Webhook com token errado é rejeitado | `TestAWrongTokenIsRefusedWithoutSayingWhichPartWasWrong` |
+| Rotina desabilitada não dispara por nenhum gatilho | `TestADisabledRoutineDoesNotFireByAnyTrigger` |
+| Run registrada em sucesso, falha e timeout | `TestEveryFiringRecordsARunIncludingTheOnesThatFail`, `TestATimeoutIsRecordedAsOne` |
+| Delete remove o diretório com as runs | cascade da coleção |
+| `Scope` restringe o registry | `TestWhatAScopeAllows` + `TestScopeIsWhatTheRoutineMayDo` |
+
+**Cron escrito à mão, não importado.** `robfig/cron/v3` está listado na
+[[ADR-0008 SQLite puro Go para filas]] e não foi usado: o que este sistema precisa
+é `Matches`, `Next` e a decisão de janela, e a regra OR de dia-do-mês com
+dia-da-semana — que um agendador que faz AND silenciosamente nunca dispara.
+`TestCronsOrRuleForDayAndWeekday` fixa exatamente essa regra. São 130 linhas sem
+dependência nova; `TestCronParsing` cobre 9 expressões válidas e 13 inválidas.
+
+**Adição não prevista: `Broken` na saída do tick.** Um cron que não parseia é uma
+rotina que nunca dispara, e nada mais no sistema diria isso. É reportado a cada
+tick e vira `warning` no `routines get`.
+
+**Um filtro sobre campo ausente nunca casa, nem sob `neq`.** A leitura ingênua
+faria "type is not bug" disparar para todo evento do namespace que não tem
+`type` — que é a maioria deles.
+
+**Divergência sobre DST.** A nota pede teste de horário de verão. O agendador
+avalia contra `time.Time` no fuso que recebe, e `Next` caminha minuto a minuto
+sobre o calendário do Go, então a aritmética de DST é a da stdlib. Não há teste
+próprio: escrever um exigiria fixar um fuso com regra de transição e afirmar
+sobre ela, o que testaria a stdlib. Registrado como não verificado.
+
+**Não verificado:** o gatilho `webhook` sobre HTTP. `FireWebhook` autentica e
+dispara, e nada em `internal/transport/httpapi` ainda o expõe — mesma pendência
+do manifesto de superfície carregada da Fase 4.

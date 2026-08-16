@@ -57,6 +57,7 @@ Daemon chi na :5326 com `/api`, `/mcp`, `/ws`, `/v/*`; gateway com máquina de e
 
 **Notas:** [[Subconsciente (Go)]] · [[Task (Go)]] · [[Todo (Go)]] · [[Comment (Go)]] · [[Routine (Go)]] · [[Activity (Go)]] · [[ADR-0008 SQLite puro Go para filas]]
 **Entrega:** task executada autonomamente do início ao `in_review`, com memórias formadas sozinhas.
+**Entregue** em `v0.7.0-fase6`. `TestTheDeliveryOfPhaseSix`: uma rotina dispara por gatilho de activity, o agente leva a task de `in_progress` a `in_review` fechando cada passo com evidência e comentando o progresso, e o subconsciente forma uma memória que ninguém pediu. Pendências registradas nas notas: assinatura do subconsciente ainda em processo, `Guidance` registrada e não injetada, webhook sem superfície HTTP, índice de inbox por varredura.
 
 ### Fase 7 — Desktop
 Wails3 + React 19; services; bindings; WebSocket; 38 temas; aparência nativa.

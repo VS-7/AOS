@@ -2,7 +2,7 @@
 tags: [dominio, task, execucao, core]
 aliases: [Task Go, Tarefa]
 fase: 6
-status: especificado
+status: pronto
 origem: "[[Task]]"
 ---
 
@@ -235,8 +235,51 @@ Falha parcial deixa filhos órfãos invisíveis (não há `TASK.md` que os refer
 
 ## Critério de pronto
 
-- [ ] Task executada autonomamente do início ao `in_review`
-- [ ] Ciclo de oito estados com transições validadas
-- [ ] Worktree Git isolada confinando o sandbox
-- [ ] Checkpoint e retomada exata
-- [ ] `guardReview` impedindo conclusão sem evidência
+- [x] Task executada autonomamente do início ao `in_review`
+- [x] Ciclo de oito estados com transições validadas
+- [x] Worktree Git isolada confinando o sandbox
+- [x] Checkpoint e retomada exata
+- [x] `guardReview` impedindo conclusão sem evidência
+
+## Saída dos testes — Fase 6
+
+`go test ./internal/domain/task/` — **86,2% de cobertura**, 24 testes.
+
+A tabela de transições é verificada inteira: `TestTheLifecycleTableIsExhaustive`
+percorre os 64 pares e afirma cada um contra o grafo, em vez de amostrar as
+arestas interessantes. `TestFinishedWorkIsNotReopened` cobre a única linha vazia
+da tabela.
+
+| O que a nota pede | Teste |
+|---|---|
+| Tabela exaustiva, incluindo as inválidas | `TestTheLifecycleTableIsExhaustive` |
+| `Update` rejeita escrita no campo `status` | `TestUpdateRefusesToWriteStatus` |
+| `in_review` com todos pendentes é bloqueado | `TestReviewIsBlockedByAnOpenPlan` |
+| `in_progress` com dependência não concluída é bloqueado | `TestWorkDoesNotStartOnUnfinishedDependencies` |
+| Delete remove o diretório inteiro | cascade da coleção, `TestCascadeDeleteRemovesTheWholeDirectory` |
+| Checkpoint no `stop`; retomada usa os três | `TestStoppingWritesTheCheckpointAndResumingConsumesIt` |
+| Worktree criada, `onCreateScript` sob sandbox, poda no limite | `TestABranchIsCutFromThePrefixAndTheSlug`, `TestTheOldestFinishedCheckoutIsPrunedAndAnActiveOneIsNot` |
+| Assignee `user` não recebe dispatch | `TestOnlyAnAgentAssigneeIsDispatchable` |
+
+**Adições não previstas na nota, cada uma por um motivo.**
+
+`TASK_NOT_AN_ENTRY_POINT` — uma task só pode ser criada em `suggestion`,
+`backlog`, `planning` ou `todo`. Criar direto em `in_progress` pularia o guard de
+dependências; em `in_review`, o guard do plano. A tabela de transições não
+protege nada se a criação puder aterrissar em qualquer estado.
+
+`TASK_DEPENDENCY_CYCLE` — duas tasks que esperam uma pela outra nunca começam, e
+o sistema não teria como dizer isso depois. A checagem é uma busca em largura
+sobre `dependsOn`, feita no `update`.
+
+Dependência que não existe mais não bloqueia. É uma referência pendente, vale
+uma linha no log, e recusar o trabalho por causa dela é a punição errada.
+
+**Divergência: `tasks branch` fora da suíte de paridade.** Cria uma worktree Git
+de verdade, que exige um repositório que a instalação de paridade não tem. Está
+em `excluded` com a razão escrita, e o mesmo caminho de código é exercido pela
+suíte do domínio sobre um driver de worktree falso.
+
+**Não verificado:** worktree contra um repositório Git real. O adaptador
+`gitcli.Worktrees` traduz para `git worktree add/remove/list --porcelain` e nunca
+rodou contra um `git` de verdade nesta fase.

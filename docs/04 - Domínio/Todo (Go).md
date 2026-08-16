@@ -2,7 +2,7 @@
 tags: [dominio, todo, task]
 aliases: [Todo Go]
 fase: 6
-status: especificado
+status: pronto
 origem: "[[Todo]]"
 ---
 
@@ -92,6 +92,36 @@ Path: `.aos/tasks/{taskId}/todos/{id}.todo.md`. `{taskId}` e `{id}` vêm do cami
 
 ## Critério de pronto
 
-- [ ] CRUD completo com pai obrigatório
-- [ ] `CountPending` integrado ao guard de `in_review`
-- [ ] Checkpoint da task usando `pendingTodoIds` reais
+- [x] CRUD completo com pai obrigatório
+- [x] `CountPending` integrado ao guard de `in_review`
+- [x] Checkpoint da task usando `pendingTodoIds` reais
+
+## Saída dos testes — Fase 6
+
+`go test ./internal/domain/todo/` — **91,1% de cobertura**, 14 testes.
+
+| O que a nota pede | Teste |
+|---|---|
+| Round-trip com `taskId` e `id` do caminho | coberto pelo motor de coleções |
+| `SetStatus` valida; `Update` rejeita status | `TestAnInvalidMoveIsRefusedAndSaysWhatWasPossible`, `TestUpdateRefusesToWriteStatus` |
+| `CountPending` alimenta o `guardReview` | `TestCountPendingIsWhatTheReviewGuardReads` |
+| Delete da task cascateia os todos | cascade da coleção |
+| `Progress` bate com a contagem real | `TestCountPendingIsWhatTheReviewGuardReads` |
+| Ordem preservada na listagem | `TestAPlanWrittenOneCallAtATimeKeepsItsOrder` |
+
+**Divergência decidida com o usuário: o formato mudou.** A nota especificava
+`.aos/tasks/{taskId}/todos/{id}.todo.md` — Markdown com corpo — e o original usa
+`{id}.json` (`todo.collection.ts:18`). A nota não explicava a troca, então foi
+perguntado. Resposta: vale a nota. O corpo de um comentário é prosa, e prosa em
+string JSON é uma linha com `\n` escapado — exatamente o que a
+[[ADR-0004 Collections em Markdown]] rejeita. O todo segue o irmão para as duas
+subcoleções não divergirem entre si. `TestFormatMatchesTheOriginal` registra as
+duas exceções com a razão.
+
+**Adição além do previsto.** `SetStatus` para `finished` sem evidência devolve um
+`warning` no output — não bloqueia. Nem todo passo é verificável ("decidir a
+abordagem" tem resultado e não tem teste), e um sistema que recusa registrar um
+passo honesto ensina a escrever evidência desonesta.
+
+`PendingIDs` foi acrescentado ao port `Plan`: é o que o checkpoint da task grava
+para uma retomada saber exatamente onde parou.

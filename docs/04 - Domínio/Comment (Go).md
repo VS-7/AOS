@@ -2,7 +2,7 @@
 tags: [dominio, comment, task, colaboracao]
 aliases: [Comment Go, Comentário]
 fase: 6
-status: especificado
+status: pronto
 origem: "[[Comment]]"
 ---
 
@@ -86,6 +86,39 @@ Path: `.aos/tasks/{taskId}/comments/{id}.comment.md`.
 
 ## Critério de pronto
 
-- [ ] Autoria server-side aplicada e testada
-- [ ] Restrição de propriedade em update e delete
-- [ ] Threads de um nível funcionando
+- [x] Autoria server-side aplicada e testada
+- [x] Restrição de propriedade em update e delete
+- [x] Threads de um nível funcionando
+
+## Saída dos testes — Fase 6
+
+`go test ./internal/domain/comment/` — **88,9% de cobertura**, 13 testes.
+
+| O que a nota pede | Teste |
+|---|---|
+| Autor da identidade ambiente; payload ignorado | `TestAuthorshipComesFromTheRequestAndNotThePayload` + `TestCreateInputHasNoAuthorField` |
+| Agente A não edita comentário de B | `TestAnAgentOnlyEditsWhatItWrote` |
+| Usuário moderador é exceção explícita | `TestAModeratorIsTheExplicitException` |
+| `parentId` inexistente é rejeitado | `TestAReplyToNothingIsRefused` |
+| Resposta a uma resposta anexa à thread de topo | `TestAReplyToAReplyJoinsTheSameThread` |
+| Delete da task cascateia os comentários | cascade da coleção |
+
+`TestCreateInputHasNoAuthorField` afirma uma **ausência** por reflexão sobre o
+schema registrado. Um campo `author` acrescentado ali depois tornaria o
+agregado inteiro forjável em silêncio, e nenhum outro teste pegaria isso.
+
+**Adição: identidade é par, não string.** `TestAnAgentAndAUserWithTheSameNameAreNotTheSameActor` —
+sem comparar o tipo junto com o identificador, um agente chamado `vitor` editaria
+os comentários de uma pessoa chamada `vitor`.
+
+**Adição: apagar a cabeça de uma thread não apaga as respostas.** Elas sobem para
+o topo. Cascatear deixaria um participante apagar as palavras de outro removendo
+a mensagem que ele respondeu. O output nomeia as que subiram.
+
+**Divergência decidida com o usuário:** Markdown em vez do JSON do original —
+mesma decisão e mesma razão registradas em [[Todo (Go)]].
+
+**Divergência de nomenclatura.** O original aninha em `tasks comment create` /
+`tasks_comment_add`. O Command Layer aqui tem dois níveis por construção, então o
+grupo é `comments` com a task como primeiro argumento. A chamada tem o mesmo
+formato; só o nome é mais raso.

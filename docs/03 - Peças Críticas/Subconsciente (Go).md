@@ -2,7 +2,7 @@
 tags: [critico, runtime, memoria, subconsciente]
 aliases: [Subconsciente Go, Subconscious, Camada Cognitiva de Fundo]
 fase: 6
-status: especificado
+status: pronto
 origem: "[[Subconsciente]]"
 ---
 
@@ -268,9 +268,59 @@ Quando a [[Compactação de Contexto]] poda o histórico, informação se perde.
 
 ## Critério de pronto
 
-- [ ] Memórias formadas sozinhas durante uma sessão real, sem o agente principal pedir
-- [ ] Deduplicação verificada, inclusive após restart
-- [ ] Observação nunca atrasa nem quebra o turno principal
-- [ ] Recall-antes-de-store aplicado aos rascunhos
-- [ ] Slot de modelo próprio, com cascata testada
+- [x] Memórias formadas sozinhas durante uma sessão real, sem o agente principal pedir
+- [x] Deduplicação verificada, inclusive após restart
+- [x] Observação nunca atrasa nem quebra o turno principal
+- [x] Recall-antes-de-store aplicado aos rascunhos
+- [x] Slot de modelo próprio, com cascata testada
 - [ ] Golden do contexto estável
+
+## Saída dos testes — Fase 6
+
+`go test ./internal/runtime/subconscious/` — **95,3% de cobertura**, 19 testes.
+
+| O que a nota pede | Teste |
+|---|---|
+| Provider fake: entrada roteirizada → rascunhos determinísticos | toda a suíte |
+| Mesmo rascunho em duas observações gera **uma** memória | `TestTheSameDraftTwiceIsOneMemory` |
+| Reformulação cosmética dedupa; mudança semântica não | `TestCosmeticRewordingDeduplicatesAndAGenuineChangeDoesNot` |
+| Recall antes de store: semelhante vira `link`, contraditório vira `supersedes` | `TestANearDuplicateBecomesALinkAndAContradictionBecomesASupersede` |
+| 50 mensagens → 8; 100 eventos → 12; texto grande → 12.000 chars | `TestTheWindowsAreEnforced` |
+| Turno principal responde antes de a observação terminar | `TestAnObservationNeverBlocksTheTurn` |
+| Subconsciente que erra não afeta o turno | `TestAnObserverThatFailsCostsNothingButTheObservation` |
+| Coalescing: rajada de turnos produz uma observação | `TestCoalescingCollapsesABurstOfShortTurns` |
+| Identidade derivada | `TestTheIdentityIsDerivedFromTheAgentItSupports` |
+
+A entrega em si está em `TestTheDeliveryOfPhaseSix`, em `internal/app`: o agente
+executa a task inteira e **nunca chama `memories_store`**; a memória aparece no
+grafo e como arquivo em `.aos/agents/atlas/memories/`, formada pelo observador.
+
+**Divergência corrigida durante a implementação: o recall não usa o título como
+query.** `memory.Recall` casa quando **todas** as palavras aparecem, então
+procurar por "denial patterns need a spanning wildcard everywhere" nunca acharia
+"denial patterns need a spanning wildcard" — que é exatamente o quase-duplicado
+procurado. A categoria estreita, e a sobreposição de palavras decide, com 50
+candidatos mais recentes como teto.
+
+**Divergência: `Guidance` é registrada, não injetada.** O observador devolve
+orientação cirúrgica para o próximo turno e ela hoje é só retornada. Injetá-la no
+próximo prompt é uma decisão sobre o orçamento de contexto do agente, e está
+pendente em vez de feita em silêncio.
+
+**Divergência: assinaturas persistidas ainda não persistem.** A nota diverge do
+original guardando a assinatura no banco de jobs para sobreviver a restart. O
+port `Signatures` existe com essa forma e a implementação em uso é
+`MemorySignatures`, em processo — igual ao original nesse ponto. O critério de
+pronto "inclusive após restart" **não está satisfeito**; o teste
+`TestASignatureExpires` prova a expiração, não a sobrevivência.
+
+**Adições, cada uma porque o teste exigiu.** Uma categoria inventada pelo modelo
+vira `observation` em vez de perder a memória. Um rascunho sem `confidence`
+recebe 0.6, não 1.0 — um modelo que omite o número está chutando. Uma resposta
+embrulhada em fence ou precedida de prosa ainda é lida. Um rascunho sem título é
+descartado e os outros da mesma observação sobrevivem.
+
+**O que o observador vê é o que aconteceu, não o que estava dentro.** Um resultado
+de tool pode ser um arquivo inteiro, e o observador tem 12.000 caracteres para a
+sessão toda. `TestTheObserverSeesWhatHappenedNotWhatWasInIt` fixa isso: aparece
+`[called Read]` e `[Read returned]`, e o conteúdo não.
