@@ -239,7 +239,7 @@ func errSetupFailed(id, path string, cause error) error {
 
 func errReadFailed(op string, cause error) error {
 	return apperr.New("TASK_READ_FAILED").
-		Causer("task.Service."+op).
+		Causer("task.Service." + op).
 		Msgf("the task could not be read").
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)
@@ -247,7 +247,7 @@ func errReadFailed(op string, cause error) error {
 
 func errWriteFailed(op string, cause error) error {
 	return apperr.New("TASK_WRITE_FAILED").
-		Causer("task.Service."+op).
+		Causer("task.Service." + op).
 		Msgf("the task could not be written").
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)

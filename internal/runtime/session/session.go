@@ -25,6 +25,7 @@ import (
 	"github.com/OWNER/aos/internal/runtime/agentloop"
 	"github.com/OWNER/aos/internal/runtime/prompt"
 	"github.com/OWNER/aos/internal/runtime/sandbox"
+	"github.com/OWNER/aos/internal/runtime/subconscious"
 	"github.com/OWNER/aos/internal/runtime/toolexec"
 	"github.com/OWNER/aos/internal/runtime/toolexec/tools"
 )
@@ -83,11 +84,29 @@ type Publisher interface {
 	ChatDone(ctx context.Context, workspace, chatID string, usage chat.TokenUsage)
 }
 
+// Observer is the background cognitive layer, fired when a turn ends.
+//
+// It is an interface here rather than the concrete observer so that the session
+// package does not depend on the subconscious: the turn's contract is "somebody
+// may want to know this happened", and what that somebody does with it is not
+// the turn's business.
+type Observer interface {
+	Schedule(ctx context.Context, in subconscious.Input)
+}
+
 // Runner executes turns.
 type Runner struct {
-	deps Deps
-	log  *slog.Logger
+	deps     Deps
+	log      *slog.Logger
+	observer Observer
 }
+
+// SetObserver attaches the background observer after both exist.
+//
+// The observer resolves its own model through the same configuration the runner
+// reads, so one of the two has to be handed to the other once both are built.
+// It is set once at boot, before a turn can arrive.
+func (r *Runner) SetObserver(o Observer) { r.observer = o }
 
 // New wires the runner.
 func New(d Deps) *Runner {
@@ -208,7 +227,27 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (*agentloop.Result, erro
 	if r.deps.Events != nil {
 		r.deps.Events.ChatDone(ctx, r.deps.WorkspaceID, conversation.ID, usageOf(result.Usage))
 	}
+	r.observe(ctx, worker, conversation.ID, state)
 	return result, nil
+}
+
+// observe hands the finished turn to the background layer.
+//
+// It is the last thing Run does and it does not wait: the observation is fired
+// on a detached context with its own timeout, so a slow or failing observer
+// never delays the answer somebody is reading. Losing an observation is a
+// warning; losing the answer would not be.
+func (r *Runner) observe(ctx context.Context, worker *agent.Agent, sessionID string, state *agentloop.State) {
+	if r.observer == nil {
+		return
+	}
+	r.observer.Schedule(ctx, subconscious.Input{
+		AgentID:   worker.ID,
+		AgentName: worker.DisplayName(),
+		SessionID: sessionID,
+		Workspace: r.deps.WorkspaceID,
+		Messages:  state.Messages,
+	})
 }
 
 // sandboxFor builds the confinement from the agent's own file.

@@ -59,7 +59,7 @@ func TestCreateInputHasNoAuthorField(t *testing.T) {
 // TestTheInputsThatCannotBeAccepted.
 func TestTheInputsThatCannotBeAccepted(t *testing.T) {
 	svc := newService(t, nil)
-	mine := mustCreate(t, svc, asAgent("atlas"), CreateInput{Task: "t-1", Body: "mine"})
+	mine := mustCreate(asAgent("atlas"), t, svc, CreateInput{Task: "t-1", Body: "mine"})
 
 	cases := []struct {
 		name string

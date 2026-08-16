@@ -45,7 +45,7 @@ func errInvalidTime(field, raw string, cause error) error {
 
 func errReadFailed(op string, cause error) error {
 	return apperr.New("ACTIVITY_READ_FAILED").
-		Causer("activity.Service."+op).
+		Causer("activity.Service." + op).
 		Msgf("the activity log could not be read").
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)
@@ -53,7 +53,7 @@ func errReadFailed(op string, cause error) error {
 
 func errWriteFailed(op string, cause error) error {
 	return apperr.New("ACTIVITY_WRITE_FAILED").
-		Causer("activity.Service."+op).
+		Causer("activity.Service." + op).
 		Msgf("the activity log could not be written").
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)

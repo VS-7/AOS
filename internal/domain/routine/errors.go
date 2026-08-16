@@ -7,7 +7,7 @@ import (
 
 func errAgentRequired(op string) error {
 	return apperr.New("ROUTINE_AGENT_REQUIRED").
-		Causer("routine.Service."+op).
+		Causer("routine.Service." + op).
 		Msgf("a routine belongs to an agent, and this request names none").
 		Status(apperr.StatusBadRequest).
 		CTA(apperr.CallToAction{
@@ -219,7 +219,7 @@ func errRunFailed(id string, cause error) error {
 
 func errReadFailed(op string, cause error) error {
 	return apperr.New("ROUTINE_READ_FAILED").
-		Causer("routine.Service."+op).
+		Causer("routine.Service." + op).
 		Msgf("the routine could not be read").
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)
@@ -227,7 +227,7 @@ func errReadFailed(op string, cause error) error {
 
 func errWriteFailed(op string, cause error) error {
 	return apperr.New("ROUTINE_WRITE_FAILED").
-		Causer("routine.Service."+op).
+		Causer("routine.Service." + op).
 		Msgf("the routine could not be written").
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)

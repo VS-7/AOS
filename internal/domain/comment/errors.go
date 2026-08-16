@@ -7,7 +7,7 @@ import (
 
 func errTaskRequired(op string) error {
 	return apperr.New("COMMENT_TASK_REQUIRED").
-		Causer("comment.Service."+op).
+		Causer("comment.Service." + op).
 		Msgf("a comment identifier means nothing without the task it belongs to").
 		Status(apperr.StatusBadRequest).
 		CTA(apperr.CallToAction{
@@ -88,7 +88,7 @@ func errForbidden(id, author, actor string) error {
 
 func errReadFailed(op string, cause error) error {
 	return apperr.New("COMMENT_READ_FAILED").
-		Causer("comment.Service."+op).
+		Causer("comment.Service." + op).
 		Msgf("the discussion could not be read").
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)
@@ -96,7 +96,7 @@ func errReadFailed(op string, cause error) error {
 
 func errWriteFailed(op string, cause error) error {
 	return apperr.New("COMMENT_WRITE_FAILED").
-		Causer("comment.Service."+op).
+		Causer("comment.Service." + op).
 		Msgf("the comment could not be written").
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)

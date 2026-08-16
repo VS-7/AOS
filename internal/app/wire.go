@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/OWNER/aos/internal/adapters/activitylog"
 	"github.com/OWNER/aos/internal/adapters/bleveindex"
 	"github.com/OWNER/aos/internal/adapters/eventlog"
 	"github.com/OWNER/aos/internal/adapters/fsauth"
@@ -20,6 +21,7 @@ import (
 	"github.com/OWNER/aos/internal/adapters/fsconfig"
 	"github.com/OWNER/aos/internal/adapters/fsworkspace"
 	"github.com/OWNER/aos/internal/adapters/gitcli"
+	"github.com/OWNER/aos/internal/adapters/sqlitequeue"
 	"github.com/OWNER/aos/internal/adapters/supervise"
 	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/clockx"
@@ -29,17 +31,27 @@ import (
 	"github.com/OWNER/aos/internal/core/env"
 	"github.com/OWNER/aos/internal/core/ids"
 	"github.com/OWNER/aos/internal/core/logging"
+	"github.com/OWNER/aos/internal/domain/activity"
 	"github.com/OWNER/aos/internal/domain/agent"
 	"github.com/OWNER/aos/internal/domain/auth"
 	"github.com/OWNER/aos/internal/domain/chat"
+	"github.com/OWNER/aos/internal/domain/comment"
 	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/domain/event"
 	"github.com/OWNER/aos/internal/domain/gateway"
+	"github.com/OWNER/aos/internal/domain/job"
 	"github.com/OWNER/aos/internal/domain/memory"
+	"github.com/OWNER/aos/internal/domain/routine"
+	"github.com/OWNER/aos/internal/domain/task"
+	"github.com/OWNER/aos/internal/domain/todo"
 	"github.com/OWNER/aos/internal/domain/workspace"
+	"github.com/OWNER/aos/internal/runtime/agentloop"
 	"github.com/OWNER/aos/internal/runtime/prompt"
+	"github.com/OWNER/aos/internal/runtime/providers"
 	"github.com/OWNER/aos/internal/runtime/session"
+	"github.com/OWNER/aos/internal/runtime/subconscious"
 	"github.com/OWNER/aos/internal/runtime/toolexec"
+	"github.com/OWNER/aos/internal/runtime/worker"
 	"github.com/OWNER/aos/internal/transport/realtime"
 )
 
@@ -84,6 +96,27 @@ type App struct {
 	// Runtime executes turns. It is exported so a test can run one and assert
 	// on the result rather than on a goroutine it has to wait for.
 	Runtime *session.Runner
+
+	// The continuity aggregates: work that outlives a conversation.
+	Tasks      *task.Service
+	Todos      *todo.Service
+	Comments   *comment.Service
+	Routines   *routine.Service
+	Activities *activity.Service
+	Jobs       *job.Service
+
+	// Queue is the durable store behind the worker. It is exported so a test
+	// can enqueue and drain deterministically rather than waiting on a tick.
+	Queue job.Queue
+
+	// Worker drains the queue and runs the periodic tick. It is not started by
+	// New: a CLI process that runs one command must not begin executing the
+	// daemon's backlog.
+	Worker *worker.Pool
+
+	// Subconscious is the background observer. Exported so a test can run one
+	// pass and assert on the memory it formed.
+	Subconscious *subconscious.Observer
 
 	// Events is the server-push hub. It exists whether or not anything is
 	// listening, so a publisher never has to check.
@@ -261,6 +294,58 @@ func New(opts Options) (*App, error) {
 	})
 	closers = append(closers, func() error { broker.Close(); return nil })
 
+	// The continuity aggregates. The order matters in one place only: the task
+	// service needs the plan, and the plan needs to know a task exists, so the
+	// two are built with the todo service first and its parent set after.
+	activityLog := activitylog.New(root)
+	activitySvc := activity.NewService(activity.Deps{
+		Log:    activityLog,
+		Read:   activitylog.NewReadStore(root),
+		Clock:  clock,
+		IDs:    idgen,
+		Sinks:  []activity.Sink{realtimeSink{hub: events, workspace: active}},
+		Logger: logger,
+	})
+
+	todoSvc := todo.NewService(todo.Deps{Repo: repos.todos, Clock: clock, IDs: idgen, Log: logger})
+	taskSvc := task.NewService(task.Deps{
+		Repo:      repos.tasks,
+		Plan:      planner{todos: todoSvc},
+		Directory: assignees{agents: agentSvc},
+		Worktrees: gitcli.NewWorktrees(gitcli.New(), root),
+		Setup:     setupScript{agents: agentSvc, tmp: paths.Outputs(), log: logger},
+		Policy: taskPolicy{
+			workspaces: workspaceSvc, active: active,
+			root: filepath.Join(paths.Data(), "worktrees"),
+		},
+		Notifier: taskActivity{activities: activitySvc, log: logger},
+		Clock:    clock,
+		IDs:      idgen,
+		Log:      logger,
+	})
+	// The subcollections learn their parent now that it exists. Passing the
+	// service into its own dependencies would be the other way to write this,
+	// and it would let a todo move the task it belongs to.
+	todoSvc.SetParent(taskSvc)
+	commentSvc := comment.NewService(comment.Deps{
+		Repo: repos.comments, Parent: taskSvc, Clock: clock, IDs: idgen, Log: logger,
+	})
+
+	routineSvc := routine.NewService(routine.Deps{
+		Repo:      repos.routines,
+		Runs:      repos.runs,
+		Tokens:    tokens{},
+		Directory: agentDirectory{agents: agentSvc},
+		Notifier:  routineActivity{activities: activitySvc, log: logger},
+		Clock:     clock,
+		IDs:       idgen,
+		Tick:      resolver.Duration(env.KeyJobsTick, job.DefaultTick),
+		Log:       logger,
+	})
+	// The reactive loop closes here: a mutation publishes an activity, and the
+	// activity fires the routines that were waiting for it.
+	activitySvc.AddSink(routineTriggers{routines: routineSvc})
+
 	reg := command.NewRegistry()
 	config.Register(reg, configSvc)
 	registerApprovals(reg, broker)
@@ -269,7 +354,11 @@ func New(opts Options) (*App, error) {
 	agent.Register(reg, agentSvc)
 	memory.Register(reg, memorySvc)
 	chat.Register(reg, chatSvc)
-	reg.Freeze()
+	task.Register(reg, taskSvc)
+	todo.Register(reg, todoSvc)
+	comment.Register(reg, commentSvc)
+	routine.Register(reg, routineSvc)
+	activity.Register(reg, activitySvc)
 
 	assembler := prompt.NewAssembler(prompt.Deps{
 		Clock:  promptClock{clock: clock, zone: zoneFrom(configSvc, logger)},
@@ -298,6 +387,64 @@ func New(opts Options) (*App, error) {
 	})
 	dispatch.to = runtime
 
+	// The background observer. It runs on its own slot so a cheap model can
+	// watch while an expensive one reasons, and it is handed to the runtime as
+	// the thing that fires when a turn ends.
+	observer := subconscious.New(subconscious.Deps{
+		Models: subconsciousModels{
+			config: configSvc, agents: agentSvc, home: filepath.Dir(paths.Root),
+			build: func(provider, key string) (agentloop.LLMProvider, error) {
+				return providers.Build(provider, providers.Config{
+					APIKey: key, Home: filepath.Dir(paths.Root),
+				})
+			},
+		},
+		Memories:   memorySvc,
+		Signatures: subconscious.NewMemorySignatures(clock.Now),
+		Clock:      clock.Now,
+		Log:        logger,
+	})
+	runtime.SetObserver(observer)
+
+	routineSvc.SetExecutor(routineExecutor{chats: chatSvc, runtime: runtime, log: logger})
+
+	// The queue and the pool that drains it. Opening the database is allowed to
+	// fail: a process that cannot defer work should still be able to answer a
+	// question, and the error says which capability was lost.
+	var queue job.Queue
+	if opened, err := sqlitequeue.Open(sqlitequeue.Options{
+		Path: paths.JobsDB(), Clock: clock.Now,
+	}); err != nil {
+		logger.Warn("continuing without a work queue: nothing will run in the background", "err", err)
+	} else {
+		queue = opened
+		closers = append(closers, opened.Close)
+	}
+
+	jobSvc := job.NewService(job.Deps{Queue: queue, Clock: clock, Log: logger})
+	job.Register(reg, jobSvc)
+	reg.Freeze()
+
+	var pool *worker.Pool
+	if queue != nil {
+		pool = worker.New(worker.Deps{
+			Queue: queue,
+			Handlers: map[string]job.Handler{
+				kindTurn: turnHandler{runtime: runtime},
+			},
+			Ticks: []worker.Tick{
+				{Name: "routines", Run: routineTick(routineSvc, active)},
+				{Name: "activity-retention", Run: activityRetention(activitySvc)},
+				{Name: "job-retention", Run: jobRetention(queue)},
+			},
+			Concurrency: resolver.Int(env.KeyJobsConcurrency, job.DefaultConcurrency),
+			TickRate:    resolver.Duration(env.KeyJobsTick, job.DefaultTick),
+			Lease:       job.DefaultLease,
+			Heartbeat:   job.DefaultHeartbeat,
+			Log:         logger,
+		})
+	}
+
 	return &App{
 		Paths:      paths,
 		Workspace:  root,
@@ -313,8 +460,19 @@ func New(opts Options) (*App, error) {
 		Approvals:  broker,
 		Runtime:    runtime,
 		Events:     events,
-		env:        resolver,
-		closers:    closers,
+
+		Tasks:        taskSvc,
+		Todos:        todoSvc,
+		Comments:     commentSvc,
+		Routines:     routineSvc,
+		Activities:   activitySvc,
+		Jobs:         jobSvc,
+		Queue:        queue,
+		Worker:       pool,
+		Subconscious: observer,
+
+		env:     resolver,
+		closers: closers,
 	}, nil
 }
 
@@ -337,6 +495,11 @@ type repoSet struct {
 	agents   *fscollections.Repo[agent.Agent]
 	memories *fscollections.Repo[memory.Memory]
 	chats    *fscollections.Repo[chat.Chat]
+	tasks    *fscollections.Repo[task.Task]
+	todos    *fscollections.Repo[todo.Todo]
+	comments *fscollections.Repo[comment.Comment]
+	routines *fscollections.Repo[routine.Routine]
+	runs     *fscollections.Repo[routine.Run]
 }
 
 func newRepoSet(root string, lock *collections.PathLock, index *fscollections.Index) (repoSet, error) {
@@ -352,6 +515,26 @@ func newRepoSet(root string, lock *collections.PathLock, index *fscollections.In
 	if err != nil {
 		return repoSet{}, err
 	}
+	taskModel, err := collections.ModelOf[task.Task]("tasks")
+	if err != nil {
+		return repoSet{}, err
+	}
+	todoModel, err := collections.ModelOf[todo.Todo]("todos")
+	if err != nil {
+		return repoSet{}, err
+	}
+	commentModel, err := collections.ModelOf[comment.Comment]("comments")
+	if err != nil {
+		return repoSet{}, err
+	}
+	routineModel, err := collections.ModelOf[routine.Routine]("routines")
+	if err != nil {
+		return repoSet{}, err
+	}
+	runModel, err := collections.ModelOf[routine.Run]("runs")
+	if err != nil {
+		return repoSet{}, err
+	}
 	return repoSet{
 		agents: fscollections.New(root, agentModel,
 			fscollections.WithLock[agent.Agent](lock),
@@ -364,6 +547,26 @@ func newRepoSet(root string, lock *collections.PathLock, index *fscollections.In
 		chats: fscollections.New(root, chatModel,
 			fscollections.WithLock[chat.Chat](lock),
 			fscollections.WithIndex[chat.Chat](index),
+		),
+		tasks: fscollections.New(root, taskModel,
+			fscollections.WithLock[task.Task](lock),
+			fscollections.WithIndex[task.Task](index),
+		),
+		todos: fscollections.New(root, todoModel,
+			fscollections.WithLock[todo.Todo](lock),
+			fscollections.WithIndex[todo.Todo](index),
+		),
+		comments: fscollections.New(root, commentModel,
+			fscollections.WithLock[comment.Comment](lock),
+			fscollections.WithIndex[comment.Comment](index),
+		),
+		routines: fscollections.New(root, routineModel,
+			fscollections.WithLock[routine.Routine](lock),
+			fscollections.WithIndex[routine.Routine](index),
+		),
+		runs: fscollections.New(root, runModel,
+			fscollections.WithLock[routine.Run](lock),
+			fscollections.WithIndex[routine.Run](index),
 		),
 	}, nil
 }

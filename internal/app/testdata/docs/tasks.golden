@@ -1,0 +1,459 @@
+# tool: Tasks
+
+Work that somebody is accountable for finishing.
+
+A task is not a reminder. It has eight lifecycle states, an owner, a plan of
+steps, a discussion, and a review it has to pass. Only an agent assignee is
+dispatched autonomously; a task owned by a person is tracked, not executed.
+
+## Commands
+- **list** — the tasks, filtered by status, type, owner, project or goal
+- **get** — one task with its resolved owner, plan progress and blockers
+- **create** — record work in one of the four entry states
+- **update** — change what the task says
+- **set-status** — move it, with the guards that go with the move
+- **branch** — cut the isolated Git checkout it executes in
+- **delete** — remove it with its plan, discussion and runs
+
+## Lifecycle
+suggestion → backlog → planning → todo → in_progress → in_review → finished,
+with stopped reachable from the middle three and returning to them.
+
+## When to use
+- **Work that outlives a conversation:** anything you would otherwise re-explain
+- **Work you will hand to an agent:** assign it and it gets dispatched
+
+## When NOT to use
+- Not for a step inside work that already exists — that is a todo
+- Not for something you will do in this reply
+
+Composite tool `Tasks` with 7 actions: branch, create, delete, get, list, set-status, update.
+
+Status moves with set-status, never with update. The move is validated and the
+guards run; a field write would route around both.
+
+A task cannot reach in_review while any step of its plan is open. That is
+enforced here, not merely advised: finish each step with the evidence for it, or
+skip the ones that stopped applying.
+
+While executing a task, report progress in its comments, not in chat. Nobody is
+watching the chat when you run autonomously.
+
+## Usage
+Call as `Tasks({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### tasks_branch
+
+Cut the isolated checkout a task executes in.
+
+Create a Git worktree on the task's own branch.
+
+The sandbox root becomes that checkout, so an agent working on the task cannot
+touch the main working tree. The workspace's onCreateScript runs inside it
+afterwards, under the assigned agent's sandbox policy rather than with free
+rein — a setup script is third-party code in most workspaces.
+
+Old checkouts are pruned to the workspace limit, oldest finished task first. One
+belonging to work still in progress is never taken.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the task."
+    },
+    "branch": {
+      "type": "string",
+      "description": "Branch name. Generated from the workspace prefix and the task slug when left out."
+    },
+    "base": {
+      "type": "string",
+      "description": "Branch to cut from."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### tasks_create
+
+Record a unit of work.
+
+Create a task in one of the four entry states: suggestion, backlog,
+planning or todo.
+
+It cannot be created directly in in_progress or in_review — a task that starts
+there has skipped every guard on the way, including the one that says work in
+review has a finished plan behind it.
+
+Assign it to an agent and it becomes eligible for autonomous dispatch. Assign it
+to a person and the system tracks it without executing it.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "What the work is. Example: \"Denial patterns never match a command line\"."
+    },
+    "type": {
+      "type": "string",
+      "description": "One of the workspace's task types. Example: \"bug\"."
+    },
+    "status": {
+      "type": "string",
+      "description": "Where it starts: suggestion, backlog, planning or todo. Defaults to backlog."
+    },
+    "priority": {
+      "type": "string",
+      "description": "One of: no_priority, urgent, high, medium, low."
+    },
+    "assigned": {
+      "type": "string",
+      "description": "Agent slug or user identifier. Only an agent is dispatched autonomously."
+    },
+    "summary": {
+      "type": "string",
+      "description": "One-paragraph statement of the work."
+    },
+    "dueAt": {
+      "type": "string",
+      "description": "RFC3339 instant it is due."
+    },
+    "project": {
+      "type": "string",
+      "description": "Project this belongs to."
+    },
+    "goal": {
+      "type": "string",
+      "description": "Goal this serves."
+    },
+    "dependsOn": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "Tasks that must finish before this one can start."
+    },
+    "worktree": {
+      "type": "boolean",
+      "description": "Run this task in an isolated Git checkout."
+    },
+    "base": {
+      "type": "string",
+      "description": "Branch the checkout is cut from."
+    },
+    "content": {
+      "type": "string",
+      "description": "The description and plan, in Markdown."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "name",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### tasks_delete
+
+Remove a task and everything under it.
+
+Delete the task directory: the task, its plan, its discussion and its
+runs.
+
+This is not reversible and it removes the record of how the work was thought
+about. A task that turned out to be unnecessary is usually better moved to
+finished with a comment saying why.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the task."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### tasks_get
+
+Read one task.
+
+One task in full: its description, its owner resolved, how much of its
+plan is done, and what it is blocked by.
+
+Read this before starting work. The blockers are the part people skip and then
+discover halfway through.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the task."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### tasks_list
+
+List the tasks.
+
+The tasks of this workspace, newest first.
+
+Each carries its resolved owner — which decides whether it can be dispatched —
+its plan progress, and the dependencies still standing in its way.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "description": "Only tasks in this status."
+    },
+    "type": {
+      "type": "string",
+      "description": "Only tasks of this workspace type. Example: \"bug\"."
+    },
+    "assigned": {
+      "type": "string",
+      "description": "Only tasks owned by this agent or user."
+    },
+    "project": {
+      "type": "string",
+      "description": "Only tasks in this project."
+    },
+    "goal": {
+      "type": "string",
+      "description": "Only tasks serving this goal."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "How many to return."
+    },
+    "offset": {
+      "type": "integer",
+      "description": "How many to skip."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### tasks_set-status
+
+Move a task through its lifecycle.
+
+Move a task, with the guards that belong to the move.
+
+Moving to in_review requires every step of the plan to be finished or skipped.
+Moving to in_progress requires the dependencies to be finished. Moving to
+stopped writes a checkpoint — the conversation, the job, the open steps and the
+progress — so a resumed run starts where this one ended rather than at the
+beginning.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the task."
+    },
+    "status": {
+      "type": "string",
+      "description": "One of: suggestion, backlog, planning, todo, in_progress, stopped, in_review, finished."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Why. Recorded on the checkpoint when stopping."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "status",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### tasks_update
+
+Change what a task says.
+
+Change a task's name, type, owner, priority, dependencies or body.
+
+Status is not writable here and the attempt is refused. Dependencies are checked
+for cycles: a pair of tasks that wait on each other could never start, and the
+system would have no way to say so later.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the task."
+    },
+    "name": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New name. The slug follows it."
+    },
+    "type": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New workspace task type."
+    },
+    "assigned": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New owner. Empty unassigns."
+    },
+    "priority": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New priority."
+    },
+    "summary": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New summary."
+    },
+    "dueAt": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New due date, RFC3339. Empty clears it."
+    },
+    "project": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New project."
+    },
+    "goal": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New goal."
+    },
+    "dependsOn": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "New dependency list. Replaces the old one whole."
+    },
+    "chat": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "Conversation this task's execution runs in."
+    },
+    "content": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New description and plan, in Markdown."
+    },
+    "status": {
+      "type": "string",
+      "description": "Not writable here. Use set-status, which validates the move and runs the guards."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+

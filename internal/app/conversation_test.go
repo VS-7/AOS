@@ -3,6 +3,7 @@ package app_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,16 +34,48 @@ import (
 // prompt, the sandbox, the tools, the hooks, the persistence — is the real
 // thing.
 var script struct {
-	mu sync.Mutex
-	on *fake.Provider
+	mu       sync.Mutex
+	on       *fake.Provider
+	observer *fake.Provider
 }
 
 func init() {
 	providers.Register("scripted", func(providers.Config) (agentloop.LLMProvider, error) {
 		script.mu.Lock()
 		defer script.mu.Unlock()
+		if script.on == nil {
+			return nil, errors.New("no script is loaded")
+		}
 		return script.on, nil
 	})
+	// The background observer runs on its own slot, as it does in production:
+	// a cheap model watching while an expensive one reasons. Pointing it at the
+	// main script instead would make the observation eat the agent's next step.
+	providers.Register("observer", func(providers.Config) (agentloop.LLMProvider, error) {
+		script.mu.Lock()
+		defer script.mu.Unlock()
+		if script.observer == nil {
+			return nil, errors.New("no observer script is loaded")
+		}
+		return script.observer, nil
+	})
+}
+
+// observing loads the answer the background observer will give. Without a call
+// to it the observer's provider refuses, which is what an installation with no
+// subconscious model configured looks like — the turn is unaffected either way.
+func observing(t *testing.T, steps ...fake.Step) *fake.Provider {
+	t.Helper()
+	p := &fake.Provider{Script: steps, ProviderName: "observer"}
+	script.mu.Lock()
+	script.observer = p
+	script.mu.Unlock()
+	t.Cleanup(func() {
+		script.mu.Lock()
+		script.observer = nil
+		script.mu.Unlock()
+	})
+	return p
 }
 
 func play(t *testing.T, steps ...fake.Step) *fake.Provider {
@@ -88,6 +121,9 @@ func conversing(t *testing.T) (*app.App, string) {
 		"agents.models": map[string]any{
 			"default": map[string]any{
 				"provider": "scripted", "model": "test-model", "reasoning": "medium",
+			},
+			"subconscious": map[string]any{
+				"provider": "observer", "model": "small-model",
 			},
 		},
 	}}); err != nil {

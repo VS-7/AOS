@@ -64,6 +64,14 @@ func NewService(d Deps) *Service {
 	}
 }
 
+// SetExecutor binds the runtime after both exist.
+//
+// A routine's run is a real turn, and a turn writes back to the conversation
+// the runtime owns — so the runtime cannot be built before this aggregate and
+// this aggregate cannot be built before it. The pointer is set once at boot,
+// before any request can arrive.
+func (s *Service) SetExecutor(e Executor) { s.executor = e }
+
 // List returns the routines, with the effective resolution of each schedule.
 func (s *Service) List(ctx context.Context, in ListInput) (ListOutput, error) {
 	q := collections.Query{IncludeContent: false}

@@ -7,7 +7,7 @@ import (
 
 func errNoQueue(op string) error {
 	return apperr.New("JOB_QUEUE_UNAVAILABLE").
-		Causer("job.Service."+op).
+		Causer("job.Service." + op).
 		Msgf("this process has no queue: deferred work runs in the daemon").
 		Status(apperr.StatusServiceUnavailable).
 		CTA(apperr.CallToAction{
@@ -42,7 +42,7 @@ func errInvalidStatus(status string) error {
 
 func errReadFailed(op string, cause error) error {
 	return apperr.New("JOB_READ_FAILED").
-		Causer("job.Service."+op).
+		Causer("job.Service." + op).
 		Msgf("the queue could not be read").
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)
@@ -50,7 +50,7 @@ func errReadFailed(op string, cause error) error {
 
 func errWriteFailed(op string, cause error) error {
 	return apperr.New("JOB_WRITE_FAILED").
-		Causer("job.Service."+op).
+		Causer("job.Service." + op).
 		Msgf("the queue could not be written").
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)

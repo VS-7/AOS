@@ -67,7 +67,17 @@ func Build(id string, cfg Config) (agentloop.LLMProvider, error) {
 	if !ok {
 		return nil, errUnknownProvider(id, Names())
 	}
-	return f(cfg)
+	built, err := f(cfg)
+	if err != nil {
+		return nil, err
+	}
+	// A factory that hands back nothing and calls it success is how a nil
+	// pointer surfaces three layers away, in a goroutine, as a panic with no
+	// connection to the thing that was misconfigured.
+	if built == nil {
+		return nil, errFactoryReturnedNothing(id)
+	}
+	return built, nil
 }
 
 // Slot is one capability of the installation: which provider and model answer
@@ -111,6 +121,17 @@ func errUnknownProvider(id string, known []string) error {
 		CTA(apperr.CallToAction{
 			Label:   "the providers this build knows are in the issue; pick one of those",
 			Command: build.Name + " config get",
+		})
+}
+
+func errFactoryReturnedNothing(id string) error {
+	return apperr.New("PROVIDER_NOT_BUILT").
+		Causer("providers.Build").
+		Msgf("the %q provider reported success and produced nothing", id).
+		Issue("provider", id).
+		Status(apperr.StatusInternalServerError).
+		CTA(apperr.CallToAction{
+			Label: "this is a defect in the provider adapter, not in your configuration",
 		})
 }
 

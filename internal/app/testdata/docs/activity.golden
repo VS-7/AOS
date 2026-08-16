@@ -1,0 +1,248 @@
+# tool: Activity
+
+What has happened in this workspace, in order.
+
+Every meaningful change publishes here: a task moves, a memory is formed, a
+routine runs. The log is the inbox a person reads and the bus a routine reacts
+to — one record, so the two can never disagree about what happened.
+
+## Commands
+- **list** — read the inbox, newest first, filtered by namespace or event
+- **get** — read one entry in full
+- **read** — mark one entry read
+- **read-all** — move your read watermark to now
+- **purge** — drop what is past the retention window
+
+## When to use
+- **Reorienting after time away:** list with unread, to see what changed
+- **Tracing a change:** filter by namespace and event to find when it happened
+
+## When NOT to use
+- Not as a place to write progress on a task — that is a task comment
+- Not as your own memory — this log is shared and expires
+
+Composite tool `Activity` with 6 actions: delete, get, list, purge, read, read-all.
+
+Read state is per actor. Marking something read marks it read for you, not for
+everyone, and your inbox is independent of the person's who is watching.
+
+Entries expire after 90 days by default. Anything you want to survive that
+belongs in a memory or a task comment, not here.
+
+## Usage
+Call as `Activity({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### activity_delete
+
+Remove one entry from the log.
+
+Remove a single entry.
+
+This rewrites the month it lived in, which is the one operation in this package
+that edits history rather than appending to it. Prefer marking it read.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the entry."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### activity_get
+
+Read one entry in full.
+
+Read one activity, including the structured payload a routine filter would match on.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the entry."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### activity_list
+
+Read the workspace inbox.
+
+What has happened, newest first.
+
+Filter by namespace to see one kind of thing — tasks, memories, routines — and
+by event to see one kind of change. The unread count is always for everything
+that matched, not for the page you asked for, so it does not shrink as you page
+through.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "namespace": {
+      "type": "string",
+      "description": "Only entries about this kind of thing. Example: \"task\"."
+    },
+    "event": {
+      "type": "string",
+      "description": "Only this event within the namespace. Example: \"status_changed\"."
+    },
+    "unread": {
+      "type": "boolean",
+      "description": "Only what you have not read yet."
+    },
+    "since": {
+      "type": "string",
+      "description": "RFC3339 instant; only entries at or after it."
+    },
+    "actor": {
+      "type": "string",
+      "description": "Whose read state to apply. Defaults to you."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "How many to return. Defaults to 50."
+    },
+    "offset": {
+      "type": "integer",
+      "description": "How many to skip."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### activity_purge
+
+Drop entries past the retention window.
+
+Remove what is older than the retention window, 90 days by default.
+
+Partitions entirely past the window are removed whole. A month only partly
+expired is rewritten in place, and the output names which ones — rewriting an
+audit log is worth knowing about even when it is correct.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "olderThanDays": {
+      "type": "integer",
+      "description": "Override the retention window, in days. Defaults to the configured 90."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### activity_read
+
+Mark one entry as read.
+
+Mark one entry read for you.
+
+Read state is per actor and never shared: this changes your inbox and nobody
+else's.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the entry."
+    },
+    "actor": {
+      "type": "string",
+      "description": "Whose read state to change. Defaults to you."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### activity_read-all
+
+Mark the whole inbox as read.
+
+Move your read watermark to now.
+
+Everything published up to this moment counts as read for you. Anything
+published after it does not.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "actor": {
+      "type": "string",
+      "description": "Whose read state to change. Defaults to you."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+

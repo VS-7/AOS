@@ -61,13 +61,14 @@ func (l *memLog) Months(context.Context) ([]string, error) {
 func (l *memLog) Rewrite(_ context.Context, month string, entries []Activity) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	kept := make([]Activity, 0, len(l.entries))
+	rewritten := make([]Activity, 0, len(l.entries)+len(entries))
 	for _, a := range l.entries {
 		if a.Month() != month {
-			kept = append(kept, a)
+			rewritten = append(rewritten, a)
 		}
 	}
-	l.entries = append(kept, entries...)
+	rewritten = append(rewritten, entries...)
+	l.entries = rewritten
 	sort.SliceStable(l.entries, func(i, j int) bool { return l.entries[i].CreatedAt.Before(l.entries[j].CreatedAt) })
 	return nil
 }

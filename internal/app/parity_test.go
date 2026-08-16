@@ -20,11 +20,17 @@ import (
 	"github.com/OWNER/aos/internal/core/env"
 	"github.com/OWNER/aos/internal/core/identity"
 	"github.com/OWNER/aos/internal/core/ids"
+	"github.com/OWNER/aos/internal/domain/activity"
 	"github.com/OWNER/aos/internal/domain/agent"
 	"github.com/OWNER/aos/internal/domain/chat"
+	"github.com/OWNER/aos/internal/domain/comment"
 	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/domain/gateway"
+	"github.com/OWNER/aos/internal/domain/job"
 	"github.com/OWNER/aos/internal/domain/memory"
+	"github.com/OWNER/aos/internal/domain/routine"
+	"github.com/OWNER/aos/internal/domain/task"
+	"github.com/OWNER/aos/internal/domain/todo"
 	"github.com/OWNER/aos/internal/domain/workspace"
 	"github.com/OWNER/aos/internal/transport/clix"
 	"github.com/OWNER/aos/internal/transport/httpapi"
@@ -70,6 +76,15 @@ var excluded = map[string]string{
 	"gateway_start": "spawns an operating-system process; running it on five surfaces " +
 		"would start five daemons. Covered end to end by TestTheDeliveryOfPhaseFour.",
 	"gateway_restart": "stops and spawns; same reason as gateway_start.",
+	"tasks_branch": "creates a real Git worktree on disk, which needs a repository " +
+		"the parity installation does not have. Covered by the task suite, which " +
+		"drives the same code path over a fake worktree driver.",
+	"routines_rotate": "returns a freshly minted secret, so no two runs can be " +
+		"byte-equal by construction. That is the point of the command, not a defect " +
+		"in it; the rotation itself is covered by the routine suite.",
+	"routines_fire": "executes a real turn against a model. Running it on four surfaces " +
+		"would be four turns. Covered by the routine suite and end to end by " +
+		"TestTheDeliveryOfPhaseSix.",
 }
 
 // scenario describes one command well enough to run it on every surface.
@@ -264,6 +279,216 @@ var scenarios = map[string]scenario{
 			Reasoning: reason(),
 		},
 	},
+
+	"tasks_list": {
+		Payload: task.ListInput{Reasoning: reason()},
+		Seed:    seedTask,
+	},
+	"tasks_get": {
+		Payload: task.GetInput{ID: "m-1", Reasoning: reason()},
+		Seed:    seedTask,
+	},
+	"tasks_create": {
+		Payload: task.CreateInput{
+			Name: "Fix the denial pattern", Type: "bug",
+			Priority: task.High, Reasoning: reason(),
+		},
+		Seed: seedWorkspace,
+	},
+	"tasks_update": {
+		Payload: task.UpdateInput{ID: "m-1", Summary: ptr("Reproduced."), Reasoning: reason()},
+		Seed:    seedTask,
+	},
+	"tasks_set-status": {
+		Payload: task.SetStatusInput{ID: "m-1", Status: task.InProgress, Reasoning: reason()},
+		Seed:    seedTask,
+	},
+	"tasks_delete": {
+		Payload: task.DeleteInput{ID: "m-1", Reasoning: reason()},
+		Seed:    seedTask,
+	},
+
+	"todos_list": {
+		Payload: todo.ListInput{Task: "m-1", Reasoning: reason()},
+		Seed:    seedTodo,
+	},
+	"todos_get": {
+		Payload: todo.GetInput{Task: "m-1", ID: "m-3", Reasoning: reason()},
+		Seed:    seedTodo,
+	},
+	"todos_create": {
+		Payload: todo.CreateInput{Task: "m-1", Title: "Write the failing test", Reasoning: reason()},
+		Seed:    seedTask,
+	},
+	"todos_update": {
+		Payload: todo.UpdateInput{
+			Task: "m-1", ID: "m-3", Evidence: ptr("go test passes"), Reasoning: reason(),
+		},
+		Seed: seedTodo,
+	},
+	"todos_set-status": {
+		Payload: todo.SetStatusInput{
+			Task: "m-1", ID: "m-3", Status: todo.Finished,
+			Evidence: "the new test fails before the fix", Reasoning: reason(),
+		},
+		Seed: seedTodo,
+	},
+	"todos_delete": {
+		Payload: todo.DeleteInput{Task: "m-1", ID: "m-3", Reasoning: reason()},
+		Seed:    seedTodo,
+	},
+
+	"comments_list": {
+		Payload: comment.ListInput{Task: "m-1", Reasoning: reason()},
+		Seed:    seedComment,
+	},
+	"comments_get": {
+		Payload: comment.GetInput{Task: "m-1", ID: "m-3", Reasoning: reason()},
+		Seed:    seedComment,
+	},
+	"comments_create": {
+		Payload: comment.CreateInput{Task: "m-1", Body: "Reproduced it.", Reasoning: reason()},
+		Seed:    seedTask,
+	},
+	"comments_update": {
+		Payload: comment.UpdateInput{Task: "m-1", ID: "m-3", Body: "Corrected.", Reasoning: reason()},
+		Seed:    seedComment,
+	},
+	"comments_delete": {
+		Payload: comment.DeleteInput{Task: "m-1", ID: "m-3", Reasoning: reason()},
+		Seed:    seedComment,
+	},
+
+	"routines_list": {
+		Payload: routine.ListInput{Reasoning: reason()},
+		Seed:    seedRoutine,
+	},
+	"routines_get": {
+		Payload: routine.GetInput{ID: "m-1", Reasoning: reason()},
+		Seed:    seedRoutine,
+	},
+	"routines_create": {
+		Payload: routine.CreateInput{
+			Name:      "Triage new bugs",
+			Triggers:  []routine.TriggerInput{{Type: routine.Scheduled, Cron: "0 9 * * 1-5"}},
+			Content:   "List the bugs in the backlog and set a priority on each.",
+			Reasoning: reason(),
+		},
+		Seed: seedAgent,
+	},
+	"routines_update": {
+		Payload: routine.UpdateInput{ID: "m-1", Name: ptr("Renamed"), Reasoning: reason()},
+		Seed:    seedRoutine,
+	},
+	"routines_runs": {
+		Payload: routine.RunsInput{ID: "m-1", Reasoning: reason()},
+		Seed:    seedRoutine,
+	},
+	"routines_delete": {
+		Payload: routine.DeleteInput{ID: "m-1", Reasoning: reason()},
+		Seed:    seedRoutine,
+	},
+
+	"activity_list": {
+		Payload: activity.ListInput{Reasoning: reason()},
+		Seed:    seedTask,
+	},
+	// Creating the task publishes the entry these three address: m-1 is the
+	// task, m-2 the activity that announced it, and m-3 whatever a seed adds
+	// after both.
+	"activity_get": {
+		Payload: activity.GetInput{ID: "m-2", Reasoning: reason()},
+		Seed:    seedTask,
+	},
+	"activity_read": {
+		Payload: activity.MarkInput{ID: "m-2", Reasoning: reason()},
+		Seed:    seedTask,
+	},
+	"activity_delete": {
+		Payload: activity.DeleteInput{ID: "m-2", Reasoning: reason()},
+		Seed:    seedTask,
+	},
+	"activity_read-all": {
+		Payload: activity.MarkAllInput{Reasoning: reason()},
+		Seed:    seedTask,
+	},
+	"activity_purge": {
+		Payload: activity.PurgeInput{OlderThanDays: 1, Reasoning: reason()},
+		Seed:    seedTask,
+	},
+
+	"jobs_list": {
+		Payload: job.ListInput{Reasoning: reason()},
+	},
+	"jobs_get": {
+		Payload: job.GetInput{ID: "j-1", Reasoning: reason()},
+		Seed:    seedJob,
+	},
+	"jobs_stats": {
+		Payload: job.StatsInput{Reasoning: reason()},
+	},
+	"jobs_recover": {
+		Payload: job.RecoverInput{Reasoning: reason()},
+	},
+	"jobs_purge": {
+		Payload: job.PurgeInput{OlderThanDays: 1, Reasoning: reason()},
+	},
+}
+
+// seedTask creates the task the subcollections hang off. Its identifier is m-1
+// because the identifier sequence is per installation and this is the first
+// record these scenarios create.
+func seedTask(t *testing.T, a *app.App) {
+	t.Helper()
+	seedWorkspace(t, a)
+	if _, err := a.Tasks.Create(parityCtx(), task.CreateInput{
+		Name: "Fix the denial pattern", Type: "bug", Status: task.Todo,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func seedTodo(t *testing.T, a *app.App) {
+	t.Helper()
+	seedTask(t, a)
+	if _, err := a.Todos.Create(parityCtx(), todo.CreateInput{
+		Task: "m-1", Title: "Write the failing test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func seedComment(t *testing.T, a *app.App) {
+	t.Helper()
+	seedTask(t, a)
+	if _, err := a.Comments.Create(parityCtx(), comment.CreateInput{
+		Task: "m-1", Body: "Reproduced it.",
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func seedRoutine(t *testing.T, a *app.App) {
+	t.Helper()
+	seedAgent(t, a)
+	if _, err := a.Routines.Create(parityCtx(), routine.CreateInput{
+		Name:    "Triage new bugs",
+		Content: "List the bugs in the backlog.",
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func seedJob(t *testing.T, a *app.App) {
+	t.Helper()
+	if a.Queue == nil {
+		t.Skip("this installation has no queue")
+	}
+	if _, err := a.Queue.Enqueue(parityCtx(), job.Job{
+		ID: "j-1", Queue: job.QueueChat, Kind: "turn",
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func reason() command.Reasoning {

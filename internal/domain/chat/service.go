@@ -308,6 +308,38 @@ type ReplyOutput struct {
 	Run     Run      `json:"run"`
 }
 
+// Post writes a message into a conversation without dispatching a turn for it.
+//
+// Like Reply, it is deliberately not a command. Send is the surface a person or
+// an agent uses, and it dispatches — a message nobody answers is not what
+// anybody means by sending one. This is the other case: a caller that is about
+// to run the turn itself and needs the message on the record first. A routine
+// is exactly that, because its run has to finish before the run record can say
+// how it went, so it cannot hand the turn to a detached dispatcher and return.
+//
+// Sending through Send and then running the turn as well would be two turns for
+// one message. That is a real defect, and it is the reason this exists.
+func (s *Service) Post(ctx context.Context, chatID, text string) (*Message, error) {
+	c, err := s.Get(ctx, GetInput{Chat: chatID})
+	if err != nil {
+		return nil, err
+	}
+
+	now := s.clock.Now()
+	msg := Message{
+		ID:        s.ids.New(),
+		Role:      RoleUser,
+		Parts:     []Part{{Type: PartText, Text: text}},
+		CreatedAt: now,
+	}
+	c.Messages = append(c.Messages, msg)
+	c.UpdatedAt = now
+	if err := s.repo.Update(ctx, c, collections.Version{}); err != nil {
+		return nil, errWriteFailed("Post", err)
+	}
+	return &msg, nil
+}
+
 // Reply appends an agent's answer and records the attempt on the message that
 // asked for it.
 func (s *Service) Reply(ctx context.Context, in ReplyInput) (ReplyOutput, error) {

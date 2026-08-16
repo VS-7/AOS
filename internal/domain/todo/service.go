@@ -36,6 +36,15 @@ func NewService(d Deps) *Service {
 	return &Service{repo: d.Repo, parent: d.Parent, clock: d.Clock, ids: d.IDs, log: log}
 }
 
+// SetParent binds the task aggregate after both exist.
+//
+// A todo and its task each need the other: the plan checks that its parent is
+// there, and the parent counts the plan to decide whether it may be reviewed.
+// One of the two has to be attached to the other once both are built, and this
+// direction is the safe one — the todo aggregate holds a port with a single
+// question on it, so it can ask whether the task exists and nothing else.
+func (s *Service) SetParent(p Parent) { s.parent = p }
+
 // List returns the plan of one task, in order.
 func (s *Service) List(ctx context.Context, in ListInput) (ListOutput, error) {
 	taskID := strings.TrimSpace(in.Task)

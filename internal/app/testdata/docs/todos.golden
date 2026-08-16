@@ -1,0 +1,300 @@
+# tool: Todos
+
+The steps of a task, in order.
+
+A plan is not a nicety here: a task cannot move to in_review while any of its
+steps is still open, so the plan is what the review guard counts. Write it
+before deep execution, and keep it honest as you go.
+
+## Commands
+- **list** — read a task's plan with its progress
+- **get** — read one step
+- **create** — add a step
+- **update** — change a step's title, order, evidence or notes
+- **set-status** — move a step, with the evidence for it
+- **delete** — remove a step
+
+## When to use
+- **Before executing:** if the plan is missing, write it first
+- **As you work:** move each step and record what you verified
+
+## When NOT to use
+- Not for a one-line task with nothing to sequence
+- Not as a progress report to a person — that is a task comment
+
+Composite tool `Todos` with 6 actions: create, delete, get, list, set-status, update.
+
+Status is moved with set-status, never written with update. The move is
+validated; a field write would route around every guard.
+
+Record evidence when you finish a step that was verifiable. The system will let
+you finish without it, and will tell you that nobody reading the plan later will
+know what was checked.
+
+A step that turned out to be unnecessary is skipped, not finished. Finishing it
+claims work that did not happen.
+
+## Usage
+Call as `Todos({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### todos_create
+
+Add a step to the plan.
+
+Add one step.
+
+Left without an order, the step goes at the end — so a plan written one call at
+a time keeps the sequence it was written in.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "task": {
+      "type": "string",
+      "description": "Identifier of the parent task."
+    },
+    "title": {
+      "type": "string",
+      "description": "What this step is. Example: \"Reproduce the failure in a test\"."
+    },
+    "order": {
+      "type": "integer",
+      "description": "Position in the plan. Left out, the step goes at the end."
+    },
+    "content": {
+      "type": "string",
+      "description": "Notes on this step, in Markdown."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "task",
+    "title",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### todos_delete
+
+Remove a step from the plan.
+
+Remove one step.
+
+Prefer skipping. A deleted step leaves no record that it was ever planned, and
+the plan is the audit trail of how the work was thought about.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "task": {
+      "type": "string",
+      "description": "Identifier of the parent task."
+    },
+    "id": {
+      "type": "string",
+      "description": "Identifier of the step."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "task",
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### todos_get
+
+Read one step.
+
+Read one step of a plan, including the evidence recorded for it.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "task": {
+      "type": "string",
+      "description": "Identifier of the parent task."
+    },
+    "id": {
+      "type": "string",
+      "description": "Identifier of the step."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "task",
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### todos_list
+
+Read a task's plan.
+
+The steps of one task, in plan order, with how much of it is done.
+
+The progress count is what the task's review guard reads: completed counts steps
+that are finished or deliberately skipped, and everything else is still open.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "task": {
+      "type": "string",
+      "description": "Identifier of the parent task."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "task",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### todos_set-status
+
+Move a step through its lifecycle.
+
+Move one step, with the evidence for the move.
+
+A step that turned out to be unnecessary is skipped, not finished — finishing it
+claims work that did not happen. A step that failed after being finished is
+reopened rather than deleted, so the record of the attempt survives.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "task": {
+      "type": "string",
+      "description": "Identifier of the parent task."
+    },
+    "id": {
+      "type": "string",
+      "description": "Identifier of the step."
+    },
+    "status": {
+      "type": "string",
+      "description": "One of: pending, in_progress, blocked, finished, skipped."
+    },
+    "evidence": {
+      "type": "string",
+      "description": "What you verified. Record it when finishing a step that was verifiable."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "task",
+    "id",
+    "status",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### todos_update
+
+Change a step's description.
+
+Change what a step says.
+
+Status is not writable here and the attempt is refused rather than ignored: a
+field that silently did nothing would let you believe the step had moved.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "task": {
+      "type": "string",
+      "description": "Identifier of the parent task."
+    },
+    "id": {
+      "type": "string",
+      "description": "Identifier of the step."
+    },
+    "title": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New title."
+    },
+    "order": {
+      "type": [
+        "null",
+        "integer"
+      ],
+      "description": "New position in the plan."
+    },
+    "evidence": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "What you verified, concretely."
+    },
+    "content": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New notes, in Markdown."
+    },
+    "status": {
+      "type": "string",
+      "description": "Not writable here. Use set-status, which validates the move."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "task",
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+

@@ -7,7 +7,7 @@ import (
 
 func errTaskRequired(op string) error {
 	return apperr.New("TODO_TASK_REQUIRED").
-		Causer("todo.Service."+op).
+		Causer("todo.Service." + op).
 		Msgf("a step identifier means nothing without the task it belongs to").
 		Status(apperr.StatusBadRequest).
 		CTA(apperr.CallToAction{
@@ -89,7 +89,7 @@ func errStatusIsNotAField(id string) error {
 
 func errReadFailed(op string, cause error) error {
 	return apperr.New("TODO_READ_FAILED").
-		Causer("todo.Service."+op).
+		Causer("todo.Service." + op).
 		Msgf("the plan could not be read").
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)
@@ -97,7 +97,7 @@ func errReadFailed(op string, cause error) error {
 
 func errWriteFailed(op string, cause error) error {
 	return apperr.New("TODO_WRITE_FAILED").
-		Causer("todo.Service."+op).
+		Causer("todo.Service." + op).
 		Msgf("the step could not be written").
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)

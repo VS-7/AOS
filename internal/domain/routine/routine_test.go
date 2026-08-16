@@ -408,7 +408,7 @@ func TestTheThreeFilterOperators(t *testing.T) {
 func TestACronFinerThanTheTickFiresOncePerWindow(t *testing.T) {
 	h := newHarness(t)
 	out := h.create(t, CreateInput{
-		Name: "Every minute, allegedly",
+		Name:     "Every minute, allegedly",
 		Triggers: []TriggerInput{{Type: Scheduled, Cron: "* * * * *"}},
 	})
 
@@ -448,7 +448,7 @@ func TestACronFinerThanTheTickFiresOncePerWindow(t *testing.T) {
 func TestACronThatIsNotDueDoesNotFire(t *testing.T) {
 	h := newHarness(t)
 	h.create(t, CreateInput{
-		Name: "Weekday mornings",
+		Name:     "Weekday mornings",
 		Triggers: []TriggerInput{{Type: Scheduled, Cron: "0 9 * * 1-5"}},
 	})
 

@@ -55,7 +55,7 @@ func asUser(id string) context.Context {
 	return identity.With(context.Background(), identity.Identity{UserID: id})
 }
 
-func mustCreate(t *testing.T, svc *Service, ctx context.Context, in CreateInput) *Comment {
+func mustCreate(ctx context.Context, t *testing.T, svc *Service, in CreateInput) *Comment {
 	t.Helper()
 	got, err := svc.Create(ctx, in)
 	if err != nil {
@@ -70,12 +70,12 @@ func mustCreate(t *testing.T, svc *Service, ctx context.Context, in CreateInput)
 func TestAuthorshipComesFromTheRequestAndNotThePayload(t *testing.T) {
 	svc := newService(t, nil)
 
-	got := mustCreate(t, svc, asAgent("atlas"), CreateInput{Task: "t-1", Body: "reproduced it"})
+	got := mustCreate(asAgent("atlas"), t, svc, CreateInput{Task: "t-1", Body: "reproduced it"})
 	if got.Author != "atlas" || got.AuthorType != "agent" {
 		t.Fatalf("authorship = %q/%q", got.Author, got.AuthorType)
 	}
 
-	byPerson := mustCreate(t, svc, asUser("u-7"), CreateInput{Task: "t-1", Body: "thanks"})
+	byPerson := mustCreate(asUser("u-7"), t, svc, CreateInput{Task: "t-1", Body: "thanks"})
 	if byPerson.Author != "u-7" || byPerson.AuthorType != "user" {
 		t.Fatalf("authorship = %q/%q", byPerson.Author, byPerson.AuthorType)
 	}
@@ -93,7 +93,7 @@ func TestAnUnattributableCommentIsRefused(t *testing.T) {
 // TestAnAgentOnlyEditsWhatItWrote.
 func TestAnAgentOnlyEditsWhatItWrote(t *testing.T) {
 	svc := newService(t, nil)
-	mine := mustCreate(t, svc, asAgent("atlas"), CreateInput{Task: "t-1", Body: "mine"})
+	mine := mustCreate(asAgent("atlas"), t, svc, CreateInput{Task: "t-1", Body: "mine"})
 
 	if _, err := svc.Update(asAgent("nova"), UpdateInput{Task: "t-1", ID: mine.ID, Body: "rewritten"}); err == nil {
 		t.Fatal("one agent rewrote another's comment")
@@ -116,7 +116,7 @@ func TestAnAgentOnlyEditsWhatItWrote(t *testing.T) {
 // comments of a person called "vitor".
 func TestAnAgentAndAUserWithTheSameNameAreNotTheSameActor(t *testing.T) {
 	svc := newService(t, nil)
-	byPerson := mustCreate(t, svc, asUser("vitor"), CreateInput{Task: "t-1", Body: "written by the person"})
+	byPerson := mustCreate(asUser("vitor"), t, svc, CreateInput{Task: "t-1", Body: "written by the person"})
 
 	if _, err := svc.Update(asAgent("vitor"), UpdateInput{
 		Task: "t-1", ID: byPerson.ID, Body: "written by the agent",
@@ -128,7 +128,7 @@ func TestAnAgentAndAUserWithTheSameNameAreNotTheSameActor(t *testing.T) {
 // TestAModeratorIsTheExplicitException, and it is logged when it happens.
 func TestAModeratorIsTheExplicitException(t *testing.T) {
 	svc := newService(t, moderatorFor("super"))
-	mine := mustCreate(t, svc, asAgent("atlas"), CreateInput{Task: "t-1", Body: "mine"})
+	mine := mustCreate(asAgent("atlas"), t, svc, CreateInput{Task: "t-1", Body: "mine"})
 
 	if _, err := svc.Update(asUser("super"), UpdateInput{
 		Task: "t-1", ID: mine.ID, Body: "moderated",
@@ -146,9 +146,9 @@ func TestAModeratorIsTheExplicitException(t *testing.T) {
 // discussion and complicates every surface that renders it.
 func TestAReplyToAReplyJoinsTheSameThread(t *testing.T) {
 	svc := newService(t, nil)
-	top := mustCreate(t, svc, asAgent("atlas"), CreateInput{Task: "t-1", Body: "found the cause"})
-	first := mustCreate(t, svc, asUser("u-7"), CreateInput{Task: "t-1", Body: "which line?", Parent: top.ID})
-	second := mustCreate(t, svc, asAgent("atlas"), CreateInput{Task: "t-1", Body: "sandbox/exec.go:61", Parent: first.ID})
+	top := mustCreate(asAgent("atlas"), t, svc, CreateInput{Task: "t-1", Body: "found the cause"})
+	first := mustCreate(asUser("u-7"), t, svc, CreateInput{Task: "t-1", Body: "which line?", Parent: top.ID})
+	second := mustCreate(asAgent("atlas"), t, svc, CreateInput{Task: "t-1", Body: "sandbox/exec.go:61", Parent: first.ID})
 
 	if second.ParentID != top.ID {
 		t.Fatalf("a reply to a reply hangs off %q, want the top comment %q", second.ParentID, top.ID)
@@ -180,8 +180,8 @@ func TestAReplyToNothingIsRefused(t *testing.T) {
 // participant erase another's words by removing the message they answered.
 func TestDeletingAThreadHeadLeavesTheAnswersStanding(t *testing.T) {
 	svc := newService(t, nil)
-	top := mustCreate(t, svc, asAgent("atlas"), CreateInput{Task: "t-1", Body: "found the cause"})
-	reply := mustCreate(t, svc, asUser("u-7"), CreateInput{Task: "t-1", Body: "good catch", Parent: top.ID})
+	top := mustCreate(asAgent("atlas"), t, svc, CreateInput{Task: "t-1", Body: "found the cause"})
+	reply := mustCreate(asUser("u-7"), t, svc, CreateInput{Task: "t-1", Body: "good catch", Parent: top.ID})
 
 	out, err := svc.Delete(asAgent("atlas"), DeleteInput{Task: "t-1", ID: top.ID})
 	if err != nil {
@@ -212,7 +212,7 @@ func TestACommentCannotHangOffATaskThatIsNotThere(t *testing.T) {
 func TestTheDiscussionReadsInWriteOrder(t *testing.T) {
 	svc := newService(t, nil)
 	for _, body := range []string{"first", "second", "third"} {
-		mustCreate(t, svc, asAgent("atlas"), CreateInput{Task: "t-1", Body: body})
+		mustCreate(asAgent("atlas"), t, svc, CreateInput{Task: "t-1", Body: body})
 	}
 	out, err := svc.List(asAgent("atlas"), ListInput{Task: "t-1"})
 	if err != nil {
