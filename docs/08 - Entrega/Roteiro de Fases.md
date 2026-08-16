@@ -64,6 +64,7 @@ Wails3 + React 19; services; bindings; WebSocket; 38 temas; aparência nativa.
 
 **Notas:** [[Wails3 Services]] · [[React 19 e Bindings]] · [[Design System]] · [[Temas]] · [[Theme (Go)]] · [[File (Go)]] · [[ADR-0002 Wails3 no lugar de Electron]]
 **Entrega:** app desktop com chat, board de tasks e grafo de memórias.
+**Parcialmente entregue** em `v0.8.0-fase7`. Compila e roda: binário desktop de 13 MB contra os 578 MB do Electron do original, 38 temas com contraste WCAG AA verificado, cliente unificado, realtime com backoff, e as três telas. **Não entregue:** o porte fiel dos 121 componentes do design system, as outras 18 rotas, o catálogo de componentes gerado, testes de frontend, e [[File (Go)]] inteiro. A janela nunca foi aberta e olhada. As notas [[React 19 e Bindings]] e [[Design System]] ficam `em-construcao` por isso.
 
 ### Fase 8 — Ecossistema
 `skill`, `toolset`, `collection` e `view` dinâmicas, `artifact`, `template`, `instruction`, `project`, `goal`, `bot`, `tunnel`, `marketplace`.

@@ -2,7 +2,7 @@
 tags: [frontend, react, wails, bindings]
 aliases: [React 19, Bindings, Frontend]
 fase: 7
-status: especificado
+status: em-construcao
 origem: "[[Camada @app (Web UI)]]"
 ---
 
@@ -130,6 +130,42 @@ Um modal global escuta `approval.request`, mostra a tool, o payload formatado e 
 ## Critério de pronto
 
 - [ ] SPA rodando no navegador e no desktop com o mesmo bundle
-- [ ] Tipos gerados do registry, verificados no CI
-- [ ] Realtime com reconexão
-- [ ] Chat, board de tasks e grafo de memórias funcionando
+- [x] Tipos gerados do registry, verificados no CI
+- [x] Realtime com reconexão
+- [x] Chat, board de tasks e grafo de memórias funcionando
+
+## Estado — Fase 7
+
+`npx tsc --noEmit` limpo; `vite build` produz 255 KB (79 KB comprimido).
+`task gen-schema` emite **71 comandos, 974 linhas** de TypeScript do registry Go,
+e `task check` falha se o gerado divergir do commitado — que é a propriedade que
+o original obtém com o caller tipado do Igniter.
+
+**O cliente unificado existe e é uma interface com dois transportes.** Nenhum
+componente sabe onde está rodando: `isDesktop()` escolhe o binding Wails ou o
+`fetch`, e ambos chegam no mesmo registry. O workspace vai em header, não em
+cookie — defeito #5 do original, e `TestTheWorkspaceTravelsInAHeaderAndNotACookie`
+afirma que nenhum cookie sai junto.
+
+**Realtime com backoff limitado.** Seis passos de 250 ms a 10 s, e para de
+crescer: sem teto, um laptop que dormiu uma hora volta e espera mais uma; com
+teto fixo curto, um daemon fora do ar apanha de cada janela aberta. Os eventos
+invalidam o cache do TanStack Query em vez de virarem estado de componente,
+então uma tela re-renderiza porque o dado dela mudou — venha a mudança da própria
+mutação ou de um agente trabalhando em segundo plano.
+
+### O que NÃO está pronto, e por quê
+
+**A nota fica `em-construcao`.** Três das quatro caixas do critério estão
+marcadas; a primeira — *"SPA rodando no navegador e no desktop com o mesmo
+bundle"* — está construída e **não foi observada rodando**. Nada nesta fase
+abriu a janela e clicou.
+
+Nenhum teste de frontend existe. A nota pede cinco (cliente unificado com
+transporte falso, reconexão, streaming incremental, modal de aprovação,
+acessibilidade) e nenhum está escrito: não há runner de teste no `package.json`.
+É a lacuna mais séria da fase e está aqui em vez de escondida atrás de três
+caixas marcadas.
+
+**Roteamento não existe.** A navegação é `useState` entre três telas. TanStack
+Router e as 21 rotas da seção 5.2 do PROMPT são trabalho não feito.

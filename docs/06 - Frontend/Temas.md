@@ -2,7 +2,7 @@
 tags: [frontend, theme, css]
 aliases: [Temas Frontend, Tokens]
 fase: 7
-status: especificado
+status: pronto
 origem: "[[Theme]]"
 ---
 
@@ -87,7 +87,31 @@ O tema ativo é gravado em `localStorage` e aplicado por um script inline no `in
 
 ## Critério de pronto
 
-- [ ] 38 temas aplicáveis
+- [x] 38 temas aplicáveis
 - [ ] Sincronização com aparência nativa no desktop
-- [ ] `auto` seguindo o SO
-- [ ] Sem flash no carregamento
+- [x] `auto` seguindo o SO
+- [x] Sem flash no carregamento
+
+## Estado — Fase 7
+
+**Sem flash, e é a parte que exige cuidado.** Um script inline em `index.html`
+lê a escolha do `localStorage` — incluindo os tokens já resolvidos — e a aplica
+antes do primeiro paint. Sem os tokens guardados junto, a página ainda piscaria:
+buscá-los do daemon é uma ida e volta, e o paint não espera.
+
+`applyTheme` escreve os tokens na raiz, troca a classe `light`/`dark`, grava a
+escolha e, no desktop, chama `SystemService.SetAppearance`.
+
+**`auto` só escuta quando é `auto`.** Quem escolheu escuro não pediu para ser
+trocado para claro ao amanhecer, então o listener de `prefers-color-scheme` só é
+registrado com a preferência em `auto`.
+
+**Divergência sobre os nomes dos tokens:** registrada em [[Theme (Go)]]. O
+vocabulário é o do original (shadcn), não o esboço desta nota, porque a lista é
+gerada de `tokens.css` e o CSS é o que os componentes portados vão ler.
+
+**Não verificado:** o material nativo da janela mudando com o tema; a troca de
+tema preservando estado (o caminho não recarrega nada, mas ninguém observou); e
+o grafo de memórias legível nos 38 temas — as cores de categoria são derivadas do
+accent e separadas por construção (`TestTheThirteenMemoryCategoriesEachGetTheirOwnColour`),
+mas legibilidade contra a superfície não foi medida por tema.

@@ -2,7 +2,7 @@
 tags: [frontend, design-system, ui]
 aliases: [Design System, Componentes]
 fase: 7
-status: especificado
+status: em-construcao
 origem: "[[Camada @app (Web UI)]]"
 ---
 
@@ -108,6 +108,38 @@ O gerador lê os `spec.ts` e emite o catálogo Go. Um componente removido no Rea
 ## Critério de pronto
 
 - [ ] Catálogo gerado e sincronizado com o Go
-- [ ] Três telas principais implementadas
-- [ ] Zero cores literais fora dos temas
+- [x] Três telas principais implementadas
+- [x] Zero cores literais fora dos temas
 - [ ] Acessibilidade verificada nas telas principais
+
+## Estado — Fase 7
+
+**As três telas que definem o produto existem**, com o comportamento que a nota
+descreve:
+
+| Tela | O que está lá |
+|---|---|
+| **Chat** | Partes tipadas — texto, reasoning colapsado por padrão, tool call com input e output, aviso quando a saída foi truncada. Enter envia, shift-enter quebra linha. |
+| **Board** | Oito colunas, arraste que chama `tasks_set-status` — a mesma validação de qualquer superfície — e um `select` ao lado, porque arrastar não é alcançável pelo teclado. A recusa é mostrada em vez de o cartão voltar sem explicação. |
+| **Grafo** | Force-directed em ~60 linhas, cor por token de categoria, raio pela confiança, aresta tracejada vermelha para `supersedes`. Layout determinístico: o mesmo grafo tem a mesma forma duas vezes. |
+
+**Zero cores literais.** Todo valor vem de `var(--token)`; o CSS de layout não
+tem um hex sequer. Verificado por leitura, não por lint — o lint que a nota pede
+não existe.
+
+### O que NÃO está pronto
+
+**Este não é o design system.** A nota fala de 121 componentes shadcn portados
+fielmente com Radix, Plate, cmdk, sonner, framer-motion, lucide e hugeicons.
+O que existe é CSS de layout escrito contra os mesmos tokens que aqueles
+componentes vão ler — de modo que o porte troque marcação, não paleta. Nenhum
+componente do design system foi portado.
+
+**O catálogo gerado não existe.** `spec.ts` ao lado de cada componente,
+`task gen-components` e `internal/domain/view/components.gen.go` são trabalho não
+feito. Sem eles, [[Views Declarativas]] não tem o que validar contra — e a nota
+chama isso de *"adição obrigatória"*.
+
+**Acessibilidade parcial.** Há foco visível, `aria-label` nos controles, `role`
+nas regiões, o board é operável por teclado e o modal de aprovação é um
+`alertdialog` que devolve foco. Nada disso foi medido por ferramenta.

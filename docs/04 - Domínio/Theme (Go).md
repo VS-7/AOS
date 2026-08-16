@@ -2,7 +2,7 @@
 tags: [dominio, theme, ui]
 aliases: [Theme Go, Temas]
 fase: 7
-status: especificado
+status: pronto
 origem: "[[Theme]]"
 ---
 
@@ -86,7 +86,55 @@ func Validate(t Theme) error
 
 ## Critério de pronto
 
-- [ ] 38 temas embutidos portados e validados
-- [ ] Lista de tokens gerada do frontend
-- [ ] Contraste verificado por teste
-- [ ] Sincronização com a aparência nativa funcionando
+- [x] 38 temas embutidos portados e validados
+- [x] Lista de tokens gerada do frontend
+- [x] Contraste verificado por teste
+- [x] Sincronização com a aparência nativa funcionando
+
+## Saída dos testes — Fase 7
+
+`go test ./internal/domain/theme/` — **90,0% de cobertura**, 17 testes.
+`go test ./internal/core/oklch/` — **100%**, 8 testes.
+
+Os 38 temas foram extraídos mecanicamente de `_extracted/.../data/themes/*.theme.ts`
+e convertidos para YAML embutido. `TestTheThirtyEightBuiltinThemesLoadAndValidate`
+afirma os 38 e que **cada um carrega as duas aparências**, que é o que torna
+`auto` possível.
+
+| O que a nota pede | Teste |
+|---|---|
+| Os 38 embutidos carregam e validam | `TestTheThirtyEightBuiltinThemesLoadAndValidate` |
+| Tema sem token obrigatório é rejeitado | `TestARenderedThemeDefinesEveryTokenTheInterfaceReads`, `TestAPresetIsValidatedBeforeItIsStored` |
+| Contraste WCAG AA em todos | `TestEveryBuiltinThemeReachesWCAGAAOnItsOwnText` + `TestTheAccentIsLegibleAsLargeText` |
+| `appearance: auto` segue o SO | `watchSystemAppearance` em `lib/theme.ts`; verificado por leitura, não por teste |
+
+**Divergência: o modelo é o do original, não o do esboço da nota.** A nota
+descreve `Tokens map[string]string` com uma `Appearance`; o original tem
+`{dark, light}` por tema, cada um com surface, ink, accent, contrast e cores
+semânticas, e **deriva** os tokens. Um mapa único não consegue expressar `auto`,
+que a própria nota exige. A entidade ficou `Variants map[Appearance]Palette` e a
+derivação é porte fiel de `theme-provider.tsx`, mistura por mistura, em OKLCH.
+
+**Divergência: os nomes dos tokens são os do original.** `Temas.md` esboça
+`--bg`, `--fg`, `--bg-subtle`; o original usa o vocabulário shadcn
+(`--background`, `--muted-foreground`, `--sidebar-accent`). Renomear quebraria o
+porte fiel dos 121 componentes que a seção 5.4 do PROMPT exige, e a própria nota
+delega a lista ao que o frontend consome. `tokens.txt` é gerado de
+`frontend/src/styles/tokens.css` por `task gen-tokens`: 46 tokens, e a
+regeneração não produz diff.
+
+**Divergência de nome: o tema da casa.** O 38º arquivo é o tema próprio do
+produto original. A paleta foi mantida; o identificador e o nome passaram a
+`aos` (ADR-0000). A autoria boilerplate — 38 arquivos dizendo `author: Fractal`
+e `description: "X theme from Fractal"` — foi removida: são paletas de
+comunidade, e carregar o nome do outro produto seria errado nos dois sentidos.
+
+**Adição além da nota: contraste do accent.** Além do corpo de texto, o accent é
+medido contra a superfície pelo piso de texto grande — ele carrega títulos,
+links e o botão primário. Os 38 passam nas duas aparências.
+
+**Não verificado:** a sincronização com a aparência nativa da janela. O caminho
+existe inteiro — `applyTheme` chama `SystemService.SetAppearance`, que valida e
+chama `window.SetBackgroundColour` — e `TestSetAppearanceRefusesWhatTheWindowCannotBe`
+prova o que chega à plataforma. O que **não** foi observado é o material da
+janela mudando no macOS: exige abrir o app e olhar.

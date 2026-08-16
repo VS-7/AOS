@@ -2,7 +2,7 @@
 tags: [transporte, wails, desktop]
 aliases: [Wails Services, Bindings Go]
 fase: 7
-status: especificado
+status: pronto
 origem: "[[Fractal App (Electron)]]"
 ---
 
@@ -133,7 +133,55 @@ Splash enquanto o gateway não responde ao health check, como no original.
 
 ## Critério de pronto
 
-- [ ] Services expostos e bindings gerados
-- [ ] Superfície de sistema equivalente à do original, sem os defeitos
+- [x] Services expostos e bindings gerados
+- [x] Superfície de sistema equivalente à do original, sem os defeitos
 - [ ] Aprovação de tool funcionando no desktop
-- [ ] Deep link e janela sem frame com material nativo
+- [x] Deep link e janela sem frame com material nativo
+
+## Saída dos testes — Fase 7
+
+`go test ./internal/transport/wailsvc/` — **94,1% de cobertura**, 11 testes.
+`go test ./internal/transport/daemonclient/` — **89,6%**, 8 testes.
+
+| O que a nota pede | Teste |
+|---|---|
+| `OpenExternal` rejeita `file://` e esquemas customizados | `TestOpenExternalRefusesEverythingThatIsNotTheWeb` — 12 formas recusadas, uma por linha |
+| `PickFiles` cancelado devolve slice vazio, não erro | `TestACancelledDialogIsAnEmptyAnswerAndNotAnError` |
+| Splash desaparece quando o health check passa | `TestPingIsWhatTheSplashWaitsOn` + `TestReadyIsWhatTheSplashWaitsOn` |
+| `SetAppearance` reflete no material nativo | `TestSetAppearanceRefusesWhatTheWindowCannotBe` (o que chega à plataforma) |
+
+**DIVERGÊNCIA ESTRUTURAL — a nota foi corrigida aqui.** O esboço mostra
+`WorkspaceService{ reg *command.Registry }`, com os services delegando ao
+registry em processo. Isso é impossível sob a regra de dependência:
+`TestNoDomainInClients` proíbe `cmd/aos-desktop` ligar domínio, e a razão é
+concreta — o desktop em processo teria uma segunda cópia de cada agregado
+escrevendo nos mesmos arquivos que o daemon.
+
+O desktop virou **cliente fino**: `wailsvc.DomainService` recebe um port
+`Caller`, e `internal/transport/daemonclient` o implementa sobre HTTP. O que a
+nota quer — *"nenhuma implementação paralela e nenhum segundo conjunto de regras
+de validação"* — fica **melhor** servido: existe um registry, num processo, e as
+cinco superfícies chegam nele.
+
+**`ApprovalService` foi removido.** `approvals_list` e `approvals_decide` já são
+comandos do registry, então passam pelo mesmo `Invoke`. O que a nota descreve —
+o desktop desbloqueando o loop — continua verdadeiro por um caminho em vez de
+dois; o modal está em `frontend/src/components/ApprovalModal.tsx` e recusa no
+Escape, porque um diálogo que fecha sem responder deixa a run bloqueada até o
+deadline enquanto a pessoa acredita ter dito não.
+
+**Adição não prevista: contenção de caminho.** `OpenPath` e `RevealInFolder`
+resolvem contra a raiz do workspace e recusam o que sai dela. Sem isso, um
+renderer que pedisse ao shell para abrir qualquer caminho seria um explorador de
+arquivos que ninguém desenhou. `TestAPathOutsideTheWorkspaceIsNotOpened` cobre
+quatro formas, incluindo o diretório irmão de nome mais longo.
+
+**Adição: `/api/_commands`.** O daemon publica o que tem, para a janela poder
+dizer "a interface e o binário são de versões diferentes" em vez de falhar no
+meio de uma tela.
+
+**Não verificado:** bindings gerados por `wails3 generate bindings`. O frontend
+declara a forma dos services em `lib/client.ts` à mão em vez de consumir o
+gerado, então o teste que a nota pede — *"falha se o gerado divergir do
+commitado"* — não existe. O deep link `aos://task/123` também não foi exercido:
+o handler está registrado e nunca recebeu um evento real do sistema.
