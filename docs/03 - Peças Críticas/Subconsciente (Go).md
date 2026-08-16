@@ -307,12 +307,16 @@ orientação cirúrgica para o próximo turno e ela hoje é só retornada. Injet
 próximo prompt é uma decisão sobre o orçamento de contexto do agente, e está
 pendente em vez de feita em silêncio.
 
-**Divergência: assinaturas persistidas ainda não persistem.** A nota diverge do
-original guardando a assinatura no banco de jobs para sobreviver a restart. O
-port `Signatures` existe com essa forma e a implementação em uso é
-`MemorySignatures`, em processo — igual ao original nesse ponto. O critério de
-pronto "inclusive após restart" **não está satisfeito**; o teste
-`TestASignatureExpires` prova a expiração, não a sobrevivência.
+**Assinaturas persistidas, como a nota exige.** `sqlitequeue.Signatures` guarda
+`(agent, signature, expires_at)` no mesmo banco da fila — estado operacional,
+não domínio, que é por que fica ali e não em `.aos`.
+`TestASignatureSurvivesARestart` fecha o banco, reabre e afirma que o mesmo
+rascunho continua suprimido: sem isso, cada restart do daemon deixaria a mesma
+memória ser formada de novo, que é o comportamento do original.
+`MemorySignatures` continua como degradação quando não há fila.
+
+Uma linha expirada é apagada na leitura, o que mantém a tabela limitada sem
+varredor; `Prune` no tick recolhe as que ninguém mais consultou.
 
 **Adições, cada uma porque o teste exigiu.** Uma categoria inventada pelo modelo
 vira `observation` em vez de perder a memória. Um rascunho sem `confidence`

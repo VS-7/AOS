@@ -387,6 +387,28 @@ func New(opts Options) (*App, error) {
 	})
 	dispatch.to = runtime
 
+	// The queue and the pool that drains it. Opening the database is allowed to
+	// fail: a process that cannot defer work should still be able to answer a
+	// question, and the error says which capability was lost.
+	var queue job.Queue
+	var signatures subconscious.Signatures
+	if opened, err := sqlitequeue.Open(sqlitequeue.Options{
+		Path: paths.JobsDB(), Clock: clock.Now,
+	}); err != nil {
+		logger.Warn("continuing without a work queue: nothing will run in the background", "err", err)
+	} else {
+		queue = opened
+		// The deduplication set shares the queue's database, which is what makes
+		// it survive a restart — the divergence from the original recorded in
+		// the Subconsciente (Go) note. Without a queue it degrades to the
+		// in-process set, which behaves the same until the daemon restarts.
+		signatures = opened.Signatures()
+		closers = append(closers, opened.Close)
+	}
+	if signatures == nil {
+		signatures = subconscious.NewMemorySignatures(clock.Now)
+	}
+
 	// The background observer. It runs on its own slot so a cheap model can
 	// watch while an expensive one reasons, and it is handed to the runtime as
 	// the thing that fires when a turn ends.
@@ -400,26 +422,13 @@ func New(opts Options) (*App, error) {
 			},
 		},
 		Memories:   memorySvc,
-		Signatures: subconscious.NewMemorySignatures(clock.Now),
+		Signatures: signatures,
 		Clock:      clock.Now,
 		Log:        logger,
 	})
 	runtime.SetObserver(observer)
 
 	routineSvc.SetExecutor(routineExecutor{chats: chatSvc, runtime: runtime, log: logger})
-
-	// The queue and the pool that drains it. Opening the database is allowed to
-	// fail: a process that cannot defer work should still be able to answer a
-	// question, and the error says which capability was lost.
-	var queue job.Queue
-	if opened, err := sqlitequeue.Open(sqlitequeue.Options{
-		Path: paths.JobsDB(), Clock: clock.Now,
-	}); err != nil {
-		logger.Warn("continuing without a work queue: nothing will run in the background", "err", err)
-	} else {
-		queue = opened
-		closers = append(closers, opened.Close)
-	}
 
 	jobSvc := job.NewService(job.Deps{Queue: queue, Clock: clock, Log: logger})
 	job.Register(reg, jobSvc)

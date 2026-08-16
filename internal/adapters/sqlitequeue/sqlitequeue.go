@@ -113,7 +113,12 @@ CREATE INDEX IF NOT EXISTS jobs_workspace ON jobs (workspace, status);
 `
 
 func (q *Queue) migrate(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, schema)
+	if _, err := q.db.ExecContext(ctx, schema); err != nil {
+		return err
+	}
+	// The subconscious deduplication set shares this database, for the reason
+	// given in signatures.go: it is operational state, not domain.
+	_, err := q.db.ExecContext(ctx, signatureSchema)
 	return err
 }
 

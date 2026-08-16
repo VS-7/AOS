@@ -480,3 +480,126 @@ func TestBackoffGrowsAndThenStops(t *testing.T) {
 		}
 	}
 }
+
+// TestASignatureSurvivesARestart is the criterion the Subconsciente (Go) note
+// sets and the original does not meet: a daemon that restarts must not let the
+// same memory be formed a second time.
+func TestASignatureSurvivesARestart(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "jobs.sqlite")
+	c := &clock{at: start}
+
+	first, err := sqlitequeue.Open(sqlitequeue.Options{Path: path, Clock: c.now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Signatures().Mark(ctx(), "atlas", "sig-1", time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := sqlitequeue.Open(sqlitequeue.Options{Path: path, Clock: c.now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = second.Close() }()
+
+	sigs := second.Signatures()
+	seen, err := sigs.Seen(ctx(), "atlas", "sig-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !seen {
+		t.Fatal("the signature did not survive the restart, so the memory would be formed again")
+	}
+
+	// One agent's signature never suppresses another's memory.
+	if other, _ := sigs.Seen(ctx(), "nova", "sig-1"); other {
+		t.Fatal("a signature leaked between agents")
+	}
+	if unknown, _ := sigs.Seen(ctx(), "atlas", "sig-unseen"); unknown {
+		t.Fatal("an unseen signature reported as seen")
+	}
+}
+
+// TestAnExpiredSignatureStopsSuppressing, so a lesson that genuinely recurs
+// months later can be recorded again.
+func TestAnExpiredSignatureStopsSuppressing(t *testing.T) {
+	q, c := open(t)
+	sigs := q.Signatures()
+
+	if err := sigs.Mark(ctx(), "atlas", "sig-1", time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	c.advance(2 * time.Hour)
+
+	seen, err := sigs.Seen(ctx(), "atlas", "sig-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seen {
+		t.Fatal("an expired signature still suppresses")
+	}
+	// Reading it dropped the row, so the pruner finds nothing left to do.
+	n, err := sigs.Prune(ctx())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("the expired row was not dropped as it was read: %d pruned", n)
+	}
+}
+
+// TestMarkingAgainExtendsTheWindow. A lesson the observer keeps arriving at is
+// one whose suppression should keep holding.
+func TestMarkingAgainExtendsTheWindow(t *testing.T) {
+	q, c := open(t)
+	sigs := q.Signatures()
+
+	if err := sigs.Mark(ctx(), "atlas", "sig-1", time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	c.advance(50 * time.Minute)
+	if err := sigs.Mark(ctx(), "atlas", "sig-1", time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	c.advance(50 * time.Minute)
+
+	seen, err := sigs.Seen(ctx(), "atlas", "sig-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !seen {
+		t.Fatal("marking again did not extend the window")
+	}
+}
+
+// TestPruneRemovesWhatNobodyAskedAbout, which is what keeps the table bounded
+// for signatures that are never queried again.
+func TestPruneRemovesWhatNobodyAskedAbout(t *testing.T) {
+	q, c := open(t)
+	sigs := q.Signatures()
+
+	for _, sig := range []string{"a", "b", "c"} {
+		if err := sigs.Mark(ctx(), "atlas", sig, time.Hour); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := sigs.Mark(ctx(), "atlas", "fresh", 48*time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	c.advance(2 * time.Hour)
+
+	n, err := sigs.Prune(ctx())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 3 {
+		t.Fatalf("pruned %d, want 3", n)
+	}
+	if seen, _ := sigs.Seen(ctx(), "atlas", "fresh"); !seen {
+		t.Fatal("the prune took a signature that had not expired")
+	}
+}

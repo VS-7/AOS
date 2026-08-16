@@ -280,6 +280,15 @@ de verdade, que exige um repositório que a instalação de paridade não tem. E
 em `excluded` com a razão escrita, e o mesmo caminho de código é exercido pela
 suíte do domínio sobre um driver de worktree falso.
 
-**Não verificado:** worktree contra um repositório Git real. O adaptador
-`gitcli.Worktrees` traduz para `git worktree add/remove/list --porcelain` e nunca
-rodou contra um `git` de verdade nesta fase.
+**Worktree verificada contra um `git` real.** `internal/adapters/gitcli` tem
+cinco testes que criam um repositório de verdade com um commit e exercem
+`worktree add/remove/list --porcelain`: a branch própria, o working tree
+principal intocado, a branch existente sendo reaproveitada com o trabalho que
+tinha, a remoção de um checkout que alguém já apagou à mão, e a branch
+sobrevivendo à remoção do checkout.
+
+**Defeito que esse teste achou.** `List` excluía o working tree principal
+comparando strings, e no macOS o git reporta `/private/var/...` enquanto a raiz
+guardada é `/var/...`. O principal não era excluído — e a poda, que remove
+checkouts que nenhuma task reivindica, o trataria como candidato. Os caminhos
+agora são resolvidos por `EvalSymlinks` dos dois lados.

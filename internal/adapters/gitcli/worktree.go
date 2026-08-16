@@ -22,11 +22,27 @@ type Worktrees struct {
 }
 
 // NewWorktrees builds the driver for one repository.
+//
+// The root is resolved through symlinks because git reports resolved paths and
+// this type compares against them. On macOS a temporary directory is /var/...
+// to the caller and /private/var/... to git, and an unresolved comparison makes
+// List report the main working tree as one of ours — which would offer the
+// user's own checkout to the prune. The real-git suite catches exactly that.
 func NewWorktrees(g *Git, repo string) *Worktrees {
 	if g == nil {
 		g = New()
 	}
-	return &Worktrees{git: g, repo: filepath.Clean(repo)}
+	return &Worktrees{git: g, repo: resolve(repo)}
+}
+
+// resolve canonicalises a path, falling back to a lexical clean when it cannot
+// be walked — a checkout that is not there yet still has a comparable name.
+func resolve(path string) string {
+	cleaned := filepath.Clean(path)
+	if real, err := filepath.EvalSymlinks(cleaned); err == nil {
+		return real
+	}
+	return cleaned
 }
 
 // Create cuts a branch and checks it out at its own path.
@@ -87,7 +103,7 @@ func (w *Worktrees) List(ctx context.Context) ([]string, error) {
 		if !ok {
 			continue
 		}
-		path := filepath.Clean(rest)
+		path := resolve(rest)
 		if path == w.repo {
 			continue // the main working tree is not one of ours to prune
 		}
