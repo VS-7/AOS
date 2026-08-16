@@ -1,0 +1,34 @@
+# Ported from the original's synthwave84.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "synthwave84"
+name: "Synthwave '84"
+variants:
+  dark:
+    surface: "#262335"
+    ink: "#ffffff"
+    accent: "#36f9f6"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#b084eb"
+      success: "#72f1b8"
+      warning: "#fede5d"
+      error: "#fe4450"
+      info: "#ff8b39"
+      diffAdded: "#97f1d8"
+      diffRemoved: "#ff5e5b"
+  light:
+    surface: "#fafafa"
+    ink: "#262335"
+    accent: "#00838f"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#9c27b0"
+      success: "#4caf50"
+      warning: "#ff9800"
+      error: "#f44336"
+      info: "#ff5722"

@@ -1,0 +1,36 @@
+# Ported from the original's kanagawa.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "kanagawa"
+name: "Kanagawa"
+variants:
+  dark:
+    surface: "#1F1F28"
+    ink: "#DCD7BA"
+    accent: "#7E9CD8"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#D27E99"
+      success: "#98BB6C"
+      warning: "#D7A657"
+      error: "#E82424"
+      info: "#76946A"
+      diffAdded: "#A9D977"
+      diffRemoved: "#F24A4A"
+  light:
+    surface: "#F2E9DE"
+    ink: "#54433A"
+    accent: "#2D4F67"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#D27E99"
+      success: "#98BB6C"
+      warning: "#D7A657"
+      error: "#E82424"
+      info: "#76946A"
+      diffAdded: "#89AF5B"
+      diffRemoved: "#D61F1F"

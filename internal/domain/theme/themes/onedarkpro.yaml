@@ -1,0 +1,36 @@
+# Ported from the original's onedarkpro.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "onedarkpro"
+name: "One Dark Pro"
+variants:
+  dark:
+    surface: "#1e222a"
+    ink: "#abb2bf"
+    accent: "#61afef"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#e06c75"
+      success: "#98c379"
+      warning: "#e5c07b"
+      error: "#e06c75"
+      info: "#56b6c2"
+      diffAdded: "#4b815a"
+      diffRemoved: "#b2555f"
+  light:
+    surface: "#f5f6f8"
+    ink: "#2b303b"
+    accent: "#2f65d9"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#d85462"
+      success: "#4fa66d"
+      warning: "#d19a66"
+      error: "#e06c75"
+      info: "#61afef"
+      diffAdded: "#c2ebcf"
+      diffRemoved: "#f7c1c5"

@@ -1,0 +1,36 @@
+# Ported from the original's catppuccin.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "catppuccin"
+name: "Catppuccin"
+variants:
+  dark:
+    surface: "#1e1e2e"
+    ink: "#cdd6f4"
+    accent: "#b4befe"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#f38ba8"
+      success: "#a6d189"
+      warning: "#f4b8e4"
+      error: "#f38ba8"
+      info: "#89dceb"
+      diffAdded: "#94e2d5"
+      diffRemoved: "#f38ba8"
+  light:
+    surface: "#eff1f5"
+    ink: "#4c4f69"
+    accent: "#1e66f5"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#d20f39"
+      success: "#40a02b"
+      warning: "#df8e1d"
+      error: "#d20f39"
+      info: "#04a5e5"
+      diffAdded: "#a6d189"
+      diffRemoved: "#e78284"

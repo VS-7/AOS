@@ -1,0 +1,26 @@
+# The house theme, ported from the original's own. The palette is kept and
+# the name is not: this product is AOS (ADR-0000). Every derived token is
+# computed from surface, ink, accent and contrast, as the original does.
+id: "aos"
+name: "AOS"
+variants:
+  dark:
+    surface: "#0d0b08"
+    ink: "#f5f5f5"
+    accent: "#ffffff"
+    contrast: 90
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      diffAdded: "#4ade80"
+      diffRemoved: "#e7000b"
+  light:
+    surface: "#f5f5f5"
+    ink: "#0d0b08"
+    accent: "#000000"
+    contrast: 60
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      diffAdded: "#00a240"
+      diffRemoved: "#ba2623"

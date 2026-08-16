@@ -80,6 +80,7 @@ func (p Paths) GatewayLock() string        { return filepath.Join(p.GatewayDir()
 func (p Paths) Tmp() string                { return filepath.Join(p.Root, "tmp") }
 func (p Paths) Outputs() string            { return filepath.Join(p.Tmp(), "outputs") }
 func (p Paths) Workspaces() string         { return filepath.Join(p.Root, "workspaces") }
+func (p Paths) Themes() string             { return filepath.Join(p.Root, "themes") }
 func (p Paths) Workspace(id string) string { return filepath.Join(p.Workspaces(), id) }
 
 // Index is derived data: safe to delete, rebuilt on demand. It lives under
@@ -94,7 +95,11 @@ func (p Paths) SecretFiles() []string { return []string{p.Config(), p.Users()} }
 
 // Ensure creates the directory skeleton with restrictive permissions.
 func (p Paths) Ensure() error {
-	for _, d := range []string{p.Root, p.Data(), p.Runtime(), p.GatewayDir(), p.Outputs(), p.Workspaces()} {
+	dirs := []string{
+		p.Root, p.Data(), p.Runtime(), p.GatewayDir(),
+		p.Outputs(), p.Workspaces(), p.Themes(),
+	}
+	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			return apperr.New("STATE_DIR_UNWRITABLE").
 				Causer("config.Paths.Ensure").

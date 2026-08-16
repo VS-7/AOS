@@ -1,0 +1,36 @@
+# Ported from the original's cursor.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "cursor"
+name: "Cursor"
+variants:
+  dark:
+    surface: "#181818"
+    ink: "#e4e4e4"
+    accent: "#88c0d0"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#88c0d0"
+      success: "#3fa266"
+      warning: "#f1b467"
+      error: "#e34671"
+      info: "#81a1c1"
+      diffAdded: "#70b489"
+      diffRemoved: "#fc6b83"
+  light:
+    surface: "#fcfcfc"
+    ink: "#141414"
+    accent: "#2b6d7d"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#6f9ba6"
+      success: "#1f8a65"
+      warning: "#db704b"
+      error: "#cf2d56"
+      info: "#3c7cab"
+      diffAdded: "#55a583"
+      diffRemoved: "#e75e78"

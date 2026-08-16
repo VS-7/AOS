@@ -1,0 +1,34 @@
+# Ported from the original's osaka-jade.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "osaka-jade"
+name: "Osaka Jade"
+variants:
+  dark:
+    surface: "#111c18"
+    ink: "#C1C497"
+    accent: "#2DD5B7"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#549e6a"
+      success: "#549e6a"
+      warning: "#E5C736"
+      error: "#FF5345"
+      info: "#2DD5B7"
+      diffAdded: "#63b07a"
+      diffRemoved: "#db9f9c"
+  light:
+    surface: "#F6F5DD"
+    ink: "#111c18"
+    accent: "#0e7361"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#3d7a52"
+      success: "#3d7a52"
+      warning: "#b5a020"
+      error: "#c7392d"
+      info: "#1faa90"

@@ -1,0 +1,36 @@
+# Ported from the original's dracula.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "dracula"
+name: "Dracula"
+variants:
+  dark:
+    surface: "#1d1e28"
+    ink: "#f8f8f2"
+    accent: "#bd93f9"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#ff79c6"
+      success: "#50fa7b"
+      warning: "#ffb86c"
+      error: "#ff5555"
+      info: "#8be9fd"
+      diffAdded: "#2fb27d"
+      diffRemoved: "#ff6b81"
+  light:
+    surface: "#f8f8f2"
+    ink: "#1f1f2f"
+    accent: "#7c6bf5"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#d16090"
+      success: "#2fbf71"
+      warning: "#f7a14d"
+      error: "#d9536f"
+      info: "#1d7fc5"
+      diffAdded: "#9fe3b3"
+      diffRemoved: "#f8a1b8"

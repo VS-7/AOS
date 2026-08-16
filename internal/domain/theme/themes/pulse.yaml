@@ -1,0 +1,36 @@
+# Ported from the original's pulse.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "pulse"
+name: "Pulse"
+variants:
+  dark:
+    surface: "#0a0a0a"
+    ink: "#eeeeee"
+    accent: "#fab283"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#9d7cd8"
+      success: "#7fd88f"
+      warning: "#f5a742"
+      error: "#e06c75"
+      info: "#56b6c2"
+      diffAdded: "#b8db87"
+      diffRemoved: "#e26a75"
+  light:
+    surface: "#ffffff"
+    ink: "#1a1a1a"
+    accent: "#3b7dd8"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#d68c27"
+      success: "#3d9a57"
+      warning: "#d68c27"
+      error: "#d1383d"
+      info: "#318795"
+      diffAdded: "#4db380"
+      diffRemoved: "#f52a65"

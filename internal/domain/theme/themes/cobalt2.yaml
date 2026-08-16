@@ -1,0 +1,34 @@
+# Ported from the original's cobalt2.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "cobalt2"
+name: "Cobalt2"
+variants:
+  dark:
+    surface: "#193549"
+    ink: "#ffffff"
+    accent: "#0088ff"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#2affdf"
+      success: "#9eff80"
+      warning: "#ffc600"
+      error: "#ff0088"
+      info: "#ff9d00"
+      diffAdded: "#b9ff9f"
+      diffRemoved: "#ff5fb3"
+  light:
+    surface: "#ffffff"
+    ink: "#193549"
+    accent: "#0066cc"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#00acc1"
+      success: "#4caf50"
+      warning: "#ff9800"
+      error: "#e91e63"
+      info: "#ff5722"

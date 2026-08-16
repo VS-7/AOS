@@ -1,0 +1,32 @@
+# Ported from the original's palenight.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "palenight"
+name: "Palenight"
+variants:
+  dark:
+    surface: "#292d3e"
+    ink: "#a6accd"
+    accent: "#82aaff"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#89ddff"
+      success: "#c3e88d"
+      warning: "#ffcb6b"
+      error: "#f07178"
+      info: "#f78c6c"
+  light:
+    surface: "#fafafa"
+    ink: "#292d3e"
+    accent: "#4976eb"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#00acc1"
+      success: "#91b859"
+      warning: "#ffb300"
+      error: "#e53935"
+      info: "#f4511e"

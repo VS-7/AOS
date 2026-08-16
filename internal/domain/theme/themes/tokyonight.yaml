@@ -1,0 +1,36 @@
+# Ported from the original's tokyonight.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "tokyonight"
+name: "Tokyonight"
+variants:
+  dark:
+    surface: "#1a1b26"
+    ink: "#c0caf5"
+    accent: "#7aa2f7"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#ff9e64"
+      success: "#9ece6a"
+      warning: "#e0af68"
+      error: "#f7768e"
+      info: "#7dcfff"
+      diffAdded: "#41a6b5"
+      diffRemoved: "#c34043"
+  light:
+    surface: "#e1e2e7"
+    ink: "#273153"
+    accent: "#2e7de9"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#b15c00"
+      success: "#587539"
+      warning: "#8c6c3e"
+      error: "#c94060"
+      info: "#007197"
+      diffAdded: "#4f8f7b"
+      diffRemoved: "#d05f7c"

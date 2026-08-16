@@ -1,0 +1,34 @@
+# Ported from the original's catppuccin-macchiato.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "catppuccin-macchiato"
+name: "Catppuccin Macchiato"
+variants:
+  dark:
+    surface: "#24273a"
+    ink: "#cad3f5"
+    accent: "#8aadf4"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#f5bde6"
+      success: "#a6da95"
+      warning: "#eed49f"
+      error: "#ed8796"
+      info: "#8bd5ca"
+  light:
+    surface: "#eff1f5"
+    ink: "#4c4f69"
+    accent: "#8839ef"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#ea76cb"
+      success: "#40a02b"
+      warning: "#df8e1d"
+      error: "#d20f39"
+      info: "#179299"
+      diffAdded: "#40a02b"
+      diffRemoved: "#d20f39"

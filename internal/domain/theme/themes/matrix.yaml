@@ -1,0 +1,36 @@
+# Ported from the original's matrix.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "matrix"
+name: "Matrix"
+variants:
+  dark:
+    surface: "#0a0e0a"
+    ink: "#62ff94"
+    accent: "#2eff6a"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#c770ff"
+      success: "#62ff94"
+      warning: "#e6ff57"
+      error: "#ff4b4b"
+      info: "#30b3ff"
+      diffAdded: "#77ffaf"
+      diffRemoved: "#ff7171"
+  light:
+    surface: "#eef3ea"
+    ink: "#203022"
+    accent: "#138A34"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#c770ff"
+      success: "#1cc24b"
+      warning: "#e6ff57"
+      error: "#ff4b4b"
+      info: "#30b3ff"
+      diffAdded: "#5dac7e"
+      diffRemoved: "#d53a3a"

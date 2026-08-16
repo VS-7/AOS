@@ -1,0 +1,36 @@
+# Ported from the original's amoled.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "amoled"
+name: "AMOLED"
+variants:
+  dark:
+    surface: "#000000"
+    ink: "#ffffff"
+    accent: "#b388ff"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#ff4081"
+      success: "#00ff88"
+      warning: "#ffea00"
+      error: "#ff1744"
+      info: "#18ffff"
+      diffAdded: "#00ff88"
+      diffRemoved: "#ff1744"
+  light:
+    surface: "#f0f0f0"
+    ink: "#0a0a0a"
+    accent: "#6200ff"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#ff0080"
+      success: "#00e676"
+      warning: "#ffab00"
+      error: "#ff1744"
+      info: "#00b0ff"
+      diffAdded: "#00e676"
+      diffRemoved: "#ff1744"

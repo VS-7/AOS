@@ -1,0 +1,36 @@
+# Ported from the original's carbonfox.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "carbonfox"
+name: "Carbonfox"
+variants:
+  dark:
+    surface: "#393939"
+    ink: "#f2f4f8"
+    accent: "#33b1ff"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#ff8389"
+      success: "#42be65"
+      warning: "#f1c21b"
+      error: "#ff8389"
+      info: "#78a9ff"
+      diffAdded: "#42be65"
+      diffRemoved: "#ff8389"
+  light:
+    surface: "#f2f4f8"
+    ink: "#161616"
+    accent: "#0072c3"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#da1e28"
+      success: "#198038"
+      warning: "#f1c21b"
+      error: "#da1e28"
+      info: "#0043ce"
+      diffAdded: "#198038"
+      diffRemoved: "#da1e28"

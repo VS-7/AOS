@@ -1,0 +1,34 @@
+# Ported from the original's zenburn.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "zenburn"
+name: "Zenburn"
+variants:
+  dark:
+    surface: "#3f3f3f"
+    ink: "#dcdccc"
+    accent: "#8cd0d3"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#93e0e3"
+      success: "#7f9f7f"
+      warning: "#f0dfaf"
+      error: "#cc9393"
+      info: "#dfaf8f"
+      diffAdded: "#8fb28f"
+      diffRemoved: "#dca3a3"
+  light:
+    surface: "#ffffef"
+    ink: "#3f3f3f"
+    accent: "#5f7f8f"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#5f8f8f"
+      success: "#5f8f5f"
+      warning: "#8f8f5f"
+      error: "#8f5f5f"
+      info: "#8f7f5f"

@@ -1,0 +1,32 @@
+# Ported from the original's mercury.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "mercury"
+name: "Mercury"
+variants:
+  dark:
+    surface: "#171721"
+    ink: "#dddde5"
+    accent: "#8da4f5"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#8da4f5"
+      success: "#77c599"
+      warning: "#fc9b6f"
+      error: "#fc92b4"
+      info: "#77becf"
+  light:
+    surface: "#ffffff"
+    ink: "#363644"
+    accent: "#5266eb"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#8da4f5"
+      success: "#036e43"
+      warning: "#a44200"
+      error: "#b0175f"
+      info: "#007f95"

@@ -1,0 +1,32 @@
+# Ported from the original's flexoki.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "flexoki"
+name: "Flexoki"
+variants:
+  dark:
+    surface: "#100F0F"
+    ink: "#CECDC3"
+    accent: "#DA702C"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#8B7EC8"
+      success: "#879A39"
+      warning: "#DA702C"
+      error: "#D14D41"
+      info: "#3AA99F"
+  light:
+    surface: "#FFFCF0"
+    ink: "#100F0F"
+    accent: "#205EA6"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#BC5215"
+      success: "#66800B"
+      warning: "#BC5215"
+      error: "#AF3029"
+      info: "#24837B"

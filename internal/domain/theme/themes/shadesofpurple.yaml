@@ -1,0 +1,36 @@
+# Ported from the original's shadesofpurple.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "shadesofpurple"
+name: "Shades of Purple"
+variants:
+  dark:
+    surface: "#1a102b"
+    ink: "#f5f0ff"
+    accent: "#c792ff"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#ff7ac6"
+      success: "#7be0b0"
+      warning: "#ffd580"
+      error: "#ff7ac6"
+      info: "#7dd4ff"
+      diffAdded: "#53c39f"
+      diffRemoved: "#d85aa0"
+  light:
+    surface: "#f7ebff"
+    ink: "#3b2c59"
+    accent: "#7a5af8"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#ff6bd5"
+      success: "#3dd598"
+      warning: "#f7c948"
+      error: "#ff6bd5"
+      info: "#62d4ff"
+      diffAdded: "#c8f8da"
+      diffRemoved: "#ffc3ef"

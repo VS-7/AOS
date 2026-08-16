@@ -1,0 +1,36 @@
+# Ported from the original's everforest.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "everforest"
+name: "Everforest"
+variants:
+  dark:
+    surface: "#2d353b"
+    ink: "#d3c6aa"
+    accent: "#a7c080"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#d699b6"
+      success: "#a7c080"
+      warning: "#e69875"
+      error: "#e67e80"
+      info: "#83c092"
+      diffAdded: "#b8db87"
+      diffRemoved: "#e26a75"
+  light:
+    surface: "#fdf6e3"
+    ink: "#5c6a72"
+    accent: "#5e7300"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#df69ba"
+      success: "#8da101"
+      warning: "#f57d26"
+      error: "#f85552"
+      info: "#35a77c"
+      diffAdded: "#4db380"
+      diffRemoved: "#f52a65"

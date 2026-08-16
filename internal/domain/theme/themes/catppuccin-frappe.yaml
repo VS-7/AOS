@@ -1,0 +1,34 @@
+# Ported from the original's catppuccin-frappe.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "catppuccin-frappe"
+name: "Catppuccin Frappe"
+variants:
+  dark:
+    surface: "#303446"
+    ink: "#c6d0f5"
+    accent: "#8da4e2"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#f4b8e4"
+      success: "#a6d189"
+      warning: "#e5c890"
+      error: "#e78284"
+      info: "#81c8be"
+  light:
+    surface: "#eff1f5"
+    ink: "#4c4f69"
+    accent: "#1e66f5"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#ea76cb"
+      success: "#40a02b"
+      warning: "#df8e1d"
+      error: "#d20f39"
+      info: "#179299"
+      diffAdded: "#40a02b"
+      diffRemoved: "#d20f39"

@@ -1,0 +1,32 @@
+# Ported from the original's material.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "material"
+name: "Material"
+variants:
+  dark:
+    surface: "#263238"
+    ink: "#eeffff"
+    accent: "#82aaff"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#89ddff"
+      success: "#c3e88d"
+      warning: "#ffcb6b"
+      error: "#f07178"
+      info: "#ffcb6b"
+  light:
+    surface: "#fafafa"
+    ink: "#263238"
+    accent: "#6182b8"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#39adb5"
+      success: "#91b859"
+      warning: "#ffb300"
+      error: "#e53935"
+      info: "#f4511e"

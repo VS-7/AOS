@@ -19,6 +19,7 @@ import (
 	"github.com/OWNER/aos/internal/adapters/fsauth"
 	"github.com/OWNER/aos/internal/adapters/fscollections"
 	"github.com/OWNER/aos/internal/adapters/fsconfig"
+	"github.com/OWNER/aos/internal/adapters/fsthemes"
 	"github.com/OWNER/aos/internal/adapters/fsworkspace"
 	"github.com/OWNER/aos/internal/adapters/gitcli"
 	"github.com/OWNER/aos/internal/adapters/sqlitequeue"
@@ -43,6 +44,7 @@ import (
 	"github.com/OWNER/aos/internal/domain/memory"
 	"github.com/OWNER/aos/internal/domain/routine"
 	"github.com/OWNER/aos/internal/domain/task"
+	"github.com/OWNER/aos/internal/domain/theme"
 	"github.com/OWNER/aos/internal/domain/todo"
 	"github.com/OWNER/aos/internal/domain/workspace"
 	"github.com/OWNER/aos/internal/runtime/agentloop"
@@ -104,6 +106,10 @@ type App struct {
 	Routines   *routine.Service
 	Activities *activity.Service
 	Jobs       *job.Service
+
+	// Themes is the appearance of the application: the built-in presets and
+	// the user's, with the tokens every component reads.
+	Themes *theme.Service
 
 	// Queue is the durable store behind the worker. It is exported so a test
 	// can enqueue and drain deterministically rather than waiting on a tick.
@@ -253,6 +259,17 @@ func New(opts Options) (*App, error) {
 		WorkingDir:    root,
 	})
 
+	// The appearance of the application. The built-in presets are embedded, so
+	// a broken one is a build failure rather than a runtime surprise — which is
+	// why this is the one service whose construction can refuse to start.
+	themeSvc, err := theme.NewService(theme.Deps{
+		Store: fsthemes.New(paths.Themes()),
+		Log:   logger,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	authSvc := auth.NewService(auth.Deps{
 		Store: fsauth.FromPaths(paths),
 		Clock: clock,
@@ -359,6 +376,7 @@ func New(opts Options) (*App, error) {
 	comment.Register(reg, commentSvc)
 	routine.Register(reg, routineSvc)
 	activity.Register(reg, activitySvc)
+	theme.Register(reg, themeSvc)
 
 	assembler := prompt.NewAssembler(prompt.Deps{
 		Clock:  promptClock{clock: clock, zone: zoneFrom(configSvc, logger)},
@@ -476,6 +494,7 @@ func New(opts Options) (*App, error) {
 		Routines:     routineSvc,
 		Activities:   activitySvc,
 		Jobs:         jobSvc,
+		Themes:       themeSvc,
 		Queue:        queue,
 		Worker:       pool,
 		Subconscious: observer,

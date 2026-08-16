@@ -30,6 +30,7 @@ import (
 	"github.com/OWNER/aos/internal/domain/memory"
 	"github.com/OWNER/aos/internal/domain/routine"
 	"github.com/OWNER/aos/internal/domain/task"
+	"github.com/OWNER/aos/internal/domain/theme"
 	"github.com/OWNER/aos/internal/domain/todo"
 	"github.com/OWNER/aos/internal/domain/workspace"
 	"github.com/OWNER/aos/internal/transport/clix"
@@ -433,6 +434,38 @@ var scenarios = map[string]scenario{
 	"jobs_purge": {
 		Payload: job.PurgeInput{OlderThanDays: 1, Reasoning: reason()},
 	},
+
+	"themes_list": {
+		Payload: theme.ListInput{Reasoning: reason()},
+	},
+	"themes_get": {
+		Payload: theme.GetInput{ID: "nord", Reasoning: reason()},
+	},
+	"themes_install": {
+		Payload: theme.InstallInput{
+			ID: "midnight", Name: "Midnight",
+			Variants: map[theme.Appearance]theme.Palette{
+				theme.Dark: {Surface: "#0b0d12", Ink: "#e6e9ef", Accent: "#7aa2f7", Contrast: 70},
+			},
+			Reasoning: reason(),
+		},
+	},
+	"themes_delete": {
+		Payload: theme.DeleteInput{ID: "midnight", Reasoning: reason()},
+		Seed:    seedTheme,
+	},
+}
+
+func seedTheme(t *testing.T, a *app.App) {
+	t.Helper()
+	if _, err := a.Themes.Install(parityCtx(), theme.InstallInput{
+		ID: "midnight",
+		Variants: map[theme.Appearance]theme.Palette{
+			theme.Dark: {Surface: "#0b0d12", Ink: "#e6e9ef", Accent: "#7aa2f7", Contrast: 70},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // seedTask creates the task the subcollections hang off. Its identifier is m-1

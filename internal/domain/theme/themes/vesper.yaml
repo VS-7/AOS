@@ -1,0 +1,36 @@
+# Ported from the original's vesper.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "vesper"
+name: "Vesper"
+variants:
+  dark:
+    surface: "#101010"
+    ink: "#FFF"
+    accent: "#FFC799"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#FF8080"
+      success: "#99FFE4"
+      warning: "#FFC799"
+      error: "#FF8080"
+      info: "#FFC799"
+      diffAdded: "#99FFE4"
+      diffRemoved: "#FF8080"
+  light:
+    surface: "#F0F0F0"
+    ink: "#101010"
+    accent: "#D95300"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#B30000"
+      success: "#008A60"
+      warning: "#D95300"
+      error: "#D92626"
+      info: "#0072B2"
+      diffAdded: "#008A60"
+      diffRemoved: "#D92626"

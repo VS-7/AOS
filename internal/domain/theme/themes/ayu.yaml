@@ -1,0 +1,36 @@
+# Ported from the original's ayu.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "ayu"
+name: "Ayu"
+variants:
+  dark:
+    surface: "#0f1419"
+    ink: "#d6dae0"
+    accent: "#3fb7e3"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#f2856f"
+      success: "#78d05c"
+      warning: "#e4a75c"
+      error: "#f58572"
+      info: "#66c6f1"
+      diffAdded: "#59c57c"
+      diffRemoved: "#f58572"
+  light:
+    surface: "#fdfaf4"
+    ink: "#4f5964"
+    accent: "#007a99"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#ef7d71"
+      success: "#5fb978"
+      warning: "#ea9f41"
+      error: "#e6656a"
+      info: "#2f9bce"
+      diffAdded: "#b1d780"
+      diffRemoved: "#e6656a"

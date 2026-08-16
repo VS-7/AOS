@@ -1,0 +1,36 @@
+# Ported from the original's vercel.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "vercel"
+name: "Vercel"
+variants:
+  dark:
+    surface: "#000000"
+    ink: "#EDEDED"
+    accent: "#0070F3"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#8E4EC6"
+      success: "#46A758"
+      warning: "#FFB224"
+      error: "#E5484D"
+      info: "#52A8FF"
+      diffAdded: "#63C46D"
+      diffRemoved: "#FF6166"
+  light:
+    surface: "#FFFFFF"
+    ink: "#171717"
+    accent: "#0070F3"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#8E4EC6"
+      success: "#388E3C"
+      warning: "#FF9500"
+      error: "#DC3545"
+      info: "#0070F3"
+      diffAdded: "#46A758"
+      diffRemoved: "#E5484D"

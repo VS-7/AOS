@@ -1,0 +1,36 @@
+# Ported from the original's nord.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "nord"
+name: "Nord"
+variants:
+  dark:
+    surface: "#2e3440"
+    ink: "#e5e9f0"
+    accent: "#88c0d0"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#d57780"
+      success: "#a3be8c"
+      warning: "#d08770"
+      error: "#bf616a"
+      info: "#81a1c1"
+      diffAdded: "#81a1c1"
+      diffRemoved: "#bf616a"
+  light:
+    surface: "#eceff4"
+    ink: "#2e3440"
+    accent: "#5e81ac"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#bf616a"
+      success: "#8fbcbb"
+      warning: "#d08770"
+      error: "#bf616a"
+      info: "#81a1c1"
+      diffAdded: "#a3be8c"
+      diffRemoved: "#bf616a"

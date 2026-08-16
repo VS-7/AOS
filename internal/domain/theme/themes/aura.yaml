@@ -1,0 +1,36 @@
+# Ported from the original's aura.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "aura"
+name: "Aura"
+variants:
+  dark:
+    surface: "#15141b"
+    ink: "#edecee"
+    accent: "#a277ff"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#ff6767"
+      success: "#61ffca"
+      warning: "#ffca85"
+      error: "#ff6767"
+      info: "#82e2ff"
+      diffAdded: "#61ffca"
+      diffRemoved: "#ff6767"
+  light:
+    surface: "#f5f0ff"
+    ink: "#2d2640"
+    accent: "#6c35de"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#d94f4f"
+      success: "#40bf7a"
+      warning: "#d9a24a"
+      error: "#d94f4f"
+      info: "#5bb8d9"
+      diffAdded: "#b3e6cc"
+      diffRemoved: "#f5b3b3"

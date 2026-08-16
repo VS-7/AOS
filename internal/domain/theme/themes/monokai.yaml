@@ -1,0 +1,36 @@
+# Ported from the original's monokai.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "monokai"
+name: "Monokai"
+variants:
+  dark:
+    surface: "#272822"
+    ink: "#f8f8f2"
+    accent: "#ae81ff"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#f92672"
+      success: "#a6e22e"
+      warning: "#fd971f"
+      error: "#f92672"
+      info: "#66d9ef"
+      diffAdded: "#4d7f2a"
+      diffRemoved: "#f4477c"
+  light:
+    surface: "#fdf8ec"
+    ink: "#292318"
+    accent: "#8b008b"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#d9487c"
+      success: "#4fb54b"
+      warning: "#f1a948"
+      error: "#e54b4b"
+      info: "#2d9ad7"
+      diffAdded: "#bfe7a3"
+      diffRemoved: "#f6a3ae"

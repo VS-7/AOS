@@ -23,6 +23,9 @@ var floors = map[string]float64{
 	"github.com/OWNER/aos/internal/transport": 60,
 	// Adapters are held to their contract suite, not to a coverage number.
 	"github.com/OWNER/aos/internal/adapters": 0,
+	// The theme presets are files in a directory, exercised through the theme
+	// aggregate and through the app. What would a percentage here measure?
+	"github.com/OWNER/aos/internal/adapters/fsthemes": 0,
 	// Model providers are adapters too, and the same reasoning applies: what
 	// says an adapter is right is providertest running the same conversation
 	// through it, not the fraction of its translation table a test touched.

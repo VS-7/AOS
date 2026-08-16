@@ -1,0 +1,32 @@
+# Ported from the original's github.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "github"
+name: "GitHub"
+variants:
+  dark:
+    surface: "#0d1117"
+    ink: "#c9d1d9"
+    accent: "#58a6ff"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#39c5cf"
+      success: "#3fb950"
+      warning: "#e3b341"
+      error: "#f85149"
+      info: "#d29922"
+  light:
+    surface: "#ffffff"
+    ink: "#24292f"
+    accent: "#0969da"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#1b7c83"
+      success: "#1a7f37"
+      warning: "#9a6700"
+      error: "#cf222e"
+      info: "#bc4c00"

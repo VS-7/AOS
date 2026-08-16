@@ -1,0 +1,34 @@
+# Ported from the original's helix.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "helix"
+name: "Helix"
+variants:
+  dark:
+    surface: "#1f1f1f"
+    ink: "#f1ece8"
+    accent: "#fab283"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      success: "#12c905"
+      warning: "#fcd53a"
+      error: "#fc533a"
+      info: "#edb2f1"
+      diffAdded: "#c8ffc4"
+      diffRemoved: "#fc533a"
+  light:
+    surface: "#f7f7f7"
+    ink: "#171311"
+    accent: "#4A6D8C"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      success: "#12c905"
+      warning: "#ffdc17"
+      error: "#fc533a"
+      info: "#a753ae"
+      diffAdded: "#9ff29a"
+      diffRemoved: "#fc533a"

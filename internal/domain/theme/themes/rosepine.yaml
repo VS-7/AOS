@@ -1,0 +1,32 @@
+# Ported from the original's rosepine.theme.ts. The palette is the author's; every
+# derived token is computed from surface, ink, accent and contrast, the
+# way the original's theme provider does it.
+id: "rosepine"
+name: "Rose Pine"
+variants:
+  dark:
+    surface: "#191724"
+    ink: "#e0def4"
+    accent: "#9ccfd8"
+    contrast: 88
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#ebbcba"
+      success: "#31748f"
+      warning: "#f6c177"
+      error: "#eb6f92"
+      info: "#9ccfd8"
+  light:
+    surface: "#faf4ed"
+    ink: "#575279"
+    accent: "#31748f"
+    contrast: 62
+    radius: "lg"
+    windows: "blur"
+    semantic:
+      accent: "#d7827e"
+      success: "#286983"
+      warning: "#ea9d34"
+      error: "#b4637a"
+      info: "#56949f"
