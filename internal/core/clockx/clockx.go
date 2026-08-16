@@ -40,6 +40,17 @@ type Stepping struct {
 	mu sync.Mutex
 }
 
+// Set moves the clock to an instant.
+//
+// It exists for the tests that need a record filed on a particular day or in a
+// particular month: setting the clock is closer to what happens in production
+// than building the record by hand with a timestamp the service never chose.
+func (s *Stepping) Set(at time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.At = at
+}
+
 // Now returns the current instant and advances.
 func (s *Stepping) Now() time.Time {
 	s.mu.Lock()

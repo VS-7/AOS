@@ -26,8 +26,8 @@ func TestMatchExtractsPlaceholders(t *testing.T) {
 			collections.Key{"id": "orchestrator"},
 		},
 		{
-			".aos/tasks/{taskId}/todos/{id}.json",
-			".aos/tasks/t-1/todos/td-9.json",
+			".aos/tasks/{taskId}/todos/{id}.todo.md",
+			".aos/tasks/t-1/todos/td-9.todo.md",
 			collections.Key{"taskId": "t-1", "id": "td-9"},
 		},
 		{

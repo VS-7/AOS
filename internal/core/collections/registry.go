@@ -68,11 +68,16 @@ var natives = []Descriptor{
 	d("tasks", FormatMarkdown, true,
 		Root+"/tasks/{id}/TASK.md",
 	),
-	d("todos", FormatJSON, false,
-		Root+"/tasks/{taskId}/todos/{id}.json",
+	// The original stores both of these as JSON. They are Markdown here, and
+	// the reason is the one ADR-0004 gives for the whole persistence model: a
+	// comment body is prose, and prose in a JSON string is a single line with
+	// escaped newlines — unreadable in a diff and impossible to edit by hand.
+	// A todo follows its sibling so the two subcollections stay consistent.
+	d("todos", FormatMarkdown, false,
+		Root+"/tasks/{taskId}/todos/{id}.todo.md",
 	),
-	d("comments", FormatJSON, false,
-		Root+"/tasks/{taskId}/comments/{id}.json",
+	d("comments", FormatMarkdown, false,
+		Root+"/tasks/{taskId}/comments/{id}.comment.md",
 	),
 	d("chats", FormatJSON, false,
 		Root+"/chats/{id}.chat.json",

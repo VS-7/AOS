@@ -87,8 +87,14 @@ func TestCascadeIsDeclaredForDirectoryBackedCollections(t *testing.T) {
 	}
 }
 
+// TestFormatMatchesTheOriginal, with two deliberate exceptions.
+//
+// The original stores todos and comments as JSON. They are Markdown here
+// because a comment body is prose, and prose in a JSON string is one line with
+// escaped newlines — the exact thing ADR-0004 rejects. The divergence is
+// recorded in the Todo (Go) and Comment (Go) notes.
 func TestFormatMatchesTheOriginal(t *testing.T) {
-	jsonBacked := map[string]bool{"chats": true, "todos": true, "comments": true, "runs": true}
+	jsonBacked := map[string]bool{"chats": true, "runs": true}
 	for _, desc := range collections.Natives() {
 		want := collections.FormatMarkdown
 		if jsonBacked[desc.Name] {

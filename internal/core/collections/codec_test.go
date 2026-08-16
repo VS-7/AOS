@@ -39,9 +39,14 @@ func markdownModel() collections.Model[probe] {
 }
 
 func jsonModel() collections.Model[probe] {
-	m, err := collections.ModelOf[probe]("todos")
+	m, err := collections.ModelOf[probe]("runs")
 	if err != nil {
 		panic(err)
+	}
+	if m.Format != collections.FormatJSON {
+		// A collection that quietly changes format would turn this test into a
+		// second Markdown round-trip that passes and proves nothing.
+		panic("jsonModel is not JSON-backed")
 	}
 	return m
 }
@@ -184,8 +189,8 @@ func TestDecodeRejectsBrokenFrontMatter(t *testing.T) {
 
 func TestJSONRoundTrip(t *testing.T) {
 	m := jsonModel()
-	key := collections.Key{"taskId": "t-1", "id": "td-9"}
-	want := &probe{TaskID: "leaked", ID: "leaked", Title: "write the test", Confidence: 1}
+	key := collections.Key{"task": "t-1", "id": "r-9"}
+	want := &probe{Task: "leaked", ID: "leaked", Title: "write the test", Confidence: 1}
 
 	data, err := collections.Encode(want, m)
 	if err != nil {
@@ -198,7 +203,7 @@ func TestJSONRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.TaskID != "t-1" || got.ID != "td-9" || got.Title != "write the test" {
+	if got.Task != "t-1" || got.ID != "r-9" || got.Title != "write the test" {
 		t.Fatalf("got %+v", got)
 	}
 }
