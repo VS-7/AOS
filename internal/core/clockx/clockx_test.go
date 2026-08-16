@@ -56,3 +56,18 @@ func TestSteppingClockDefaultsToOneSecond(t *testing.T) {
 		t.Fatalf("step = %v, want 1s", got)
 	}
 }
+
+// TestSettingTheSteppingClockMovesIt, which is how a test files a record on a
+// particular day without building the record by hand.
+func TestSettingTheSteppingClockMovesIt(t *testing.T) {
+	c := &clockx.Stepping{At: refTime, Step: time.Minute}
+	later := refTime.AddDate(0, 2, 0)
+
+	c.Set(later)
+	if got := c.Now(); !got.Equal(later) {
+		t.Fatalf("Now = %v, want %v", got, later)
+	}
+	if got := c.Now(); !got.Equal(later.Add(time.Minute)) {
+		t.Fatalf("the clock stopped stepping after being set: %v", got)
+	}
+}
