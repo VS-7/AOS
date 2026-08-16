@@ -128,11 +128,11 @@ func (r *Repo[T]) pathForKey(key collections.Key) (string, bool, error) {
 
 // pathForWrite builds the path a new or updated record must occupy.
 func (r *Repo[T]) pathForWrite(v *T) (string, collections.Key, error) {
-	p, err := r.model.WritePattern()
+	key := collections.KeyOf(v)
+	p, err := r.model.WritePatternFor(key)
 	if err != nil {
 		return "", nil, err
 	}
-	key := collections.KeyOf(v)
 	rel, err := p.Build(key)
 	if err != nil {
 		return "", nil, err

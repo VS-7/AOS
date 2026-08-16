@@ -58,6 +58,35 @@ func (m Model[T]) WritePattern() (*Pattern, error) {
 	return nil, errNoWritablePattern(m.Name)
 }
 
+// WritePatternFor picks the writable pattern a key can actually fill.
+//
+// A collection with one shape does not need it. One with several does: a run
+// belongs either to a task or to a routine, and the two live in different
+// directories with different placeholders. Choosing by the fields the record
+// carries is what lets one collection hold both — and falling back to the first
+// writable pattern keeps the single-shape case behaving exactly as before.
+func (m Model[T]) WritePatternFor(k Key) (*Pattern, error) {
+	for _, p := range m.Patterns {
+		if !p.Writable() {
+			continue
+		}
+		if fills(p, k) {
+			return p, nil
+		}
+	}
+	return m.WritePattern()
+}
+
+// fills reports whether a key has a non-empty value for every placeholder.
+func fills(p *Pattern, k Key) bool {
+	for _, field := range p.Fields() {
+		if k[field] == "" {
+			return false
+		}
+	}
+	return true
+}
+
 // MatchPath finds the pattern that owns a path and the key it yields.
 func (m Model[T]) MatchPath(rel string) (*Pattern, Key, bool) {
 	for _, p := range m.Patterns {
