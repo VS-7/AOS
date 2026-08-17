@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { DomainError } from "@/lib/client";
 import { AppStateProvider } from "@/lib/app-state";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { router } from "@/router";
 
 const queryClient = new QueryClient({
@@ -18,10 +19,12 @@ const queryClient = new QueryClient({
 
 export function App(): JSX.Element {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AppStateProvider>
-        <RouterProvider router={router} />
-      </AppStateProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AppStateProvider>
+          <RouterProvider router={router} />
+        </AppStateProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

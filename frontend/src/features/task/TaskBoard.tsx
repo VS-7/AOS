@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { JSX } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
-import { Failure } from "@/features/chat/ChatScreen";
+import { Failure } from "@/components/Failure";
 
 /** The eight states, in the order the board shows them. */
 const COLUMNS = [

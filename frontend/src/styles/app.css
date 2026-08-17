@@ -103,7 +103,13 @@ input, textarea {
 }
 input:focus-visible, textarea:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
-a { color: var(--primary); }
+/*
+ * No blanket `a { color }` rule: the ported design system's own components
+ * (SidebarMenuButton and friends) set their own link/text colour, including
+ * the distinct one for data-active — a global override here was flattening
+ * that back to one colour for every nav item regardless of which page is
+ * open. Nothing left in src/features renders a plain, unstyled <a>.
+ */
 
 /*
  * The app shell (sidebar, nav, workspace header) is now the ported

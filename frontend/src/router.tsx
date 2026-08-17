@@ -9,6 +9,7 @@ import {
   Outlet,
   Link,
   useRouterState,
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { client, isDesktop, setWorkspace } from "@/lib/client";
 import { useRealtime } from "@/lib/realtime";
@@ -21,7 +22,8 @@ import {
   type AppearancePreference,
   type ThemeSummary,
 } from "@/lib/theme";
-import { ChatScreen, Failure } from "@/features/chat/ChatScreen";
+import { ChatScreen } from "@/features/chat/ChatScreen";
+import { Failure } from "@/components/Failure";
 import { TaskBoard } from "@/features/task/TaskBoard";
 import { MemoryGraph } from "@/features/memory/MemoryGraph";
 import { ApprovalModal } from "@/components/ApprovalModal";
@@ -113,7 +115,24 @@ const memoriesRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([indexRoute, chatRoute, tasksRoute, memoriesRoute]);
 
-export const router = createRouter({ routeTree });
+/**
+ * What a route renders instead of its page when a loader throws — most often
+ * the daemon being unreachable. `reset` re-runs the failed route rather than
+ * reloading the page, so a person who started the daemon back up doesn't lose
+ * their place.
+ */
+function RouteErrorFallback({ error, reset }: ErrorComponentProps): JSX.Element {
+  return (
+    <div className="empty" role="alert">
+      <Failure error={error} />
+      <button type="button" onClick={() => reset()}>
+        Try again
+      </button>
+    </div>
+  );
+}
+
+export const router = createRouter({ routeTree, defaultErrorComponent: RouteErrorFallback });
 
 declare module "@tanstack/react-router" {
   interface Register {

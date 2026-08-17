@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { client } from "@/lib/client";
-import { Failure } from "@/features/chat/ChatScreen";
+import { Failure } from "@/components/Failure";
 
 interface GraphNode {
   id: string;
