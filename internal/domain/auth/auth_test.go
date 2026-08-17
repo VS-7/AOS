@@ -471,6 +471,68 @@ func TestUsersCarryNothingThatAuthenticates(t *testing.T) {
 	}
 }
 
+// TestGetReturnsThePublicProjection: the login/session HTTP surface needs to
+// answer "who is this" without ever handing back a hash.
+func TestGetReturnsThePublicProjection(t *testing.T) {
+	svc, store := newService(t)
+	onboard(t, svc)
+	id := store.users[0].ID
+
+	got, err := svc.Get(ctx(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != id || got.Username != "vitor" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestGetOnAMissingAccountIsNotFound(t *testing.T) {
+	svc, _ := newService(t)
+	if _, err := svc.Get(ctx(), "nobody"); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+// TestRevokeByTokenLogsOutOnlyTheSessionPresented: logging out one device must
+// not silently end every other session the account holds.
+func TestRevokeByTokenLogsOutOnlyTheSessionPresented(t *testing.T) {
+	svc, _ := newService(t)
+	onboard(t, svc)
+	first, err := svc.Login(ctx(), auth.LoginInput{Identifier: "vitor", Password: goodPassword})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := svc.Login(ctx(), auth.LoginInput{Identifier: "vitor", Password: goodPassword})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := svc.RevokeByToken(ctx(), first.Token); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.Authenticate(ctx(), first.Token); !errors.Is(err, apperr.ErrUnauthorized) {
+		t.Fatalf("the revoked session should no longer authenticate: %v", err)
+	}
+	if _, err := svc.Authenticate(ctx(), second.Token); err != nil {
+		t.Fatalf("the other session should still work: %v", err)
+	}
+}
+
+// TestRevokeByTokenIsIdempotent: a caller that is already logged out, or was
+// never logged in, gets the same quiet success — logout is not a place to
+// leak whether a value was ever a real credential.
+func TestRevokeByTokenIsIdempotent(t *testing.T) {
+	svc, _ := newService(t)
+	if err := svc.RevokeByToken(ctx(), ""); err != nil {
+		t.Fatalf("empty: %v", err)
+	}
+	if err := svc.RevokeByToken(ctx(), "not-a-real-token"); err != nil {
+		t.Fatalf("garbage: %v", err)
+	}
+}
+
 func ptr[T any](v T) *T { return &v }
 
 // steppingClock lets a test move time forward on purpose.

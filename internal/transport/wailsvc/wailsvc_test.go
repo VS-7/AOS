@@ -57,6 +57,32 @@ func (h health) Ready(context.Context) (bool, error) { return h.ready, h.err }
 
 func ctx() context.Context { return context.Background() }
 
+// authCaller is what AuthService talks to instead of the real daemonclient.
+type authCaller struct {
+	result   wailsvc.AuthResult
+	status   wailsvc.AuthStatus
+	session  wailsvc.PublicUser
+	failWith error
+}
+
+func (a *authCaller) Status(context.Context) (wailsvc.AuthStatus, error) {
+	return a.status, a.failWith
+}
+
+func (a *authCaller) Login(context.Context, string, string) (wailsvc.AuthResult, error) {
+	return a.result, a.failWith
+}
+
+func (a *authCaller) Onboarding(context.Context, string, string, string) (wailsvc.AuthResult, error) {
+	return a.result, a.failWith
+}
+
+func (a *authCaller) Logout(context.Context) error { return a.failWith }
+
+func (a *authCaller) Session(context.Context) (wailsvc.PublicUser, error) {
+	return a.session, a.failWith
+}
+
 // TestOpenExternalRefusesEverythingThatIsNotTheWeb. A link in a model's answer
 // with a local scheme would hand the machine to whatever wrote that text.
 func TestOpenExternalRefusesEverythingThatIsNotTheWeb(t *testing.T) {
@@ -344,10 +370,65 @@ func TestTheServicesNameThemselves(t *testing.T) {
 	cases := map[string]interface{ ServiceName() string }{
 		"SystemService": wailsvc.NewSystem(&platform{}, nil, t.TempDir()),
 		"DomainService": wailsvc.NewDomain(nil),
+		"AuthService":   wailsvc.NewAuth(nil, nil),
 	}
 	for want, svc := range cases {
 		if got := svc.ServiceName(); got != want {
 			t.Errorf("service is named %q, want %q", got, want)
 		}
+	}
+}
+
+// TestAuthWithNoDaemonSaysSo, the same shape as DomainService's equivalent:
+// a window that has not found its daemon yet gets a named cause, not a
+// generic failure three layers down.
+func TestAuthWithNoDaemonSaysSo(t *testing.T) {
+	svc := wailsvc.NewAuth(nil, nil)
+
+	if _, err := svc.Status(ctx()); err == nil {
+		t.Fatal("a status check with no daemon behind it reported success")
+	}
+	if _, err := svc.Login(ctx(), "vitor", "whatever"); err == nil {
+		t.Fatal("a login with no daemon behind it reported success")
+	}
+	if _, err := svc.Onboarding(ctx(), "Vitor", "vitor@example.test", "whatever"); err == nil {
+		t.Fatal("an onboarding with no daemon behind it reported success")
+	}
+	if err := svc.Logout(ctx()); err == nil {
+		t.Fatal("a logout with no daemon behind it reported success")
+	}
+	if _, err := svc.Session(ctx()); err == nil {
+		t.Fatal("a session check with no daemon behind it reported success")
+	}
+}
+
+// TestAuthRunsAfterAuthOnlyOnSuccess: the workspace registration this hook
+// exists for needs a token Login/Onboarding only just minted — running it
+// after a failure would register a workspace nobody is signed in to see.
+func TestAuthRunsAfterAuthOnlyOnSuccess(t *testing.T) {
+	var hookRuns int
+	hook := func(context.Context) { hookRuns++ }
+
+	ok := wailsvc.NewAuth(&authCaller{result: wailsvc.AuthResult{User: wailsvc.PublicUser{ID: "u1"}}}, hook)
+	if _, err := ok.Login(ctx(), "vitor", "whatever"); err != nil {
+		t.Fatal(err)
+	}
+	if hookRuns != 1 {
+		t.Fatalf("hookRuns after a successful login = %d, want 1", hookRuns)
+	}
+
+	failing := wailsvc.NewAuth(&authCaller{failWith: errors.New("wrong password")}, hook)
+	if _, err := failing.Login(ctx(), "vitor", "wrong"); err == nil {
+		t.Fatal("a failed login reported success")
+	}
+	if hookRuns != 1 {
+		t.Fatalf("hookRuns after a failed login = %d, want still 1", hookRuns)
+	}
+
+	if _, err := ok.Onboarding(ctx(), "Vitor", "vitor@example.test", "whatever"); err != nil {
+		t.Fatal(err)
+	}
+	if hookRuns != 2 {
+		t.Fatalf("hookRuns after a successful onboarding = %d, want 2", hookRuns)
 	}
 }

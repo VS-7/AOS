@@ -339,6 +339,53 @@ func (s *Service) ChangePassword(ctx context.Context, in ChangePasswordInput) er
 	return nil
 }
 
+// Get reads one account's public projection.
+func (s *Service) Get(ctx context.Context, userID string) (Public, error) {
+	users, err := s.store.Load(ctx)
+	if err != nil {
+		return Public{}, errStoreFailed("Get", err)
+	}
+	idx := indexOf(users, userID)
+	if idx < 0 {
+		return Public{}, errUserNotFound(userID)
+	}
+	return users[idx].ToPublic(), nil
+}
+
+// RevokeByToken finds and revokes the specific credential a caller presented —
+// the logout counterpart to Authenticate, for a caller that knows the value it
+// was handed but not which token record backs it.
+//
+// Presenting nothing, or a value that matches no token, revokes nothing and
+// returns no error: logging out is idempotent, and a caller that already has
+// no valid session gets the same "you are logged out" outcome either way.
+func (s *Service) RevokeByToken(ctx context.Context, bearer string) error {
+	presented := strings.TrimSpace(bearer)
+	if presented == "" {
+		return nil
+	}
+	users, err := s.store.Load(ctx)
+	if err != nil {
+		return errStoreFailed("RevokeByToken", err)
+	}
+	want := hashToken(presented)
+	now := s.clock.Now()
+	for i := range users {
+		for j := range users[i].Tokens {
+			if subtle.ConstantTimeCompare([]byte(users[i].Tokens[j].Hash), []byte(want)) != 1 {
+				continue
+			}
+			users[i].Tokens[j].RevokedAt = &now
+			users[i].UpdatedAt = now
+			if err := s.store.Save(ctx, users); err != nil {
+				return errStoreFailed("RevokeByToken", err)
+			}
+			return nil
+		}
+	}
+	return nil
+}
+
 // Users lists the accounts, without anything that authenticates.
 func (s *Service) Users(ctx context.Context) ([]Public, error) {
 	users, err := s.store.Load(ctx)

@@ -73,6 +73,14 @@ type Config struct {
 	// else. Nil leaves it unmounted.
 	Files http.Handler
 
+	// AuthRoutes is the identity domain's own router — login, onboarding,
+	// logout, session, password — mounted at /api/auth outside the
+	// authenticated group: a request has to reach login before it can
+	// possibly hold a credential. Each of its routes decides for itself
+	// whether it needs one already; see authapi's package doc for why this,
+	// like Files, is not a command.Registry surface. Nil leaves it unmounted.
+	AuthRoutes http.Handler
+
 	Log   *slog.Logger
 	Now   func() time.Time
 	NewID func() string
@@ -115,6 +123,10 @@ func New(cfg Config) *Server {
 		// decide whether the daemon it just started is actually serving, and it
 		// has no credential at that moment.
 		api.Get("/health", s.health)
+
+		if cfg.AuthRoutes != nil {
+			api.Mount("/auth", cfg.AuthRoutes)
+		}
 
 		api.Group(func(guarded chi.Router) {
 			guarded.Use(authenticate(cfg.Auth, cfg.SecurityEnabled))

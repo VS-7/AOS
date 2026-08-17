@@ -67,13 +67,20 @@ type Token struct {
 
 ```go
 type Service interface {
-	Onboarding(ctx context.Context, in OnboardingInput) (*User, string, error) // returns the first token, once
+	Onboarding(ctx context.Context, in OnboardingInput) (OnboardingOutput, error) // returns the first token, once
 	Login(ctx context.Context, in LoginInput) (Session, error)
 	ChangePassword(ctx context.Context, in ChangePasswordInput) error
 
+	Get(ctx context.Context, userID string) (Public, error)
+	Users(ctx context.Context) ([]Public, error)
+
 	IssueToken(ctx context.Context, in IssueTokenInput) (Token, string, error)
-	RevokeToken(ctx context.Context, id string) error
-	RotateToken(ctx context.Context, id string) (Token, string, error)
+	RevokeToken(ctx context.Context, userID, tokenID string) error
+	// RevokeByToken revokes the specific credential a caller presented — the
+	// logout counterpart to Authenticate, for a caller that knows the value
+	// it was handed but not which token record backs it.
+	RevokeByToken(ctx context.Context, bearer string) error
+	RotateToken(ctx context.Context, userID, tokenID string, grace time.Duration) (Token, string, error)
 
 	// Authenticate resolves a bearer token to a user, in constant time.
 	Authenticate(ctx context.Context, bearer string) (*User, error)
@@ -118,6 +125,14 @@ func (s *service) Authenticate(ctx context.Context, bearer string) (*User, error
 > [!decision] Continua fora do MCP
 > Herdado. A fronteira de privilégio é deliberada: o agente opera o domínio, não a identidade ([[Ferramentas MCP]]).
 
+> [!decision] Exposto por HTTP dedicado (`internal/transport/authapi`), não pelo command registry
+> A CLI (`aos auth login`) continua adiada — ver a nota mais abaixo, ainda verdadeira. O que mudou: `/api/auth/status|login|onboarding|logout|session|password`, montado em `/api/auth` fora do grupo autenticado (cada rota decide por si se precisa de credencial), pelo mesmo motivo estrutural de `fileapi` — sem grupo de comando, o registry nunca pode expor isto a uma tool MCP por acidente. Necessário para o onboarding real: sem uma superfície HTTP, não havia nada para o `OnboardingForm`/`LoginPage` portados chamarem.
+>
+> Login e onboarding devolvem o token no corpo (para o cliente Go do desktop, que não usa cookies) **e** gravam `Set-Cookie: sessionToken=...; HttpOnly` (para o navegador — o mesmo nome de cookie que `httpapi`'s `bearerOf` já lia, herdado do original, mas agora `HttpOnly`: o original grava via `document.cookie` no cliente, legível por qualquer script; aqui nunca é.)
+
+> [!decision] `ensureLocalAccount` removido — substituído pelo onboarding real
+> A fase anterior desta reconstrução tinha um bootstrap silencioso em `app.Serve`: gerava uma senha aleatória, chamava `Onboarding`, descartava a senha e gravava só o token em `Paths.LocalToken()`. Resolvia o desktop rapidamente, mas fechava a porta para sempre — `Onboarding` recusa quando já existe uma conta, então a tela de onboarding nunca seria alcançável, e não havia como uma pessoa entrar pelo navegador sem o arquivo de token. Removido; tanto o desktop quanto o navegador agora mostram o onboarding real no primeiro uso — ver `wailsvc.AuthService` e `cmd/aos-desktop`'s `afterAuth` hook, que re-registra o workspace assim que a janela consegue autenticar.
+
 > [!decision] Sem waitlist
 > O original tem `SKIP_WAITLIST_CHECK` e `FRACTAL_AUTH_WAITLIST_NOT_APPROVED`, indicando controle de acesso por lista de espera acoplado ao produto. Não portamos: é decisão de negócio do original, não capacidade técnica.
 
@@ -153,6 +168,7 @@ func (s *service) Authenticate(ctx context.Context, bearer string) (*User, error
 - [x] Tokens hasheados, com expiração e rotação — `TestTheDiskNeverHoldsTheToken`, `TestRotationKeepsTheOldTokenWorkingDuringTheGrace`
 - [x] Política de senha aplicada — `TestAPasswordOfElevenIsRejected`, `TestABreachedPasswordIsRejectedWhateverItsLength`
 - [x] Auth fora do alcance do agente — não existe grupo de comando de auth, logo não existe tool
+- [x] Onboarding e login alcançáveis por um humano — `internal/transport/authapi`, ver `TestOnboardingThenStatusThenLoginRoundTrip`; UI real em `frontend/src/features/auth`
 
 ## Saída dos testes — Fase 4
 
@@ -176,4 +192,5 @@ ok  	github.com/OWNER/aos/internal/adapters/fsauth
 
 - **Teste estatístico de timing** do `Authenticate`. O caminho de comparação é `subtle.ConstantTimeCompare` e o login faz o hash da isca mesmo sem conta, mas medir isso de forma não-flaky exige mais cuidado do que um `t.Run`, e um teste de timing instável é pior que nenhum.
 - **A lista de vazamentos é uma lista inicial**, não o top-100k de um corpus real: são as credenciais que aparecem primeiro em toda wordlist, mais as que as pessoas escolhem quando a política pede doze caracteres. Trocar o arquivo é passo de build, não mudança de código.
-- **Comandos de auth** (`aos auth login`, `token issue`) — o serviço existe e nada o expõe ainda. Deliberado nesta fase: a superfície de auth precisa decidir o que é local e o que é remoto, e isso pertence à mesma leva que a árvore completa da CLI.
+- **Comandos de auth na CLI** (`aos auth login`, `token issue`) — ainda não existem. O que mudou nesta fase foi a superfície HTTP (ver a decisão acima); a CLI continua pertencendo à mesma leva que a árvore completa de comandos.
+- **Onboarding não cria nem configura um workspace.** O wizard portado (`OnboardingForm.tsx`) tem os mesmos passos visuais do original — usuário, segurança, região, orquestrador — mas só usuário/segurança (`auth.Onboarding`) e região (`config_update`) chamam algo real; o passo de orquestrador coleta nome/tom/estilo/autonomia sem persistir em lugar nenhum, porque o orquestrador de um workspace já é semeado automaticamente na criação dele ([[Workspace (Go)]]), não por conta. Rótulado como tal na própria tela, não escondido.

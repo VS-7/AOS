@@ -16,7 +16,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -71,8 +70,13 @@ func main() {
 	address := fmt.Sprintf("http://%s:%d", host, port)
 
 	daemon := daemonclient.New(daemonclient.Options{
-		BaseURL:   address,
-		Token:     localToken(paths, resolver),
+		BaseURL: address,
+		// No token at construction: the first boot no longer self-provisions
+		// an account (see AuthService) — the window opens signed out, and
+		// AuthService.Login/Onboarding fills this in once a person has.
+		// AOS_TOKEN still overrides it, for pointing this window at a daemon
+		// it did not start and is already signed into.
+		Token:     resolver.String("TOKEN", ""),
 		Workspace: resolver.String(env.KeyWorkspaceID, ""),
 	})
 
@@ -100,6 +104,16 @@ func main() {
 		Services: []application.Service{
 			application.NewService(wailsvc.NewSystem(platform, daemon, root)),
 			application.NewService(wailsvc.NewDomain(daemon)),
+			application.NewService(wailsvc.NewAuth(daemon, func(ctx context.Context) {
+				// A successful login or onboarding is the first moment this
+				// client can call anything past /api/auth — workspace
+				// registration needed a token it didn't have until now.
+				if id, err := introspectWorkspace(ctx, daemon, root); err == nil {
+					daemon.SetWorkspace(id)
+				} else {
+					log.Warn("could not register or find the workspace for this directory", "path", root, "err", err)
+				}
+			})),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -141,7 +155,7 @@ func main() {
 
 	// The daemon is asked to be running, not started blindly. Two things
 	// supervising one process is how you end up with two of it.
-	go ensureDaemon(supervisor, daemon, paths, root, log)
+	go ensureDaemon(supervisor, daemon, root, log)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -156,16 +170,19 @@ func main() {
 	}
 }
 
-// ensureDaemon starts the daemon if nothing is already answering, then brings
-// client (what the window talks through) up to date with two things main()
-// could not have known yet when it built client: the token the daemon's first
-// boot wrote to disk, and which registered workspace this desktop instance is
-// for.
+// ensureDaemon starts the daemon if nothing is already answering, then tries
+// to register the workspace this desktop instance is for — which only
+// succeeds once a person has signed in through AuthService, since a fresh
+// installation has no account and no token yet. That first attempt is worth
+// making anyway: a daemon a previous run of this same binary already
+// authenticated against (AOS_TOKEN, or a login that outlived this process)
+// can register the workspace immediately, with nobody watching a screen they
+// don't need to see.
 //
 // A failure here does not stop the window from opening: an interface that says
 // it cannot reach the daemon is more useful than an application that refuses to
 // start and does not say why.
-func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, paths corecfg.Paths, root string, log *slog.Logger) {
+func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, root string, log *slog.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -181,16 +198,8 @@ func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, path
 		return
 	}
 
-	// Start() only returns once /health answers, and the daemon's own boot
-	// writes this file before it opens that listener — so by this point it is
-	// there, unless authentication is switched off, in which case there is
-	// nothing to read and nothing that needed it.
-	if token := localToken(paths, env.Default()); token != "" {
-		client.SetToken(token)
-	}
-
 	if id, err := introspectWorkspace(ctx, client, root); err != nil {
-		log.Warn("could not register or find the workspace for this directory", "path", root, "err", err)
+		log.Warn("could not register or find the workspace for this directory yet", "path", root, "err", err)
 	} else {
 		client.SetWorkspace(id)
 	}
@@ -231,17 +240,3 @@ func introspectWorkspace(ctx context.Context, client *daemonclient.Client, root 
 	return envelope.Data.Workspace.ID, nil
 }
 
-// localToken reads the token the daemon's first boot generated for itself
-// (internal/app.ensureLocalAccount), so the desktop authenticates without a
-// person ever entering a password. AOS_TOKEN overrides it, for pointing the
-// desktop at a daemon it did not start.
-func localToken(paths corecfg.Paths, resolver *env.Resolver) string {
-	if explicit := resolver.String("TOKEN", ""); explicit != "" {
-		return explicit
-	}
-	raw, err := os.ReadFile(paths.LocalToken())
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(raw))
-}
