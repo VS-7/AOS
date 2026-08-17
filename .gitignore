@@ -12,3 +12,7 @@
 # because a Go embed pattern cannot reach outside its own package; committing a
 # build output would put a stale interface in the history.
 /cmd/aos-desktop/dist/
+
+# go-task's local up-to-date cache (source hashes for `sources:`/`generates:`
+# checks) — machine-local, rebuilds itself, nothing to diff.
+/.task/

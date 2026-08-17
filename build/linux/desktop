@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=AOS
+Comment=An operating system for AI agents.
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/aos-desktop %u
+Terminal=false
+Type=Application
+Icon=aos-desktop
+Categories=Utility;
+StartupWMClass=aos-desktop
+
+ 

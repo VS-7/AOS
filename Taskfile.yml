@@ -1,5 +1,16 @@
 version: '3'
 
+# common/darwin/windows/linux come from `wails3 generate build-assets` (see
+# build/config.yml). They expect a project-root main package and a `bin`
+# output dir, neither of which fits this module's cmd/aos-desktop + dist/
+# layout — see the "build"/"run"/"dev" tasks below for how that's bridged,
+# rather than patched into the generated files themselves.
+includes:
+  common: ./build/Taskfile.yml
+  darwin: ./build/darwin/Taskfile.yml
+  windows: ./build/windows/Taskfile.yml
+  linux: ./build/linux/Taskfile.yml
+
 vars:
   VERSION:
     sh: git describe --tags --always --dirty 2>/dev/null || echo dev
@@ -17,6 +28,22 @@ vars:
   TARGETS: darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64 windows/arm64
   # The binaries that exist. aos-desktop joins in phase 7.
   BINARIES: aos aosd
+  # Read by the included common/darwin/windows/linux Taskfiles: where the
+  # desktop binary they wrap (into a .app/.exe/.dev.app) is expected to be,
+  # and what to call it. Matches build:desktop's own -o path exactly, so
+  # `run` finds what `build` produced.
+  APP_NAME: aos-desktop
+  BIN_DIR: dist
+  # wails3 dev sets WAILS_VITE_PORT when it drives this; plain `npm run dev`
+  # falls back to the same port vite.config.ts already defaults to.
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 5327}}'
+  # The generated common/Taskfile.yml's install/build/dev-frontend tasks all
+  # branch on this to pick a package manager (npm/yarn/pnpm/bun) and never
+  # default it themselves — left unset, `{{.PACKAGE_MANAGER}}` renders empty
+  # and every one of those tasks fails looking up e.g.
+  # "install:frontend:deps:" (trailing colon, no manager suffix). AOS only
+  # ever uses npm (see build:desktop above).
+  PACKAGE_MANAGER: npm
 
 tasks:
   default:
@@ -105,10 +132,45 @@ tasks:
       - cp -R frontend/dist/. cmd/aos-desktop/dist/
       - CGO_ENABLED=1 go build -trimpath -ldflags="{{.LDFLAGS}}" -o dist/aos-desktop ./cmd/aos-desktop
 
-  build:
+  build:cli:
+    desc: Build aos and aosd for this platform
     cmds:
       - for: {var: BINARIES}
         cmd: CGO_ENABLED=0 go build -trimpath -ldflags="{{.LDFLAGS}}" -o dist/{{.ITEM}} ./cmd/{{.ITEM}}
+
+  # "build"/"run"/"dev" below are the names `wails3 dev`/`wails3 build` call
+  # by convention (see build/config.yml's dev_mode.executes and
+  # https://v3.wails.io/guides/build/customization). `build` delegates to the
+  # existing build:desktop rather than the generated darwin/windows/linux
+  # `build` tasks, which assume `go build` from the project root — this
+  # module's main package is cmd/aos-desktop, and build:desktop already
+  # handles that (plus the frontend/dist -> cmd/aos-desktop/dist copy the
+  # go:embed directive needs). `run` and `dev` are the generated ones
+  # unmodified: they only need the binary at {{.BIN_DIR}}/{{.APP_NAME}},
+  # which build:desktop already produces.
+  build:
+    desc: Build the desktop application (wails3 dev/build entry point)
+    cmds:
+      - task: build:desktop
+      # aos-desktop doesn't embed the daemon (ADR-0002); it supervises a
+      # separate aosd process, resolved beside its own executable or via
+      # AOS_DAEMON_PATH (internal/adapters/supervise.Resolver.Resolve) —
+      # neither of which build:desktop alone satisfies.
+      - task: build:cli
+
+  run:
+    desc: Run the desktop application
+    env:
+      AOS_DAEMON_PATH: "{{.ROOT_DIR}}/dist/aosd"
+    cmds:
+      - task: "{{OS}}:run"
+
+  dev:
+    desc: Run the desktop application in development mode (hot reload)
+    env:
+      AOS_DAEMON_PATH: "{{.ROOT_DIR}}/dist/aosd"
+    cmds:
+      - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
 
   build:all:
     desc: Cross-compile every binary for every supported platform

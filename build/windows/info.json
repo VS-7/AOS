@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.1.0"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "0.1.0",
+			"CompanyName": "AOS",
+			"FileDescription": "An operating system for AI agents.",
+			"LegalCopyright": "Provisional codename per ADR-0000 — not a final release identity.",
+			"ProductName": "AOS",
+			"Comments": "Development build"
+		}
+	}
+}

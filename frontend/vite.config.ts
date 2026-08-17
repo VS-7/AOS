@@ -21,7 +21,12 @@ export default defineConfig({
     sourcemap: true,
   },
   server: {
-    port: 5327,
+    // wails3 dev drives this through `--port`/`--strictPort` (see the root
+    // Taskfile's VITE_PORT var), which already overrides this default; the
+    // env var is read too so a bare `vite`/`wails3 dev` invocation without
+    // that flag still lands on the same port instead of a random one.
+    port: Number(process.env.WAILS_VITE_PORT) || 5327,
+    strictPort: true,
     proxy: {
       // In development the page is served by Vite and the daemon answers on its
       // own port. In production both come from the same origin, so this proxy
