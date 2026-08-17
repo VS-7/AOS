@@ -1,13 +1,14 @@
 import * as React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Page, PageBody, PageHeader } from "@/components/ui/page";
 import { AvatarAgentFallback } from "@/components/ui/avatar";
 import { Hash } from "lucide-react";
 import { client } from "@/lib/client";
-import { Failure } from "@/components/Failure";
 import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
 import { useChat } from "@/features/chat/presentation/hooks/use-chat";
 import { ChatMessageList } from "@/features/chat/presentation/components/chat-message-list";
+import { ChatComposer } from "@/features/chat/presentation/components/composer/chat-composer";
+import { ComposerHelper } from "@/features/chat/presentation/helpers/composer.helper";
 import type { StreamingAnswer } from "@/lib/realtime";
 
 interface ChatContentProps {
@@ -21,17 +22,8 @@ interface ChatContentProps {
  * directory of human users; AOS has neither built yet (single-operator
  * model, see ChatThreadHelper), so `userName` defaults straight to "You"
  * instead of resolving through a directory that doesn't exist.
- *
- * The composer here is a plain textarea, not yet the original's Tiptap-based
- * rich composer (inline @mentions, /skill triggers, attachments) — that's
- * separate, larger work. Message rendering (reactions display, agent
- * thinking steps, tool calls, day dividers, avatars) is the faithful port;
- * the composer is the one piece still catching up.
  */
 export function ChatContent({ chatId, userName = "You" }: ChatContentProps) {
-  const queryClient = useQueryClient();
-  const [draft, setDraft] = React.useState("");
-
   const agentsQuery = useQuery({
     queryKey: ["agents"],
     queryFn: async () =>
@@ -47,16 +39,6 @@ export function ChatContent({ chatId, userName = "You" }: ChatContentProps) {
     queryFn: () => ({ text: "", reasoning: "" }),
     enabled: chatId !== "",
     staleTime: Infinity,
-  });
-
-  const send = useMutation({
-    mutationFn: async (text: string) =>
-      client.invoke("chats_send", { chat: chatId, text, _reasoning: "the person wrote a message" }),
-    onSuccess: () => {
-      setDraft("");
-      queryClient.setQueryData<StreamingAnswer>(["chat", chatId, "streaming"], { text: "", reasoning: "" });
-      liveChat.refresh();
-    },
   });
 
   const directAgent = React.useMemo(() => {
@@ -94,7 +76,7 @@ export function ChatContent({ chatId, userName = "You" }: ChatContentProps) {
         </div>
       </PageHeader>
       <PageBody className="min-h-0 overflow-hidden overflow-y-hidden relative flex flex-col gap-3">
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-hidden pb-24">
           <ChatMessageList agents={agents} chat={chat} userName={userName} />
         </div>
 
@@ -102,32 +84,11 @@ export function ChatContent({ chatId, userName = "You" }: ChatContentProps) {
           <div className="px-6 text-sm text-muted-foreground">{streaming.data.text}</div>
         ) : null}
 
-        <form
-          className="composer px-6 pb-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const text = draft.trim();
-            if (text !== "") send.mutate(text);
-          }}
-        >
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Ask something. Address an agent with @slug."
-            aria-label="Message"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                const text = draft.trim();
-                if (text !== "") send.mutate(text);
-              }
-            }}
-          />
-          <button type="submit" disabled={send.isPending || draft.trim() === ""}>
-            {send.isPending ? "Sending…" : "Send"}
-          </button>
-        </form>
-        {send.error && <Failure error={send.error} />}
+        <ChatComposer
+          agents={agents}
+          chat={chat}
+          isDirectMessage={ComposerHelper.isAgentDirectMessage(chat)}
+        />
       </PageBody>
     </Page>
   );

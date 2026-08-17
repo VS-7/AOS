@@ -7,6 +7,23 @@
  * reconstruction from usage evidence, not a new design.
  */
 
+import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
+import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
+
+/**
+ * What `<ChatComposer>` needs from its page. The original also threaded a
+ * `userId` through here to resolve message authorship client-side; AOS's
+ * chats_send derives the author from the authenticated caller server-side
+ * (see internal/domain/chat/service.go's Send), so there is nothing for a
+ * client-supplied id to do.
+ */
+export interface ChatComposerProps {
+  agents: Agent[];
+  chat: Chat;
+  isDirectMessage?: boolean;
+  onSent?: () => void;
+}
+
 export type ComposerReferenceKind = "file" | "folder" | "skill" | "instruction";
 
 /** An attachment inserted into the composer: `@mention` a file, folder, skill, or instruction. */
