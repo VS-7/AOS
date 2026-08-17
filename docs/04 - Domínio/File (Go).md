@@ -80,6 +80,9 @@ func (s *service) resolve(ctx context.Context, p string) (string, error) {
 > [!decision] Helper de contenção compartilhado
 > No original, `FileService` e `SandboxService` implementam contenção separadamente. Uma única implementação em `internal/core/pathx`, testada uma vez, usada nos dois.
 
+> [!decision] `pathx.ResolveInside` fica atrás da porta `FS`, não direto no domínio
+> O esboço acima (`s.resolve` chamando `pathx.ResolveInside` diretamente) é o que a interface *comunica*, mas `internal/architecture` tem um teste (`TestDomainTestsDoNotTouchIO`) que proíbe teste de domínio tocar disco real. Como `pathx.Resolve` chama `filepath.EvalSymlinks` (I/O real), um teste de `file.Service` com FS fake ainda cairia em disco se o domínio chamasse `pathx` diretamente por operação. Solução: `FS.Resolve(ctx, root, p)` entra na porta — o adapter real (`osfile`) delega para `pathx.ResolveInside`; um fake de teste faz a mesma contenção em memória, sem disco. `Service.root()` continua chamando `pathx.Root` diretamente (não é por-operação, e resolver o root em si — antes de qualquer FS — não tem como ser injetado sem reintroduzir o mesmo problema de galinha-e-ovo que `pathx.Root` existe para resolver). Contenção continua uma implementação só; só o *ponto de chamada* por-arquivo mudou de lugar.
+
 > [!decision] Leitura com teto e detecção de binário
 > Arquivo grande é truncado com marcação explícita; binário volta como base64 com limite. Sem isso, abrir um arquivo de 500 MB na UI derruba o navegador.
 
@@ -94,6 +97,14 @@ func (s *service) resolve(ctx context.Context, p string) (string, error) {
 
 ## Critério de pronto
 
-- [ ] Explorador de arquivos funcionando na UI
-- [ ] Contenção compartilhada com o sandbox
-- [ ] Sem superfície CLI nem MCP
+- [ ] Explorador de arquivos funcionando na UI — backend pronto (`internal/domain/file`, HTTP em `/api/file`); UI (Monaco + árvore) ainda não portada, ver [[Files (Frontend)]]
+- [x] Contenção compartilhada com o sandbox — `internal/core/pathx`
+- [x] Sem superfície CLI nem MCP — `Service` não é `command.Descriptor`; roteado direto em `internal/transport/fileapi`, fora do registry
+
+### Escopo desta fase (backend)
+
+`Service` implementa exatamente a interface Go do topo: `Tree`, `Read`, `Write`, `Move`, `Delete`, `Diff` — não os 11 endpoints do `FractalFileController` original (`list`/`search`/`explorer`/`changes`/`content` foram deliberadamente consolidados ou descartados; `Write` também faz o papel do `create` original, já que a interface Go não tem um método `Create` separado). Ficou de fora, sinalizado como pendência e não como decisão definitiva:
+
+- Contexto de explorer `task`/`branch` (ver `FractalFileExplorerContextSchema` no original) — `Tree`/`Read`/`Write`/`Diff` hoje só enxergam a raiz do workspace. `Diff` sempre compara contra `HEAD` do repositório do workspace.
+- A lista de mudanças (`changes`) e o snapshot completo de git status do explorer original — `Diff` responde por caminho único, sob demanda; não há endpoint que liste todos os arquivos alterados de uma vez.
+- Busca por nome (`search`) — não portada.

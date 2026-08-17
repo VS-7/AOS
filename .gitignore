@@ -29,3 +29,7 @@
 # name (see its own comment for why) — so this would be dead code kept in
 # sync with Go source for no reader. Regenerate on demand if that changes.
 /frontend/bindings/
+
+# A stock `wails3 init` scaffold kept alongside the real project purely as a
+# reference for what a default Wails3 app looks like — not part of AOS.
+/exemplo-wails3-ultima-versao/

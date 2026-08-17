@@ -76,6 +76,46 @@ func (g *Git) OriginURL(ctx context.Context, dir string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// Status reports path's working-tree status relative to HEAD, for the file
+// domain's Diff. It shells out to `git status --porcelain` rather than
+// keeping its own tracking, for the same reason IsRepository asks git
+// instead of looking for .git itself: the working tree belongs to the
+// user's own git, hooks and all, and a second opinion is how the two drift.
+func (g *Git) Status(ctx context.Context, dir, path string) (string, error) {
+	out, err := g.run(ctx, dir, "status", "--porcelain", "--", path)
+	if err != nil {
+		return "", errGitFailed("status", dir, err)
+	}
+	line := strings.TrimSuffix(out, "\n")
+	if line == "" {
+		return "", nil
+	}
+	// Porcelain v1: two status letters, a space, then the path. XY__path
+	code := line[:2]
+	switch {
+	case strings.Contains(code, "?"):
+		return "untracked", nil
+	case strings.Contains(code, "A"):
+		return "added", nil
+	case strings.Contains(code, "D"):
+		return "deleted", nil
+	default:
+		return "modified", nil
+	}
+}
+
+// Show returns path's content at ref via `git show ref:path`. ok is false —
+// not an error — when git reports the path does not exist at that ref,
+// which is the ordinary case for a new file (no HEAD version) or a deleted
+// one (no working-tree version).
+func (g *Git) Show(ctx context.Context, dir, ref, path string) ([]byte, bool, error) {
+	out, err := g.run(ctx, dir, "show", ref+":"+path)
+	if err != nil {
+		return nil, false, nil //nolint:nilerr // git's exit code does not distinguish "missing" from other refusals cheaply enough to bother; the caller only needs a body or none
+	}
+	return []byte(out), true, nil
+}
+
 func (g *Git) run(ctx context.Context, dir string, args ...string) (string, error) {
 	timeout := g.Timeout
 	if timeout == 0 {

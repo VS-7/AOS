@@ -18,6 +18,7 @@ import (
 	"github.com/OWNER/aos/internal/core/env"
 	"github.com/OWNER/aos/internal/domain/auth"
 	"github.com/OWNER/aos/internal/domain/config"
+	"github.com/OWNER/aos/internal/transport/fileapi"
 	"github.com/OWNER/aos/internal/transport/httpapi"
 	"github.com/OWNER/aos/internal/transport/realtime"
 )
@@ -79,6 +80,7 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 	server := httpapi.New(httpapi.Config{
 		Registry: a.Registry,
 		Auth:     a.Auth,
+		Files:    fileapi.New(fileapi.Config{Service: a.Files, Log: log}),
 		Realtime: realtime.Upgrade(realtime.Config{
 			Hub:     a.Events,
 			Auth:    a.Workspaces,

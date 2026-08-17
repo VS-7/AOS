@@ -66,6 +66,13 @@ type Config struct {
 	// unmounted, which is the state while the only transport is stdio.
 	MCP http.Handler
 
+	// Files is the file explorer's own router, mounted at /api/file inside
+	// the same authenticated group as the command routes. It is not a
+	// command.Registry surface — see fileapi's package doc — so it cannot be
+	// derived from the registry the way mountCommands derives everything
+	// else. Nil leaves it unmounted.
+	Files http.Handler
+
 	Log   *slog.Logger
 	Now   func() time.Time
 	NewID func() string
@@ -116,6 +123,9 @@ func New(cfg Config) *Server {
 			// instead of failing halfway through a screen.
 			guarded.Get("/_commands", s.commands)
 			s.mountCommands(guarded)
+			if cfg.Files != nil {
+				guarded.Mount("/file", cfg.Files)
+			}
 		})
 
 		if cfg.DocsEnabled {

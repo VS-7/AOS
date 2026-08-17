@@ -22,6 +22,7 @@ import (
 	"github.com/OWNER/aos/internal/adapters/fsthemes"
 	"github.com/OWNER/aos/internal/adapters/fsworkspace"
 	"github.com/OWNER/aos/internal/adapters/gitcli"
+	"github.com/OWNER/aos/internal/adapters/osfile"
 	"github.com/OWNER/aos/internal/adapters/sqlitequeue"
 	"github.com/OWNER/aos/internal/adapters/supervise"
 	"github.com/OWNER/aos/internal/core/build"
@@ -39,6 +40,7 @@ import (
 	"github.com/OWNER/aos/internal/domain/comment"
 	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/domain/event"
+	"github.com/OWNER/aos/internal/domain/file"
 	"github.com/OWNER/aos/internal/domain/gateway"
 	"github.com/OWNER/aos/internal/domain/job"
 	"github.com/OWNER/aos/internal/domain/memory"
@@ -87,6 +89,11 @@ type App struct {
 	Chats      *chat.Service
 	Auth       *auth.Service
 	Gateway    *gateway.Service
+
+	// Files backs the UI file explorer and editor. Unlike everything else
+	// here, it is not reached through Registry — see its own construction
+	// below for why.
+	Files *file.Service
 
 	// Hooks is the bus the nine events are emitted on. A skill registers a
 	// handler here; nothing else writes to the audit log.
@@ -257,6 +264,16 @@ func New(opts Options) (*App, error) {
 		WorkspacesDir: paths.Workspaces(),
 		Active:        active,
 		WorkingDir:    root,
+	})
+
+	// The UI file explorer and editor. It has no command group and no MCP
+	// tools — see File (Go)'s "não tem grupo de comando" — so it is wired
+	// straight to its own HTTP router in Serve rather than through the
+	// command registry every other domain here goes through.
+	fileSvc := file.NewService(file.Deps{
+		FS:         osfile.New(),
+		Git:        gitcli.New(),
+		Workspaces: workspaceRoot{workspaceSvc},
 	})
 
 	// The appearance of the application. The built-in presets are embedded, so
@@ -483,6 +500,7 @@ func New(opts Options) (*App, error) {
 		Chats:      chatSvc,
 		Auth:       authSvc,
 		Gateway:    gatewaySvc,
+		Files:      fileSvc,
 		Hooks:      hookBus,
 		Approvals:  broker,
 		Runtime:    runtime,
@@ -502,6 +520,23 @@ func New(opts Options) (*App, error) {
 		env:     resolver,
 		closers: closers,
 	}, nil
+}
+
+// workspaceRoot adapts workspace.Service to file.Workspaces: the active
+// workspace's path, resolved fresh on every call rather than captured once,
+// since the active workspace can change while the daemon runs.
+type workspaceRoot struct{ svc *workspace.Service }
+
+func (w workspaceRoot) Root(ctx context.Context) (string, error) {
+	ws, err := w.svc.Get(ctx, workspace.GetInput{
+		Reasoning: command.Reasoning{
+			Reasoning: "resolving the workspace root the file explorer confines itself to",
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	return ws.Path, nil
 }
 
 // lateDispatcher breaks the cycle between the conversation and the runtime.
