@@ -1,0 +1,62 @@
+/*
+ * Absent from the reconstructed source (dotmatrix-core.tsx imports it, but
+ * no .css file survived extraction — same situation as
+ * data-table-toolbar-component.tsx, resizable.tsx, and composer.types.ts
+ * this session). Reconstructed from the class names and CSS custom
+ * properties dotmatrix-core.tsx actually sets (dmx-root/-grid/-dot/-path/
+ * -inactive/-muted/-bloom*, --dmx-path as a per-dot phase offset): a small
+ * dot grid where each active dot pulses, offset by its wave position, with
+ * an optional glow. The exact original timing/easing isn't recoverable —
+ * this is a faithful *effect*, not a byte-for-byte match.
+ */
+
+.dmx-root {
+  display: inline-flex;
+  color: currentColor;
+}
+
+.dmx-grid {
+  display: grid;
+  grid-auto-flow: column;
+}
+
+.dmx-dot {
+  display: block;
+  width: var(--dmx-dot-size, 3px);
+  height: var(--dmx-dot-size, 3px);
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 1;
+}
+
+.dmx-dot.dmx-inactive {
+  opacity: 0.15;
+}
+
+.dmx-root.dmx-muted .dmx-dot {
+  opacity: 0.5;
+}
+
+.dmx-dot.dmx-path {
+  animation: dmx-pulse var(--dmx-speed, 1.4s) ease-in-out infinite;
+  animation-delay: calc(var(--dmx-path, 0) * var(--dmx-speed, 1.4s) * -1);
+}
+
+@keyframes dmx-pulse {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 1; }
+}
+
+.dmx-root.dmx-bloom .dmx-dot.dmx-bloom-dot {
+  box-shadow: 0 0 4px 1px currentColor;
+}
+
+.dmx-bloom-halo {
+  filter: blur(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmx-dot.dmx-path {
+    animation: none;
+  }
+}

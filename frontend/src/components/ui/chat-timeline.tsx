@@ -11,35 +11,15 @@ import {
   FileTextIcon,
   WrenchIcon,
 } from "lucide-react"
+import type { Chat, Message } from "@/features/chat/interfaces/chat.interfaces"
 
 /**
- * A part of a message, as `chats_get` returns it. Mirrors the shape
- * features/chat/ChatScreen.tsx already reads — the original's `ai` SDK
- * `UIMessage` carries a live per-part state (input-streaming, output-
- * available, ...) that our backend does not expose: a stored message is
- * finished, and the in-progress turn is the separate streaming answer
- * (lib/realtime.ts). This timeline shows what happened, not a live status.
+ * A stored message is finished by the time chats_get returns it — the
+ * in-progress turn is the separate streaming answer (lib/realtime.ts). This
+ * timeline shows what happened, not a live per-part status; see
+ * features/agent/presentation/helpers/agent-tool-thinking.helper.ts for why
+ * AOS's Part has no such status to show.
  */
-interface Part {
-  type: "text" | "reasoning" | "tool_call" | "tool_result" | "file"
-  text?: string
-  toolName?: string
-  input?: unknown
-  output?: unknown
-}
-
-interface Message {
-  id: string
-  role: "user" | "assistant" | "system"
-  parts?: Part[]
-  createdAt?: string
-}
-
-interface Chat {
-  id: string
-  messages?: Message[]
-}
-
 type TimelineEvent = {
   id: string
   kind: "reasoning" | "tool" | "text"
@@ -51,7 +31,7 @@ function toExecutionEvents(messages: Message[]): TimelineEvent[] {
   const events: TimelineEvent[] = []
 
   for (const message of messages) {
-    if (message.role !== "assistant") continue
+    if (message.role !== "assistant" && message.author?.type !== "agent") continue
 
     for (const [index, part] of (message.parts ?? []).entries()) {
       const id = `${message.id}:${index}`
@@ -63,10 +43,10 @@ function toExecutionEvents(messages: Message[]): TimelineEvent[] {
         continue
       }
 
-      if (part.type === "tool_call" || part.type === "tool_result") {
+      if (part.type === "tool-call" || part.type === "tool-result") {
         const toolName = part.toolName ?? "Tool"
         const detail =
-          part.type === "tool_result" ? stringify(part.output) : `Tool call: ${toolName}`
+          part.type === "tool-result" ? stringify(part.output) : `Tool call: ${toolName}`
         events.push({ id, kind: "tool", title: toolName, detail })
         continue
       }
@@ -135,9 +115,9 @@ function ChatTimelineLive({
   chatId: string
   title: string
 }) {
-  // Same query key features/chat/ChatScreen.tsx uses for the same chat: one
-  // cache entry, invalidated centrally by lib/realtime.ts on `chat.done` — no
-  // manual refetch wiring needed here.
+  // Same query key features/chat/presentation/hooks/use-chat.ts uses for the
+  // same chat: one cache entry, invalidated centrally by lib/realtime.ts on
+  // `chat.done` — no manual refetch wiring needed here.
   const { data, isLoading } = useQuery({
     queryKey: ["chat", chatId],
     queryFn: async () =>

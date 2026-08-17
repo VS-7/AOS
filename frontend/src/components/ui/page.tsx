@@ -1,13 +1,8 @@
 'use client'
 
 import { motion, MotionProps } from 'motion/react'
-import { ChevronLeft } from 'lucide-react'
-import { useRouter, useLocation } from '@tanstack/react-router'
 import * as React from 'react'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
-import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar'
-import { InboxPanel } from '@/features/workspace/presentation/components/panels/inbox'
 import { isDesktop } from '@/lib/client'
 
 // Variantes de animação
@@ -63,7 +58,6 @@ type MotionDivProps = React.ComponentPropsWithRef<'div'> & MotionProps
 export function Page({
   className,
   children,
-  showInboxPanel = true,
   ref,
   ...props
 }: MotionDivProps & { showInboxPanel?: boolean }) {

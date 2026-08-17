@@ -22,7 +22,7 @@ import {
   type AppearancePreference,
   type ThemeSummary,
 } from "@/lib/theme";
-import { ChatScreen } from "@/features/chat/ChatScreen";
+import { ChatContent } from "@/features/chat/presentation/components/chat-content";
 import { Failure } from "@/components/Failure";
 import { TaskBoard } from "@/features/task/TaskBoard";
 import { MemoryGraph } from "@/features/memory/MemoryGraph";
@@ -71,15 +71,7 @@ const chatRoute = createRoute({
   path: "/chat/$chatId",
   component: () => {
     const { chatId } = chatRoute.useParams();
-    return (
-      <>
-        <header>
-          <h2>Chat</h2>
-          <p className="subtitle">Talk to the agents of this workspace.</p>
-        </header>
-        <ChatScreen chatId={chatId} />
-      </>
-    );
+    return <ChatContent chatId={chatId} />;
   },
 });
 
