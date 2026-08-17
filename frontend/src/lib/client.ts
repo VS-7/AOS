@@ -1,5 +1,6 @@
 import { Call } from "@wailsio/runtime";
 import type { CommandInput, CommandKey, CommandOutput } from "./schema";
+import { desktopRetryDelays, isDesktopConfirmed, markDesktopConfirmed, sleep } from "./desktop-transport";
 
 /**
  * The one door to the domain.
@@ -42,7 +43,7 @@ export interface Client {
  * window opens.
  */
 export function isDesktop(): boolean {
-  return confirmedDesktop;
+  return isDesktopConfirmed();
 }
 
 /**
@@ -99,41 +100,8 @@ export function unwrap<T>(raw: unknown): T {
   return raw as T;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 const WAILSVC_PKG = "github.com/OWNER/aos/internal/transport/wailsvc";
 const DOMAIN_SERVICE_INVOKE = `${WAILSVC_PKG}.DomainService.Invoke`;
-
-// Backoff (ms) before each retried desktop call, longest first attempt last.
-// ensureDaemon in cmd/aos-desktop/main.go starts the daemon in the background
-// so a slow one never blocks the window from opening — which means a window
-// that just opened can genuinely be rendering, and firing its first queries,
-// before the daemon it's supervising has finished booting (first boot also
-// runs an argon2id hash for ensureLocalAccount, deliberately slow). Total
-// budget here (~3.7s) is chosen to comfortably cover that, not to paper over
-// a daemon that's actually not coming up — errNeverBecameHealthy in
-// gateway.Service still fires on its own, independent timeout.
-const DESKTOP_RETRY_DELAYS_MS = [200, 500, 1000, 2000];
-
-// A rejected Call.ByName looks identical whether there's truly no Wails host
-// (a plain browser tab) or there is one that just hasn't warmed up yet (the
-// window's first few calls). Patient retries are right for the second case
-// and expensive for the first — a browser tab would eat ~3.7s on every call,
-// forever, if it always retried. confirmedDesktop breaks the tie: any
-// successful desktop call proves the host is real, after which failures are
-// assumed transient and always retried patiently. Before that first success,
-// patience is bounded to the window right after the page loads, when a real
-// host warming up is the likely explanation; past it, one quick attempt is
-// enough to conclude this is not the desktop and hand off to HTTP.
-let confirmedDesktop = false;
-const desktopColdStartUntil = typeof window === "undefined" ? 0 : Date.now() + 5_000;
-
-function desktopRetryDelays(): readonly number[] {
-  if (confirmedDesktop || Date.now() < desktopColdStartUntil) return DESKTOP_RETRY_DELAYS_MS;
-  return [];
-}
 
 /**
  * Whether a failed desktop call is worth retrying rather than surfacing (or
@@ -187,7 +155,7 @@ const desktop: Client = {
     for (let attempt = 0; ; attempt++) {
       try {
         const raw = await Call.ByName(DOMAIN_SERVICE_INVOKE, key, input ?? {});
-        confirmedDesktop = true;
+        markDesktopConfirmed();
         return unwrap(typeof raw === "string" ? JSON.parse(raw) : raw);
       } catch (err) {
         const delay = delays[attempt];

@@ -12,6 +12,7 @@ import {
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { client, isDesktop, setWorkspace } from "@/lib/client";
+import { logout } from "@/lib/auth";
 import { useRealtime } from "@/lib/realtime";
 import {
   listThemes,
@@ -203,6 +204,20 @@ function RootLayout(): JSX.Element {
             {connection === "open" ? "connected" : connection}
           </span>
           <span className="status">{isDesktop() ? "desktop" : "browser"}</span>
+          <button
+            type="button"
+            className="status"
+            onClick={() => {
+              // A hard reload, deliberately — the same shape as the
+              // original's own auth-state transitions (see OnboardingForm's
+              // init step). AuthGate lives above this whole tree, so it is
+              // what re-checks status() and shows LoginPage next; there is
+              // no lighter-weight way to hand control back to it from here.
+              void logout().finally(() => window.location.reload());
+            }}
+          >
+            Sign out
+          </button>
         </SidebarFooter>
       </Sidebar>
 

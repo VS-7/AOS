@@ -4,6 +4,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { DomainError } from "@/lib/client";
 import { AppStateProvider } from "@/lib/app-state";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { AuthGate } from "@/features/auth/AuthGate";
 import { router } from "@/router";
 
 const queryClient = new QueryClient({
@@ -22,7 +23,9 @@ export function App(): JSX.Element {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AppStateProvider>
-          <RouterProvider router={router} />
+          <AuthGate>
+            <RouterProvider router={router} />
+          </AuthGate>
         </AppStateProvider>
       </QueryClientProvider>
     </ErrorBoundary>

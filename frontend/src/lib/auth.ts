@@ -1,0 +1,132 @@
+import { Call } from "@wailsio/runtime";
+import { DomainError, unwrap } from "./client";
+import { desktopRetryDelays, markDesktopConfirmed, sleep } from "./desktop-transport";
+
+/** Mirrors internal/transport/wailsvc.PublicUser / internal/domain/auth.Public. */
+export interface PublicUser {
+  id: string;
+  name: string;
+  username: string;
+  email: string;
+  role: string;
+}
+
+/** What a successful login or onboarding answers with. */
+export interface AuthResult {
+  user: PublicUser;
+  expiresAt: string;
+}
+
+/** What the app checks before deciding what to show. */
+export interface AuthStatus {
+  onboarded: boolean;
+  authenticated: boolean;
+}
+
+const WAILSVC_PKG = "github.com/OWNER/aos/internal/transport/wailsvc";
+const AUTH_SERVICE = `${WAILSVC_PKG}.AuthService`;
+
+/**
+ * Whether a rejected Call.ByName is worth retrying rather than falling back
+ * to HTTP. Mirrors client.ts's isRetryableDesktopError: a well-formed
+ * DomainError means the call reached the daemon and back, so whatever it
+ * says is the real answer, not a warm-up symptom.
+ */
+function isRetryable(err: unknown): boolean {
+  return !(err instanceof DomainError);
+}
+
+// Shares its cold-start budget with client.ts's desktop transport — see
+// desktop-transport.ts — rather than keeping its own separate clock. Two
+// independent retry windows on the same page compound into a much longer
+// wait than either alone: AuthGate's status() check and, moments later,
+// RootLayout's own data queries would otherwise each pay the full price.
+async function desktopCall<T>(method: string, ...args: unknown[]): Promise<T> {
+  const delays = desktopRetryDelays();
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const raw = await Call.ByName(`${AUTH_SERVICE}.${method}`, ...args);
+      markDesktopConfirmed();
+      return unwrap<T>(typeof raw === "string" ? JSON.parse(raw) : raw);
+    } catch (err) {
+      const delay = delays[attempt];
+      if (!isRetryable(err) || delay === undefined) throw err;
+      await sleep(delay);
+    }
+  }
+}
+
+async function httpRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(path, init);
+  } catch (err) {
+    throw new DomainError({
+      code: "TRANSPORT_UNREACHABLE",
+      message: err instanceof Error ? err.message : "the daemon could not be reached",
+      status: 503,
+    });
+  }
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new DomainError({
+      code: "TRANSPORT_UNREADABLE",
+      message: `the daemon answered ${response.status} with something that is not JSON`,
+      status: response.status,
+    });
+  }
+  return unwrap(payload);
+}
+
+/**
+ * Tries the desktop transport, falling back to HTTP — the same trade
+ * client.ts's client.invoke makes, and for the same reason: there is no
+ * reliable synchronous "am I in the desktop window" signal, but attempting
+ * the call is itself the reliable signal.
+ */
+async function call<T>(desktopMethod: string, desktopArgs: unknown[], httpPath: string, httpInit?: RequestInit): Promise<T> {
+  try {
+    return await desktopCall<T>(desktopMethod, ...desktopArgs);
+  } catch {
+    return httpRequest<T>(httpPath, httpInit);
+  }
+}
+
+const jsonHeaders = { "content-type": "application/json" };
+
+/** What the app should show right now, before anyone has a session. */
+export function status(): Promise<AuthStatus> {
+  return call<AuthStatus>("Status", [], "/api/auth/status");
+}
+
+/** Signs into an existing account. */
+export function login(identifier: string, password: string): Promise<AuthResult> {
+  return call<AuthResult>(
+    "Login",
+    [identifier, password],
+    "/api/auth/login",
+    { method: "POST", headers: jsonHeaders, body: JSON.stringify({ identifier, password }) },
+  );
+}
+
+/** Creates the installation's first account. */
+export function onboarding(name: string, email: string, password: string): Promise<AuthResult> {
+  return call<AuthResult>(
+    "Onboarding",
+    [name, email, password],
+    "/api/auth/onboarding",
+    { method: "POST", headers: jsonHeaders, body: JSON.stringify({ name, email, password }) },
+  );
+}
+
+/** Ends the current session. */
+export async function logout(): Promise<void> {
+  await call<Record<string, never>>("Logout", [], "/api/auth/logout", { method: "POST", headers: jsonHeaders, body: "{}" });
+}
+
+/** Reads the account the current session belongs to. */
+export function session(): Promise<{ user: PublicUser }> {
+  return call<{ user: PublicUser }>("Session", [], "/api/auth/session");
+}
