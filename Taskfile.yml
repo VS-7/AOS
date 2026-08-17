@@ -45,6 +45,14 @@ vars:
   # ever uses npm (see build:desktop above).
   PACKAGE_MANAGER: npm
 
+# Global rather than declared on run/dev below: a task's own `env:` only
+# reaches shell commands that task runs directly, not a `task: X` call to
+# another task — and both run and dev only ever call into darwin/windows/
+# linux's generated `run`, which is what actually execs the app binary. This
+# needs to be visible there, so it has to be global.
+env:
+  AOS_DAEMON_PATH: "{{.ROOT_DIR}}/dist/aosd"
+
 tasks:
   default:
     cmds: [task: check]
@@ -160,15 +168,11 @@ tasks:
 
   run:
     desc: Run the desktop application
-    env:
-      AOS_DAEMON_PATH: "{{.ROOT_DIR}}/dist/aosd"
     cmds:
       - task: "{{OS}}:run"
 
   dev:
     desc: Run the desktop application in development mode (hot reload)
-    env:
-      AOS_DAEMON_PATH: "{{.ROOT_DIR}}/dist/aosd"
     cmds:
       - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
 

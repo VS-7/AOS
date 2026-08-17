@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/OWNER/aos/internal/core/apperr"
@@ -139,12 +138,13 @@ func TestSecretFilesAreTheOnesAudited(t *testing.T) {
 		t.Fatal(err)
 	}
 	files := p.SecretFiles()
-	if len(files) != 2 {
-		t.Fatalf("expected config.json and users.json, got %v", files)
+	want := []string{p.Config(), p.Users(), p.LocalToken()}
+	if len(files) != len(want) {
+		t.Fatalf("expected %v, got %v", want, files)
 	}
-	for _, f := range files {
-		if !strings.HasSuffix(f, ".json") {
-			t.Errorf("unexpected secret file %q", f)
+	for i, f := range files {
+		if f != want[i] {
+			t.Errorf("expected %q at position %d, got %q", want[i], i, f)
 		}
 	}
 }

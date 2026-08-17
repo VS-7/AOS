@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/OWNER/aos/internal/core/apperr"
+	"github.com/OWNER/aos/internal/core/identity"
 	"github.com/OWNER/aos/internal/core/patch"
 	"github.com/OWNER/aos/internal/core/slug"
 )
@@ -320,11 +321,24 @@ func (s *Service) Inventory(ctx context.Context, in InventoryInput) (Inventory, 
 	return out, nil
 }
 
-// resolve loads a workspace by id, or the active one when no id is given.
+// resolve loads a workspace by id: the one given explicitly, the one this
+// installation was started against (Deps.Active — a single-process CLI/MCP
+// run, or a daemon an operator deliberately pinned to one workspace), or the
+// one the caller is scoped to (the x-workspace-id a browser or the desktop's
+// own client sends with every call — see ambientIdentity in httpapi).
+//
+// Active outranks ambient identity rather than the other way around: it is a
+// deliberate, administrative setting, where a request header is an inference
+// about what the caller probably means. A daemon serving several workspaces
+// leaves Active unset, which is what lets ambient identity resolve anything
+// at all here.
 func (s *Service) resolve(ctx context.Context, id string) (*Workspace, error) {
 	target := strings.TrimSpace(id)
 	if target == "" {
 		target = s.active
+	}
+	if target == "" {
+		target = identity.From(ctx).WorkspaceID
 	}
 	if target == "" {
 		return nil, errNotFound("")

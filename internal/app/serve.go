@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"log/slog"
 	"net"
@@ -12,7 +14,9 @@ import (
 
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/build"
+	corecfg "github.com/OWNER/aos/internal/core/config"
 	"github.com/OWNER/aos/internal/core/env"
+	"github.com/OWNER/aos/internal/domain/auth"
 	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/transport/httpapi"
 	"github.com/OWNER/aos/internal/transport/realtime"
@@ -64,6 +68,11 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 	}
 	if err := guardExposure(host, current); err != nil {
 		return err
+	}
+	if current.Security.Enabled {
+		if err := a.ensureLocalAccount(ctx); err != nil {
+			return err
+		}
 	}
 
 	origins := allowedOrigins(resolver)
@@ -139,6 +148,48 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 		_ = srv.Close()
 	}
 	return <-errs
+}
+
+// ensureLocalAccount is the "no ceremony" half of ADR-0009: authentication is
+// on by default, and the first boot has to create what that then requires
+// without anyone typing a password. It creates the installation's one local
+// account and writes its token to Paths.LocalToken() — the file
+// internal/transport/daemonclient already documented reading, before anything
+// wrote it.
+//
+// A second boot finds an account already there (auth.Service.Onboarding
+// refuses on purpose, for the same reason an unauthenticated "create the
+// first admin" endpoint has to close once an admin exists) and does nothing:
+// the token from the first boot is still on disk, still correct.
+func (a *App) ensureLocalAccount(ctx context.Context) error {
+	password, err := randomPassword()
+	if err != nil {
+		return err
+	}
+	out, err := a.Auth.Onboarding(ctx, auth.OnboardingInput{
+		Name:     "Local",
+		Username: "local",
+		Password: password,
+	})
+	if err != nil {
+		if errors.Is(err, apperr.ErrConflict) {
+			return nil
+		}
+		return err
+	}
+	return corecfg.WriteSecret(a.Paths.LocalToken(), []byte(out.Token))
+}
+
+// randomPassword satisfies auth.ValidatePassword without a human ever seeing
+// or typing it: the account it belongs to is authenticated by the token
+// ensureLocalAccount writes down, never by this value, which is discarded the
+// moment Onboarding returns.
+func randomPassword() (string, error) {
+	buf := make([]byte, 24)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
 // guardExposure refuses to serve beyond loopback without authentication.

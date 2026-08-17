@@ -10,11 +10,13 @@ package main
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -70,7 +72,7 @@ func main() {
 
 	daemon := daemonclient.New(daemonclient.Options{
 		BaseURL:   address,
-		Token:     resolver.String("TOKEN", ""),
+		Token:     localToken(paths, resolver),
 		Workspace: resolver.String(env.KeyWorkspaceID, ""),
 	})
 
@@ -139,7 +141,7 @@ func main() {
 
 	// The daemon is asked to be running, not started blindly. Two things
 	// supervising one process is how you end up with two of it.
-	go ensureDaemon(supervisor, log)
+	go ensureDaemon(supervisor, daemon, paths, root, log)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -154,19 +156,92 @@ func main() {
 	}
 }
 
-// ensureDaemon starts the daemon if nothing is already answering.
+// ensureDaemon starts the daemon if nothing is already answering, then brings
+// client (what the window talks through) up to date with two things main()
+// could not have known yet when it built client: the token the daemon's first
+// boot wrote to disk, and which registered workspace this desktop instance is
+// for.
 //
 // A failure here does not stop the window from opening: an interface that says
 // it cannot reach the daemon is more useful than an application that refuses to
 // start and does not say why.
-func ensureDaemon(supervisor *gateway.Service, log *slog.Logger) {
+func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, paths corecfg.Paths, root string, log *slog.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	healthy := false
 	if state, err := supervisor.Status(ctx, gateway.StatusInput{}); err == nil && state.Healthy {
+		healthy = true
+	} else if _, err := supervisor.Start(ctx, gateway.StartInput{}); err != nil {
+		log.Error("the daemon is not running and could not be started", "err", err)
+	} else {
+		healthy = true
+	}
+	if !healthy {
 		return
 	}
-	if _, err := supervisor.Start(ctx, gateway.StartInput{}); err != nil {
-		log.Error("the daemon is not running and could not be started", "err", err)
+
+	// Start() only returns once /health answers, and the daemon's own boot
+	// writes this file before it opens that listener — so by this point it is
+	// there, unless authentication is switched off, in which case there is
+	// nothing to read and nothing that needed it.
+	if token := localToken(paths, env.Default()); token != "" {
+		client.SetToken(token)
 	}
+
+	if id, err := introspectWorkspace(ctx, client, root); err != nil {
+		log.Warn("could not register or find the workspace for this directory", "path", root, "err", err)
+	} else {
+		client.SetWorkspace(id)
+	}
+}
+
+// introspectWorkspace registers root as a workspace (idempotent — a directory
+// already registered comes back unchanged, see workspace_introspect's own
+// doc) and returns its id, so this desktop instance can address it without
+// anyone picking a workspace by hand.
+func introspectWorkspace(ctx context.Context, client *daemonclient.Client, root string) (string, error) {
+	input, err := json.Marshal(map[string]string{
+		"path":       root,
+		"_reasoning": "the desktop is starting and needs to know which workspace it is for",
+	})
+	if err != nil {
+		return "", err
+	}
+	raw, err := client.Invoke(ctx, "workspace_introspect", input)
+	if err != nil {
+		return "", err
+	}
+	var envelope struct {
+		Data struct {
+			Workspace struct {
+				ID string `json:"id"`
+			} `json:"workspace"`
+		} `json:"data"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return "", err
+	}
+	if envelope.Error != nil {
+		return "", fmt.Errorf("%s", envelope.Error.Message)
+	}
+	return envelope.Data.Workspace.ID, nil
+}
+
+// localToken reads the token the daemon's first boot generated for itself
+// (internal/app.ensureLocalAccount), so the desktop authenticates without a
+// person ever entering a password. AOS_TOKEN overrides it, for pointing the
+// desktop at a daemon it did not start.
+func localToken(paths corecfg.Paths, resolver *env.Resolver) string {
+	if explicit := resolver.String("TOKEN", ""); explicit != "" {
+		return explicit
+	}
+	raw, err := os.ReadFile(paths.LocalToken())
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
 }

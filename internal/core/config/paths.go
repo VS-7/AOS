@@ -83,6 +83,14 @@ func (p Paths) Workspaces() string         { return filepath.Join(p.Root, "works
 func (p Paths) Themes() string             { return filepath.Join(p.Root, "themes") }
 func (p Paths) Workspace(id string) string { return filepath.Join(p.Workspaces(), id) }
 
+// LocalToken is the plain-text API token of the account the first boot
+// creates for itself (ADR-0009's "no ceremony" half of turning authentication
+// on by default). users.json only ever holds the hash; this is the one place
+// the value the desktop authenticates with is written down, and only once —
+// at the moment it exists and nowhere else, the same way the original showed
+// it once and never again.
+func (p Paths) LocalToken() string { return filepath.Join(p.Root, "local.token") }
+
 // Index is derived data: safe to delete, rebuilt on demand. It lives under
 // ~/.aos rather than inside the user's repository so it is never committed
 // (ADR-0013).
@@ -91,7 +99,7 @@ func (p Paths) Index(workspaceID string) string {
 }
 
 // SecretFiles lists the files audited at boot for loose permissions.
-func (p Paths) SecretFiles() []string { return []string{p.Config(), p.Users()} }
+func (p Paths) SecretFiles() []string { return []string{p.Config(), p.Users(), p.LocalToken()} }
 
 // Ensure creates the directory skeleton with restrictive permissions.
 func (p Paths) Ensure() error {

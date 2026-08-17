@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/OWNER/aos/internal/core/apperr"
@@ -22,8 +23,8 @@ import (
 // Client calls the daemon.
 type Client struct {
 	base      string
-	token     string
-	workspace string
+	token     atomic.Pointer[string]
+	workspace atomic.Pointer[string]
 	http      *http.Client
 }
 
@@ -52,12 +53,44 @@ func New(opts Options) *Client {
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
-	return &Client{
-		base:      strings.TrimSuffix(opts.BaseURL, "/"),
-		token:     opts.Token,
-		workspace: opts.Workspace,
-		http:      &http.Client{Timeout: timeout},
+	c := &Client{
+		base: strings.TrimSuffix(opts.BaseURL, "/"),
+		http: &http.Client{Timeout: timeout},
 	}
+	c.SetToken(opts.Token)
+	c.SetWorkspace(opts.Workspace)
+	return c
+}
+
+// SetToken replaces the token later calls authenticate with.
+//
+// It exists because the desktop constructs this client before the daemon it
+// talks to is necessarily running yet — ensureDaemon starts it in the
+// background so a slow or failing daemon never blocks the window from
+// opening. On a first run, the token this client was built with may be empty
+// because nothing had written it yet; once the daemon is confirmed healthy,
+// the caller reads it again and sets it here, without reconstructing the
+// client or losing anything in flight.
+func (c *Client) SetToken(token string) { c.token.Store(&token) }
+
+func (c *Client) currentToken() string {
+	if v := c.token.Load(); v != nil {
+		return *v
+	}
+	return ""
+}
+
+// SetWorkspace replaces the workspace id later calls are scoped to. Set once
+// the desktop learns it from workspace_introspect — the directory it was
+// launched against, resolved to a registered workspace — for the same reason
+// SetToken exists: that answer is not known at construction time.
+func (c *Client) SetWorkspace(id string) { c.workspace.Store(&id) }
+
+func (c *Client) currentWorkspace() string {
+	if v := c.workspace.Load(); v != nil {
+		return *v
+	}
+	return ""
 }
 
 // Invoke runs one command.
@@ -74,11 +107,11 @@ func (c *Client) Invoke(ctx context.Context, key string, input json.RawMessage) 
 		return nil, errUnreachable(c.base, err)
 	}
 	req.Header.Set("content-type", "application/json")
-	if c.token != "" {
-		req.Header.Set("authorization", "Bearer "+c.token)
+	if token := c.currentToken(); token != "" {
+		req.Header.Set("authorization", "Bearer "+token)
 	}
-	if c.workspace != "" {
-		req.Header.Set("x-workspace-id", c.workspace)
+	if workspace := c.currentWorkspace(); workspace != "" {
+		req.Header.Set("x-workspace-id", workspace)
 	}
 
 	res, err := c.http.Do(req)
@@ -104,8 +137,8 @@ func (c *Client) Commands(ctx context.Context) ([]wailsvc.CommandInfo, error) {
 	if err != nil {
 		return nil, errUnreachable(c.base, err)
 	}
-	if c.token != "" {
-		req.Header.Set("authorization", "Bearer "+c.token)
+	if token := c.currentToken(); token != "" {
+		req.Header.Set("authorization", "Bearer "+token)
 	}
 
 	res, err := c.http.Do(req)
