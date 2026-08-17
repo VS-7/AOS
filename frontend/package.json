@@ -22,6 +22,7 @@
     "@radix-ui/react-toolbar": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.1.6",
     "@tanstack/react-query": "^5.62.0",
+    "@tanstack/react-router": "^1.170.29",
     "@tanstack/react-table": "^8.20.6",
     "ai": "^4.1.0",
     "cambio": "^1.1.5",

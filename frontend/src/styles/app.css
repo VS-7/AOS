@@ -105,28 +105,13 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--ring); ou
 
 a { color: var(--primary); }
 
-.app { display: grid; grid-template-columns: 15rem 1fr; height: 100%; }
-
-.sidebar {
-  background: var(--sidebar);
-  color: var(--sidebar-foreground);
-  border-right: 1px solid var(--sidebar-border);
-  padding: 1rem 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  /* The frameless window's traffic lights sit here on macOS. */
-  padding-top: 2.5rem;
-}
-.sidebar h1 { font-size: 0.95rem; margin: 0 0 0.75rem 0.4rem; letter-spacing: 0.02em; }
-.sidebar nav { display: flex; flex-direction: column; gap: 0.15rem; }
-.sidebar nav button { background: transparent; border-color: transparent; text-align: left; }
-.sidebar nav button[aria-current="page"] {
-  background: var(--sidebar-accent);
-  color: var(--sidebar-accent-foreground);
-}
-.sidebar footer { margin-top: auto; display: flex; flex-direction: column; gap: 0.5rem; }
-
+/*
+ * The app shell (sidebar, nav, workspace header) is now the ported
+ * SidebarProvider/Sidebar/SidebarInset from components/ui/sidebar.tsx — see
+ * src/router.tsx — which brings its own Tailwind-based layout. What remains
+ * here is the content area and the three screens' own markup, still hand-
+ * written pending their own pass through the design system.
+ */
 .main { overflow: auto; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; min-height: 0; }
 .main > header { margin-bottom: 1rem; }
 .main h2 { margin: 0; font-size: 1.1rem; }
