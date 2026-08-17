@@ -294,6 +294,20 @@ func TestReadReturnsBase64ForABinaryExtension(t *testing.T) {
 	}
 }
 
+func TestReadDetectsBinaryContentEvenWithNoExtension(t *testing.T) {
+	fs := newFakeFS()
+	fs.put(rel("compiled-tool"), []byte{0x7f, 'E', 'L', 'F', 0x00, 0x01, 0x02})
+	s := newService(fs, newFakeGit())
+
+	got, err := s.Read(context.Background(), file.ReadInput{Path: "compiled-tool"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Text != "" || got.Base64 == "" {
+		t.Fatalf("got %+v, want a NUL-bearing extensionless file treated as binary", got)
+	}
+}
+
 func TestReadTruncatesALargeFileWithTheFlagSet(t *testing.T) {
 	fs := newFakeFS()
 	big := strings.Repeat("a", maxReadBytes+10)

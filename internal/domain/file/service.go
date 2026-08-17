@@ -122,7 +122,11 @@ func (s *Service) Read(ctx context.Context, in ReadInput) (Content, error) {
 		Size:      info.Size,
 		Truncated: truncated,
 	}
-	if isBinaryExt(in.Path) {
+	// The extension is the fast path; content is the fallback for the files
+	// it misses — a binary with no extension at all (a compiled tool
+	// committed by mistake, say) would otherwise come back as "text" full of
+	// invalid UTF-8.
+	if isBinaryExt(in.Path) || isBinaryContent(data) {
 		content.Base64 = base64.StdEncoding.EncodeToString(data)
 	} else {
 		content.Text = string(data)

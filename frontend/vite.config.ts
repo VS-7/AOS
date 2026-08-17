@@ -13,6 +13,13 @@ export default defineConfig({
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
+  // Monaco ships from node_modules, in the bundle, rather than served from
+  // the daemon the way the original does — see docs/05 - Transporte/Artifacts
+  // e Estáticos.md's "Monaco no bundle" decision. Vite's dependency
+  // pre-bundler otherwise chokes on Monaco's internal ESM structure.
+  optimizeDeps: {
+    include: ["monaco-editor"],
+  },
   build: {
     outDir: "dist",
     emptyOutDir: true,

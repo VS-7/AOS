@@ -88,6 +88,8 @@ O frontend é embutido com `//go:embed all:frontend/dist` no `aosd` e no `aos-de
 
 O editor Monaco, no original, é servido de `node_modules` pelo servidor. Aqui ele entra no bundle do frontend como qualquer outra dependência, o que elimina um transporte inteiro e a preocupação com traversal nele.
 
+Implementado: `monaco-editor` + `@monaco-editor/react` no bundle Vite, self-hosted (`loader.config({ monaco })`, sem CDN), workers via imports `?worker` (`frontend/src/lib/monaco-setup.ts`). O ponto de atenção real não foi o transporte — foi a resolução de import: a partir da 0.56, o `exports` map do pacote é `"./*": "./esm/vs/*.js"`, então o especificador correto é `monaco-editor/editor/editor.worker?worker`, **sem** o prefixo `esm/vs/` que a documentação (e a maioria dos tutoriais) ainda mostra. Com o prefixo, `vite build` falha ao resolver o import (o dev server, via esbuild, ainda resolvia — só a build de produção, via Rollup, acusava o erro).
+
 ## Decisões e divergências
 
 > [!decision] CSP estrita por padrão para artifacts

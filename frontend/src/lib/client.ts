@@ -81,7 +81,13 @@ interface Envelope<T> {
   notice?: { message: string };
 }
 
-function unwrap<T>(raw: unknown): T {
+/**
+ * Unwraps the envelope every surface answers with. Exported for lib/file.ts,
+ * which talks to /api/file directly rather than through Client — that
+ * surface is outside the command registry (see File (Go)'s "não tem grupo de
+ * comando") but still answers in the same envelope shape.
+ */
+export function unwrap<T>(raw: unknown): T {
   const envelope = raw as Envelope<T>;
   if (envelope && typeof envelope === "object" && "error" in envelope && envelope.error) {
     throw new DomainError(envelope.error);

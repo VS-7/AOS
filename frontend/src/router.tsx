@@ -26,6 +26,7 @@ import { ChatContent } from "@/features/chat/presentation/components/chat-conten
 import { Failure } from "@/components/Failure";
 import { TaskBoard } from "@/features/task/TaskBoard";
 import { MemoryGraph } from "@/features/memory/MemoryGraph";
+import { FilesPage } from "@/features/file/FilesPage";
 import { ApprovalModal } from "@/components/ApprovalModal";
 import {
   SidebarProvider,
@@ -105,7 +106,21 @@ const memoriesRoute = createRoute({
   ),
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, chatRoute, tasksRoute, memoriesRoute]);
+const filesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/files",
+  component: () => (
+    <div className="flex h-full flex-col gap-3">
+      <header>
+        <h2>Files</h2>
+        <p className="subtitle">The same workspace tree a human reaches by SSH, browsable here.</p>
+      </header>
+      <FilesPage />
+    </div>
+  ),
+});
+
+const routeTree = rootRoute.addChildren([indexRoute, chatRoute, tasksRoute, memoriesRoute, filesRoute]);
 
 /**
  * What a route renders instead of its page when a loader throws — most often
@@ -171,6 +186,11 @@ function RootLayout(): JSX.Element {
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={pathname === "/memories"}>
                   <Link to="/memories">Memories</Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === "/files"}>
+                  <Link to="/files">Files</Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
