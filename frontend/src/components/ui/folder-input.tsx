@@ -2,7 +2,7 @@ import { FolderOpen } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { isDesktop } from "@/lib/client";
+import { isDesktop, system } from "@/lib/client";
 
 interface FolderInputProps {
   value: string;
@@ -22,9 +22,9 @@ export function FolderInput({
   const native = isDesktop();
 
   const handleSelectFolder = async () => {
-    const picked = await window.go?.SystemService?.PickFiles({ directories: true });
-    if (picked && picked.length > 0) {
-      onChange(picked[0] as string);
+    const picked = await system.pickFiles({ directories: true });
+    if (picked.length > 0 && picked[0]) {
+      onChange(picked[0]);
     }
   };
 

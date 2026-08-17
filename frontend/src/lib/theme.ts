@@ -1,4 +1,4 @@
-import { client, isDesktop } from "./client";
+import { client, isDesktop, system } from "./client";
 
 /** A palette resolved to the properties the document root carries. */
 export interface RenderedTheme {
@@ -78,7 +78,12 @@ export async function applyTheme(
   }
 
   if (isDesktop()) {
-    await window.go?.SystemService?.SetAppearance(preference, rendered.windows);
+    try {
+      await system.setAppearance(preference, rendered.windows);
+    } catch {
+      // The window still repaints from the tokens set above; the native
+      // material just won't match until the next successful sync.
+    }
   }
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { JSX } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { client, isDesktop } from "@/lib/client";
+import { client } from "@/lib/client";
 
 interface ApprovalRequest {
   id: string;
@@ -41,20 +41,13 @@ export function ApprovalModal(): JSX.Element | null {
   });
 
   const decide = useMutation({
-    mutationFn: async (input: { id: string; approved: boolean; reason: string }) => {
-      if (isDesktop() && window.go?.ApprovalService) {
-        return window.go.ApprovalService.Resolve(input.id, {
-          approved: input.approved,
-          reason: input.reason,
-        });
-      }
-      return client.invoke("approvals_decide", {
+    mutationFn: async (input: { id: string; approved: boolean; reason: string }) =>
+      client.invoke("approvals_decide", {
         id: input.id,
         approved: input.approved,
         reason: input.reason,
         _reasoning: "the person answered a waiting tool call",
-      });
-    },
+      }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["approvals"] }),
   });
 

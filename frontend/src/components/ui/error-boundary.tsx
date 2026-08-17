@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { isDesktop } from "@/lib/client";
+import { isDesktop, system } from "@/lib/client";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -166,7 +166,7 @@ function ErrorFallback({ error, section, copied, onReset, onCopy }: ErrorFallbac
   function handleOpenBrowser() {
     const url = window.location.href;
     if (isDesktop()) {
-      window.go?.SystemService?.OpenExternal(url);
+      void system.openExternal(url);
     } else {
       window.open(url, "_blank", "noopener,noreferrer");
     }

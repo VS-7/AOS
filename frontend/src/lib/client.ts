@@ -25,43 +25,24 @@ export interface Client {
  * frontend (SystemService, ApprovalService) still expect this global and are
  * a known follow-up, not fixed by this change.
  */
-declare global {
-  interface Window {
-    go?: {
-      SystemService?: {
-        SetAppearance(appearance: string, windows: string): Promise<void>;
-        OpenExternal(url: string): Promise<void>;
-        Ping(): Promise<boolean>;
-        PickFiles(opts: {
-          title?: string;
-          directory?: string;
-          multiple?: boolean;
-          directories?: boolean;
-          extensions?: string[];
-        }): Promise<string[]>;
-      };
-      ApprovalService?: {
-        Resolve(id: string, decision: unknown): Promise<boolean>;
-        Pending(): Promise<unknown[]>;
-      };
-    };
-  }
-}
-
 /**
  * Whether this page is inside the desktop window rather than a browser tab.
  *
- * There is no synchronous signal for this in Wails3 — window.location stays
- * a normal http(s) origin either way, and the interception that makes the
- * desktop transport work happens at the network layer, not in anything JS
- * can inspect ahead of a call. client.invoke() below doesn't use this: it
- * tries the desktop transport and falls back on failure, which is the only
- * check that's actually reliable. This export is a best-effort synchronous
- * guess for the handful of call sites (native chrome, the file picker) that
- * need an answer before they can make any call at all.
+ * There is no synchronous ground truth for this in Wails3 — window.location
+ * stays a normal http(s) origin either way, and the interception that makes
+ * the desktop transport work happens at the network layer, nothing JS can
+ * inspect ahead of a call. This reflects confirmedDesktop (declared further
+ * down, alongside the desktop transport): false until the first domain call
+ * actually succeeds through it, true from then on. client.invoke() itself
+ * doesn't use this — it tries the desktop transport fresh on every call,
+ * which is the only check that's actually reliable moment to moment. This
+ * is for the handful of call sites (native chrome, the file picker) that
+ * need a synchronous answer before they can act at all, and can tolerate
+ * that answer starting out wrong for the first call or two after the
+ * window opens.
  */
 export function isDesktop(): boolean {
-  return typeof window !== "undefined" && !!window.go?.SystemService;
+  return confirmedDesktop;
 }
 
 /**
@@ -116,7 +97,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const DOMAIN_SERVICE_INVOKE = "github.com/OWNER/aos/internal/transport/wailsvc.DomainService.Invoke";
+const WAILSVC_PKG = "github.com/OWNER/aos/internal/transport/wailsvc";
+const DOMAIN_SERVICE_INVOKE = `${WAILSVC_PKG}.DomainService.Invoke`;
 
 // Backoff (ms) before each retried desktop call, longest first attempt last.
 // ensureDaemon in cmd/aos-desktop/main.go starts the daemon in the background
@@ -207,6 +189,40 @@ const desktop: Client = {
         await sleep(delay);
       }
     }
+  },
+};
+
+/**
+ * internal/transport/wailsvc.SystemService — the platform calls: opening a
+ * URL, picking a folder, syncing the native window material with a theme
+ * change. Unlike DomainService's single generic Invoke, each of these is
+ * its own bound Go method with its own typed arguments, called the same
+ * way (Call.ByName with the fully qualified name) but without Invoke's
+ * envelope: a Go error here rejects the call directly as a RuntimeError,
+ * so callers just try/catch around the call itself.
+ *
+ * No retry here, deliberately: every caller already gates these behind
+ * isDesktop() (see its own comment on why that can be wrong immediately
+ * after the window opens) or otherwise treats a rejection as "not
+ * available right now" rather than a failure worth surfacing — retrying a
+ * platform call that isn't there yet buys nothing a browser tab (which
+ * will never have one) doesn't also pay for.
+ */
+export const system = {
+  async setAppearance(appearance: string, windows: string): Promise<void> {
+    await Call.ByName(`${WAILSVC_PKG}.SystemService.SetAppearance`, appearance, windows);
+  },
+  async openExternal(url: string): Promise<void> {
+    await Call.ByName(`${WAILSVC_PKG}.SystemService.OpenExternal`, url);
+  },
+  async pickFiles(opts: {
+    title?: string;
+    directory?: string;
+    multiple?: boolean;
+    directories?: boolean;
+    extensions?: string[];
+  }): Promise<string[]> {
+    return (await Call.ByName(`${WAILSVC_PKG}.SystemService.PickFiles`, opts)) as string[];
   },
 };
 
