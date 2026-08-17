@@ -1,0 +1,208 @@
+import { useQuery } from "@tanstack/react-query"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
+import { client } from "@/lib/client"
+import {
+  BotIcon,
+  FileTextIcon,
+  WrenchIcon,
+} from "lucide-react"
+
+/**
+ * A part of a message, as `chats_get` returns it. Mirrors the shape
+ * features/chat/ChatScreen.tsx already reads — the original's `ai` SDK
+ * `UIMessage` carries a live per-part state (input-streaming, output-
+ * available, ...) that our backend does not expose: a stored message is
+ * finished, and the in-progress turn is the separate streaming answer
+ * (lib/realtime.ts). This timeline shows what happened, not a live status.
+ */
+interface Part {
+  type: "text" | "reasoning" | "tool_call" | "tool_result" | "file"
+  text?: string
+  toolName?: string
+  input?: unknown
+  output?: unknown
+}
+
+interface Message {
+  id: string
+  role: "user" | "assistant" | "system"
+  parts?: Part[]
+  createdAt?: string
+}
+
+interface Chat {
+  id: string
+  messages?: Message[]
+}
+
+type TimelineEvent = {
+  id: string
+  kind: "reasoning" | "tool" | "text"
+  title: string
+  detail: string
+}
+
+function toExecutionEvents(messages: Message[]): TimelineEvent[] {
+  const events: TimelineEvent[] = []
+
+  for (const message of messages) {
+    if (message.role !== "assistant") continue
+
+    for (const [index, part] of (message.parts ?? []).entries()) {
+      const id = `${message.id}:${index}`
+
+      if (part.type === "reasoning") {
+        const detail = part.text?.trim()
+        if (!detail) continue
+        events.push({ id, kind: "reasoning", title: "Reasoning", detail })
+        continue
+      }
+
+      if (part.type === "tool_call" || part.type === "tool_result") {
+        const toolName = part.toolName ?? "Tool"
+        const detail =
+          part.type === "tool_result" ? stringify(part.output) : `Tool call: ${toolName}`
+        events.push({ id, kind: "tool", title: toolName, detail })
+        continue
+      }
+
+      if (part.type === "text") {
+        const detail = part.text?.trim()
+        if (!detail) continue
+        events.push({ id, kind: "text", title: "Response", detail })
+      }
+    }
+  }
+
+  return events
+}
+
+function stringify(value: unknown): string {
+  if (value === undefined || value === null) return ""
+  if (typeof value === "string") return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function eventIcon(kind: TimelineEvent["kind"]) {
+  if (kind === "reasoning") return <BotIcon className="size-3.5 text-muted-foreground" />
+  if (kind === "tool") return <WrenchIcon className="size-3.5 text-muted-foreground" />
+  return <FileTextIcon className="size-3.5 text-muted-foreground" />
+}
+
+export interface ChatTimelineProps {
+  chatId?: string
+  messages?: Message[]
+  isLoading?: boolean
+  title?: string
+}
+
+export function ChatTimeline({
+  chatId,
+  messages,
+  isLoading: externalLoading,
+  title = "Execution Timeline",
+}: ChatTimelineProps) {
+  if (messages) {
+    return (
+      <ChatTimelineView
+        isLoading={externalLoading ?? false}
+        messages={messages}
+        title={title}
+      />
+    )
+  }
+
+  if (!chatId) {
+    return null
+  }
+
+  return <ChatTimelineLive chatId={chatId} title={title} />
+}
+
+function ChatTimelineLive({
+  chatId,
+  title,
+}: {
+  chatId: string
+  title: string
+}) {
+  // Same query key features/chat/ChatScreen.tsx uses for the same chat: one
+  // cache entry, invalidated centrally by lib/realtime.ts on `chat.done` — no
+  // manual refetch wiring needed here.
+  const { data, isLoading } = useQuery({
+    queryKey: ["chat", chatId],
+    queryFn: async () =>
+      (await client.invoke("chats_get", {
+        chat: chatId,
+        _reasoning: "the execution timeline is open",
+      })) as Chat,
+  })
+
+  return (
+    <ChatTimelineView
+      isLoading={isLoading}
+      messages={data?.messages ?? []}
+      title={title}
+    />
+  )
+}
+
+function ChatTimelineView({
+  isLoading,
+  messages,
+  title,
+}: {
+  isLoading: boolean
+  messages: Message[]
+  title: string
+}) {
+  const events = toExecutionEvents(messages)
+
+  return (
+    <div className="flex flex-col">
+      <div className="mb-2 flex items-center justify-between px-1">
+        <p className="text-xs font-semibold tracking-wide text-foreground/90">{title}</p>
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span>{events.length} events</span>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground">Loading execution...</p>
+      ) : events.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No execution events yet.</p>
+      ) : (
+        <Accordion type="multiple" className="w-full max-w-none pr-1 pb-2">
+          {events.map((event, index) => (
+            <AccordionItem key={event.id} value={event.id}>
+              <AccordionTrigger className="px-2.5">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  {eventIcon(event.kind)}
+                  <span className="text-[11px] text-muted-foreground">#{index + 1}</span>
+                  <span className="truncate text-xs font-medium text-foreground/90">{event.title}</span>
+                </div>
+              </AccordionTrigger>
+
+              <AccordionContent className="px-2.5 pb-2.5">
+                <div className="max-w-full overflow-hidden rounded-md border border-border/40 bg-background/60 p-2">
+                  <p className="max-w-full overflow-hidden whitespace-pre-wrap break-all text-xs leading-relaxed text-muted-foreground">
+                    {event.detail}
+                  </p>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      )}
+    </div>
+  )
+}

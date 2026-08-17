@@ -24,6 +24,13 @@ declare global {
         SetAppearance(appearance: string, windows: string): Promise<void>;
         OpenExternal(url: string): Promise<void>;
         Ping(): Promise<boolean>;
+        PickFiles(opts: {
+          title?: string;
+          directory?: string;
+          multiple?: boolean;
+          directories?: boolean;
+          extensions?: string[];
+        }): Promise<string[]>;
       };
       ApprovalService?: {
         Resolve(id: string, decision: unknown): Promise<boolean>;

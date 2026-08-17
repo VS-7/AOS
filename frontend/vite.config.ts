@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath, URL } from "node:url";
 
 // The bundle is served two ways: by the daemon over HTTP, and from inside the
@@ -7,7 +8,7 @@ import { fileURLToPath, URL } from "node:url";
 // subdirectory, so the base is the root and the output goes where the Go embed
 // directive looks for it.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   base: "/",
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },

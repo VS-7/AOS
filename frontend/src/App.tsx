@@ -3,6 +3,7 @@ import type { JSX } from "react";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { client, DomainError, isDesktop, setWorkspace } from "@/lib/client";
 import { useRealtime } from "@/lib/realtime";
+import { AppStateProvider } from "@/lib/app-state";
 import {
   listThemes,
   resolveAppearance,
@@ -33,7 +34,9 @@ type Screen = "chat" | "board" | "graph";
 export function App(): JSX.Element {
   return (
     <QueryClientProvider client={queryClient}>
-      <Shell />
+      <AppStateProvider>
+        <Shell />
+      </AppStateProvider>
     </QueryClientProvider>
   );
 }
