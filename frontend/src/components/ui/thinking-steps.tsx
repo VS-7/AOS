@@ -8,6 +8,7 @@ import {
   type CSSProperties,
 } from "react";
 import { motion } from "framer-motion";
+import { XCircleIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIcon } from "@/lib/icon-context";
 import type { IconName } from "@/lib/icon-context";
@@ -142,7 +143,7 @@ ThinkingStepsContent.displayName = "ThinkingStepsContent";
 
 // ─── ThinkingStep ───────────────────────────────────────────────────────────
 
-type StepStatus = "complete" | "active" | "pending";
+type StepStatus = "complete" | "active" | "pending" | "error";
 
 interface ThinkingStepProps {
   icon?: IconName;
@@ -181,6 +182,7 @@ function ThinkingStep({
   if (status === "pending") return null;
 
   const isActive = status === "active";
+  const isError = status === "error";
 
   return (
     <motion.div
@@ -208,7 +210,9 @@ function ThinkingStep({
         animate={{
           backgroundColor: isActive
             ? "color-mix(in srgb, var(--accent) 18%, transparent)"
-            : "transparent",
+            : isError
+              ? "color-mix(in srgb, var(--destructive) 8%, transparent)"
+              : "transparent",
         }}
         transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
         className={cn("flex gap-2.5 px-2 py-1.5", shape.item)}
@@ -229,7 +233,11 @@ function ThinkingStep({
                 strokeWidth={1.5}
                 className={cn(
                   "transition-colors duration-500",
-                  isActive ? "text-foreground" : "text-muted-foreground",
+                  isError
+                    ? "text-destructive"
+                    : isActive
+                      ? "text-foreground"
+                      : "text-muted-foreground",
                 )}
               />
             ) : (
@@ -237,7 +245,11 @@ function ThinkingStep({
                 <motion.div
                   className={cn(
                     "w-1.5 h-1.5 rounded-md",
-                    isActive ? "bg-foreground" : "bg-muted-foreground/60",
+                    isError
+                      ? "bg-destructive"
+                      : isActive
+                        ? "bg-foreground"
+                        : "bg-muted-foreground/60",
                   )}
                   animate={
                     isActive ? { opacity: [0.6, 1, 0.6] } : { opacity: 1 }
@@ -308,6 +320,17 @@ function ThinkingStep({
                   />
                 ) : null}
               </motion.div>
+            ) : null}
+            {isError ? (
+              <motion.span
+                initial={false}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                className="flex shrink-0 items-center gap-1 text-destructive/90"
+                title="Error"
+              >
+                <XCircleIcon className="size-3.5" />
+              </motion.span>
             ) : null}
             {trailing ? (
               <motion.div
