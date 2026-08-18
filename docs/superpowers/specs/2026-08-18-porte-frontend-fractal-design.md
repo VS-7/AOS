@@ -196,9 +196,17 @@ O aninhamento sob a chave do domínio já casa: o Go devolve
 | Chamada | Comportamento |
 |---|---|
 | `query` / `mutate` | Devolve `{ data: undefined, error: { code: "AOS_DOMAIN_DORMANT" } }`. A lista renderiza vazia em vez de quebrar. |
-| `useQuery` | `data` fica `undefined`, `isLoading` resolve. Sem retry — dormente não melhora tentando de novo. |
+| `useQuery` | `data` fica `null` (**não `undefined`**), `isLoading` resolve. Sem retry — dormente não melhora tentando de novo. |
 | `useMutation` | Resolve com o mesmo envelope; a UI exibe o aviso pelo caminho de erro que já tem. |
 | Rota do domínio | Layout exibe um painel claro: *"Este domínio ainda não existe no backend Go."* |
+
+> **`null`, nunca `undefined`.** O TanStack Query trata `undefined` devolvido por
+> um `queryFn` como erro (`"<hash> data is undefined"`) e coloca a query em
+> estado de falha. Devolver `undefined` no caminho dormente destruiria
+> exatamente o contrato desta seção: o `AOS_DOMAIN_DORMANT` nunca chegaria à UI
+> e o painel ficaria inalcançável por qualquer hook. `null` é dado válido para o
+> TanStack, e o código portado lê `q.data?.campo`, que lida com `null`
+> naturalmente.
 
 O painel é o que separa degradação honesta de tela quebrada: uma tela vazia sem
 explicação é indistinguível de um defeito. Um domínio que "acorda" no Go passa a
