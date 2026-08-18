@@ -33,3 +33,6 @@
 # A stock `wails3 init` scaffold kept alongside the real project purely as a
 # reference for what a default Wails3 app looks like — not part of AOS.
 /exemplo-wails3-ultima-versao/
+
+# Scratch da execução de planos (superpowers SDD) — não é artefato do projeto
+.superpowers/
