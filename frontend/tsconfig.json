@@ -6,13 +6,13 @@
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "strict": true,
-    // Relaxadas para o código portado do Fractal, escrito sob outro perfil.
-    // As duas primeiras são lint, não segurança. noUncheckedIndexedAccess é
-    // segurança, e desligá-la é perda real — aceita porque o alternativo é
-    // editar 413 indexações em código que não escrevemos, e cada edição é
-    // divergência permanente contra a fonte. A ilha estrita
-    // (tsconfig.strict.json) mantém as três sobre src/lib, que é o código
-    // que este porte de fato escreve.
+    // Relaxed for the code ported from Fractal, written under a different
+    // profile. The first two are lint, not safety. noUncheckedIndexedAccess
+    // is safety, and turning it off is a real loss — accepted because the
+    // alternative is editing 413 index accesses in code we did not write,
+    // and each edit is a permanent divergence from the source. The strict
+    // island (tsconfig.strict.json) keeps all three enforced over src/lib,
+    // which is the code this port actually writes.
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,

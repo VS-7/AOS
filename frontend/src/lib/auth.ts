@@ -130,3 +130,13 @@ export async function logout(): Promise<void> {
 export function session(): Promise<{ user: PublicUser }> {
   return call<{ user: PublicUser }>("Session", [], "/api/auth/session");
 }
+
+/** Changes the current session's password. */
+export async function changePassword(current: string, next: string): Promise<void> {
+  await call<Record<string, never>>(
+    "ChangePassword",
+    [current, next],
+    "/api/auth/password",
+    { method: "POST", headers: jsonHeaders, body: JSON.stringify({ current, next }) },
+  );
+}

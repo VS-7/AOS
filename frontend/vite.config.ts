@@ -21,9 +21,9 @@ export default defineConfig({
   optimizeDeps: {
     include: ["monaco-editor"],
   },
-  // O ambiente é node, não jsdom: o que testamos é a fachada — tradução de
-  // nome, montagem de payload e formato do envelope. Nada disso toca o DOM,
-  // e um jsdom aqui só somaria tempo de subida a cada rodada.
+  // The environment is node, not jsdom: what we're testing is the facade —
+  // name translation, payload assembly, and envelope shape. None of that
+  // touches the DOM, and a jsdom here would only add startup time to every run.
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
