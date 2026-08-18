@@ -1077,23 +1077,40 @@ git commit -m "feat(frontend): port the task feature end to end, proving the fac
 
 ---
 
-### Task 7: Recuperar as 18 interfaces restantes e os 3 arquivos `@core`
+### Task 7: Recuperar as 17 interfaces restantes e os arquivos `@core`
 
 **Files:**
-- Create: `$AOS/src/features/<d>/interfaces/<d>.interfaces.ts` × 18
-- Create: `$AOS/src/core/{helpers/request-context.ts,services/activity.ts,services/store.ts}`
+- Create: `$AOS/src/features/<d>/interfaces/<d>.interfaces.ts` × 17
+- Create: `$AOS/src/core/helpers/{request-context.ts,schema.helper.ts}`
+- Create: `$AOS/src/core/services/{activity.ts,store.ts}`
+- Create: `$AOS/src/core/interfaces/response.interfaces.ts` — reconstruído
 
 **Interfaces:**
-- Produces: `Fractal*` para agent, chat, file, routine, goal, project, workspace, model, collection, memory, skill, template, theme, toolset, view, instruction, auth, config
+- Produces: `Fractal*` para agent, chat, file, routine, goal, project, workspace, model, collection, memory, skill, template, theme, toolset, view, instruction, auth
+- Produces: `ResponseWithCTA<T>`, `Schema`
 
-- [ ] **Step 1: Copiar e reposicionar**
+> **Correções aplicadas na varredura pré-execução.** Os arquivos do `index/` são
+> a fonte **server-side**, não a do frontend. Cinco problemas foram identificados
+> e resolvidos nos passos abaixo; não os redescubra:
+> 1. `config` **sai** da lista — a versão boa é a de `v401/web`, que a Task 9
+>    traz. A do `index/` importa `@igniter-js/core`.
+> 2. 15 dos 17 importam `ResponseWithCTA` de um arquivo que **não existe em
+>    nenhuma extração** — Step 2 o reconstrói.
+> 3. Quase todos importam `Schema` de `@core/helpers/schema.helper`, **ausente
+>    no AOS** — Step 1 o recupera.
+> 4. `collection` e `view` importam tipos de `@igniter-js/collections` — Step 4.
+> 5. `agent.interfaces.ts` importa `node:child_process` e serviços de backend —
+>    Step 5 poda. É a única poda manual autorizada nesta task.
+
+- [ ] **Step 1: Copiar as 17 interfaces e os arquivos `@core` de apoio**
 
 A extração `index/` guarda os arquivos num caminho mais raso
 (`features/<d>/<d>.interfaces.ts`); o front espera
-`features/<d>/interfaces/<d>.interfaces.ts`.
+`features/<d>/interfaces/<d>.interfaces.ts`. `config` não entra — ver a nota
+da task.
 
 ```bash
-for d in agent chat file routine goal project workspace model collection memory skill template theme toolset view instruction auth config; do
+for d in agent chat file routine goal project workspace model collection memory skill template theme toolset view instruction auth; do
   src="$EXT/index/src/features/$d/$d.interfaces.ts"
   if [ -f "$src" ]; then
     mkdir -p "$AOS/src/features/$d/interfaces"
@@ -1105,33 +1122,127 @@ for d in agent chat file routine goal project workspace model collection memory 
 done
 ```
 
-Esperado: 18 linhas `OK`, nenhuma `FALTA`.
-
-- [ ] **Step 2: Copiar os 3 arquivos `@core`**
+Esperado: 17 linhas `OK`, nenhuma `FALTA`.
 
 ```bash
-mkdir -p "$AOS/src/core/helpers" "$AOS/src/core/services"
+mkdir -p "$AOS/src/core/helpers" "$AOS/src/core/services" "$AOS/src/core/interfaces"
 cp "$EXT/index/src/@core/helpers/request-context.ts" "$AOS/src/core/helpers/"
 cp "$EXT/index/src/@core/services/activity.ts" "$AOS/src/core/services/"
 cp "$EXT/index/src/@core/services/store.ts" "$AOS/src/core/services/"
+# schema.helper vem da árvore do front, não do index/
+cp "$EXT/v401/web/src/@core/helpers/schema.helper.ts" "$AOS/src/core/helpers/"
+```
+
+- [ ] **Step 2: Reconstruir `response.interfaces.ts`**
+
+15 dos 17 arquivos importam `ResponseWithCTA` daqui, e o arquivo não existe em
+nenhuma extração — era type-only. Verificado: o tipo só aparece em interfaces
+`IFractal*Service`, que são contratos de serviço server-side; o frontend chama
+o domínio pela fachada e nunca implementa nem invoca essas interfaces.
+
+Criar `$AOS/src/core/interfaces/response.interfaces.ts`:
+
+```ts
+/**
+ * Reconstruído: o arquivo era type-only e nenhuma extração o preservou.
+ *
+ * `ResponseWithCTA` aparece exclusivamente nas interfaces `IFractal*Service`,
+ * que descrevem os serviços do backend original. O frontend não as implementa
+ * nem as chama — fala com o domínio pela fachada. O tipo existe aqui para que
+ * os 15 arquivos recuperados compilem sem serem editados: pruná-los seria 15
+ * divergências à mão contra a fonte, que é o que a spec manda evitar.
+ */
+export interface ResponseCTA {
+  label: string;
+  command?: string;
+  tool?: string;
+}
+
+export interface ResponseWithCTA<TData> {
+  data?: TData;
+  error?: { code?: string; message?: string };
+  cta?: ResponseCTA[];
+}
 ```
 
 - [ ] **Step 3: Reescrever os imports**
 
 ```bash
 cd "$AOS/src"
-perl -pi -e 's{\@/\@core/}{\@/core/}g' $(find features core -name '*.interfaces.ts' -o -path '*core/*' -name '*.ts')
-perl -pi -e 's{from "\@/features/([a-z]+)/\1\.interfaces"}{from "\@/features/$1/interfaces/$1.interfaces"}g' $(find features core -name '*.ts')
+FILES=$(find features core -name '*.ts')
+perl -pi -e 's{\@/\@core/}{\@/core/}g' $FILES
+perl -pi -e 's{from "\@/features/([a-z]+)/\1\.interfaces"}{from "\@/features/$1/interfaces/$1.interfaces"}g' $FILES
+# os recuperados referenciam vizinhos por caminho relativo raso
+perl -pi -e 's{from "\.\./([a-z]+)/\1\.interfaces"}{from "\@/features/$1/interfaces/$1.interfaces"}g' $FILES
 ```
 
-- [ ] **Step 4: Verificar que os tipos resolvem entre si**
+- [ ] **Step 4: Substituir os tipos de `@igniter-js/collections`**
 
-Run: `cd "$AOS" && npx tsc --noEmit --skipLibCheck $(find src/features -name '*.interfaces.ts') 2>&1 | grep -v "Cannot find module '@/features" | head -20`
+`collection` e `view` importam dois tipos de um pacote que não instalamos.
+Ambos os domínios estão dormentes, então o contrato mínimo basta.
+
+Acrescentar ao topo de `$AOS/src/features/collection/interfaces/collection.interfaces.ts`,
+removendo a linha `import type { IIgniterCollectionModel } from "@igniter-js/collections";`:
+
+```ts
+/** Era `IIgniterCollectionModel`. Domínio dormente — contrato mínimo. */
+export interface IIgniterCollectionModel {
+  name: string;
+  fields?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+```
+
+Idem em `$AOS/src/features/view/interfaces/view.interfaces.ts`, removendo
+`import type { IgniterCollectionViewDefinition } from "@igniter-js/collections";`:
+
+```ts
+/** Era `IgniterCollectionViewDefinition`. Domínio dormente — contrato mínimo. */
+export interface IgniterCollectionViewDefinition {
+  name: string;
+  tree?: unknown;
+  [key: string]: unknown;
+}
+```
+
+- [ ] **Step 5: Podar o bloco server-side de `agent.interfaces.ts`**
+
+É o único arquivo recuperado que traz dependência de runtime Node para dentro
+do bundle do navegador. Remover de
+`$AOS/src/features/agent/interfaces/agent.interfaces.ts`:
+
+- `import type { SpawnOptions } from "node:child_process";`
+- `import type { BackgroundJobs } from "./services/jobs.service";`
+- qualquer `import ... from "./services/browser.service";`
+- `import { IgniterLogger } from "@igniter-js/core";`
+- a interface `IFractalAgentService` e quaisquer tipos que existam apenas para
+  ela e citem os símbolos acima
+
+Manter tudo o mais: as entidades (`FractalAgent` e companhia) e seus schemas
+são o que a UI importa.
+
+Confirmar:
+
+```bash
+grep -nE "node:|@igniter-js|services/" "$AOS/src/features/agent/interfaces/agent.interfaces.ts" || echo "limpo"
+```
+
+- [ ] **Step 6: Verificar que os tipos resolvem entre si**
+
+```bash
+cd "$AOS" && grep -rn "@igniter-js" src/features src/core && echo "FALHOU: resíduo" || echo "OK: sem Igniter"
+npx tsc --noEmit --skipLibCheck $(find src/features src/core -name '*.ts') 2>&1 | grep -v "Cannot find module '@/features" | head -20
+```
 
 Erros restantes devem ser só de módulos ainda não portados. Qualquer erro de
 sintaxe ou tipo dentro dos próprios arquivos precisa ser corrigido aqui.
 
-- [ ] **Step 5: Commit**
+Não corrigir erros vindos do código AOS antigo de `features/chat` e
+`features/agent`: os tipos recuperados usam `FractalAgent`/`FractalChat` e o
+código antigo usa `Agent`/`Participant`. A Task 9 substitui esses
+consumidores; a janela quebrada entre as duas tasks é esperada.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 cd "$AOS/.." && git add frontend/src/features frontend/src/core
