@@ -107,8 +107,24 @@ function actionNode(feature: string, action: string): ActionNode {
         queryKey: [feature, action, flattenArgs(opts)],
         queryFn: async () => {
           const r = await call(feature, action, opts);
-          if (r.error && r.error.code !== DORMANT_CODE) throw r.error;
-          return r.data ?? undefined;
+          // @tanstack/query-core rejects `undefined` as query data outright
+          // (it throws "... data is undefined"), so every branch here
+          // returns `null` instead — never `undefined`. Dormant resolves to
+          // `null` data rather than an error state: the ported code reads
+          // `q.data?.field`, which treats `null` the same as "not there
+          // yet" and never even notices. `query()`/`mutate()` keep the
+          // `{ data: undefined, error }` shape for dormant calls — that
+          // asymmetry with this hook is intentional, not a mismatch to fix.
+          if (r.error) {
+            if (r.error.code === DORMANT_CODE) return null;
+            // A plain `{code, message}` object thrown here would type `error`
+            // as non-Error at the `UseQueryResult` boundary — real `Error`
+            // instances are what `instanceof Error`, `.stack`, and any
+            // throwOnError/ErrorBoundary path expect. `code` still needs to
+            // reach the UI, so it rides along as a property on the Error.
+            throw Object.assign(new Error(r.error.message), { code: r.error.code });
+          }
+          return r.data ?? null;
         },
         enabled: opts?.enabled ?? true,
         // Dormant doesn't get better by retrying.

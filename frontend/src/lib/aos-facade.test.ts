@@ -1,18 +1,33 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { COMMAND_MAP } from "./command-map";
+import * as authApi from "./auth";
+import * as reactQuery from "@tanstack/react-query";
 
 const invoke = vi.fn();
-vi.mock("./client", () => ({
+// Real react-query's useQuery needs a QueryClientProvider to run at all, and
+// what's under test here is the config it's handed — queryFn's dormant/
+// error/undefined-data handling — not react-query's own scheduling. Spread
+// the real module (useMutation stays real, unused by these tests) and
+// replace only useQuery with a spy that hands back its config untouched, so
+// tests can call `config.queryFn()` directly.
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQuery: vi.fn((config: unknown) => config),
+}));
+// Spread the real module and override only `client`. command-map.ts eagerly
+// imports lib/auth.ts and lib/file.ts, which pull in DomainError, unwrap,
+// isDesktop and getWorkspace from ./client — neither module is exercised
+// directly by this suite, but the import graph still needs those bindings
+// to resolve. Re-stubbing each one by hand (as an earlier version of this
+// file did) is both wrong (a hand-rolled `unwrap` that just returns its
+// input isn't the real unwrap/DomainError contract, so a test that actually
+// exercised those call sites could pass for the wrong reason) and brittle
+// (any new export auth.ts or file.ts starts using from ./client breaks this
+// suite with a cryptic "No 'X' export is defined on the './client' mock").
+// Spreading the real module sidesteps both problems.
+vi.mock("./client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./client")>()),
   client: { invoke: (...a: unknown[]) => invoke(...a) },
-  DomainError: class DomainError extends Error {
-    code = "AOS_TEST"; status = 400; issues = {}; actions = [];
-  },
-  // command-map.ts eagerly imports lib/auth.ts and lib/file.ts, which in
-  // turn import these from ./client. Neither is exercised by this suite
-  // (only task.* and collection.* paths run below), but the module graph
-  // still needs the bindings to exist for the import to resolve.
-  unwrap: (raw: unknown) => raw,
-  isDesktop: () => false,
-  getWorkspace: () => "",
 }));
 
 const { flattenArgs, call, api, DORMANT_CODE } = await import("./aos-facade");
@@ -84,6 +99,64 @@ describe("call", () => {
   });
 });
 
+describe("call (HttpHandler branch)", () => {
+  // auth.*, session.*, password.* and file.* — 13 entries — route through a
+  // plain function instead of client.invoke (see command-map.ts's own
+  // HttpHandler doc). Nothing exercised that branch before this suite: a
+  // rename of a CallOpts key on either side of the auth.login entry, or a
+  // regression that started leaking _reasoning into it, would have broken
+  // silently. These tests close that gap.
+
+  const ECHO_PATH = "test.echo";
+
+  afterEach(() => {
+    delete COMMAND_MAP[ECHO_PATH];
+  });
+
+  it("invokes the handler with exactly the flattened payload — no _reasoning added", async () => {
+    // A synthetic entry, not a real domain one: this isolates call()'s own
+    // dispatch contract (what object the handler receives) from any single
+    // domain's argument-extraction logic, which is covered separately below.
+    let received: Record<string, unknown> | undefined;
+    COMMAND_MAP[ECHO_PATH] = async (p) => {
+      received = p;
+      return { ok: true };
+    };
+
+    const r = await call("test", "echo", { params: { id: "t-1" }, query: { limit: 5 } });
+
+    expect(received).toEqual({ id: "t-1", limit: 5 });
+    expect(received).not.toHaveProperty("_reasoning");
+    expect(invoke).not.toHaveBeenCalled();
+    expect(r.data).toEqual({ ok: true });
+  });
+
+  it("converts a handler rejection into an error envelope instead of throwing", async () => {
+    COMMAND_MAP[ECHO_PATH] = async () => {
+      throw Object.assign(new Error("nope"), { code: "AOS_ECHO_FAILED" });
+    };
+
+    const r = await call("test", "echo");
+
+    expect(r.data).toBeUndefined();
+    expect(r.error?.code).toBe("AOS_ECHO_FAILED");
+  });
+
+  it("resolves auth.login's identifier/password from the flattened payload — the real entry, not a stand-in", async () => {
+    const login = vi.spyOn(authApi, "login").mockResolvedValueOnce({
+      user: { id: "u-1", name: "Ada", username: "ada", email: "ada@example.com", role: "member" },
+      expiresAt: "2030-01-01T00:00:00Z",
+    });
+
+    const r = await call("auth", "login", { params: { identifier: "ada@example.com", password: "secret" } });
+
+    expect(login).toHaveBeenCalledWith("ada@example.com", "secret");
+    expect(invoke).not.toHaveBeenCalled();
+    expect(r.error).toBeUndefined();
+    login.mockRestore();
+  });
+});
+
 describe("api (the Proxy)", () => {
   it("exposes query, mutate, useQuery and useMutation on any feature.action", () => {
     // AosClient types api as Record<string, Record<string, ActionNode>>, so
@@ -104,5 +177,61 @@ describe("api (the Proxy)", () => {
     expect(invoke).toHaveBeenCalledWith("tasks_list", {
       limit: 3, _reasoning: "interface: task.list",
     });
+  });
+});
+
+describe("useQuery's queryFn", () => {
+  // @tanstack/query-core throws "... data is undefined" if queryFn ever
+  // resolves to undefined — so a dormant call, and a live call that
+  // legitimately answers with no body, both have to land on `null` instead.
+  // Without this, api.instruction.list.useQuery() (a dormant domain) would
+  // put the query in *error* state and DORMANT_CODE would never reach the
+  // UI at all — the exact panel it exists to trigger becomes unreachable.
+
+  function lastQueryConfig(): { queryFn: () => Promise<unknown> } {
+    const calls = vi.mocked(reactQuery.useQuery).mock.calls;
+    const last = calls.at(-1);
+    if (!last) throw new Error("useQuery was not called");
+    // The real UseQueryOptions#queryFn takes a QueryFunctionContext this
+    // suite never needs — call() ignores it — so this narrows to the shape
+    // actually used here, same escape hatch as the CommandKey cast in
+    // aos-facade.ts: through `unknown` first, since the two signatures
+    // don't otherwise overlap enough for TS to allow it directly.
+    return last[0] as unknown as { queryFn: () => Promise<unknown> };
+  }
+
+  it("resolves a dormant call to null data, not undefined", async () => {
+    api.collection!.list!.useQuery();
+    const { queryFn } = lastQueryConfig();
+    await expect(queryFn()).resolves.toBeNull();
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("resolves a successful call with no body to null, not undefined", async () => {
+    api.task!.list!.useQuery();
+    const { queryFn } = lastQueryConfig();
+    invoke.mockResolvedValueOnce(undefined);
+    await expect(queryFn()).resolves.toBeNull();
+  });
+
+  it("passes real data through untouched", async () => {
+    api.task!.list!.useQuery();
+    const { queryFn } = lastQueryConfig();
+    invoke.mockResolvedValueOnce({ tasks: [{ id: "t-1" }] });
+    await expect(queryFn()).resolves.toEqual({ tasks: [{ id: "t-1" }] });
+  });
+
+  it("throws a real Error carrying `code`, for a non-dormant failure", async () => {
+    api.task!.list!.useQuery();
+    const { queryFn } = lastQueryConfig();
+    invoke.mockRejectedValueOnce(Object.assign(new Error("nope"), { code: "AOS_TASK_BLOCKED" }));
+    await expect(queryFn()).rejects.toBeInstanceOf(Error);
+  });
+
+  it("keeps the error code reachable on the thrown Error", async () => {
+    api.task!.list!.useQuery();
+    const { queryFn } = lastQueryConfig();
+    invoke.mockRejectedValueOnce(Object.assign(new Error("nope"), { code: "AOS_TASK_BLOCKED" }));
+    await expect(queryFn()).rejects.toMatchObject({ code: "AOS_TASK_BLOCKED" });
   });
 });
