@@ -199,7 +199,7 @@ export class AosApp<
 
       useContext: () => {
         // Obtenção síncrona do contexto global resolvido pelo beforeLoad da rota raiz
-        const { context } = rootRoute.useRouteContext();
+        const { context } = rootRoute.useRouteContext() as { context: TContext };
         return context;
       },
 
@@ -214,7 +214,7 @@ export class AosApp<
         use: () => ({ mutate: async () => { }, data: undefined, error: null, isLoading: false })
       },
 
-      useQueryClient: useQueryClient<unknown>,
+      useQueryClient: useQueryClient,
 
       useForm: <TPath extends MutationPath<TClient>, TSchema extends z.ZodTypeAny>(
         options: AosUseFormOptions<TClient, TPath, TSchema>
@@ -405,6 +405,6 @@ export class AosApp<
         }) as AosFormReturn<TSchema>;
       }
 
-    } as unknown as AosAppBuilt<TClient, TContext, TStores, any>;
+    };
   }
 }

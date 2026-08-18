@@ -1,6 +1,10 @@
 import type { AnyRoute, RouteComponent } from "@tanstack/react-router";
+import type { QueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import type { ZodTypeAny, z } from "zod";
+import type { AosLayout } from "./layout";
+import type { AosMiddleware } from "./middleware";
+import type { AosPage } from "./page";
 
 /**
  * The builders' internal contract, reconstructed.
@@ -50,46 +54,97 @@ export interface AosAppConfig<TClient = unknown, TContext = DefaultContext, TSto
   onPageLoad?: (args: PageLifecycleArgs<TClient, TContext, TStores>) => Promise<void> | void;
 }
 
+/**
+ * `AosApp.build()`'s fallback trigger API, used when no trigger builder was
+ * configured via `withTriggers`. Its shape genuinely differs from
+ * {@link AosTriggerAPI} — it exposes `trigger` where the real,
+ * `initialize()`-produced API exposes `dispatch` — so `AosAppBuilt.triggers`
+ * is typed as a union of both rather than papering over the mismatch.
+ */
+export interface AosTriggerAPIFallback {
+  list: () => Promise<never[]>;
+  trigger: () => Promise<void>;
+  use: () => AosTriggerHookResult;
+}
+
+/**
+ * What `AosApp.build()` actually returns, read member-for-member off the
+ * object literal in `app.tsx`. `page`/`layout`/`middleware` return the real
+ * builder instances with every generic parameter that matters to a caller
+ * (`TClient`, `TContext`, `TStores`, and for `page` the loader/search-schema
+ * slots) threaded through concretely.
+ *
+ * The one slot left as `any` is `AosPage`/`AosLayout`'s *parent-route* type
+ * parameter. That parameter is stored as a plain public class property
+ * (`public parentRoute: TParentRoute`), which TypeScript's structural
+ * variance measurement treats as invariant — so no single named type (not
+ * even {@link AnyRoute}, which is TanStack's own "accept anything" escape
+ * hatch) is simultaneously assignable from the concrete `typeof rootRoute`
+ * app.tsx actually constructs *and* usable as a stand-in in this interface,
+ * which cannot name that concrete, per-app route type. `any` is the
+ * intentionally narrow exception, isolated to that one slot; every other
+ * parameter here is real.
+ */
 export interface AosAppBuilt<TClient = unknown, TContext = DefaultContext, TStores = unknown, TTrigger = unknown> {
-  client: TClient;
-  context: TContext;
-  stores: TStores;
-  triggers: TTrigger;
-  config: AosAppConfig<TClient, TContext, TStores, TTrigger>;
-  /** The TanStack root route produced by `AosApp.build()`; consumed by `AosRouter`. */
+  /** The TanStack root route produced by `build()`; consumed by `AosRouter`. */
   rootRoute: AnyRoute;
-  page(path: string): unknown;
-  layout(path: string): unknown;
-  router(routes: AnyRoute[]): unknown;
+  config: AosAppConfig<TClient, TContext, TStores>;
+  client: TClient;
+  stores: TStores;
+  layout: () => AosLayout<any, TClient, TContext, TStores>;
+  middleware: () => AosMiddleware<TClient, TContext, TStores, any>;
+  page: <TNewPath extends string>(path: TNewPath) => AosPage<TNewPath, any, TClient, TContext, TStores, ZodTypeAny, any>;
+  useContext: () => TContext;
+  triggers: AosTriggerAPI<TClient, TContext, TStores> | AosTriggerAPIFallback;
+  commands: AosTriggerAPI<TClient, TContext, TStores> | AosTriggerAPIFallback;
+  useQueryClient: (queryClient?: QueryClient) => QueryClient;
+  useForm: <TPath extends MutationPath<TClient>, TSchema extends ZodTypeAny>(
+    options: AosUseFormOptions<TClient, TPath, TSchema>
+  ) => AosFormReturn<TSchema>;
 }
 
 /**
  * The fluent builder interface `AosApp` implements.
  *
- * `TTrigger` is kept as a parameter for call-site compatibility (so callers
- * can still write `IAosAppBuilder<A, B, C, D>`) but deliberately does not
- * appear in any member below. The class's own `withClient`/`withContext`/
- * `withStores`/`build` all collapse the trigger type to a fresh default
- * (typically `IAosTriggerBuilt<...>`) rather than preserving the caller's
- * `TTrigger` — threading it through here would make every one of those
- * methods fail to structurally satisfy this interface, since TS can't prove
- * a general default is assignable to an arbitrary, independently-chosen
- * `TTrigger`. Making the parameter phantom sidesteps a real variance
- * limitation in the copied builder code rather than working around it with
- * unsound casts.
+ * `TClient`/`TContext`/`TStores` are threaded through `withClient`/
+ * `withContext`/`withStores`/`withTriggers` as real generic type parameters,
+ * matching how the class itself narrows them on every call.
+ *
+ * `TTrigger`, by contrast, is kept as a parameter for call-site compatibility
+ * (so callers can still write `IAosAppBuilder<A, B, C, D>`) but deliberately
+ * does not appear in the *output* position of `withClient`/`withContext`/
+ * `withStores`/`build` — only `withTriggers` propagates a real `TNewTrigger`.
+ * This is not the same erasure as the other three params: the class's own
+ * `withClient`/`withContext`/`withStores` each collapse the trigger type to a
+ * *fresh* `IAosTriggerBuilt<...>` default rather than preserving whatever
+ * `TTrigger` the caller instantiated the interface with, so threading the
+ * caller's `TTrigger` through those three specifically would make the class
+ * provably fail to structurally satisfy the interface — TS cannot prove a
+ * general default is assignable to an arbitrary, independently-chosen
+ * `TTrigger`. Erasing `TTrigger` to `any` only at those four output
+ * positions (not at `TClient`/`TContext`/`TStores`, which the class does
+ * preserve exactly) sidesteps that real variance limitation in the copied
+ * builder code rather than working around it with unsound casts.
  */
 export interface IAosAppBuilder<TClient = unknown, TContext = DefaultContext, TStores = unknown, TTrigger = unknown> {
-  withClient(client: unknown): IAosAppBuilder<any, TContext, TStores, any>;
-  withStores(stores: unknown, onReady?: (args: { stores: any }) => Promise<void> | void): IAosAppBuilder<TClient, TContext, any, any>;
-  withContext(factory: (args: { stores: TStores }) => unknown): IAosAppBuilder<TClient, any, TStores, any>;
-  withTriggers(triggers: unknown): IAosAppBuilder<TClient, TContext, TStores, any>;
-  withLayout(component: RouteComponent): IAosAppBuilder<TClient, TContext, TStores, any>;
-  withNotFoundComponent(component: RouteComponent): IAosAppBuilder<TClient, TContext, TStores, any>;
-  withNotAuthorizedComponent(component: RouteComponent): IAosAppBuilder<TClient, TContext, TStores, any>;
-  withDefaultPreload(mode: "intent" | "render" | "viewport" | false): IAosAppBuilder<TClient, TContext, TStores, any>;
-  withBeforePageLoader(fn: unknown): IAosAppBuilder<TClient, TContext, TStores, any>;
-  withPageLoader(fn: unknown): IAosAppBuilder<TClient, TContext, TStores, any>;
-  build(): AosAppBuilt<TClient, TContext, TStores, any>;
+  withClient<TNewClient = unknown>(client: TNewClient): IAosAppBuilder<TNewClient, TContext, TStores, any>;
+  withStores<TNewStores extends AosStoresCollection<any> = AosStoresCollection<any>>(
+    stores: TNewStores,
+    onReady?: (args: { client: TClient; stores: TNewStores; request: unknown }) => Promise<void> | void
+  ): IAosAppBuilder<TClient, TContext, TNewStores, any>;
+  withContext<TNewContext = unknown>(
+    factory: (args: { client: TClient; stores: TStores; request: unknown }) => Promise<TNewContext> | TNewContext
+  ): IAosAppBuilder<TClient, TNewContext, TStores, any>;
+  withTriggers<TNewTrigger extends IAosTriggerBuilt<TClient, TContext, TStores> = IAosTriggerBuilt<TClient, TContext, TStores>>(
+    triggers: TNewTrigger
+  ): IAosAppBuilder<TClient, TContext, TStores, TNewTrigger>;
+  withLayout(component: RouteComponent): IAosAppBuilder<TClient, TContext, TStores, TTrigger>;
+  withNotFoundComponent(component: RouteComponent): IAosAppBuilder<TClient, TContext, TStores, TTrigger>;
+  withNotAuthorizedComponent(component: RouteComponent): IAosAppBuilder<TClient, TContext, TStores, TTrigger>;
+  withDefaultPreload(mode: "intent" | "render" | "viewport" | false): IAosAppBuilder<TClient, TContext, TStores, TTrigger>;
+  withBeforePageLoader(fn: unknown): IAosAppBuilder<TClient, TContext, TStores, TTrigger>;
+  withPageLoader(fn: unknown): IAosAppBuilder<TClient, TContext, TStores, TTrigger>;
+  build(): AosAppBuilt<TClient, TContext, TStores, TTrigger>;
 }
 
 /** What `withComponent(({ route }) => …)` receives. */
