@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -19,6 +20,13 @@ export default defineConfig({
   // pre-bundler otherwise chokes on Monaco's internal ESM structure.
   optimizeDeps: {
     include: ["monaco-editor"],
+  },
+  // O ambiente é node, não jsdom: o que testamos é a fachada — tradução de
+  // nome, montagem de payload e formato do envelope. Nada disso toca o DOM,
+  // e um jsdom aqui só somaria tempo de subida a cada rodada.
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts"],
   },
   build: {
     outDir: "dist",
