@@ -118,18 +118,54 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "agent.delete": "agents_delete",
   "agent.update": { key: "agents_update", wrapOut: "agent" },
   // `chat.getById`/`chat.create` answer with a bare `*Chat`
-  // (`internal/domain/chat/commands.go`) — confirmed against Fractal's
-  // `use-chat.ts` (`data?.chat`) for `getById`; `create` isn't directly
-  // confirmed but returns the identical Go type from the same command
-  // group, so the same wrap applies by strong analogy. AOS's real chat
-  // feature (`features/chat/presentation/hooks/use-chat.ts`) doesn't call
-  // either through this facade — it invokes `chats_get` directly via
-  // `lib/client.ts` — so, like `agent.*` above, this was latent, not
-  // live-broken.
+  // (`internal/domain/chat/commands.go`). Both are live and confirmed
+  // correct as written — task-12's live HTTP pass exercised both directly:
+  // `use-chat.ts` calls `aos.client.chat.getById.useQuery({ params: {
+  // chat: chatId } })` and reads `data?.chat`, and
+  // `create-channel-dialog.tsx` calls `chat.create` and reads
+  // `response?.data?.chat`. (An earlier round of this comment claimed
+  // neither call site went through this facade at all — that was wrong;
+  // it was never re-checked against the actual call sites once `chat` was
+  // ported, which is exactly the gap the live-exercise pass exists to
+  // catch.)
   "chat.create": { key: "chats_create", wrapOut: "chat" },
   "chat.getById": { key: "chats_get", wrapOut: "chat" },
   "chat.list": "chats_list",
-  "chat.send": "chats_send",
+  // task-12 (round 2): `use-chat-composer.ts`'s `sendMessage` calls this
+  // with `body: { id: chat.id, message: <FractalChatMessage: {id, role,
+  // parts, metadata}> }` — a rich AI-SDK `UIMessage`, never a plain string.
+  // Go's `SendInput` (`internal/domain/chat/schema.go`) has exactly three
+  // fields — `chat`, `text` (required), `agent` — and no representation
+  // for a message id, structured parts, or metadata at all.
+  //
+  // `ComposerHelper.buildMessageParts` (`presentation/helpers/
+  // composer.helper.ts`) only ever constructs two part types for an
+  // outbound user message: `text` (the typed text, plus any auto-attached
+  // instruction references — themselves plain text, mentions and skill/
+  // file references included, since those are serialized as inline markup
+  // *inside* the text string by `ChatInlineMarkupHelper`, not a separate
+  // part type) and `file` (real attachments, collected separately from
+  // typed text). `coerceIn` joins every `text` part in order, which is a
+  // faithful flatten — nothing meant to be read as text is lost. A `file`
+  // part is dropped here **explicitly**: Go's `SendInput` has no field an
+  // attachment could go in, so an attachment the composer collected does
+  // not reach the server today. This is disclosed, not silent — surfacing
+  // it further (e.g. rejecting the send, or showing the user their
+  // attachment won't arrive) is a UI decision for whoever owns the
+  // composer, not something this map can express.
+  "chat.send": {
+    key: "chats_send",
+    coerceIn: {
+      message: (value) => {
+        const parts = (value as { parts?: Array<{ type: string; text?: string }> } | undefined)?.parts ?? [];
+        const text = parts
+          .filter((part) => part.type === "text" && typeof part.text === "string")
+          .map((part) => part.text)
+          .join("\n\n");
+        return { text };
+      },
+    },
+  },
 
   // `comment.list` was the only entry here before the `task` port. Go
   // registers a full `comments` command group — list, get, create, update,
@@ -180,11 +216,11 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // Fractal's original `routine-list-row.component.tsx`) reads
   // `result.data?.executions?.length` — a *list* of executions, not one
   // run under any single key. `wrapOut` can only rename/nest a value, not
-  // turn one entity into an array, so this stays unwrapped; the read
-  // degrades safely today (`?? 1`, confirmed against a live response in
-  // the task-12 HTTP exercise) rather than crashing, but the UI never
-  // shows more than "1" regardless of what actually ran. Escalated, not
-  // fixed here — a genuine shape decision, not a wire-level one.
+  // turn one entity into an array, so this can't be fixed here — that
+  // read is adapted at the call site instead (that file's own comment,
+  // task-12 round 2): the single `Run` is wrapped in a one-element array
+  // where it's read, so the count reflects what Go actually did rather
+  // than silently defaulting to "1" regardless of outcome.
   "routine.fire": { key: "routines_fire", renameIn: { routine: "id" } },
   "routine.getById": { key: "routines_get", renameIn: { routine: "id" }, wrapOut: "routine" },
   "routine.list": "routines_list",

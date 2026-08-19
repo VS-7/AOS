@@ -238,7 +238,22 @@ export const RoutineUpsertPage = aos
         onSuccess: async (result) => {
           // `onSuccess` receives the full `Envelope` — see `aos-facade.ts`'s
           // `useMutation` doc comment.
-          const executionCount = result?.data?.executions?.length ?? 1;
+          //
+          // task-12 (round 2): Go's `routines_fire`
+          // (`internal/domain/routine/commands.go`) returns one bare `*Run`
+          // — never `{ executions: [...] }`. This UI was written against a
+          // backend whose `fire` could fan a routine out to several agents
+          // in one call and return the list; this Go port always fires
+          // exactly one. `wrapOut` (`command-map.ts`) can only nest a
+          // value, not change its cardinality, so this is a call-site
+          // adaptation: wrap the single `Run` Go actually returned in a
+          // one-element array, so `executionCount` reflects what really
+          // happened (one run, or zero if the call returned nothing) —
+          // reading `.executions` off a bare `Run` was always `undefined`,
+          // silently defaulting to "1" via `?? 1` whether the call
+          // succeeded or not.
+          const executions = result?.data ? [result.data] : [];
+          const executionCount = executions.length;
           toast.success(
             executionCount > 1
               ? `Routine started for ${executionCount} agents.`
