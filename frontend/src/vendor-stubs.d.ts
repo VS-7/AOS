@@ -1,46 +1,32 @@
 /**
  * Ambient type stubs for third-party packages the copied Fractal
- * presentation code imports but that are not installed in this
- * environment (`npm install` is blocked here — see Task 9's report).
+ * presentation code imports.
  *
- * These packages are real and resolvable on the npm registry (verified
- * with `npm view`), unlike `@igniter-js/*`, which this port deliberately
- * does not depend on. This file exists only so `tsc --noEmit` — this
- * task's gate — succeeds without them; it does NOT make the affected
- * components work. A bundler (`vite build`/`vite dev`) will still fail to
- * resolve these modules at runtime. Installing the real packages
- * (`@pierre/trees`, `@pierre/diffs`, `@json-render/react`, `@json-render/
- * core`, `@json-render/shadcn`, `@json-render/devtools-react`,
- * `@visual-json/react`, `@visual-json/core`, `uploadthing`,
- * `@uploadthing/react`, `react-force-graph-3d`, `frimousse`) replaces this
- * file's relevant `declare module` block outright.
+ * Review round 2: nine of the original twelve packages here
+ * (`@pierre/trees`, `@pierre/trees/react`, `@pierre/diffs/react`,
+ * `@visual-json/react`, `@visual-json/core`, `uploadthing/types`,
+ * `@uploadthing/react`, `react-force-graph-3d`, `frimousse`,
+ * `react-resizable-panels`) are now actually installed (the reviewer had
+ * install permission Task 9 did not) — their `declare module` blocks are
+ * gone. An ambient module declaration resolves ahead of `node_modules`,
+ * so leaving them in place after install would have kept every consumer
+ * typed `any` while silently hiding real type errors — that was flagged
+ * and fixed (see the fix report for what deleting each block surfaced).
  *
- * Every export here is loosely typed (`any`) — this is a compile-only
- * placeholder, not a reconstruction of each package's real API surface.
- * Consumers: `features/file`'s diff/tree/JSON-editor panels, the dormant
- * `features/view` json-render registry, `hooks/use-upload-file.ts`,
- * `features/workspace`'s memory-graph 3D tab, and the chat composer's
- * emoji picker.
+ * `@json-render/*` (`react`, `react/schema`, `shadcn`, `shadcn/catalog`,
+ * `core`, `devtools-react`) stay stubbed deliberately, not because
+ * installation failed: `@json-render/shadcn` requires zod 4, and this
+ * project is on zod 3 (`package.json`) — installing it would force a zod
+ * major-version bump across every one of the ~61 files that build schemas
+ * with `zod`, for a feature (`features/view`'s declarative renderer) that
+ * has no Go backend yet and cannot run regardless (`view.*` is dormant in
+ * `lib/command-map.ts`). `tsc --noEmit` is the gate; a bundler will still
+ * fail to resolve these six until that tradeoff is revisited.
+ *
+ * Every export here is loosely typed (`any`) — compile-only, not a
+ * reconstruction of the real API surface. Consumers are all inside the
+ * dormant `features/view/` json-render registry (13 files).
  */
-
-declare module "@pierre/trees" {
-  export type FileTreeBuiltInIconSet = any;
-  export type FileTreeDirectoryHandle = any;
-  export type ContextMenuItem = any;
-  export type ContextMenuOpenContext = any;
-  export type FileTree = any;
-  export function prepareFileTreeInput(...args: any[]): any;
-}
-
-declare module "@pierre/trees/react" {
-  export const FileTree: any;
-  export function useFileTree(...args: any[]): any;
-}
-
-declare module "@pierre/diffs/react" {
-  export const MultiFileDiff: any;
-  export type FileContents = any;
-}
 
 declare module "@json-render/react" {
   export const JSONUIProvider: any;
@@ -69,45 +55,4 @@ declare module "@json-render/core" {
 
 declare module "@json-render/devtools-react" {
   export const JsonRenderDevtools: any;
-}
-
-declare module "@visual-json/react" {
-  export const JsonEditor: any;
-  export type JsonSchema = any;
-  export type JsonValue = any;
-}
-
-declare module "@visual-json/core" {
-  export function resolveSchema(...args: any[]): any;
-}
-
-declare module "uploadthing/types" {
-  export type ClientUploadedFileData<T = unknown> = any;
-  export type UploadFilesOptions<T = unknown> = any;
-}
-
-declare module "@uploadthing/react" {
-  export function generateReactHelpers<T = any>(...args: any[]): any;
-}
-
-declare module "react-force-graph-3d" {
-  const ForceGraph3D: any;
-  export default ForceGraph3D;
-}
-
-declare module "frimousse" {
-  export const EmojiPicker: any;
-}
-
-/**
- * Backs `components/ui/resizable.tsx` (one of the five UI components the
- * Task 9 brief names explicitly, via `split-page-layout.tsx`'s own import
- * of it) — the standard shadcn/ui wrapper around this package. Also real
- * and resolvable on npm (verified with `npm view`), same as every other
- * package in this file.
- */
-declare module "react-resizable-panels" {
-  export const Panel: any;
-  export const PanelGroup: any;
-  export const PanelResizeHandle: any;
 }

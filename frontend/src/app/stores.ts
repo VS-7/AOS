@@ -360,18 +360,52 @@ const goalsStore = AosStore.create("goals")
   )
   .build();
 
-export const stores = {
-  workspace: workspaceStore,
-  auth: authStore,
-  projects: projectsStore,
-  goals: goalsStore,
-  viewport: ViewportStore,
-  activity: ActivityStore,
-  agent: AgentStore,
-  browser: BrowserStore,
-  chat: ChatStore,
-  collections: CollectionStore,
-  config: ConfigStore,
-  files: FilesStore,
-  theme: ThemeStore,
-};
+/**
+ * Review round 2 fix: this is now the single canonical store registry.
+ *
+ * Before this fix, `app/lib/stores.ts` (a pristine `v401/web` copy) built
+ * its *own* `AosStore.router({...})` registry from the pristine
+ * `WorkspaceStore`/`AuthStore`/etc. singletons — a second source of truth
+ * for `workspace` alongside this file's own hand-built `workspaceStore`.
+ * `AosApp.build()`'s root `beforeLoad` (`app/builders/app.tsx`) only calls
+ * `.init()` on stores reachable from *this* object (the one `app/aos.tsx`
+ * passes to `.withStores(...)`) — the pristine `WorkspaceStore` was never
+ * initialized by anything, so `features/workspace/presentation/
+ * components/layout/index.tsx`'s `stores.workspace.current?.id` (reading
+ * the *other* registry via `@/app/lib/stores`) stayed `undefined` forever,
+ * even after this file's `workspaceStore` successfully populated its own
+ * `current` from `workspace_get`.
+ *
+ * Fix: `app/lib/stores.ts` now re-exports this exact object instead of
+ * building a second one (see that file). Wrapping it in `AosStore.router`
+ * here — the same call the pristine registry used — is not just to keep
+ * `stores.namespace` working for `layout/index.tsx`'s workspace-switch
+ * writer; it also calls `_attachRuntime` on every store here, which none
+ * of them had before (`.withStores(...)` alone never does that — see
+ * `app/builders/app.tsx`). Every `.withNamespace(...)` config already set
+ * on these stores (`workspaceStore`, `chat.store.ts`, `activity.store.ts`,
+ * …) was silently resolving against an always-empty namespace map until
+ * now (`AosStoreBuilt`'s `_getNamespaces` defaults to `() => ({})`) — a
+ * real, positive side effect of unifying the two registries, not a risk:
+ * `task`'s already-verified pages never depended on multi-namespace
+ * behavior (AOS is single-workspace today), so there is nothing for this
+ * to break, only a previously-inert wiring to turn on.
+ */
+export const stores = AosStore.router({
+  prefix: "fractal",
+  stores: {
+    workspace: workspaceStore,
+    auth: authStore,
+    projects: projectsStore,
+    goals: goalsStore,
+    viewport: ViewportStore,
+    activity: ActivityStore,
+    agent: AgentStore,
+    browser: BrowserStore,
+    chat: ChatStore,
+    collections: CollectionStore,
+    config: ConfigStore,
+    files: FilesStore,
+    theme: ThemeStore,
+  },
+});

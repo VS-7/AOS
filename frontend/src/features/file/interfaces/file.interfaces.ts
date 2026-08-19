@@ -333,8 +333,37 @@ export interface FractalFileExplorerSnapshot {
   files?: FractalFileChangeEntry[];
   /** True for a read-only context (e.g. a non-checked-out branch). */
   readOnly?: boolean;
-  /** Per-path git status, consumed opaquely by the `@pierre/trees` tree model. */
-  gitStatus?: unknown[];
+  /**
+   * Per-path git status handed straight to `@pierre/trees`'
+   * `model.setGitStatus(...)` (`files-explorer-group.tsx`). Review round 2:
+   * tightened from `unknown[]` to `@pierre/trees`' own real `GitStatusEntry`
+   * shape (`{ path: string; status: GitStatus }`,
+   * `node_modules/@pierre/trees/dist/publicTypes.d.ts`) now that the
+   * package is actually installed and its real contract is visible — the
+   * `unknown[]` stub predates that and was masking a real type mismatch at
+   * the `setGitStatus` call site.
+   */
+  gitStatus?: FractalFileGitStatusEntry[];
   /** Branch names offered by the explorer's context switcher. */
   branches?: string[];
+}
+
+/**
+ * Mirrors `@pierre/trees`' own `GitStatusEntry`/`GitStatus` — kept as a
+ * local, domain-layer copy rather than importing from the UI tree library
+ * inside an `interfaces/` file (this file has no other dependency on
+ * `@pierre/trees`, and interfaces files elsewhere in this port don't
+ * depend on vendor UI packages either).
+ */
+export type FractalFileGitStatus =
+  | "added"
+  | "deleted"
+  | "ignored"
+  | "modified"
+  | "renamed"
+  | "untracked";
+
+export interface FractalFileGitStatusEntry {
+  path: string;
+  status: FractalFileGitStatus;
 }

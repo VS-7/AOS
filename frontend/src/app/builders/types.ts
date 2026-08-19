@@ -19,7 +19,23 @@ import type { AosResponse } from "./response";
  * in ported code that already runs.
  */
 
-export type DefaultContext = Record<string, unknown>;
+/**
+ * Review round 2 fix: widened from `Record<string, unknown>` to
+ * `Record<string, any>`. This app's real instance (`app/aos.tsx`'s `aos`)
+ * never calls `.withContext(...)` — Fractal's global route context is
+ * unwired here (`task`'s own `set-type.dropdown.tsx` already documented
+ * this before this fix) — so `TContext` stays at this default everywhere
+ * `aos.useContext()` or a page loader's `context` param is read.
+ * `unknown` forced `.workspaces?.current`-style chained reads (settings
+ * pages, onboarding steps) through a local `as any` cast at 6+ call
+ * sites, each repeating the same explanation. Fixed once, here, at the
+ * generic's own default — the same "fix the machinery, not each call
+ * site" principle already applied to `aos-facade.ts`'s `Envelope<T>`.
+ * A future app instance that *does* wire a real context via
+ * `.withContext(fn)` gets that real, narrow type back immediately — this
+ * default only ever applies to the unset case.
+ */
+export type DefaultContext = Record<string, any>;
 
 export interface AosStoresCollection<T = Record<string, unknown>> {
   [key: string]: T[keyof T] | unknown;

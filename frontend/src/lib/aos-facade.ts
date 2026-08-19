@@ -158,29 +158,30 @@ export async function call(feature: string, action: string, opts?: CallOpts): Pr
 }
 
 /**
- * `Envelope<any>`/`UseQueryResult<any>` here, not `<unknown>`: the Go
- * registry is untyped JSON per command, and this facade has no per-command
- * response-type map (`CommandKey` only names the call, not its shape) — so
- * every one of the 26 ported features reads `.data.someField` straight off
- * a query/mutation result the way the original generated Igniter client's
- * *typed* client let them. `unknown` forced every such read through a cast
- * or narrowing; across the Task 9 bulk copy that was 187 errors in 70
- * files, all the same shape ("Property X does not exist on type '{}'" —
- * `unknown`'s `||`/`??` fallback narrows to the structural empty-object
- * type, not the array/object the ported code assumes). `any` is the
- * accurate type for "Go can return anything here, unverified" — this is
- * the visible, disclosed version of that fact rather than 70 files each
- * hiding their own cast. Re-typing this properly (a `CommandKey` →
- * response-shape map) is future work; this task's job is compiling the
- * copy, not building that map. `call()`'s own `Envelope<unknown>` (the
- * internal function, not this public interface) is left alone — internal
- * code benefits from the stricter type; only the ported-code-facing
- * surface is loosened.
+ * `Envelope<T = any>` — a generic parameter, not a fixed `<any>` — per
+ * review round 2. The Go registry is untyped JSON per command, and this
+ * facade has no per-command response-type map (`CommandKey` only names the
+ * call, not its shape), so every one of the 26 ported features reads
+ * `.data.someField` straight off a query/mutation result the way the
+ * original generated Igniter client's *typed* client let them. `unknown`
+ * forced every such read through a cast or narrowing; across the Task 9
+ * bulk copy that was 187 errors in 70 files, all the same shape ("Property
+ * X does not exist on type '{}'" — `unknown`'s `||`/`??` fallback narrows
+ * to the structural empty-object type, not the array/object the ported
+ * code assumes). Defaulting `T` to `any` keeps every one of those 70 call
+ * sites compiling unchanged today (source-compatible, zero edits) while
+ * opening a seam the follow-up per-feature contract-verification task can
+ * use incrementally: `api.task.list.useQuery<TaskListOut>()` opts one call
+ * site into a real response type without a big-bang facade rewrite or a
+ * `CommandKey` → response-shape map built up front. `call()`'s own
+ * `Envelope<unknown>` (the internal function, not this public interface)
+ * is left alone — internal code benefits from the stricter type; only the
+ * ported-code-facing surface takes the generic.
  */
 interface ActionNode {
-  query(opts?: CallOpts): Promise<Envelope<any>>;
-  mutate(opts?: CallOpts): Promise<Envelope<any>>;
-  useQuery(opts?: CallOpts): UseQueryResult<any>;
+  query<T = any>(opts?: CallOpts): Promise<Envelope<T>>;
+  mutate<T = any>(opts?: CallOpts): Promise<Envelope<T>>;
+  useQuery<T = any>(opts?: CallOpts): UseQueryResult<T>;
   /**
    * `options` accepts the same `onSuccess`/`onError`/`onSettled` callbacks
    * `@tanstack/react-query`'s own `useMutation` does — `mutationFn` is
@@ -198,22 +199,26 @@ interface ActionNode {
    * directly. Adding the alias here, once, is the fix; teaching every one
    * of those files React Query's naming is the alternative this avoids.
    */
-  useMutation(
-    options?: Omit<UseMutationOptions<Envelope<any>, Error, CallOpts | undefined>, "mutationFn">,
-  ): UseMutationResult<Envelope<any>, Error, CallOpts | undefined> & { loading: boolean };
+  useMutation<T = any>(
+    options?: Omit<UseMutationOptions<Envelope<T>, Error, CallOpts | undefined>, "mutationFn">,
+  ): UseMutationResult<Envelope<T>, Error, CallOpts | undefined> & { loading: boolean };
 }
 
 export type AosClient = Record<string, Record<string, ActionNode>>;
 
 function actionNode(feature: string, action: string): ActionNode {
   return {
-    query: (opts) => call(feature, action, opts),
-    mutate: (opts) => call(feature, action, opts),
+    // The implementation is the same untyped `call()` regardless of what
+    // `T` a caller asks for — `T` is a pure type-level opt-in (see this
+    // interface's doc comment above), so the cast here is exactly as
+    // honest as the old fixed `<any>` was, just deferred to the call site.
+    query: (opts) => call(feature, action, opts) as any,
+    mutate: (opts) => call(feature, action, opts) as any,
 
     // The ported code reads `q.data?.tasks`, not `q.data.data.tasks` — so
     // the hook unwraps the envelope and hands back the payload directly,
     // which is what a useQuery is expected to return.
-    useQuery: (opts) => {
+    useQuery: (opts): any => {
       const result = useQuery({
         queryKey: [feature, action, flattenArgs(opts)],
         queryFn: async () => {
@@ -256,10 +261,10 @@ function actionNode(feature: string, action: string): ActionNode {
       return result;
     },
 
-    useMutation: (options) => {
+    useMutation: (options): any => {
       const mutation = useMutation({
         ...options,
-        mutationFn: (opts?: CallOpts) => call(feature, action, opts),
+        mutationFn: (opts?: CallOpts) => call(feature, action, opts) as any,
       });
       // See the `.loading` doc comment on `ActionNode.useMutation` above.
       return { ...mutation, loading: mutation.isPending };

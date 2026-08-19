@@ -20,11 +20,10 @@ export function WorkspaceGitSection() {
   const router = useRouter();
   
   // `aos.useContext()` is Fractal's global route context (`withContext(...)`),
-  // which this port's `app/aos.tsx` never wires (see `task`'s own `set-type.
-  // dropdown.tsx` doc comment on the same gap) -- always `{}` here in practice.
-  // Cast, not a real typed context: these settings screens read aggregated
-  // config/agents/profile-update fields off it that have no other source yet.
-  const context = aos.useContext() as any;
+  // which this port's `app/aos.tsx` never wires -- `DefaultContext` (`app/
+  // builders/types.ts`) is deliberately loose (`Record<string, any>`) for
+  // exactly this unset case, so no per-call-site cast is needed here.
+  const context = aos.useContext();
   const currentWorkspace = context.workspaces?.current;
 
   const form = aos.useForm({

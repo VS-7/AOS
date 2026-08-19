@@ -57,12 +57,12 @@ const GOAL_TABS = GOAL_STATUS_ORDER.map((status) => ({
 export const HomePage = aos
   .page("/")
   .use(WorkspacePageMiddleware())
-  .withLoader(async ({ client, context: rawContext }) => {
+  .withLoader(async ({ client, context }) => {
     // Route context (Fractal's global `withContext(...)`) is unwired in
-    // this port — same gap as `aos.useContext()` elsewhere (see `task`'s
-    // own `set-type.dropdown.tsx` doc comment). Cast, not a real typed
-    // context.
-    const context = rawContext as any;
+    // this port — same gap as `aos.useContext()` elsewhere. `DefaultContext`
+    // (`app/builders/types.ts`) is deliberately loose (`Record<string,
+    // any>`) for exactly this unset case, so no per-call-site cast is
+    // needed here.
     const [tasksResult, goalsResult, projectsResult] = await Promise.all([
       client.task.list.query({
         query: {},
