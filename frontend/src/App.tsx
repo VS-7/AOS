@@ -5,7 +5,7 @@ import { DomainError } from "@/lib/client";
 import { AppStateProvider } from "@/lib/app-state";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { AuthGate } from "@/features/auth/AuthGate";
-import { router } from "@/router";
+import { router } from "@/app/router";
 
 const queryClient = new QueryClient({
   defaultOptions: {

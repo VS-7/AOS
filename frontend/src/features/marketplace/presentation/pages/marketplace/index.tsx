@@ -2,6 +2,7 @@ import { aos } from "@/app/aos";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
 import { Schema } from "@/core/helpers/schema.helper";
 import { z } from "zod";
+import { DormantGate } from "@/components/DormantDomain";
 import { MarketplacePageInner } from "./inner";
 
 const MarketplacePageSearchSchema = Schema.object({
@@ -44,11 +45,13 @@ export const MarketplacePage = aos
     const search = route.useSearch();
 
     return (
-      <MarketplacePageInner
-        marketplacePlugins={marketplacePlugins}
-        installedPlugins={installedPlugins}
-        search={search}
-      />
+      <DormantGate feature="marketplace">
+        <MarketplacePageInner
+          marketplacePlugins={marketplacePlugins}
+          installedPlugins={installedPlugins}
+          search={search}
+        />
+      </DormantGate>
     );
   })
   .build();

@@ -38,8 +38,20 @@ export function WorkspaceTasksSection() {
     mode: "onChange",
     mutation: "workspace.update",
     values: {
+      // Task 10: `currentWorkspace.tasks` (`app/stores.ts`'s own
+      // `WorkspaceTaskType`) types `label`/`color` optional — Go's
+      // `workspace_get` doesn't always populate them (see that file's own
+      // doc comment on the honest-empty-state policy). This form's Zod
+      // schema (`FractalWorkspaceTaskTypeSchema`, pristine) requires both
+      // as non-empty strings, so entries missing either get the same
+      // fallback the empty-workspace default below already uses, rather
+      // than widening the schema itself to accept what Go's shape allows.
       tasks: currentWorkspace?.tasks?.length
-        ? currentWorkspace.tasks
+        ? currentWorkspace.tasks.map((task) => ({
+            ...task,
+            label: task.label || "Task",
+            color: task.color || "#64748b",
+          }))
         : [{ id: "task", label: "Task", color: "#64748b", instructions: "" }],
     },
     onSubmit: (values) => ({

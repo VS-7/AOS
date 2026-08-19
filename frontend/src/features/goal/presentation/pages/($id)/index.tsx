@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 
 import { aos } from "@/app/aos";
+import { isDormant } from "@/lib/command-map";
+import { DormantGate } from "@/components/DormantDomain";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
 import {
   AlertDialog,
@@ -183,7 +185,14 @@ export const GoalDetailsPage = aos
   .withLoader(async ({ client, request, response }) => {
     const isCreate = request.params.id === "new";
 
-    if (isCreate) {
+    // Task 10: the `goal` domain is dormant — no Go backend to call yet.
+    // Short-circuits before any client call, the same shape `isCreate`
+    // already returns, so `withComponent` below can rely on its existing
+    // null-`goal` handling. `DormantGate` (wrapping the returned JSX)
+    // is what actually hides the form; this only keeps the loader from
+    // calling `response.notFound()` on the dormant command's empty
+    // envelope and preempting that render with the 404 page instead.
+    if (isDormant("goal") || isCreate) {
       return {
         mode: "create" as const,
         goal: null as FractalGoalWithContext | null,
@@ -327,6 +336,7 @@ export const GoalDetailsPage = aos
         : null;
 
     return (
+      <DormantGate feature="goal">
       <Page className="h-full overflow-hidden">
         <PageBody className="overflow-hidden">
           <Form form={form} className="flex h-full flex-1 flex-col">
@@ -763,6 +773,7 @@ export const GoalDetailsPage = aos
           </Form>
         </PageBody>
       </Page>
+      </DormantGate>
     );
   })
   .build();

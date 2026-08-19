@@ -2,6 +2,7 @@ import { aos } from "@/app/aos";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
 import { Schema } from "@/core/helpers/schema.helper";
 import { z } from "zod";
+import { DormantGate } from "@/components/DormantDomain";
 
 import { GoalsProvider } from "./context";
 import { GoalsPageInner } from "./inner";
@@ -40,9 +41,11 @@ export const GoalsPage = aos
     const search = route.useSearch();
 
     return (
-      <GoalsProvider goals={goals} search={search}>
-        <GoalsPageInner />
-      </GoalsProvider>
+      <DormantGate feature="goal">
+        <GoalsProvider goals={goals} search={search}>
+          <GoalsPageInner />
+        </GoalsProvider>
+      </DormantGate>
     );
   })
   .build();

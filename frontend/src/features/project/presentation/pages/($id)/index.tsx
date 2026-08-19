@@ -31,6 +31,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { aos } from "@/app/aos";
+import { isDormant } from "@/lib/command-map";
+import { DormantGate } from "@/components/DormantDomain";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
 import type { FractalProject } from "@/features/project/interfaces/project.interfaces";
 import { ProjectIconPicker } from "@/features/project/presentation/components/project-icon-picker";
@@ -214,7 +216,9 @@ export const ProjectDetailsPage = aos
   .withLoader(async ({ client, request, response }) => {
     const isCreate = request.params.id === "new";
 
-    if (isCreate) {
+    // Task 10: the `project` domain is dormant — see the matching comment
+    // in `goal/presentation/pages/($id)/index.tsx` for the reasoning.
+    if (isDormant("project") || isCreate) {
       return {
         mode: "create" as const,
         project: null as FractalProject | null,
@@ -341,6 +345,7 @@ export const ProjectDetailsPage = aos
     const tabsIdPrefix = `project-upsert-${project?.id ?? "new"}`;
 
     return (
+      <DormantGate feature="project">
       <Page className="h-full overflow-hidden">
         <PageBody className="overflow-hidden">
           <Form form={form} className="flex h-full flex-1 flex-col">
@@ -552,6 +557,7 @@ export const ProjectDetailsPage = aos
           </Form>
         </PageBody>
       </Page>
+      </DormantGate>
     );
   })
   .build();

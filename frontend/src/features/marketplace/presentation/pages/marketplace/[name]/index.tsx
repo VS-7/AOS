@@ -2,6 +2,8 @@ import { aos } from "@/app/aos";
 import type { FractalSkill } from "@/features/skill/interfaces/skill.interfaces";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
 import { getRelatedListings } from "@/features/marketplace/presentation/helpers/marketplace.helper";
+import { isDormant } from "@/lib/command-map";
+import { DormantGate } from "@/components/DormantDomain";
 import { MarketplaceDetailsPageInner } from "./inner";
 
 /**
@@ -17,6 +19,24 @@ export const MarketplaceDetailsPage = aos
   .use(WorkspacePageMiddleware())
   .withLoader(async ({ client, request, response }) => {
     const { name } = request.params;
+
+    // Task 10: the `marketplace` domain is dormant — no Go backend to call
+    // yet. Short-circuits before any client call so the dormant commands'
+    // empty envelopes never reach the `!plugin || !inventory` check below,
+    // which would otherwise call `response.notFound()` and preempt
+    // `DormantGate` (wrapping the returned JSX in `withComponent`) with
+    // the 404 page instead.
+    if (isDormant("marketplace")) {
+      return {
+        plugin: undefined as any,
+        inventory: undefined as any,
+        sourceUrl: "",
+        isInstalled: false,
+        installedSkill: undefined as any,
+        related: [] as any[],
+        installedNames: [] as string[],
+      };
+    }
 
     const [detailRes, listRes] = await Promise.all([
       client.marketplace.getByName.query({
@@ -74,15 +94,17 @@ export const MarketplaceDetailsPage = aos
     } = route.useLoaderData();
 
     return (
-      <MarketplaceDetailsPageInner
-        plugin={plugin}
-        inventory={inventory}
-        sourceUrl={sourceUrl}
-        isInstalled={isInstalled}
-        installedSkill={installedSkill}
-        related={related}
-        installedNames={installedNames}
-      />
+      <DormantGate feature="marketplace">
+        <MarketplaceDetailsPageInner
+          plugin={plugin}
+          inventory={inventory}
+          sourceUrl={sourceUrl}
+          isInstalled={isInstalled}
+          installedSkill={installedSkill}
+          related={related}
+          installedNames={installedNames}
+        />
+      </DormantGate>
     );
   })
   .build();

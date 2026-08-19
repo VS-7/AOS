@@ -13,7 +13,7 @@ export type WorkspaceSidebarMenu = "main" | "files" | "settings";
 async function navigateToSettingsSection(
   sectionId: SettingsSectionId,
 ): Promise<void> {
-  const { router } = await import("@/router");
+  const { router } = await import("@/app/router");
   const args = SettingsRouteHelper.sectionIdToNavigateArgs(sectionId);
   await router.navigate(args as never);
 }
@@ -242,7 +242,7 @@ export const ViewportStore = AosStore.create("viewport")
       },
     }));
 
-    void import("@/router").then(({ router }) => {
+    void import("@/app/router").then(({ router }) => {
       if (router.state.location.pathname.startsWith("/settings")) {
         void router.navigate({ to: "/" });
       }

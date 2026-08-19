@@ -2,6 +2,8 @@ import * as React from "react";
 import type { Spec } from "@/features/view/interfaces/collections.interfaces";
 import { Page, PageBody } from "@/components/ui/page";
 import { aos } from "@/app/aos";
+import { isDormant } from "@/lib/command-map";
+import { DormantGate } from "@/components/DormantDomain";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
 import {
   CollectionViewProvider,
@@ -21,6 +23,16 @@ export const ViewPage = aos
   .use(WorkspacePageMiddleware())
   .withLoader(async ({ client, request, response }) => {
     const { id: viewId } = request.params;
+
+    // Task 10: the `view` domain is dormant — no Go backend to call yet.
+    // Short-circuits before any client call so the dormant command's empty
+    // envelope never reaches the `!view` check below, which would
+    // otherwise call `response.notFound()` and preempt `DormantGate` (the
+    // very first check in `withComponent` below, before any hook runs)
+    // with the 404 page instead.
+    if (isDormant("view")) {
+      return { view: null, viewId, renderResult: null };
+    }
 
     const viewResult = await client.view.getById.query({
       params: { view: viewId },
@@ -47,6 +59,16 @@ export const ViewPage = aos
     };
   })
   .withComponent(({ route }) => {
+    // Bails before any hook below runs — `handlers` (the `useMemo`
+    // further down) calls `ViewDataHelper.getAllActionIds(viewDef)` on
+    // loader data this dormant stub does not shape correctly, and
+    // `isDormant("view")` is a build-time constant (never toggles for a
+    // mounted instance), so skipping every hook here on every render is
+    // consistent, not a rules-of-hooks violation in practice.
+    if (isDormant("view")) {
+      return <DormantGate feature="view">{null}</DormantGate>;
+    }
+
     const { view, viewId, renderResult } = route.useLoaderData();
     const [spec, setSpec] = React.useState<Spec | null>(() =>
       ViewDataHelper.getSpec(renderResult),

@@ -2,6 +2,7 @@ import { aos } from "@/app/aos";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
 import { Schema } from "@/core/helpers/schema.helper";
 import { z } from "zod";
+import { DormantGate } from "@/components/DormantDomain";
 
 import { ProjectsProvider } from "./context";
 import { ProjectsPageInner } from "./inner";
@@ -34,9 +35,11 @@ export const ProjectsPage = aos.page("/projects")
     const search = route.useSearch();
 
     return (
-      <ProjectsProvider projects={projects} search={search}>
-        <ProjectsPageInner />
-      </ProjectsProvider>
+      <DormantGate feature="project">
+        <ProjectsProvider projects={projects} search={search}>
+          <ProjectsPageInner />
+        </ProjectsProvider>
+      </DormantGate>
     );
   })
   .build();

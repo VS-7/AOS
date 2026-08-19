@@ -36,6 +36,8 @@ import {
 } from "@/components/ui/page";
 import { aos } from "@/app/aos";
 import { stores } from "@/app/lib/stores";
+import { isDormant } from "@/lib/command-map";
+import { DormantGate } from "@/components/DormantDomain";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -142,6 +144,16 @@ export const CollectionPage = aos
   })
   .use(WorkspacePageMiddleware())
   .withLoader(async ({ client, request, response }) => {
+    // Task 10: the `collection` domain is dormant — no Go backend to call
+    // yet. Short-circuits before any client call so the dormant command's
+    // empty envelope never reaches the `!collection.data` check below,
+    // which would otherwise call `response.notFound()` and preempt
+    // `DormantGate` (wrapping the returned JSX in `withComponent`) with
+    // the 404 page instead.
+    if (isDormant("collection")) {
+      return { collection: undefined as any, records: [] as unknown[] };
+    }
+
     try {
 
       const collection = await client.collection.getById.query({
@@ -274,20 +286,22 @@ export const CollectionPage = aos
     }, [allRecords, columns]);
 
     return (
-      <DataTableProvider
-        data={allRecords}
-        columns={tableColumns}
-        filters={filters}
-        enableRowSelection={true}
-      >
-        <CollectionPageContent
-          collection={collection}
-          collectionId={collectionId}
-          allRecords={allRecords}
-          deleteRecord={deleteRecord}
-          deleteRecordAsync={deleteRecordAsync}
-        />
-      </DataTableProvider>
+      <DormantGate feature="collection">
+        <DataTableProvider
+          data={allRecords}
+          columns={tableColumns}
+          filters={filters}
+          enableRowSelection={true}
+        >
+          <CollectionPageContent
+            collection={collection}
+            collectionId={collectionId}
+            allRecords={allRecords}
+            deleteRecord={deleteRecord}
+            deleteRecordAsync={deleteRecordAsync}
+          />
+        </DataTableProvider>
+      </DormantGate>
     );
   })
   .build();

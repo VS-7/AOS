@@ -43,6 +43,8 @@ import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { Textarea } from "@/components/ui/textarea";
 import { aos } from "@/app/aos";
 import { stores } from "@/app/lib/stores";
+import { isDormant } from "@/lib/command-map";
+import { DormantGate } from "@/components/DormantDomain";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
 import { SchemaForm } from "../../../../components/schema-form";
 import {
@@ -116,6 +118,17 @@ export const CollectionRecordUpsertPage = aos
   })
   .use(WorkspacePageMiddleware())
   .withLoader(async ({ client, request, response }) => {
+    // Task 10: the `collection` domain is dormant — no Go backend to call
+    // yet. Short-circuits before any client call so the dormant command's
+    // empty envelope never reaches the `!collection` check below, which
+    // would otherwise call `response.notFound()`. `collection` here is a
+    // stub, not a real empty record — see the `isDormant` early return in
+    // `withComponent` below, which bails before this stub's fields (e.g.
+    // `collection.format`) are ever dereferenced.
+    if (isDormant("collection")) {
+      return { collection: {} as any, mode: "create" as const, record: null };
+    }
+
     const collectionResult = await client.collection.getById.query({
       params: { collection: request.params.id },
     });
@@ -259,6 +272,17 @@ export const CollectionRecordUpsertPage = aos
 
     function handleBack() {
       void navigate({ to: "/collections/$id", params: { id: collectionId } });
+    }
+
+    // Every hook above has already run unconditionally, in the same order
+    // on every render — `isDormant("collection")` is a build-time
+    // constant, not state, so this bail does not change hook order across
+    // renders. It runs *before* the JSX below, which dereferences
+    // `collection.name`/`collection.format` as non-null fields (the real
+    // loader guarantees that; the dormant stub above does not) — building
+    // that tree with the stub would throw, not just render emptily.
+    if (isDormant("collection")) {
+      return <DormantGate feature="collection">{null}</DormantGate>;
     }
 
     return (
