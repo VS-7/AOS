@@ -125,7 +125,14 @@ tasks:
     desc: Build the single-page application
     dir: frontend
     cmds:
-      - npm ci --silent || npm install --silent
+      # task-12: root pins zod ^3.25.76 (satisfies @ai-sdk/gateway's
+      # `^3.25.76 || ^4.1.8`), but @json-render/shadcn peer-depends on
+      # zod ^4.0.0 — a plain `npm ci`/`npm install` hits ERESOLVE on a
+      # fresh install every time, deterministically (confirmed: ci ac4540b
+      # already had to install @json-render itself with --legacy-peer-deps
+      # for the same reason). Without this flag, `build:desktop` cannot get
+      # past this step on a clean checkout or CI cache miss.
+      - npm ci --legacy-peer-deps --silent || npm install --legacy-peer-deps --silent
       - npx tsc --noEmit
       - npx vite build
 

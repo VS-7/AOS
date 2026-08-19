@@ -56,11 +56,20 @@ export function WorkspaceProfileSection() {
       logo: currentWorkspace?.logo || "",
       color: currentWorkspace?.color || "",
     },
+    // task-12 disclosed divergence: Go's `workspace_update` (`UpdateInput`,
+    // `internal/domain/workspace/schema.go`) takes a single dotted-path
+    // `set: map[string]any`, not top-level `name`/`logo`/`color` fields.
+    // `command-map.ts`'s `coerceIn` can't build this up across three
+    // independent scalar fields in one call (each field's transform result
+    // gets shallow-merged — see that file's `workspace.update` comment) —
+    // this form is the one place the dotted `set` object is built directly.
     onSubmit: (values) => ({
       body: {
-        name: values.name,
-        logo: values.logo,
-        color: values.color,
+        set: {
+          name: values.name,
+          logo: values.logo,
+          color: values.color,
+        },
       },
       params: { id: currentWorkspace?.id },
     }),

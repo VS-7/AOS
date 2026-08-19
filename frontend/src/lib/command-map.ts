@@ -98,7 +98,14 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // ── command registry ────────────────────────────────────────────────────
   "activity.list": "activity_list",
   "activity.markAllAsRead": "activity_read-all",
-  "activity.markAsRead": "activity_read",
+  // task-12 live HTTP pass: `activity.store.ts`'s `markAsRead` action calls
+  // `api.activity.markAsRead.mutate({ params: { activity: activityId } })` —
+  // Go's `MarkInput` (`internal/domain/activity/schema.go`) names that
+  // field `id`. Without `renameIn` the unknown `activity` key was dropped
+  // and `id` arrived empty; `MarkInput.ID` has no `required` validator, so
+  // this didn't 400 — it silently marked *no* entry (Go's `Get`-by-empty-id
+  // path just doesn't find one) on every "mark as read" click.
+  "activity.markAsRead": { key: "activity_read", renameIn: { activity: "id" } },
   // `agent.create`/`agent.update` answer with a bare `*Agent`
   // (`internal/domain/agent/commands.go`), not `{agent: ...}` — confirmed
   // against the Fractal source's own consumer (`agents.context.tsx` reads
@@ -151,26 +158,37 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
 
   "config.get": "config_get",
   "config.update": "config_update",
-  "routine.create": "routines_create",
-  "routine.delete": "routines_delete",
-  // NOT `{ key: "routines_fire", wrapOut: "run" }`, on purpose. Go's
-  // `routines_fire` returns a single bare `*Run`
-  // (`internal/domain/routine/commands.go`), but Fractal's original
-  // consumer (`routine-list-row.component.tsx`) reads
+  // task-12 correction: the comments this whole `routine.*` block carried
+  // said "no live consumer here yet (`routine` isn't a ported feature)".
+  // That was wrong — `presentation/pages/($id)/index.tsx` is live and
+  // calls every one of `getById`/`create`/`update`/`delete`/`fire` through
+  // `aos.client.routine.*` — the earlier round's own verification never
+  // actually exercised it. Found by task 12's live HTTP pass, not by
+  // static reading: every one of `getById`/`update`/`delete`/`fire` sends
+  // `params: { routine: id }`, but every one of Go's
+  // `GetInput`/`UpdateInput`/`DeleteInput`/`FireInput`
+  // (`internal/domain/routine/schema.go`) names that field `id` — with no
+  // `renameIn`, the unknown `routine` key was silently dropped by Go's
+  // decoder and the required `id` arrived empty, so every one of those
+  // four 400'd on every call (`validate:"required,notblank"`). `create`
+  // and `update`'s body also sends `prompt`; Go's field is `content`.
+  "routine.create": { key: "routines_create", renameIn: { prompt: "content" } },
+  "routine.delete": { key: "routines_delete", renameIn: { routine: "id" } },
+  // NOT `wrapOut: "run"`, on purpose. Go's `routines_fire` returns a
+  // single bare `*Run` (`internal/domain/routine/commands.go`), but the
+  // live consumer (`onSuccess` in `pages/($id)/index.tsx`, matching
+  // Fractal's original `routine-list-row.component.tsx`) reads
   // `result.data?.executions?.length` — a *list* of executions, not one
   // run under any single key. `wrapOut` can only rename/nest a value, not
-  // turn one entity into an array; whatever adapts this is a genuine
-  // shape change belonging at a call site once `routine` is ported, not a
-  // map entry. Left as a plain key, disclosed rather than papered over
-  // with a `wrapOut` that would produce the wrong shape.
-  "routine.fire": "routines_fire",
-  // `*View` (bare) — same pattern as `task.getById`; confirmed against
-  // the Fractal source's own consumer (`routine/pages/($id)/index.tsx`
-  // reads `result.data?.routine`). No live consumer here yet (`routine`
-  // isn't a ported feature), caught by the sweep.
-  "routine.getById": { key: "routines_get", wrapOut: "routine" },
+  // turn one entity into an array, so this stays unwrapped; the read
+  // degrades safely today (`?? 1`, confirmed against a live response in
+  // the task-12 HTTP exercise) rather than crashing, but the UI never
+  // shows more than "1" regardless of what actually ran. Escalated, not
+  // fixed here — a genuine shape decision, not a wire-level one.
+  "routine.fire": { key: "routines_fire", renameIn: { routine: "id" } },
+  "routine.getById": { key: "routines_get", renameIn: { routine: "id" }, wrapOut: "routine" },
   "routine.list": "routines_list",
-  "routine.update": "routines_update",
+  "routine.update": { key: "routines_update", renameIn: { routine: "id", prompt: "content" } },
 
   // Every `tasks_*` command that names one task takes `id`
   // (`internal/domain/task/schema.go`'s `GetInput`/`UpdateInput`/
@@ -222,7 +240,18 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "task.setStatus": { key: "tasks_set-status", renameIn: { task: "id" } },
   "task.update": { key: "tasks_update", renameIn: { task: "id" }, wrapOut: "task" },
 
-  "theme.get": "themes_get",
+  // task-12 live HTTP pass: `theme.store.ts`'s `setPreset`/`update` actions
+  // call `api.theme.get.query({ params: { theme: preset } })`. Go's
+  // `GetInput` (`internal/domain/theme/schema.go`) names that field `id`,
+  // with `validate:"required,notblank"` — every call 400'd. `renameIn`
+  // fixes the wire mismatch; it does not fix the read on the other side
+  // (`response.data?.theme?.theme` — Go's `GetOutput.Theme` has no nested
+  // `.theme`, only `id`/`name`/`author`/`builtin`/`variants` keyed by
+  // light/dark `Palette`), which stays broken and is a task-12 escalation:
+  // reshaping `variants.{light,dark}` into the flat `FractalThemeSettings`
+  // shape `theme.store.ts` expects is a real data-model decision, not a
+  // wire-level one `renameIn`/`coerceIn` can express.
+  "theme.get": { key: "themes_get", renameIn: { theme: "id" } },
   "theme.list": "themes_list",
 
   // Only `todo.list` existed before the `task` port; `create`/`update`
@@ -258,6 +287,47 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "workspace.create": "workspace_create",
   "workspace.delete": "workspace_delete",
   "workspace.list": "workspace_list",
+  // `workspace.update` was entirely absent from this map — found by the
+  // task-12 call-path sweep, not by anyone clicking. Four settings forms
+  // (`workspace/{git,profile,tasks,worktrees}/index.tsx`, under
+  // `presentation/components/settings/components/sections/workspace`) call
+  // it via `aos.useForm({ mutation: "workspace.update" })`
+  // (`app/builders/app.tsx` splits that string and indexes into the same
+  // `client[controller][action]` this map resolves); every one of the four
+  // threw `call not mapped` on every submit.
+  //
+  // Go's `UpdateInput` (`internal/domain/workspace/schema.go`) takes
+  // `workspace` (id) plus one dotted-path `set: map[string]any` — the same
+  // pattern `config.update` already uses. `renameIn` covers `params: { id
+  // }` -> `workspace`, the field name Fractal's original UI still uses.
+  // Three of the four forms already submit one grouped object per top-level
+  // key that lines up with a nested `Workspace` field (`git` ->
+  // `GitOptions`, `worktrees` -> `WorktreeOptions`, `tasks` -> the `Tasks
+  // []TaskType` field verbatim) — `coerceIn` turns each into the
+  // corresponding `set` entries, a wire-shape fix (object -> dotted map),
+  // not a UI data-model change.
+  //
+  // `.../profile` is not covered by `coerceIn` here: it submits three
+  // independent top-level scalars (`name`, `logo`, `color`) in one call,
+  // and `coerceIn`'s per-field merge (`aos-facade.ts`'s `applyCoerceIn`)
+  // shallow-`Object.assign`s each field's result — three separate `{set:
+  // {...}}` results would each clobber the last, not merge. That call site
+  // was edited directly instead (see its own comment) to build `{ set: {
+  // name, logo, color } }` up front, which needs no coercion at all.
+  "workspace.update": {
+    key: "workspace_update",
+    renameIn: { id: "workspace" },
+    coerceIn: {
+      git: (value) => ({
+        set: Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [`git.${k}`, v])),
+      }),
+      worktrees: (value) => ({
+        set: Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [`worktrees.${k}`, v])),
+      }),
+      tasks: (value) => ({ set: { tasks: value } }),
+    },
+    wrapOut: "workspace",
+  },
 
   // ── own HTTP surfaces ────────────────────────────────────────────────────
   "auth.getStatus": () => authApi.status(),
@@ -290,6 +360,25 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "file.search": null,
   "session.updateProfile": null,
   "task.start": null,
+  // `workspace.directory` (`workspace-directory.fetch.ts`, called by both
+  // `AgentStore` and `WorkspaceStore` preload) has no Go counterpart at all
+  // — there is no `workspace_directory`/`workspace_inventory`-shaped command
+  // that returns agents+users combined the way Fractal's original did.
+  // Before this entry existed, the call fell through `call()`'s loud "not
+  // mapped" throw — caught locally by that one file's own try/catch (see its
+  // "Falls back to raw fetch when the typed client schema is stale" comment)
+  // and silently retried against `/api/workspaces/{id}/directory`, a REST
+  // path Go's `httpapi` router (`internal/transport/httpapi/server.go`) never
+  // registers — so the roster always resolved to `{ users: [], agents: [] }`,
+  // quietly, no matter what. Declaring this `null` here doesn't change that
+  // outcome (a dormant `query()` also resolves to empty for this call site),
+  // but it makes the failure go through the one documented dormancy path
+  // instead of a bespoke local one — and stops every agent-roster load from
+  // needlessly throwing and 404ing first. The actual gap — no Go command
+  // backs the agent roster the UI wants — is a task-12 escalation, not
+  // something this map entry can fix: `agents_list` exists and is live, but
+  // nothing wires it into `AgentStore` today.
+  "workspace.directory": null,
   "workspace.addMember": null,
   "workspace.listMembers": null,
   "workspace.removeMember": null,

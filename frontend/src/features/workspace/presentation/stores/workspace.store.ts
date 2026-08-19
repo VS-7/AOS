@@ -65,8 +65,18 @@ export const WorkspaceStore = AosStore.create("workspace")
     directory: EMPTY_DIRECTORY,
   })
   .withPreload(async (ctx) => {
+    // task-12 disclosed divergence: `workspace_list` (Go's
+    // `internal/domain/workspace/schema.go` `ListOutput`) answers
+    // `{ workspaces, total }`, not a bare array — confirmed live
+    // (`POST /api/workspace/list` in the task-12 HTTP exercise). Reading
+    // `response.data` directly, as this originally did, hands the object
+    // to `.find`/`.map` below and throws on every boot — this store's
+    // preload is awaited before the rest of the app initializes
+    // (`app/aos.tsx`'s own doc comment), so this was on the critical boot
+    // path. Same shape as `activity.list` above: no `wrapOut` fixes an
+    // already-named `Output` struct's field, only a call-site read does.
     const response = await api.workspace.list.query();
-    const workspacesList: FractalWorkspace[] = response.data || [];
+    const workspacesList: FractalWorkspace[] = (response.data as { workspaces?: FractalWorkspace[] } | undefined)?.workspaces || [];
 
     let currentWorkspace = ctx.state.get().current;
 
@@ -104,8 +114,9 @@ export const WorkspaceStore = AosStore.create("workspace")
     enabled: true,
   })
   .addAction("refresh", (ctx) => async () => {
+    // Same shape fix as `withPreload` above.
     const response = await api.workspace.list.query();
-    const workspacesList: FractalWorkspace[] = response.data || [];
+    const workspacesList: FractalWorkspace[] = (response.data as { workspaces?: FractalWorkspace[] } | undefined)?.workspaces || [];
 
     const state = ctx.state.get();
     let currentWorkspace = state.current;
@@ -205,7 +216,15 @@ export const WorkspaceStore = AosStore.create("workspace")
   })
   .addAction("create", (ctx) => async (params: FractalWorkspaceCreate) => {
     const response = await api.workspace.create.mutate({ body: params });
-    const data = response.data;
+    // task-12 disclosed divergence: `workspace_create` answers
+    // `CreateOutput { workspace, orchestrator, scaffold, adopted }`
+    // (`internal/domain/workspace/schema.go`) — confirmed live via the CLI
+    // during the task-12 scratch-state setup — not a bare `Workspace`.
+    // Reading `response.data.id` directly, as this originally did, is
+    // always `undefined`; the id is at `response.data.workspace.id`. That
+    // left `ctx.actions.switch(undefined)` silently failing to select the
+    // workspace that was just created.
+    const data = (response.data as { workspace?: FractalWorkspace } | undefined)?.workspace;
 
     if (data) {
       // switch now handles refresh internally and returns { data, error }
@@ -231,8 +250,9 @@ export const WorkspaceStore = AosStore.create("workspace")
       await api.workspace.delete.mutate({ params: { workspace: workspaceId } });
 
       // Refresh the list — the deleted workspace is now gone
+      // Same shape fix as `withPreload` above.
       const response = await api.workspace.list.query();
-      const workspacesList: FractalWorkspace[] = response.data || [];
+      const workspacesList: FractalWorkspace[] = (response.data as { workspaces?: FractalWorkspace[] } | undefined)?.workspaces || [];
 
       // Determine the next current workspace
       let nextCurrent: FractalWorkspace | undefined;

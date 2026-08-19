@@ -3,8 +3,14 @@ import { COMMAND_MAP, DORMANT_DOMAINS, isDormant } from "./command-map";
 import { COMMAND_KEYS } from "./schema";
 
 describe("COMMAND_MAP", () => {
-  it("covers the 123 calls the Fractal frontend makes", () => {
-    expect(Object.keys(COMMAND_MAP)).toHaveLength(123);
+  it("covers the 125 calls the Fractal frontend makes", () => {
+    // 123 + `workspace.update` (task 12: found unmapped by the call-path
+    // sweep — four settings forms called it via `mutation: "workspace.update"`
+    // and threw `call not mapped` on every submit) + `workspace.directory`
+    // (task 12: declared dormant explicitly — see its own comment — instead
+    // of silently falling through the loud "not mapped" throw the way it
+    // did before).
+    expect(Object.keys(COMMAND_MAP)).toHaveLength(125);
   });
 
   it("points only at commands the Go side actually publishes", () => {
@@ -31,7 +37,11 @@ describe("COMMAND_MAP", () => {
     expect(typeof taskGetById === "object" && taskGetById !== null ? taskGetById.key : taskGetById).toBe("tasks_get");
     const taskSetStatus = COMMAND_MAP["task.setStatus"];
     expect(typeof taskSetStatus === "object" && taskSetStatus !== null ? taskSetStatus.key : taskSetStatus).toBe("tasks_set-status");
-    expect(COMMAND_MAP["activity.markAsRead"]).toBe("activity_read");
+    // `activity.markAsRead` is now a `CommandDescriptor` too (task 12: the
+    // UI's `params: { activity: id }` needs `renameIn` to reach Go's `id`
+    // field) — same `.key`-not-whole-entry check as the two above.
+    const activityMarkAsRead = COMMAND_MAP["activity.markAsRead"];
+    expect(typeof activityMarkAsRead === "object" && activityMarkAsRead !== null ? activityMarkAsRead.key : activityMarkAsRead).toBe("activity_read");
     expect(COMMAND_MAP["activity.markAllAsRead"]).toBe("activity_read-all");
   });
 
