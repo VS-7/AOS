@@ -218,7 +218,7 @@ export class AosApp<
 
       useForm: <TPath extends MutationPath<TClient>, TSchema extends z.ZodTypeAny>(
         options: AosUseFormOptions<TClient, TPath, TSchema>
-      ): AosFormReturn<TSchema> => {
+      ): AosFormReturn<z.infer<TSchema> & Record<string, any>> => {
         const {
           schema,
           values,
@@ -402,7 +402,7 @@ export class AosApp<
         return Object.assign(form, {
           isLoading,
           submit,
-        }) as AosFormReturn<TSchema>;
+        }) as AosFormReturn<z.infer<TSchema> & Record<string, any>>;
       }
 
     };

@@ -1,10 +1,21 @@
 import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
-import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
+import type { Chat, Message } from "@/features/chat/interfaces/chat.interfaces";
 
 export interface UseChatResult {
   chat: Chat | null;
+  /**
+   * Added for `task`'s execution timeline (`($id)/components/details/
+   * components/tabs/execution/index.tsx`, `main/index.tsx`), which reads
+   * `liveChat.messages` — a field the Fractal original's richer `useChat`
+   * had (it tracked a live-streaming array separately) but this
+   * intentionally-simplified port didn't need until now. `chat.messages`
+   * is already fetched as part of the `chats_get` response (`Chat.messages:
+   * Message[]`, `interfaces/chat.interfaces.ts`), so this is a derived
+   * read, not a second fetch.
+   */
+  messages: Message[];
   isLoading: boolean;
   isRefreshing: boolean;
   refresh: () => void;
@@ -37,6 +48,7 @@ export function useChat({ chatId, enabled = true }: { chatId: string; enabled?: 
 
   return {
     chat: chatQuery.data ?? null,
+    messages: chatQuery.data?.messages ?? [],
     isLoading: chatQuery.isLoading,
     isRefreshing: chatQuery.isFetching,
     refresh,

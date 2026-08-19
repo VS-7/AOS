@@ -1,0 +1,145 @@
+import * as React from "react"
+import { z } from "zod"
+
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+  FormControl,
+  FormField,
+  Field,
+  FieldGroup,
+  Form,
+} from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { aos } from "@/app/aos"
+import type { FractalTodo } from "@/features/task/interfaces/todo.interfaces"
+
+const formSchema = z.object({
+  description: z.string().min(1, "Description is required"),
+  agent: z.string().optional(),
+  instructions: z.string().optional(),
+})
+
+interface TodoDialogUpsertProps {
+  taskId: string
+  todo?: FractalTodo
+  onCreated?: () => void
+  children?: React.ReactNode
+}
+
+export function TodoDialogUpsert({ taskId, todo, onCreated, children }: TodoDialogUpsertProps) {
+  const ref = React.useRef<HTMLDivElement | null>(null)
+
+  const isEdit = !!todo
+
+  const initialValues = React.useMemo(() => ({
+    description: todo?.description || "",
+    agent: todo?.agent || "",
+    instructions: todo?.instructions || "",
+  }), [todo])
+
+  const form = aos.useForm({
+    schema: formSchema,
+    mutation: isEdit ? "todo.update" : "todo.create",
+    values: initialValues,
+    onSubmit: (values) => {
+      const body: Record<string, unknown> = {
+        description: values.description,
+      }
+      if (values.agent) body.agent = values.agent
+      if (values.instructions) body.instructions = values.instructions
+
+      if (isEdit) {
+        return {
+          params: { taskId, id: todo!.id },
+          body,
+        }
+      }
+
+      return {
+        params: { taskId },
+        body,
+      }
+    },
+    onResponse: ({ error }) => {
+      if (!error) {
+        ref.current?.click()
+        form.reset()
+        onCreated?.()
+      }
+    },
+  })
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <div ref={ref}>
+          {children}
+        </div>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit Todo" : "Create Todo"}</DialogTitle>
+        </DialogHeader>
+        <Form form={form}>
+          <FieldGroup>
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <Field>
+                  <Label htmlFor="description">Description</Label>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      id="description"
+                      placeholder="What needs to be done?"
+                      className="min-h-20 resize-none"
+                    />
+                  </FormControl>
+                </Field>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="instructions"
+              render={({ field }) => (
+                <Field>
+                  <Label htmlFor="instructions">Instructions (optional)</Label>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      id="instructions"
+                      placeholder="Instructions for the agent..."
+                      className="min-h-20 resize-none"
+                    />
+                  </FormControl>
+                </Field>
+              )}
+            />
+          </FieldGroup>
+          <DialogFooter className="mt-6">
+            <Button variant="outline" type="button" onClick={() => {
+              form.reset()
+              ref.current?.click()
+            }}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={form.isLoading}>
+              {form.isLoading ? "Saving..." : isEdit ? "Update" : "Create"}
+            </Button>
+          </DialogFooter>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  )
+}

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, type UseMutationResult, type UseQueryResult } from "@tanstack/react-query";
+import type { UseMutationOptions } from "@tanstack/react-query";
 import { client } from "./client";
 import { COMMAND_MAP, type MapEntry } from "./command-map";
 import type { CommandKey } from "./schema";
@@ -89,7 +90,20 @@ interface ActionNode {
   query(opts?: CallOpts): Promise<Envelope<unknown>>;
   mutate(opts?: CallOpts): Promise<Envelope<unknown>>;
   useQuery(opts?: CallOpts): UseQueryResult<unknown>;
-  useMutation(): UseMutationResult<Envelope<unknown>, Error, CallOpts | undefined>;
+  /**
+   * `options` accepts the same `onSuccess`/`onError`/`onSettled` callbacks
+   * `@tanstack/react-query`'s own `useMutation` does — `mutationFn` is
+   * fixed (it's always `call(feature, action, opts)`), everything else
+   * passes through. Originally this took no parameter at all; the first
+   * real ported call site (`task`'s `client.chat.stop.useMutation({
+   * onSuccess, onError})`) called it with options and failed to compile
+   * ("Expected 0 arguments, but got 1") — a common enough React Query
+   * pattern that every other feature is likely to hit it too, so this is
+   * fixed at the facade rather than worked around per call site.
+   */
+  useMutation(
+    options?: Omit<UseMutationOptions<Envelope<unknown>, Error, CallOpts | undefined>, "mutationFn">,
+  ): UseMutationResult<Envelope<unknown>, Error, CallOpts | undefined>;
 }
 
 export type AosClient = Record<string, Record<string, ActionNode>>;
@@ -131,8 +145,9 @@ function actionNode(feature: string, action: string): ActionNode {
         retry: false,
       }),
 
-    useMutation: () =>
+    useMutation: (options) =>
       useMutation({
+        ...options,
         mutationFn: (opts?: CallOpts) => call(feature, action, opts),
       }),
   };

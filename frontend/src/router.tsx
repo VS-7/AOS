@@ -25,7 +25,8 @@ import {
 } from "@/lib/theme";
 import { ChatContent } from "@/features/chat/presentation/components/chat-content";
 import { Failure } from "@/components/Failure";
-import { TaskBoard } from "@/features/task/TaskBoard";
+import { TasksPage } from "@/features/task/presentation/pages/(main)";
+import { TaskDetailsPage } from "@/features/task/presentation/pages/($id)";
 import { MemoryGraph } from "@/features/memory/MemoryGraph";
 import { FilesPage } from "@/features/file/FilesPage";
 import { ApprovalModal } from "@/components/ApprovalModal";
@@ -77,20 +78,39 @@ const chatRoute = createRoute({
   },
 });
 
-const tasksRoute = createRoute({
+/**
+ * `TasksPage`/`TaskDetailsPage` come from `aos.page(...).build()` (see
+ * `app/builders/page.ts`), which hardcodes `getParentRoute` to the `aos`
+ * app instance's own internal root route — a separate `createRootRoute`
+ * call made inside `AosApp.build()`, never mounted by this file's
+ * `createRouter`. Left alone, that breaks navigation: TanStack Router
+ * resolves the *matched ancestor chain* for beforeLoad/loader execution and
+ * component nesting by walking each route's `parentRoute` reference
+ * (`buildRouteBranch` in `@tanstack/router-core`), not by the `addChildren`
+ * nesting below — so the pages would render outside `RootLayout` entirely
+ * (no sidebar, no ApprovalModal), parented to a route this router never
+ * initializes.
+ *
+ * `.update({ getParentRoute })` retargets each built route's parent to this
+ * file's real `rootRoute` before `createRouter` processes the tree, which
+ * is enough: both root routes compute to the same `"__root__"` id/`"/"`
+ * fullPath, so path resolution for `/tasks` and `/tasks/$id` is unaffected.
+ * Every future `aos.page(...)` route wired into this router needs the same
+ * retarget until Task 10 either makes `router.tsx`'s root the `aos`
+ * instance's root, or `page.ts` accepts an injectable parent.
+ *
+ * `.update()`'s public type (`UpdatableRouteOptions`) does not include
+ * `getParentRoute` — TanStack does not officially support re-parenting a
+ * built route — even though the runtime implementation is a plain
+ * `Object.assign(this.options, options)` that accepts it fine (see
+ * `@tanstack/router-core`'s `route.js`). The cast documents that this
+ * relies on that internal, untyped-but-functional behavior.
+ */
+(TasksPage.update as (options: { getParentRoute: () => typeof rootRoute }) => unknown)({
   getParentRoute: () => rootRoute,
-  path: "/tasks",
-  component: () => (
-    <>
-      <header>
-        <h2>Tasks</h2>
-        <p className="subtitle">
-          Moving a card calls the same command an agent calls, with the same guards behind it.
-        </p>
-      </header>
-      <TaskBoard />
-    </>
-  ),
+});
+(TaskDetailsPage.update as (options: { getParentRoute: () => typeof rootRoute }) => unknown)({
+  getParentRoute: () => rootRoute,
 });
 
 const memoriesRoute = createRoute({
@@ -121,7 +141,14 @@ const filesRoute = createRoute({
   ),
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, chatRoute, tasksRoute, memoriesRoute, filesRoute]);
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  chatRoute,
+  TasksPage,
+  TaskDetailsPage,
+  memoriesRoute,
+  filesRoute,
+]);
 
 /**
  * What a route renders instead of its page when a loader throws — most often

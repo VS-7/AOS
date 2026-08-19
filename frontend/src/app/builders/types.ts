@@ -1,10 +1,12 @@
 import type { AnyRoute, RouteComponent } from "@tanstack/react-router";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import type { UseFormReturn } from "react-hook-form";
 import type { ZodTypeAny, z } from "zod";
 import type { AosLayout } from "./layout";
 import type { AosMiddleware } from "./middleware";
 import type { AosPage } from "./page";
+import type { AosResponse } from "./response";
 
 /**
  * The builders' internal contract, reconstructed.
@@ -28,7 +30,7 @@ export interface PageLifecycleArgs<TClient = unknown, TContext = DefaultContext,
   context: TContext;
   stores: TStores;
   request: { url: string; query: Record<string, unknown>; params: Record<string, string> };
-  response: unknown;
+  response: AosResponse;
   page: unknown;
 }
 
@@ -100,7 +102,7 @@ export interface AosAppBuilt<TClient = unknown, TContext = DefaultContext, TStor
   useQueryClient: (queryClient?: QueryClient) => QueryClient;
   useForm: <TPath extends MutationPath<TClient>, TSchema extends ZodTypeAny>(
     options: AosUseFormOptions<TClient, TPath, TSchema>
-  ) => AosFormReturn<TSchema>;
+  ) => AosFormReturn<z.infer<TSchema> & Record<string, unknown>>;
 }
 
 /**
@@ -182,7 +184,7 @@ export interface AosTriggerDef<
     client: TClient;
     context: TContext;
     stores: TStores;
-    response: unknown;
+    response: AosResponse;
   }) => Promise<TResult> | TResult;
   [key: string]: unknown;
 }
@@ -249,10 +251,24 @@ export interface AosUseFormOptions<TClient = unknown, TPath = MutationPath<TClie
   onResponse?: (result: { data?: unknown; error?: Error }) => void;
 }
 
-/** The object `useForm` returns: a react-hook-form `UseFormReturn` extended with `isLoading`/`submit`. Left as an open shape — react-hook-form's own type is not reproduced here. */
-export interface AosFormReturn<TValues = Record<string, unknown>> {
+/**
+ * The object `useForm` returns: a real react-hook-form `UseFormReturn`
+ * (`app/builders/app.tsx`'s `useForm` does `Object.assign(form, {isLoading,
+ * submit})` on the actual `useHookForm(...)` result) extended with
+ * `isLoading`/`submit`.
+ *
+ * This used to be a loose `{ isLoading; submit; children?; [key: string]:
+ * unknown }` shape with no relation to react-hook-form's real type. That
+ * made every accessor on the runtime-real object (`form.watch`,
+ * `form.reset`, `form.control`, `form.formState`, ...) type as `unknown` to
+ * callers — invisible until `task`'s forms (`dialogs/create`,
+ * `comments/index.tsx`'s reply box, `todo-dialog-upsert`) were the first
+ * real consumers. Extending `UseFormReturn<TValues>` gives every real
+ * accessor its real type; `isLoading`/`submit` stay as the two fields this
+ * builder actually adds on top.
+ */
+export interface AosFormReturn<TValues extends Record<string, any> = Record<string, any>> extends UseFormReturn<TValues> {
   isLoading: boolean;
   submit: (...args: any[]) => unknown;
   children?: ReactNode;
-  [key: string]: unknown;
 }

@@ -38,7 +38,18 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "chat.getById": "chats_get",
   "chat.list": "chats_list",
   "chat.send": "chats_send",
+  // `comment.list` was the only entry here before this task. The Go side
+  // registers a full `comments` command group — list, get, create, update,
+  // delete (`internal/domain/comment/commands.go`) — but the other four
+  // were never registered in this map, which the `comments/index.tsx` reply
+  // box this task ports needs to actually post a reply. Added rather than
+  // left silently unmapped (the facade fails loud on an unmapped call, but
+  // only at the moment someone submits the form).
+  "comment.create": "comments_create",
+  "comment.delete": "comments_delete",
+  "comment.getById": "comments_get",
   "comment.list": "comments_list",
+  "comment.update": "comments_update",
   "config.get": "config_get",
   "config.update": "config_update",
   "routine.create": "routines_create",
@@ -47,6 +58,12 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "routine.getById": "routines_get",
   "routine.list": "routines_list",
   "routine.update": "routines_update",
+  // `task.create` was missing here entirely (neither mapped nor dormant) —
+  // the ported `dialogs/create/index.tsx` calls `mutation: "task.create"`,
+  // which would have thrown "call not mapped" the moment someone submitted
+  // the form. Go registers `tasks_create` (`internal/domain/task/
+  // commands.go`), so this is a real, live command, just never registered.
+  "task.create": "tasks_create",
   "task.delete": "tasks_delete",
   "task.getById": "tasks_get",
   "task.list": "tasks_list",
