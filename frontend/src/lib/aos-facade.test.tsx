@@ -1,19 +1,37 @@
+import * as React from "react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { COMMAND_MAP } from "./command-map";
 import * as authApi from "./auth";
-import * as reactQuery from "@tanstack/react-query";
 
 const invoke = vi.fn();
-// Real react-query's useQuery needs a QueryClientProvider to run at all, and
-// what's under test here is the config it's handed — queryFn's dormant/
-// error/undefined-data handling — not react-query's own scheduling. Spread
-// the real module (useMutation stays real, unused by these tests) and
-// replace only useQuery with a spy that hands back its config untouched, so
-// tests can call `config.queryFn()` directly.
-vi.mock("@tanstack/react-query", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
-  useQuery: vi.fn((config: unknown) => config),
-}));
+
+/**
+ * Second pass, final review: `useQuery`'s "queryFn" suite used to fake
+ * react-query's own `useQuery` with a spy that handed back its config
+ * object untouched, so tests could call `config.queryFn()` directly without
+ * a real render. That worked until `ActionNode.useQuery` (`aos-facade.ts`)
+ * gained a real `React.useEffect` for the `onSuccess` shim — calling that
+ * effect's owning function outside an actual render has no dispatcher to
+ * call into (`Cannot read properties of null (reading 'useEffect')`), which
+ * is exactly what broke (`git log -S "React.useEffect"` dates the effect to
+ * `6ab2f34`, Task 9's bulk copy — the fake predates it and was never
+ * updated once it landed). Rendering the real hook through a real
+ * `QueryClientProvider` (`renderHook`, `@testing-library/react`) tests the
+ * hook as what it actually is, including the effect the old fake couldn't
+ * reach at all — the `onSuccess` shim had no coverage of its own before
+ * this. `vite.config.ts`'s `test.environment` switched to `jsdom` for this.
+ */
+function withQueryClient() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const wrapper = ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client: queryClient }, children);
+  return { queryClient, wrapper };
+}
+
 // Spread the real module and override only `client`. command-map.ts eagerly
 // imports lib/auth.ts and lib/file.ts, which pull in DomainError, unwrap,
 // isDesktop and getWorkspace from ./client — neither module is exercised
@@ -216,51 +234,129 @@ describe("useQuery's queryFn", () => {
   // Without this, api.instruction.list.useQuery() (a dormant domain) would
   // put the query in *error* state and DORMANT_CODE would never reach the
   // UI at all — the exact panel it exists to trigger becomes unreachable.
-
-  function lastQueryConfig(): { queryFn: () => Promise<unknown> } {
-    const calls = vi.mocked(reactQuery.useQuery).mock.calls;
-    const last = calls.at(-1);
-    if (!last) throw new Error("useQuery was not called");
-    // The real UseQueryOptions#queryFn takes a QueryFunctionContext this
-    // suite never needs — call() ignores it — so this narrows to the shape
-    // actually used here, same escape hatch as the CommandKey cast in
-    // aos-facade.ts: through `unknown` first, since the two signatures
-    // don't otherwise overlap enough for TS to allow it directly.
-    return last[0] as unknown as { queryFn: () => Promise<unknown> };
-  }
+  //
+  // These render the real hook (`renderHook`, `@testing-library/react`)
+  // through a real `QueryClientProvider` — see this file's top-of-file
+  // comment for why the earlier "fake useQuery, grab the config" approach
+  // stopped working once the hook gained a real `React.useEffect`.
 
   it("resolves a dormant call to null data, not undefined", async () => {
-    api.collection!.list!.useQuery();
-    const { queryFn } = lastQueryConfig();
-    await expect(queryFn()).resolves.toBeNull();
+    const { wrapper } = withQueryClient();
+    const { result } = renderHook(() => api.collection!.list!.useQuery(), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toBeNull();
     expect(invoke).not.toHaveBeenCalled();
   });
 
   it("resolves a successful call with no body to null, not undefined", async () => {
-    api.task!.list!.useQuery();
-    const { queryFn } = lastQueryConfig();
     invoke.mockResolvedValueOnce(undefined);
-    await expect(queryFn()).resolves.toBeNull();
+    const { wrapper } = withQueryClient();
+    const { result } = renderHook(() => api.task!.list!.useQuery(), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toBeNull();
   });
 
   it("passes real data through untouched", async () => {
-    api.task!.list!.useQuery();
-    const { queryFn } = lastQueryConfig();
     invoke.mockResolvedValueOnce({ tasks: [{ id: "t-1" }] });
-    await expect(queryFn()).resolves.toEqual({ tasks: [{ id: "t-1" }] });
+    const { wrapper } = withQueryClient();
+    const { result } = renderHook(() => api.task!.list!.useQuery(), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toEqual({ tasks: [{ id: "t-1" }] });
   });
 
   it("throws a real Error carrying `code`, for a non-dormant failure", async () => {
-    api.task!.list!.useQuery();
-    const { queryFn } = lastQueryConfig();
     invoke.mockRejectedValueOnce(Object.assign(new Error("nope"), { code: "AOS_TASK_BLOCKED" }));
-    await expect(queryFn()).rejects.toBeInstanceOf(Error);
+    const { wrapper } = withQueryClient();
+    const { result } = renderHook(() => api.task!.list!.useQuery(), { wrapper });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(result.current.error).toBeInstanceOf(Error);
   });
 
   it("keeps the error code reachable on the thrown Error", async () => {
-    api.task!.list!.useQuery();
-    const { queryFn } = lastQueryConfig();
     invoke.mockRejectedValueOnce(Object.assign(new Error("nope"), { code: "AOS_TASK_BLOCKED" }));
-    await expect(queryFn()).rejects.toMatchObject({ code: "AOS_TASK_BLOCKED" });
+    const { wrapper } = withQueryClient();
+    const { result } = renderHook(() => api.task!.list!.useQuery(), { wrapper });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(result.current.error).toMatchObject({ code: "AOS_TASK_BLOCKED" });
+  });
+});
+
+describe("useQuery's onSuccess shim", () => {
+  // No coverage existed for this before the final review's second pass —
+  // it arrived in Task 9's bulk copy (`6ab2f34`) and was never looked at on
+  // its own. See `aos-facade.ts`'s own comment on the shim for the "is this
+  // a stale-closure bug" investigation this suite backs up: it isn't one,
+  // but the structural-sharing gap below is real.
+
+  it("fires once, with the resolved data, the first time the query succeeds", async () => {
+    invoke.mockResolvedValueOnce({ tasks: [{ id: "t-1" }] });
+    const onSuccess = vi.fn();
+    const { wrapper } = withQueryClient();
+    const { result } = renderHook(() => api.task!.list!.useQuery({ onSuccess }), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+
+    expect(onSuccess).toHaveBeenCalledWith({ tasks: [{ id: "t-1" }] });
+  });
+
+  it("does not fire for a dormant resolution's null data on its own merits — but it does fire, since null is still a successful result", async () => {
+    // Documents the actual, current behavior rather than assuming it:
+    // dormant resolves `isSuccess: true` with `data: null` (see the queryFn
+    // tests above), and this shim's only condition is `result.isSuccess` —
+    // it does not special-case dormant. A dormant screen's `onSuccess`, if
+    // it has one, does get called once with `null`.
+    const onSuccess = vi.fn();
+    const { wrapper } = withQueryClient();
+    const { result } = renderHook(() => api.collection!.list!.useQuery({ onSuccess }), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+
+    expect(onSuccess).toHaveBeenCalledWith(null);
+  });
+
+  it("fires again when a refetch resolves to genuinely different data", async () => {
+    invoke.mockResolvedValueOnce({ tasks: [{ id: "t-1" }] });
+    const onSuccess = vi.fn();
+    const { wrapper } = withQueryClient();
+    const { result } = renderHook(() => api.task!.list!.useQuery({ onSuccess }), { wrapper });
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+
+    invoke.mockResolvedValueOnce({ tasks: [{ id: "t-1" }, { id: "t-2" }] });
+    await result.current.refetch();
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(2));
+    expect(onSuccess).toHaveBeenLastCalledWith({ tasks: [{ id: "t-1" }, { id: "t-2" }] });
+  });
+
+  it("does NOT fire again when a refetch resolves to deep-equal data — react-query's structural sharing keeps the same reference, so the effect's deps don't change (the documented gap vs. real v4, which fires unconditionally per fetch)", async () => {
+    invoke.mockResolvedValueOnce({ tasks: [{ id: "t-1" }] });
+    const onSuccess = vi.fn();
+    const { wrapper } = withQueryClient();
+    const { result } = renderHook(() => api.task!.list!.useQuery({ onSuccess }), { wrapper });
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+
+    // Deep-equal to the first response, but a fresh object — exactly what a
+    // background refetch that found nothing new would resolve.
+    invoke.mockResolvedValueOnce({ tasks: [{ id: "t-1" }] });
+    await result.current.refetch();
+    await waitFor(() => expect(result.current.isFetching).toBe(false));
+
+    // Give any effect a chance to run before asserting it didn't.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onSuccess).toHaveBeenCalledTimes(1);
   });
 });

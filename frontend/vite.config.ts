@@ -21,12 +21,24 @@ export default defineConfig({
   optimizeDeps: {
     include: ["monaco-editor"],
   },
-  // The environment is node, not jsdom: what we're testing is the facade —
-  // name translation, payload assembly, and envelope shape. None of that
-  // touches the DOM, and a jsdom here would only add startup time to every run.
+  // jsdom, not node (final review, second pass): `lib/aos-facade.test.ts`'s
+  // "useQuery's queryFn" suite renders the real `useQuery`/`useMutation`
+  // hooks (via `@testing-library/react`'s `renderHook`) to test them as
+  // what they are — React hooks, one of which (`ActionNode.useQuery`) runs
+  // a real `React.useEffect` for the `onSuccess` shim. Calling a hook's
+  // body directly outside a render (this suite's original approach) broke
+  // the moment that `useEffect` landed (Task 9's bulk copy, `6ab2f34`) —
+  // React's dispatcher only exists during an actual render, real or
+  // `renderHook`'s. The rest of the suite (name translation, payload
+  // assembly, envelope shape) touches no DOM and pays jsdom's startup cost
+  // for no benefit, but it's one environment per file, not per test, and
+  // this project has exactly one test file that needs it.
   test: {
-    environment: "node",
-    include: ["src/**/*.test.ts"],
+    environment: "jsdom",
+    // `.tsx`, not just `.ts`: `lib/aos-facade.test.tsx` renders real hooks
+    // through a `QueryClientProvider`, which needs JSX — see that file's
+    // own comment and `vite.config.ts`'s `test.environment` comment above.
+    include: ["src/**/*.test.{ts,tsx}"],
   },
   build: {
     outDir: "dist",

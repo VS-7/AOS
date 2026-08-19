@@ -313,6 +313,37 @@ function actionNode(feature: string, action: string): ActionNode {
 
       // Simulates React Query v4's `onSuccess` callback — see `CallOpts.
       // onSuccess`'s doc comment for why this facade offers it at all.
+      //
+      // Final review, second pass: checked this for a stale-closure bug (the
+      // `[result.isSuccess, result.data]` dependency array doesn't include
+      // `onSuccess` itself, on purpose — an unmemoized inline callback must
+      // not re-fire this effect on every unrelated parent re-render). It
+      // isn't one: whenever this effect actually *runs*, it does so as part
+      // of the same render whose deps changed, and that render's own
+      // `onSuccess` closure is what gets built and invoked — there is no
+      // separate "stale" render's closure left running later. A version of
+      // this comment briefly suggested routing `onSuccess` through a
+      // `useRef` to fix exactly that; reverted once the reasoning above
+      // didn't hold up — the ref changed nothing observable and would have
+      // been unjustified complexity, the thing this whole review keeps
+      // arguing against.
+      //
+      // The real, narrower gap: react-query's structural sharing means
+      // `result.data` keeps the *same reference* across a refetch that
+      // resolves to deep-equal content, so this effect's deps don't change
+      // and `onSuccess` does not re-fire — unlike real React Query v4, whose
+      // `onSuccess` option fired on every settled fetch regardless of
+      // whether the data changed. "Simulates v4's onSuccess" above is
+      // accurate for the common case (first success, or a refetch that
+      // actually changed something) and imprecise for a refetch that
+      // resolves to identical bytes. The one live consumer (`use-chat.ts`'s
+      // `chat.getById.useQuery`, merging a chat snapshot) is unaffected in
+      // practice — a merge against unchanged data is a no-op either way —
+      // but a future consumer relying on "fires every fetch, full stop"
+      // would be surprised by this. Documented here rather than "fixed":
+      // matching real v4 (firing unconditionally per settled fetch, not per
+      // distinct result) is a different, deliberate behavior change to
+      // shared machinery, not a bug fix, and belongs to whoever needs it.
       const onSuccess = opts?.onSuccess;
       React.useEffect(() => {
         if (result.isSuccess) {
