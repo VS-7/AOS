@@ -1,28 +1,34 @@
 /**
- * Reconstructed from usage: the file was type-only and the bundler erased
- * it. There is no Go backend for this domain yet — when there is, this
- * contract becomes verifiable and should be checked against it.
+ * There is no AOS Go backend for this domain yet, but a real, checkable
+ * declaration exists in the old Fractal server:
+ * `v401/server/src/features/workspace/services/workspace/workspace.service.ts`'s
+ * `getDirectory()` — the exact object-construction site for
+ * `FractalWorkspaceDirectoryUser`/`Agent` (the type-only
+ * `interfaces/directory.interfaces.ts` it imports from was itself erased
+ * by the bundler, same as everywhere else, so this construction site is
+ * the best available ground truth). Recovered, not guessed — this
+ * replaces an earlier pass reconstructed from frontend usage alone
+ * (`task`'s `assignee.helper.ts`), which had `username`/`email` backwards
+ * as optional (the real construction always sets both), invented a
+ * `role` field the real payload never sets, and had `orchestrator`/
+ * `processing` backwards as optional (both are always present — the
+ * server does `Boolean(agent.orchestrator)` and
+ * `processingByAgent.get(agent.id) ?? []`, never omitting either).
  *
- * `FractalWorkspaceDirectoryUser`/`FractalWorkspaceDirectoryAgent`'s base
- * fields (id/name/username/email/image/role) come from how `task`'s
- * assignee.helper.ts reads them (normalizeUser/findUser) — this is what
- * the previous, now-superseded stub covered. `FractalWorkspaceDirectory`
- * (the container) and the agent's `description`/`orchestrator`/
- * `processing` fields are additions from v401/web/src's real consumers,
- * found while reconstructing this batch:
- * `features/workspace/presentation/helpers/workspace-directory.fetch.ts`
- * (the `{ users, agents }` container shape) and
- * `.../sidebar/.../groups/chat/components/chat-team-list.tsx` (agent
- * `description`/`orchestrator`, coerced into `FractalAgent`, and
- * `processing`, read as `FractalWorkspaceDirectoryAgentProcessing[]`).
+ * `FractalWorkspaceDirectoryAgentProcessing`'s shape comes from
+ * `FractalChatKindHelper.index_processing_by_agent`'s return type
+ * (`chat-kind.helper.ts`, already verified byte-identical between
+ * `v401/web` and `v401/server`): `{ chatId, title, kind }`. `kind` stays
+ * `string` rather than importing `chat`'s `ChatKind`/`FractalChatKind` to
+ * avoid a cross-feature import — always valid, since `FractalChatKind` is
+ * a string-literal union.
  */
 export interface FractalWorkspaceDirectoryUser {
   id: string;
   name: string;
-  username?: string;
-  email?: string;
+  username: string;
+  email: string;
   image?: string;
-  role?: string;
 }
 
 /** One live chat this agent is currently processing (sidebar Team tab badge). */
@@ -38,8 +44,8 @@ export interface FractalWorkspaceDirectoryAgent {
   image?: string;
   role?: string;
   description?: string;
-  orchestrator?: boolean;
-  processing?: FractalWorkspaceDirectoryAgentProcessing[];
+  orchestrator: boolean;
+  processing: FractalWorkspaceDirectoryAgentProcessing[];
 }
 
 /** Workspace roster snapshot: `stores.workspace.directory` (viewer-relative — self excluded). */

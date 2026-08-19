@@ -1,31 +1,41 @@
 /**
- * Reconstructed from usage: the file was type-only and the bundler erased
- * it. There is no Go backend for this domain yet — AOS's own auth is
+ * There is no AOS Go backend for this domain yet — AOS's own auth is
  * single-user (`internal/domain/auth.Public`, already ported as
  * `lib/auth.ts`'s `PublicUser`); this is Fractal's separate multi-user
  * instance-admin surface (list/create/update/delete accounts), which AOS
- * has no equivalent for. When it does, this contract becomes verifiable
- * and should be checked against it.
+ * has no equivalent for. But a real, checkable declaration for it does
+ * exist — `v401/server/src/features/auth/schemas/user.schema.ts`'s Zod
+ * schemas — so this is a recovered contract, not a guess from frontend
+ * usage. When AOS grows a Go backend for this, re-verify against that
+ * instead.
  *
- * Usage sites (v401/web/src): the workspace members section and the
- * instance users section (`features/workspace/presentation/components/
- * settings/.../sections/{workspace/members,user/users}/index.tsx`) read
- * `id`, `name`, `email`, `role` ("member" | "super"); the profile section
- * (`.../sections/user/profile/index.tsx`) also reads `image` and calls
- * `updateProfile({ name, email, image })`.
+ * `FractalUserPublic` mirrors `FractalUserPublicSchema`
+ * (`FractalUserSchema.omit({password: true, token: true})`): `username`,
+ * `email`, `createdAt`, `updatedAt` are all required fields the frontend's
+ * own usage never touched (`workspace/members` and `user/users` settings
+ * sections only read `id`/`name`/`email`/`role`) — usage alone would have
+ * missed them. `FractalUserUpdateMeInput` mirrors
+ * `FractalUserUpdateMeBodySchema`
+ * (`FractalUserSchema.pick({name, username, email, image}).partial()`);
+ * the ported profile form only ever submits `name`/`email`/`image`, but
+ * `username` is a real, independently-updatable field on the wire.
  */
 export type FractalUserRole = "member" | "super";
 
 export interface FractalUserPublic {
   id: string;
   name: string;
+  username: string;
   email: string;
-  image?: string;
   role: FractalUserRole;
+  image?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface FractalUserUpdateMeInput {
   name?: string;
+  username?: string;
   email?: string;
   image?: string;
 }
