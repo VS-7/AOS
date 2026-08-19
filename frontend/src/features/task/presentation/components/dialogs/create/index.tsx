@@ -114,18 +114,13 @@ export function TaskDialog() {
         priority: values.priority,
         status: values.status,
         assigned: values.assigned,
-        // Go's `task.create` input has `worktree` as a bare `bool`
-        // (`internal/domain/task/schema.go`'s `CreateInput.Worktree`) and
-        // a top-level `base` — not the nested `{enabled, base, branch}`
-        // object the form collects. Flattened here rather than changing
-        // the form's own field shape, which the JSX below is bound to.
-        // Go's `CreateInput` has no `branch` field at all for create (only
-        // `task.branch`, a separate command) — that value has nowhere to
-        // go and is dropped.
-        worktree: values.worktree.enabled,
-        ...(values.worktree.enabled && values.worktree.base?.trim()
-          ? { base: values.worktree.base.trim() }
-          : {}),
+        worktree: values.worktree.enabled
+          ? {
+            enabled: true,
+            ...(values.worktree.base?.trim() ? { base: values.worktree.base.trim() } : {}),
+            ...(values.worktree.branch?.trim() ? { branch: values.worktree.branch.trim() } : {}),
+          }
+          : { enabled: false },
       }
     }),
     onResponse: ({ error }) => {

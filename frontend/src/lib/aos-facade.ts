@@ -51,6 +51,36 @@ function toEnvelopeError(err: unknown): EnvelopeError {
 }
 
 /**
+ * Applies `descriptor.coerceIn`'s per-field type/shape fixes, leaving
+ * every other key as it was. Runs before `applyRenameIn` — see
+ * `CommandDescriptor.coerceIn`'s own doc comment for the two return
+ * shapes a coercion function can produce (replace the field in place, or
+ * return an object whose keys get merged into the payload in the field's
+ * place). A no-op when there's nothing to coerce — the common case.
+ */
+function applyCoerceIn(
+  payload: Record<string, unknown>,
+  coerceIn?: Record<string, (value: unknown) => unknown>,
+): Record<string, unknown> {
+  if (!coerceIn) return payload;
+  const coerced: Record<string, unknown> = { ...payload };
+  for (const [key, transform] of Object.entries(coerceIn)) {
+    if (!(key in coerced)) continue;
+    const result = transform(coerced[key]);
+    delete coerced[key];
+    if (result !== null && typeof result === "object" && !Array.isArray(result)) {
+      Object.assign(coerced, result as Record<string, unknown>);
+    } else if (result !== undefined) {
+      coerced[key] = result;
+    }
+    // `result === undefined` (and not an object): the coercion dropped
+    // the field entirely, deliberately — already handled by the `delete`
+    // above running unconditionally.
+  }
+  return coerced;
+}
+
+/**
  * Renames the keys `descriptor.renameIn` names, leaving every other key as
  * it was. A no-op when there's nothing to rename — the common case, most
  * commands need no adaptation at all.
@@ -102,7 +132,7 @@ export async function call(feature: string, action: string, opts?: CallOpts): Pr
     // a shape whose fields vary per command — the real safety net is Go's
     // own input validation on the other side.
     const descriptor = resolveDescriptor(entry);
-    const payload = applyRenameIn(rawPayload, descriptor.renameIn);
+    const payload = applyRenameIn(applyCoerceIn(rawPayload, descriptor.coerceIn), descriptor.renameIn);
     const raw = await client.invoke(descriptor.key as CommandKey, { ...payload, _reasoning: `interface: ${path}` } as never);
     // Only a defined result gets wrapped — an empty/void response has
     // nothing worth nesting, and wrapping `undefined` as `{ [key]:

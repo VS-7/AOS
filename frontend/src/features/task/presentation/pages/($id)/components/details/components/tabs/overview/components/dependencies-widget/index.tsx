@@ -46,11 +46,7 @@ export function DependenciesWidget({ task }: DependenciesWidgetProps) {
   ).length;
 
   const { data: tasksData } = aos.client.task.list.useQuery({
-    // Go's `task.list` input declares `limit` as `int`
-    // (`internal/domain/task/schema.go`) — the quoted string here decodes
-    // fine for most JSON libraries but fails Go's strict `int` unmarshal
-    // (a hard 400), so this sends a real number.
-    query: { limit: 200 },
+    query: { limit: "200" },
     enabled: pickerOpen,
   });
   const tasks: FractalTask[] =

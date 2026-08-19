@@ -47,25 +47,13 @@ export const TasksPage = aos
     const project = parseOptionalMultiValue(query.project);
     const goal = parseOptionalMultiValue(query.goal);
 
-    // Go's `task.list` input (`internal/domain/task/schema.go`'s
-    // `ListInput`) declares `type`/`project`/`goal` as plain `string` —
-    // one exact-match filter each, not a multi-select. Sending the array
-    // this UI's multi-select produces makes Go's JSON decoder fail the
-    // whole request (an array into a string field is a hard 400), which
-    // is what happened on every filtered load before this fix. Go also has
-    // no `priority` or free-text `query` filter at all — those two are
-    // sent as-is; Go's decoder just drops unknown fields, so they're
-    // inert rather than crashing, but they don't actually filter
-    // anything server-side. Until Go's `ListInput` grows multi-value
-    // support, this UI's multi-select degrades to "filter by the first
-    // selection" for type/project/goal.
     const response = await client.task.list.query({
       query: {
         query: query.query?.trim() || undefined,
         ...(priority ? { priority } : {}),
-        ...(type?.[0] ? { type: type[0] } : {}),
-        ...(project?.[0] ? { project: project[0] } : {}),
-        ...(goal?.[0] ? { goal: goal[0] } : {}),
+        ...(type ? { type } : {}),
+        ...(project ? { project } : {}),
+        ...(goal ? { goal } : {}),
       },
     });
 

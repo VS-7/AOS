@@ -257,6 +257,9 @@ export class AosApp<
             setIsLoading(true);
             try {
               let result: any = null;
+              // Set only by the `mutation` branch below — see the
+              // `nextValues` comment further down for why it matters.
+              let resultFromMutation = false;
 
               if (mutation) {
                 // Parse mutation path "controller.action"
@@ -284,6 +287,7 @@ export class AosApp<
                 // Call the mutate function
                 const mutateFn = clientController[action].mutate;
                 result = await mutateFn(payload);
+                resultFromMutation = true;
 
                 // [Business Rule]: AOS's client never throws from mutate() —
                 // a domain failure comes back as `{ data: undefined, error }`,
@@ -315,11 +319,28 @@ export class AosApp<
                 onResponse({ data: result });
               }
 
-              // Prefer the authoritative mutation result over the submitted payload.
-              // Submitted data can be stale when derived fields change server-side
-              // (e.g. theme preset swaps that reload accent/surface/ink from API).
-              const nextValues =
-                result !== undefined && result !== null ? result : data;
+              // Prefer the authoritative mutation result over the submitted
+              // payload — but only when `result` actually has a chance of
+              // being the form's own field shape. A `mutation`-based
+              // submit's `result` is the facade's unwrapped response: still
+              // whatever shape `command-map.ts`'s `wrapOut` produced (e.g.
+              // `{ task: {...} }`, not `{ name, type, ... }`) and, even
+              // unwrapped, the Go entity's own field names, which this port
+              // has repeatedly found don't match a form's internal field
+              // names (todo's `title`/`content` vs a form's `description`/
+              // `instructions`, for one). Resetting the form with either
+              // would silently blank every field right after a successful
+              // submit — the same symptom class as the envelope bug above,
+              // just one step further down. Only the custom
+              // onSubmit-without-`mutation` path — whose caller fully
+              // controls what `result` means — keeps the original
+              // "prefer the authoritative result" behavior (its original
+              // use case: a value like a theme preset swap, where the
+              // caller's own `onSubmit` already returns exactly the form's
+              // field shape, refreshed from the server).
+              const nextValues = resultFromMutation
+                ? data
+                : (result !== undefined && result !== null ? result : data);
 
               hasSubmittedSuccessfullyRef.current = true;
 

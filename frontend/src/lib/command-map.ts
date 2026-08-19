@@ -6,7 +6,7 @@ import * as authApi from "./auth";
  * One Fractal frontend call, resolved.
  *
  * - `CommandKey` — goes through the command registry (`client.invoke`).
- * - `CommandDescriptor` — same, plus the two adaptations a Go command
+ * - `CommandDescriptor` — same, plus the adaptations a Go command
  *   sometimes needs (see below).
  * - `HttpHandler` — goes through its own HTTP surface (`/api/auth`,
  *   `/api/file`), which sits outside the registry by backend decision.
@@ -19,14 +19,16 @@ export type HttpHandler = (payload: Record<string, unknown>) => Promise<unknown>
  * or expects back, described declaratively instead of patched at each call
  * site.
  *
- * This exists because a plain string couldn't say two things command-map.ts
+ * This exists because a plain string couldn't say what command-map.ts
  * needed to say, discovered only once real ported pages exercised real Go
  * commands: many Fractal inputs use a field name Go's command doesn't
- * (`task` where Go wants `id`), and many Go commands answer with a bare
- * entity where the ported code expects it nested under a domain key
- * (`tasks_get` returns the task itself; `client.task.getById.query(...)`
- * reads `result.data.task`). Fixing either by hand-editing every call site
- * would mean 25 more features silently reinventing the same fix, or
+ * (`task` where Go wants `id`), many send a value of the wrong *type*
+ * (an array where Go wants one scalar, a quoted number, an object where
+ * Go wants a bare `bool`), and many Go commands answer with a bare entity
+ * where the ported code expects it nested under a domain key (`tasks_get`
+ * returns the task itself; `client.task.getById.query(...)` reads
+ * `result.data.task`). Fixing any of these by hand-editing every call
+ * site would mean 25 more features silently reinventing the same fix, or
  * forgetting to.
  */
 export interface CommandDescriptor {
@@ -36,11 +38,38 @@ export interface CommandDescriptor {
    * Payload keys to rename before the call reaches Go — `{ fractalName:
    * goName }`. Applied to the flattened `{...params, ...query, ...body}`
    * object, so it doesn't matter which of the three a field started in.
-   * `useQuery`'s cache key is computed from the *unrenamed* payload (what
-   * the calling code actually passed) — renaming is purely an outbound
-   * transport concern, invisible to the ported code on both sides.
+   * Runs before `coerceIn`. `useQuery`'s cache key is computed from the
+   * *original* payload (what the calling code actually passed, before
+   * either transform) — both are purely outbound transport concerns,
+   * invisible to the ported code on both sides.
    */
   renameIn?: Record<string, string>;
+  /**
+   * Type/shape fixes to apply to individual payload fields before the
+   * call reaches Go, keyed by the field name the ported UI actually sends
+   * (pre-`renameIn`, so name it the same as the UI's own key, not Go's).
+   * Each function receives that field's current value:
+   *
+   * - Return a plain value to replace the field in place (a scalar Go
+   *   wants where the UI holds an array — take the first element; an
+   *   `int` where the UI sent a quoted string; etc).
+   * - Return a plain *object* to replace the field entirely with that
+   *   object's own keys, merged into the payload — for a UI field whose
+   *   wire shape Go splits into several top-level ones (a `{enabled,
+   *   base, branch}` object where Go wants a bare `worktree: bool` plus a
+   *   separate top-level `base`, dropping `branch` because Go's `create`
+   *   input has no field for it at all).
+   *
+   * This is for the wire contract only — a scalar/array/bool/int
+   * mismatch between what the UI collects and what Go's JSON decoder
+   * accepts. A transform that reshapes what the UI *means* (which of
+   * several editable fields feeds which Go field, restructuring one
+   * nested concept's rendering into different JSX) is a UI data-model
+   * decision and stays a disclosed call-site edit, not a `coerceIn` entry
+   * — see the `task.create`/`task.list` entries below for the line drawn
+   * in practice.
+   */
+  coerceIn?: Record<string, (value: unknown) => unknown>;
   /**
    * Go returns a bare entity for this command (no wrapper object) — wrap
    * the response under this key so `result.data.<wrapOut>` resolves the
@@ -70,11 +99,28 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "activity.list": "activity_list",
   "activity.markAllAsRead": "activity_read-all",
   "activity.markAsRead": "activity_read",
-  "agent.create": "agents_create",
+  // `agent.create`/`agent.update` answer with a bare `*Agent`
+  // (`internal/domain/agent/commands.go`), not `{agent: ...}` — confirmed
+  // against the Fractal source's own consumer (`agents.context.tsx` reads
+  // `response.data?.agent`), not guessed; nothing in this app calls these
+  // through the facade yet (no `agent` feature ported), so this was a
+  // latent instance of the same bug `todo.getById` was, caught by the
+  // full-map sweep the round-2 review asked for rather than by a live
+  // failure.
+  "agent.create": { key: "agents_create", wrapOut: "agent" },
   "agent.delete": "agents_delete",
-  "agent.update": "agents_update",
-  "chat.create": "chats_create",
-  "chat.getById": "chats_get",
+  "agent.update": { key: "agents_update", wrapOut: "agent" },
+  // `chat.getById`/`chat.create` answer with a bare `*Chat`
+  // (`internal/domain/chat/commands.go`) — confirmed against Fractal's
+  // `use-chat.ts` (`data?.chat`) for `getById`; `create` isn't directly
+  // confirmed but returns the identical Go type from the same command
+  // group, so the same wrap applies by strong analogy. AOS's real chat
+  // feature (`features/chat/presentation/hooks/use-chat.ts`) doesn't call
+  // either through this facade — it invokes `chats_get` directly via
+  // `lib/client.ts` — so, like `agent.*` above, this was latent, not
+  // live-broken.
+  "chat.create": { key: "chats_create", wrapOut: "chat" },
+  "chat.getById": { key: "chats_get", wrapOut: "chat" },
   "chat.list": "chats_list",
   "chat.send": "chats_send",
 
@@ -107,8 +153,22 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "config.update": "config_update",
   "routine.create": "routines_create",
   "routine.delete": "routines_delete",
+  // NOT `{ key: "routines_fire", wrapOut: "run" }`, on purpose. Go's
+  // `routines_fire` returns a single bare `*Run`
+  // (`internal/domain/routine/commands.go`), but Fractal's original
+  // consumer (`routine-list-row.component.tsx`) reads
+  // `result.data?.executions?.length` — a *list* of executions, not one
+  // run under any single key. `wrapOut` can only rename/nest a value, not
+  // turn one entity into an array; whatever adapts this is a genuine
+  // shape change belonging at a call site once `routine` is ported, not a
+  // map entry. Left as a plain key, disclosed rather than papered over
+  // with a `wrapOut` that would produce the wrong shape.
   "routine.fire": "routines_fire",
-  "routine.getById": "routines_get",
+  // `*View` (bare) — same pattern as `task.getById`; confirmed against
+  // the Fractal source's own consumer (`routine/pages/($id)/index.tsx`
+  // reads `result.data?.routine`). No live consumer here yet (`routine`
+  // isn't a ported feature), caught by the sweep.
+  "routine.getById": { key: "routines_get", wrapOut: "routine" },
   "routine.list": "routines_list",
   "routine.update": "routines_update",
 
@@ -120,10 +180,45 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // ...}`; `tasks_set-status` already answers `{task, from, to}` and
   // needs no `wrapOut`. `tasks_delete`'s `DeleteOutput{id, ...}` is read
   // by no ported call site, so it stays unwrapped too.
-  "task.create": { key: "tasks_create", wrapOut: "task" },
+  //
+  // `coerceIn` on `task.create`: `dialogs/create/index.tsx`'s form groups
+  // worktree options as one editable `{enabled, base, branch}` object —
+  // that grouping is the form's own UI decision and is untouched here.
+  // What changes is purely the *wire* shape: `CreateInput.Worktree` is a
+  // bare `bool`, `Base` is a separate top-level field, and there is no
+  // `branch` field on create at all (branching is the separate
+  // `task.branch` command) — so `branch` has nowhere to go and is
+  // dropped, same as any other field Go's decoder doesn't recognize.
+  "task.create": {
+    key: "tasks_create",
+    coerceIn: {
+      worktree: (value) => {
+        const w = value as { enabled?: boolean; base?: string } | undefined;
+        return w?.enabled ? { worktree: true, ...(w.base ? { base: w.base } : {}) } : { worktree: false };
+      },
+    },
+    wrapOut: "task",
+  },
   "task.delete": { key: "tasks_delete", renameIn: { task: "id" } },
   "task.getById": { key: "tasks_get", renameIn: { task: "id" }, wrapOut: "task" },
-  "task.list": "tasks_list",
+  // `coerceIn` on `task.list`: `(main)/index.tsx`'s filter bar is a
+  // genuine multi-select — that UI decision is untouched. What Go's
+  // `ListInput` actually accepts for `type`/`project`/`goal` is one
+  // scalar `string` each (`internal/domain/task/schema.go`), not a list —
+  // an array into a string field is a hard 400 — so only the first
+  // selection reaches Go; the rest of the UI's selection state is
+  // unaffected, it just doesn't all filter server-side yet. `limit` is
+  // `int`; the quoted-string form some call sites send fails Go's strict
+  // unmarshal the same way.
+  "task.list": {
+    key: "tasks_list",
+    coerceIn: {
+      type: (value) => (Array.isArray(value) ? value[0] : value),
+      project: (value) => (Array.isArray(value) ? value[0] : value),
+      goal: (value) => (Array.isArray(value) ? value[0] : value),
+      limit: (value) => (typeof value === "string" && value.trim() !== "" ? Number(value) : value),
+    },
+  },
   "task.setStatus": { key: "tasks_set-status", renameIn: { task: "id" } },
   "task.update": { key: "tasks_update", renameIn: { task: "id" }, wrapOut: "task" },
 
@@ -151,7 +246,11 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // bare `*Todo`, hence `wrapOut`.
   "todo.create": { key: "todos_create", renameIn: { taskId: "task", description: "title", instructions: "content" }, wrapOut: "todo" },
   "todo.delete": { key: "todos_delete", renameIn: { taskId: "task" } },
-  "todo.getById": { key: "todos_get", renameIn: { taskId: "task" } },
+  // Missing `wrapOut` here was the round-2 review's Important #1:
+  // `todos_get` is `command.Command[GetInput, *Todo]` (bare), the exact
+  // same shape as `comment.getById` right above, which already has
+  // `wrapOut: "comment"`.
+  "todo.getById": { key: "todos_get", renameIn: { taskId: "task" }, wrapOut: "todo" },
   "todo.list": { key: "todos_list", renameIn: { taskId: "task" } },
   "todo.setStatus": { key: "todos_set-status", renameIn: { taskId: "task" } },
   "todo.update": { key: "todos_update", renameIn: { taskId: "task", description: "title", instructions: "content" }, wrapOut: "todo" },
