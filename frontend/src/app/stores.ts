@@ -36,12 +36,14 @@ import type { FractalWorkspaceMember } from "@/features/workspace/interfaces/wor
  */
 import { ActivityStore } from "@/features/activity/presentation/stores/activity.store";
 import { AgentStore } from "@/features/agent/presentation/stores/agent.store";
+import { ArtifactStore } from "@/features/artifact/presentation/stores/artifact.store";
 import { BrowserStore } from "@/features/workspace/presentation/stores/browser.store";
 import { ChatStore } from "@/features/chat/presentation/stores/chat.store";
 import { CollectionStore } from "@/features/collection/presentation/stores/collection.store";
 import { ConfigStore } from "@/features/config/presentation/stores/config.store";
 import { FilesStore } from "@/features/file/presentation/stores/files.store";
 import { ThemeStore } from "@/features/theme/presentation/stores/theme.store";
+import { ViewStore } from "@/features/view/presentation/stores/view.store";
 import { ViewportStore } from "@/features/workspace/presentation/stores/viewport.store";
 import { loadWorkspaceDirectory } from "@/features/workspace/presentation/helpers/workspace-directory.fetch";
 
@@ -390,6 +392,16 @@ const goalsStore = AosStore.create("goals")
  * `task`'s already-verified pages never depended on multi-namespace
  * behavior (AOS is single-workspace today), so there is nothing for this
  * to break, only a previously-inert wiring to turn on.
+ *
+ * Ledger triage, final review: `view`/`artifact` were the *third* instance
+ * of exactly this bug — `use-views.ts`/`use-artifacts.ts` read `ViewStore`/
+ * `ArtifactStore` (`features/{view,artifact}/presentation/stores/*.store.
+ * ts`) as pristine singletons the same way `layout/index.tsx` once read
+ * `WorkspaceStore`, never registered here, so `.init()` never ran and
+ * their `withPreload` never fetched `view.list`/`artifact.list`. Added
+ * below; `AosStoreBuilt.useState()` now also warns loudly (`app/builders/
+ * store.ts`) the first time any future store repeats this, independent of
+ * which one.
  */
 export const stores = AosStore.router({
   prefix: "fractal",
@@ -398,6 +410,8 @@ export const stores = AosStore.router({
     auth: authStore,
     projects: projectsStore,
     goals: goalsStore,
+    artifact: ArtifactStore,
+    view: ViewStore,
     viewport: ViewportStore,
     activity: ActivityStore,
     agent: AgentStore,

@@ -132,6 +132,25 @@ export function TodoDialogUpsert({ taskId, todo, onCreated, children }: TodoDial
                 </Field>
               )}
             />
+            {/*
+              C5 of the final review ("honest empty state" policy, R26):
+              `agent` is in this form's own schema and gets read from
+              `todo?.agent` on edit, but there was no control for it at all
+              — a user could never see or set it. There is also no Go field
+              to hold it (`command-map.ts`'s `todo.create`/`.update` entries:
+              "no Go equivalent for `agent` at all... sent and silently
+              ignored"). Two silent gaps stacked; this makes both visible
+              instead of pretending the field doesn't exist.
+            */}
+            <Field>
+              <Label htmlFor="agent">Agent</Label>
+              <FormControl>
+                <Input id="agent" value={form.watch("agent") ?? ""} disabled placeholder="Not assignable yet" />
+              </FormControl>
+              <p className="text-xs text-muted-foreground">
+                Assigning a todo to a specific agent isn&apos;t saved by the backend yet.
+              </p>
+            </Field>
           </FieldGroup>
           <DialogFooter className="mt-6">
             <Button variant="outline" type="button" onClick={() => {

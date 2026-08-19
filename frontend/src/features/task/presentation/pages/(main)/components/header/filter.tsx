@@ -65,12 +65,21 @@ export function TasksFilter() {
     return `Priority (${selectedPriorities.length})`;
   };
 
+  // C5 of the final review ("honest empty state" policy, R26):
+  // `command-map.ts`'s `task.list` entry can only send Go's `ListInput` one
+  // scalar `type`/`project`/`goal` each — a genuine wire limitation, not a
+  // UI bug — so checking a second box here doesn't broaden what the server
+  // returns, only what shows in the button. Before this, that was silent:
+  // the button read "(3)" as if all three were filtering. Disclosed here,
+  // not fixed at the wire — there's no server capability yet to widen into.
+  const ONLY_FIRST_APPLIES = " (only the first applies)";
+
   const getTypeButtonLabel = () => {
     if (selectedTypes.length === 0) return "Type";
     if (selectedTypes.length === 1) {
       return `Type: ${selectedTypes[0]}`;
     }
-    return `Type (${selectedTypes.length})`;
+    return `Type (${selectedTypes.length})${ONLY_FIRST_APPLIES}`;
   };
 
   const getProjectButtonLabel = () => {
@@ -79,7 +88,7 @@ export function TasksFilter() {
       const proj = projects.find((p) => p.id === selectedProjects[0]);
       return `Project: ${proj ? proj.name : selectedProjects[0]}`;
     }
-    return `Project (${selectedProjects.length})`;
+    return `Project (${selectedProjects.length})${ONLY_FIRST_APPLIES}`;
   };
 
   const selectedProjectIcon =
@@ -95,7 +104,7 @@ export function TasksFilter() {
       const goal = goals.find((g) => g.id === selectedGoals[0]);
       return `Goal: ${goal ? goal.title : selectedGoals[0]}`;
     }
-    return `Goal (${selectedGoals.length})`;
+    return `Goal (${selectedGoals.length})${ONLY_FIRST_APPLIES}`;
   };
 
   const activeTypeConfig =

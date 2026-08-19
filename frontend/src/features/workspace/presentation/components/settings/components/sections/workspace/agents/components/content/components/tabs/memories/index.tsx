@@ -48,13 +48,43 @@ export function AgentMemoriesTab({ agent }: AgentMemoriesTabProps) {
       .query({ query: { agent: agent.id.toLowerCase() } })
       .then((response) => {
         if (!isMounted) return;
-        const next = response.data ?? { nodes: [], links: [] };
+        // `command-map.ts`'s `memory.graph` entry: Go's `memories_graph`
+        // answers a bare `{nodes, edges, health, counts}` (`internal/
+        // domain/memory/schema.go`'s `Graph`), not the `{nodes, links}`
+        // shape this 3D renderer wants — disclosed there, adapted here.
+        // `Node.title`/`.category` become the renderer's `.label`/`.group`;
+        // `Edge.From`/`.To` become `.source`/`.target`. There is no Go
+        // equivalent of the renderer's per-node `.val` (relative size) —
+        // `Node.confidence` (0..1) is the closest available signal, made
+        // visible as the substitute rather than left at a silent default.
+        const raw = response.data as
+          | { nodes?: unknown[]; edges?: unknown[] }
+          | null
+          | undefined;
+        const rawNodes = Array.isArray(raw?.nodes) ? raw.nodes : [];
+        const rawEdges = Array.isArray(raw?.edges) ? raw.edges : [];
 
-        // Ensure a safe graph payload for 3D renderer even when API extends data with metadata fields.
         setGraph({
-          nodes: Array.isArray(next.nodes) ? next.nodes : [],
-          links: Array.isArray(next.links) ? next.links : [],
+          nodes: rawNodes.map((n: any) => ({
+            id: n.id,
+            label: n.title,
+            category: n.category,
+            status: n.status,
+            group: n.category,
+            val: typeof n.confidence === "number" ? n.confidence : undefined,
+          })),
+          links: rawEdges.map((e: any) => ({
+            source: e.from,
+            target: e.to,
+            type: e.type,
+          })),
         });
+      })
+      .catch((error) => {
+        // No daemon call is unmapped here anymore (`memory.graph` is
+        // registered above), but the facade can still reject on a network
+        // failure — surface it instead of leaving the graph stuck loading.
+        console.error("[AgentMemoriesTab] failed to load memory graph", error);
       })
       .finally(() => {
         if (!isMounted) return;

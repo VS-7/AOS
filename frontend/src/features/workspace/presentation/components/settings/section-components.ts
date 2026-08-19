@@ -38,6 +38,22 @@ function dormant(feature: string, Section: React.ComponentType): React.Component
 }
 
 /**
+ * C6 of the final review: `WorkspaceMembersSection` isn't in a dormant
+ * *domain* the way the four `dormant(...)`-wrapped sections below are —
+ * `workspace.create`/`.update`/`.list` are real — but every command this
+ * one section actually calls is individually `null`
+ * (`workspace.addMember`/`.listMembers`/`.removeMember`/`.updateMember`,
+ * `user.list`). Ungated, it rendered a functional-looking member form that
+ * silently no-op'd on every action. `DormantGate`'s `commands` prop (added
+ * for exactly this) gates on those five paths instead of the domain.
+ */
+function dormantCommands(feature: string, commands: string[], Section: React.ComponentType): React.ComponentType {
+  return function DormantSection() {
+    return React.createElement(DormantGate, { feature, commands, children: React.createElement(Section) });
+  };
+}
+
+/**
  * Map of settings section ids to their page components.
  * Kept as a single source of truth for the settings shell and routes.
  */
@@ -53,7 +69,11 @@ export const SETTINGS_SECTION_COMPONENTS: Record<
   "user.users": dormant("user", UserUsersSection),
   "user.tunnel": dormant("tunnel", WorkspaceTunnelSection),
   "workspace.profile": WorkspaceProfileSection,
-  "workspace.members": WorkspaceMembersSection,
+  "workspace.members": dormantCommands(
+    "workspace",
+    ["workspace.addMember", "workspace.listMembers", "workspace.removeMember", "workspace.updateMember", "user.list"],
+    WorkspaceMembersSection,
+  ),
   "workspace.agents": WorkspaceAgentsSection,
   "workspace.instructions": dormant("instruction", WorkspaceInstructionsSection),
   "workspace.templates": dormant("template", WorkspaceTemplatesSection),

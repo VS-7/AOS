@@ -38,10 +38,15 @@ export interface CommandDescriptor {
    * Payload keys to rename before the call reaches Go — `{ fractalName:
    * goName }`. Applied to the flattened `{...params, ...query, ...body}`
    * object, so it doesn't matter which of the three a field started in.
-   * Runs before `coerceIn`. `useQuery`'s cache key is computed from the
-   * *original* payload (what the calling code actually passed, before
-   * either transform) — both are purely outbound transport concerns,
-   * invisible to the ported code on both sides.
+   * Runs *after* `coerceIn` (M1 of the final review: this comment said
+   * "before" — the wrong one of the two; `aos-facade.ts`'s `call()` is
+   * the ground truth: `applyRenameIn(applyCoerceIn(rawPayload,
+   * descriptor.coerceIn), descriptor.renameIn)`, coerce innermost, so
+   * first). `coerceIn`'s own doc comment below (keyed pre-`renameIn`) was
+   * already correct — matched the code, contradicted this one. `useQuery`'s
+   * cache key is computed from the *original* payload (what the calling
+   * code actually passed, before either transform) — both are purely
+   * outbound transport concerns, invisible to the ported code on both sides.
    */
   renameIn?: Record<string, string>;
   /**
@@ -116,6 +121,24 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // failure.
   "agent.create": { key: "agents_create", wrapOut: "agent" },
   "agent.delete": "agents_delete",
+  // Found by the final-review sweep's corrected pattern (`client.<feature>.
+  // <action>` alone, not requiring `.query`/`.mutate` on the same line) —
+  // `agents.context.tsx`'s live `aos.client.agent.getById\n  .query(...)`
+  // is a multi-line method chain the original adjacent-match sweep missed
+  // entirely. `agents_get`'s `GetInput.ID` (`internal/domain/agent/
+  // schema.go`) names the field `id`; the call site sends `params: {
+  // agent: selectedAgentId }`. `agents_get` answers with a bare `*Agent`
+  // (`internal/domain/agent/commands.go`), same as `agent.create`/`.update`
+  // above; the call site reads `response.data?.agent`, confirming `wrapOut`.
+  "agent.getById": { key: "agents_get", renameIn: { agent: "id" }, wrapOut: "agent" },
+  // B3 of the final review: `AgentStore` (`features/agent/presentation/
+  // stores/agent.store.ts`) used to source the roster from `workspace.
+  // directory` — `null` in this map, no Go counterpart — while
+  // `agents_list` sat right there, real and live, unused. `agents_list`
+  // answers `ListOutput{agents: Agent[], total: int}`
+  // (`internal/domain/agent/schema.go`) — already wrapped under `agents`,
+  // so no `wrapOut` needed; the store reads `response.data?.agents`.
+  "agent.list": "agents_list",
   "agent.update": { key: "agents_update", wrapOut: "agent" },
   // `chat.getById`/`chat.create` answer with a bare `*Chat`
   // (`internal/domain/chat/commands.go`). Both are live and confirmed
@@ -192,8 +215,39 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "comment.list": { key: "comments_list", renameIn: { taskId: "task" } },
   "comment.update": { key: "comments_update", renameIn: { taskId: "task" }, wrapOut: "comment" },
 
+  // Left without `wrapOut` on an earlier round for "genuine ambiguity" —
+  // resolved now that `config.update` has a live `useForm` consumer.
+  // `config_get`/`config_update` (`internal/domain/config/commands.go`)
+  // both answer a bare `Config` value, not `{config: ...}`. The one live
+  // consumer, `config.store.ts`'s `unwrapConfig`, was written defensively
+  // to accept either shape (`"config" in data ? data.config : data`) — but
+  // that tolerance is exactly the smell this map exists to remove: a
+  // second call site with the same bare response and no such guard would
+  // silently read `undefined`. Resolving it here removes the ambiguity for
+  // every future caller: Go's response is bare, so no `wrapOut`.
   "config.get": "config_get",
   "config.update": "config_update",
+
+  // Found by the final-review sweep's corrected pattern — `memories/
+  // index.tsx`'s live `aos.client.memory.graph\n  .query(...)` is another
+  // multi-line chain the original sweep missed. `memories_graph`'s
+  // `GraphInput.Agent` (`internal/domain/memory/schema.go`) already names
+  // its field `agent`, matching the call site's `query: { agent: ... } }`
+  // — no `renameIn` needed. The output is a bare `Graph`
+  // (`command.Command[GraphInput, Graph]`,
+  // `internal/domain/memory/commands.go`), read straight off `response.
+  // data` with no wrapping key, so no `wrapOut` either — but `Graph`'s own
+  // shape (`{nodes: Node[], edges: Edge[], health, counts}`) diverges from
+  // what the force-3d-graph render layer wants (`{nodes: {id, label,
+  // group, val}[], links: {source, target, type}[]}`, per `memory.
+  // interfaces.ts`'s `MemoryGraphSchema`) — Go's `edges` isn't `links`,
+  // `Node.title` isn't `.label`, and there's no `.group`/`.val` at all.
+  // Same class of gap as `theme.get`'s `fonts`: `wrapOut` only adds one
+  // nesting level to a bare entity, it can't reshape fields several levels
+  // in, so the reshape is a disclosed call-site fix (see that file's own
+  // comment) rather than something expressible here.
+  "memory.graph": "memories_graph",
+
   // task-12 correction: the comments this whole `routine.*` block carried
   // said "no live consumer here yet (`routine` isn't a ported feature)".
   // That was wrong — `presentation/pages/($id)/index.tsx` is live and
@@ -445,6 +499,15 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "goal.update": null,
   "instruction.create": null,
   "instruction.delete": null,
+  // Found by the final-review sweep's corrected pattern — missing
+  // alongside the other four `instruction.*` entries, but previously
+  // shielded from ever throwing by `DormantGate` (the whole `instruction`
+  // domain never renders children), unlike `agent.getById`/`memory.graph`
+  // above, which had no such shield. There is no `instructions_*` command
+  // group in the Go registry at all (`frontend/src/lib/schema.ts` has no
+  // `instructions_get`/`instructions_getById`) — whole domain absent, same
+  // as its four siblings.
+  "instruction.getById": null,
   "instruction.list": null,
   "instruction.update": null,
   "marketplace.getByName": null,
@@ -462,6 +525,11 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "skill.update": null,
   "template.create": null,
   "template.delete": null,
+  // Found by the final-review sweep's corrected pattern — same shape as
+  // `instruction.getById` above: shielded from ever throwing by
+  // `DormantGate`, missing from the map, no `templates_*` command group in
+  // the Go registry at all. Whole domain absent, same as its siblings.
+  "template.getById": null,
   "template.list": null,
   "template.update": null,
   "token.regenerate": null,
@@ -492,4 +560,21 @@ export const DORMANT_DOMAINS: ReadonlySet<string> = new Set([
 /** Whether the whole domain is dormant — what the route shows as a panel. */
 export function isDormant(feature: string): boolean {
   return DORMANT_DOMAINS.has(feature);
+}
+
+/**
+ * Whether one specific call path is dormant (`null` in `COMMAND_MAP`).
+ *
+ * `isDormant`/`DORMANT_DOMAINS` only sees whole-domain absence — every
+ * `feature.*` path missing, the way `collection` or `instruction` are.
+ * C6 of the final review needed a narrower check: `WorkspaceMembersSection`
+ * lives in the very much *not* dormant `workspace` domain
+ * (`workspace.create`/`.update`/`.list` are real), but every command that
+ * section actually calls — `workspace.addMember`/`.listMembers`/
+ * `.removeMember`/`.updateMember`, `user.list` — is individually `null`.
+ * `DormantGate`'s `commands` prop uses this to gate a section on its own
+ * specific dependencies instead of its domain's.
+ */
+export function isCommandDormant(path: string): boolean {
+  return COMMAND_MAP[path] === null;
 }

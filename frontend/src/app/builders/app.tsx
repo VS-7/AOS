@@ -266,6 +266,17 @@ export class AosApp<
                 const [controller, action] = (mutation as string).split(".");
                 const clientController = (client as any)[controller];
 
+                // M4 of the final review: unreachable as things stand today.
+                // `client` here is `lib/aos-facade.ts`'s `api` — a two-level
+                // Proxy whose `get` trap manufactures an `ActionNode` (with
+                // a real `.mutate`) for *any* property, so `clientController`,
+                // `clientController[action]`, and `.mutate` are never falsy
+                // no matter how `mutation` is misspelled. Left in rather than
+                // removed: it is exactly the guard a non-Proxy client (a
+                // generated, finite object, the way Fractal's original was)
+                // would need, and it costs nothing dead. `call()`'s own
+                // "not mapped" envelope (`aos-facade.ts`) is what actually
+                // catches an invalid path today.
                 if (!clientController || !clientController[action] || !clientController[action].mutate) {
                   throw new Error(`Mutation path ${mutation as string} is invalid or not found on the client.`);
                 }

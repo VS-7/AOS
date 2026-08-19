@@ -8,9 +8,34 @@ import type { CommandKey } from "./schema";
 /** The code the UI recognizes as "the Go side doesn't have this yet". */
 export const DORMANT_CODE = "AOS_DOMAIN_DORMANT";
 
-export interface EnvelopeError {
+/**
+ * The code the UI recognizes as "this call path was never registered in
+ * `COMMAND_MAP` at all" — distinct from {@link DORMANT_CODE}, which means
+ * the map explicitly knows Go has no such command. This means nobody told
+ * the map the call path exists.
+ */
+export const NOT_MAPPED_CODE = "AOS_CALL_NOT_MAPPED";
+
+/**
+ * C4 of the final review: this used to be a plain `{code, message}` object.
+ * ~54 ported call sites do `error instanceof Error ? error.message : "Failed
+ * to…"` (e.g. `.../workspace/members/index.tsx:97,125,147`) — a pattern
+ * copied from Fractal's original, where the generated client's errors *were*
+ * real `Error`s. Against a plain object that check was always `false`, so
+ * every one of those sites silently discarded the real message (dormant's
+ * included) for a generic fallback string. Making this a real `Error`
+ * subclass fixes every one of those 54 sites at the machinery, with no
+ * per-site edit and no divergence between them — the alternative this
+ * review rejected.
+ */
+export class EnvelopeError extends Error {
   code: string;
-  message: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "EnvelopeError";
+    this.code = code;
+  }
 }
 
 /**
@@ -58,9 +83,9 @@ export function flattenArgs(opts?: CallOpts): Record<string, unknown> {
 function toEnvelopeError(err: unknown): EnvelopeError {
   if (err && typeof err === "object" && "code" in err) {
     const e = err as { code?: unknown; message?: unknown };
-    return { code: String(e.code ?? "UNKNOWN"), message: String(e.message ?? "the call failed") };
+    return new EnvelopeError(String(e.code ?? "UNKNOWN"), String(e.message ?? "the call failed"));
   }
-  return { code: "UNKNOWN", message: err instanceof Error ? err.message : "the call failed" };
+  return new EnvelopeError("UNKNOWN", err instanceof Error ? err.message : "the call failed");
 }
 
 /**
@@ -70,6 +95,18 @@ function toEnvelopeError(err: unknown): EnvelopeError {
  * shapes a coercion function can produce (replace the field in place, or
  * return an object whose keys get merged into the payload in the field's
  * place). A no-op when there's nothing to coerce — the common case.
+ *
+ * M2 of the final review: the object-merge branch used to be a bare
+ * `Object.assign(coerced, result)` — non-composable, and silent about it.
+ * `command-map.ts`'s `workspace.update` entry has exactly this shape:
+ * `git`/`worktrees`/`tasks` each return `{set: {...}}`, and a payload
+ * carrying two of the three would have the second clobber the first's
+ * `set` key with no warning (today's three forms each submit only one,
+ * so this hasn't fired — but nothing stopped a fourth form from
+ * combining them). `mergedBy` tracks which coercion produced which output
+ * key so a second one landing on the same key throws here, inside the
+ * `try` in `call()`, so it still surfaces as an envelope rather than an
+ * uncaught exception.
  */
 function applyCoerceIn(
   payload: Record<string, unknown>,
@@ -77,11 +114,23 @@ function applyCoerceIn(
 ): Record<string, unknown> {
   if (!coerceIn) return payload;
   const coerced: Record<string, unknown> = { ...payload };
+  const mergedBy = new Map<string, string>(); // output key -> which coerceIn field produced it
   for (const [key, transform] of Object.entries(coerceIn)) {
     if (!(key in coerced)) continue;
     const result = transform(coerced[key]);
     delete coerced[key];
     if (result !== null && typeof result === "object" && !Array.isArray(result)) {
+      for (const outKey of Object.keys(result as Record<string, unknown>)) {
+        const producedBy = mergedBy.get(outKey);
+        if (producedBy) {
+          throw new Error(
+            `coerceIn collision: both "${producedBy}" and "${key}" produced the payload key ` +
+              `"${outKey}" — merging both would silently drop one (see aos-facade.ts's ` +
+              `applyCoerceIn doc comment).`,
+          );
+        }
+        mergedBy.set(outKey, key);
+      }
       Object.assign(coerced, result as Record<string, unknown>);
     } else if (result !== undefined) {
       coerced[key] = result;
@@ -120,13 +169,26 @@ export async function call(feature: string, action: string, opts?: CallOpts): Pr
   const entry: MapEntry | undefined = COMMAND_MAP[path];
 
   // A missing key is a programming error, not backend state: someone wrote
-  // a new call without registering it. Fail loud, on purpose.
+  // a new call without registering it. It used to throw here — outside
+  // any try/catch, since this check runs before the one below. That threw
+  // *past* the 117 call sites that read envelopes with no try/catch at
+  // all (`agent.getById`, `memory.graph`: an unhandled rejection that
+  // still cleared its own spinner via `.finally()`, a silently-wrong panel
+  // with no error in sight). Loud-and-non-fatal beats loud-and-fatal: log
+  // it where a developer will see it, and hand back an envelope so the
+  // call site's normal error path — the one it already has, for every
+  // other kind of failure — is what runs.
   if (entry === undefined) {
-    throw new Error(`call not mapped: ${path} — register it in lib/command-map.ts`);
+    const message = `call not mapped: ${path} — register it in lib/command-map.ts`;
+    console.error(`[aos-facade] ${message}`);
+    return { data: undefined, error: new EnvelopeError(NOT_MAPPED_CODE, message) };
   }
 
   if (entry === null) {
-    return { data: undefined, error: { code: DORMANT_CODE, message: `the "${feature}" domain does not exist in the Go backend yet` } };
+    return {
+      data: undefined,
+      error: new EnvelopeError(DORMANT_CODE, `the "${feature}" domain does not exist in the Go backend yet`),
+    };
   }
 
   const rawPayload = flattenArgs(opts);
@@ -233,12 +295,13 @@ function actionNode(feature: string, action: string): ActionNode {
           // asymmetry with this hook is intentional, not a mismatch to fix.
           if (r.error) {
             if (r.error.code === DORMANT_CODE) return null;
-            // A plain `{code, message}` object thrown here would type `error`
-            // as non-Error at the `UseQueryResult` boundary — real `Error`
-            // instances are what `instanceof Error`, `.stack`, and any
-            // throwOnError/ErrorBoundary path expect. `code` still needs to
-            // reach the UI, so it rides along as a property on the Error.
-            throw Object.assign(new Error(r.error.message), { code: r.error.code });
+            // C4 of the final review made `EnvelopeError` a real `Error`
+            // subclass (see its own doc comment) — `r.error` already *is*
+            // what this used to construct by hand (`Object.assign(new
+            // Error(...), {code})`), so it can be thrown directly. `code`
+            // still rides along, now as the class's own field rather than
+            // a bolted-on one.
+            throw r.error;
           }
           return r.data ?? null;
         },

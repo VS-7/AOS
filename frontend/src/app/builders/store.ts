@@ -316,6 +316,7 @@ export class AosStoreBuilt<TState, TActions> {
   private _getNamespaces: () => AosStoreNamespaceValues = () => ({});
   private _storageKey?: string;
   private _isInitialized = false;
+  private _warnedNeverInitialized = false;
   private _namespaceBuckets = new Map<string, TState>();
   private _setState: (action: SetStateAction<TState>) => void;
 
@@ -609,6 +610,32 @@ export class AosStoreBuilt<TState, TActions> {
   useState(): TState;
   useState<TSelected>(selector: (state: TState) => TSelected, equalityFn?: (a: TSelected, b: TSelected) => boolean): TSelected;
   useState<TSelected>(selector?: (state: TState) => TSelected, equalityFn?: (a: TSelected, b: TSelected) => boolean): TState | TSelected {
+    // Class-level fix from the final review's ledger triage: `ViewStore`/
+    // `ArtifactStore` were read through `.useState()` as pristine
+    // singletons — never passed to `AosStore.router({...})` in `app/
+    // stores.ts`, so `.init()` (which runs `withPreload` and resolves the
+    // namespace) never ran, and every read just saw the untouched initial
+    // state forever. This is the *third* time this exact bug shipped
+    // (`workspace`/`auth`/`projects`/`goals` were the first two — see
+    // `app/lib/stores.ts`'s own incident writeup). Fixing only the two
+    // instances again would leave a fourth store free to repeat it
+    // silently; this warns from the class itself, the first time any
+    // store's state is read before it was ever registered — independent
+    // of which store, or when its module happens to load. Gated on
+    // `config.preload` existing: a store with no preload has nothing
+    // `.init()` would fetch, so never being registered costs it nothing
+    // worth warning about.
+    if (this.config.preload && !this._isInitialized && !this._warnedNeverInitialized) {
+      this._warnedNeverInitialized = true;
+      console.error(
+        `[AosStore: ${this.name}] .useState() was called, but this store was never ` +
+          `passed to AosStore.router({...}) in app/stores.ts — .init() never ran, so ` +
+          `its preload never fetched and its namespace never resolved. It will read as ` +
+          `permanently stuck at its initial state. Add "${this.name}" to that registry's ` +
+          `"stores" object.`,
+      );
+    }
+
     const getSnapshot = () => this._state;
 
     return useSyncExternalStoreWithSelector(

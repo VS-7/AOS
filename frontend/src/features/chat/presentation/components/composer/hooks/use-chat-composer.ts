@@ -543,6 +543,19 @@ export function useChatComposer({
       pendingMessageIdRef.current = nextMessage.id;
       onSent?.(nextMessage);
 
+      // C5 of the final review ("honest empty state" policy, R26):
+      // `command-map.ts`'s `chat.send` entry drops every `file` part —
+      // Go's `SendInput` has no field for an attachment at all, disclosed
+      // there. `onSent` above already rendered `nextMessage` locally
+      // (attachment included), so without this the user sees their own
+      // attachment appear to send successfully and only discovers it never
+      // reached the agent when the reply makes no reference to it — or
+      // never, if they don't think to check. A toast at the moment of
+      // loss, not a silent one.
+      if (parts.some((part) => part.type === "file")) {
+        toast.warning("Attachments aren't sent to the agent yet — only your text was delivered.");
+      }
+
       sendMessage({
         params: {
           chat: chat.id,

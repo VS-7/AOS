@@ -3,14 +3,29 @@ import { COMMAND_MAP, DORMANT_DOMAINS, isDormant } from "./command-map";
 import { COMMAND_KEYS } from "./schema";
 
 describe("COMMAND_MAP", () => {
-  it("covers the 125 calls the Fractal frontend makes", () => {
-    // 123 + `workspace.update` (task 12: found unmapped by the call-path
-    // sweep — four settings forms called it via `mutation: "workspace.update"`
-    // and threw `call not mapped` on every submit) + `workspace.directory`
-    // (task 12: declared dormant explicitly — see its own comment — instead
-    // of silently falling through the loud "not mapped" throw the way it
-    // did before).
-    expect(Object.keys(COMMAND_MAP)).toHaveLength(125);
+  it("never shrinks without someone noticing, and always registers its own dormant entries", () => {
+    // An exact `toHaveLength(N)` here used to fail on every legitimate
+    // addition for no reason — the final-review pass hit that itself
+    // (`agent.getById`, `instruction.getById`, `memory.graph`,
+    // `template.getById`, all found by the corrected call-path sweep).
+    // What's actually worth guarding: the map doesn't shrink out from
+    // under a call site (a lower bound, not a fixed count — see the "133"
+    // history in this suite's git blame for the running total), and the
+    // specific entries that were once silently missing stay declared. A
+    // key present with a `null` value guards dormancy explicitly; a key
+    // absent entirely is the bug this whole map exists to prevent — see
+    // `COMMAND_MAP`'s own doc comment.
+    expect(Object.keys(COMMAND_MAP).length).toBeGreaterThanOrEqual(129);
+    for (const path of [
+      "workspace.update",
+      "workspace.directory",
+      "agent.getById",
+      "instruction.getById",
+      "memory.graph",
+      "template.getById",
+    ]) {
+      expect(path in COMMAND_MAP).toBe(true);
+    }
   });
 
   it("points only at commands the Go side actually publishes", () => {

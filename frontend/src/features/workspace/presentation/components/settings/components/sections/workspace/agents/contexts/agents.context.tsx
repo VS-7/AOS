@@ -198,6 +198,14 @@ export function AgentsProvider({ children, agents }: AgentsProviderProps) {
           form.reset(buildAgentFormValues(response.data.agent));
         }
       })
+      .catch((error) => {
+        // `agent.getById` is registered in command-map.ts now; this still
+        // guards against a network failure surfacing as a stuck spinner
+        // with no visible cause (the bug this call site shipped when the
+        // path was unmapped — an unhandled rejection outside `call()`'s
+        // try/catch, silently cleared by `.finally()`).
+        console.error("[AgentsContext] failed to load agent", error);
+      })
       .finally(() => {
         setIsLoadingContent(false);
       });

@@ -87,6 +87,24 @@ describe("call", () => {
     expect(r.error?.code).toBe("AOS_TASK_BLOCKED");
   });
 
+  it("M2: throws (as an envelope) instead of silently dropping data when two coerceIn fields collide on the same output key", async () => {
+    // The real shape this can happen with: `workspace.update`'s `git` and
+    // `worktrees` entries both return `{set: {...}}` — a naive
+    // `Object.assign` merge would have `worktrees`'s result clobber
+    // `git`'s. Today's three call sites each submit only one of
+    // git/worktrees/tasks per call, so this hasn't fired live — this test
+    // is what would catch a future call site combining them.
+    const r = await call("workspace", "update", {
+      params: { id: "w-1" },
+      body: { git: { autoCommit: true }, worktrees: { enabled: true } },
+    });
+    expect(invoke).not.toHaveBeenCalled();
+    expect(r.data).toBeUndefined();
+    expect(r.error?.message).toMatch(/coerceIn collision/);
+    expect(r.error?.message).toContain("git");
+    expect(r.error?.message).toContain("worktrees");
+  });
+
   it("answers dormant without touching the network", async () => {
     const r = await call("collection", "list");
     expect(invoke).not.toHaveBeenCalled();
@@ -94,8 +112,19 @@ describe("call", () => {
     expect(r.error?.code).toBe(DORMANT_CODE);
   });
 
-  it("fails loud when the call is not in the map", async () => {
-    await expect(call("inventada", "list")).rejects.toThrow(/not mapped/);
+  it("answers a not-mapped call with an envelope, loudly logged, never a thrown exception", async () => {
+    // B2 of the final review: this used to `throw` here, past the try/catch
+    // — an unhandled rejection at any of the 117 call sites that read
+    // envelopes with no try/catch of their own. `agent.getById` and
+    // `memory.graph` both hid behind exactly this shape (a `.then().
+    // finally()` chain with no `.catch()`) before they were mapped.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const r = await call("inventada", "list");
+    expect(r.data).toBeUndefined();
+    expect(r.error?.code).toBe("AOS_CALL_NOT_MAPPED");
+    expect(r.error?.message).toMatch(/not mapped/);
+    expect(spy).toHaveBeenCalledWith(expect.stringMatching(/not mapped/));
+    spy.mockRestore();
   });
 });
 
