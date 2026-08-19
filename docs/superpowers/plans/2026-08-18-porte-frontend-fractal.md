@@ -1745,6 +1745,30 @@ git commit -m "feat(frontend): complete the Fractal interface port"
 
 ---
 
+## Checklist de porte por feature
+
+> Adicionado após a Task 6, a fatia vertical. Cada item existe porque a ausência
+> dele produziu um defeito real ali. Os quatro Criticals da T6 teriam sido pegos
+> só pelo item 4.
+
+Para **cada** feature portada, nesta ordem:
+
+1. **Copiar e reescrever imports** pelo script. Depois rodar o diff mecânico
+   fonte-vs-porte e guardá-lo — é ele que revela a divergência, não a memória de
+   quem portou. Relatório em prosa omite; foi verificado.
+2. **Entradas.** Para cada `params`/`query`/`body`, conferir nome **e tipo** de
+   cada chave contra as tags do `*Input` em Go. Tipos importam tanto quanto nomes:
+   `bool` vs objeto, `int` vs string, escalar vs array — todos apareceram na T6.
+   Renome sistemático de chave vai em `renameIn` no mapa, não no call site.
+3. **Saídas.** Para cada campo lido de uma resposta, conferir contra a entidade ou
+   o `*Output` do Go. ~32 dos 71 comandos devolvem entidade nua: se o código lê
+   `data.task` e o Go devolve o `View` direto, usar `wrapOut` no mapa.
+4. **Exercitar cada comando da feature uma vez por HTTP, com a carga que a UI
+   realmente monta** — não um corpo mínimo escrito à mão. Esta é a regra que pega
+   o que o compilador não pega, porque `params`/`body` são `Record<string, unknown>`.
+5. **Conferir que todo caminho `client.x.y` da feature existe no `COMMAND_MAP`.**
+   Ausência hoje só aparece quando alguém clica.
+
 ## Notas para quem executar
 
 **A fachada é o único lugar que deve mudar.** Se um erro aparece em dezenas de

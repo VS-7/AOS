@@ -187,9 +187,36 @@ fachada **inverte** essa convenção: captura a exceção e a devolve como `erro
 Errar isso quebra os 117 sites em silêncio — um `catch` ausente vira tela
 branca em vez de mensagem.
 
-O aninhamento sob a chave do domínio já casa: o Go devolve
-`{"tasks": [...], "total": n}` e `{"task": {...}}`, exatamente o que
-`result.data?.tasks` e `result.data?.task` esperam.
+> **A inversão obriga a auditar os builders.** Eles vieram do Fractal, onde o
+> cliente lançava. Qualquer código portado que trate erro por `try/catch` — ou que
+> assuma que "retornou" significa "deu certo" — passa a estar errado sob esta
+> convenção. O caso encontrado: `useForm` (`app/builders/app.tsx`) chamava
+> `onResponse({ data: result })` sem olhar `result.error`, de modo que **todo
+> formulário portado reportava sucesso quando o backend falhava**. Auditar cada
+> ponto dos builders que consome um resultado da fachada é parte do porte, não
+> uma verificação opcional.
+
+**O aninhamento NÃO casa sozinho.** Medição sobre os 71 comandos: ~38 devolvem um
+envelope nomeado (`ListOutput`, `CreateOutput`) que de fato aninha sob a chave do
+domínio, mas **~32 devolvem a entidade nua** — `tasks_get` é
+`command.Command[GetInput, *View]`, sem `GetOutput`, sem chave `task`. O código
+portado lê `result.data?.task` e receberia `undefined` em quase metade da
+superfície.
+
+Isso, junto com os nomes de campo de entrada (que divergem irregularmente por
+domínio: `{task:x}`→`{id:x}` em task, mas `{chat:x}`→`{chat:x}` em chat), faz da
+entrada do mapa um **descritor**, não uma string:
+
+```ts
+"task.getById": { key: "tasks_get", renameIn: { task: "id" }, wrapOut: "task" },
+"chat.getById": { key: "chats_get", wrapOut: "chat" },   // renameIn desnecessário
+"task.list":    { key: "tasks_list" },                    // Go já devolve {tasks,total}
+```
+
+`renameIn` traduz os nomes de campo; `wrapOut` reenvelopa a entidade nua sob a
+chave que o código portado espera. Ambos vivem na fachada — nenhum call site
+copiado é editado. Uma regra genérica erraria em silêncio nos dois casos, pela
+mesma razão que erraria nos nomes de comando: a irregularidade é real.
 
 ### Contrato de domínio dormente
 
