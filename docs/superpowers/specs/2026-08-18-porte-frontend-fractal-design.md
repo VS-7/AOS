@@ -214,9 +214,23 @@ entrada do mapa um **descritor**, não uma string:
 ```
 
 `renameIn` traduz os nomes de campo; `wrapOut` reenvelopa a entidade nua sob a
-chave que o código portado espera. Ambos vivem na fachada — nenhum call site
-copiado é editado. Uma regra genérica erraria em silêncio nos dois casos, pela
+chave que o código portado espera; `coerceIn` ajusta o **tipo** — o Go quer um
+escalar onde a UI guarda um array, um `int` onde a UI mandou string, um `bool`
+onde o formulário coletou um objeto. Os três vivem na fachada; nenhum call site
+copiado é editado. Uma regra genérica erraria em silêncio nos três casos, pela
 mesma razão que erraria nos nomes de comando: a irregularidade é real.
+
+**A fronteira do `coerceIn`.** Ele existe para o *contrato de fio*, não para o
+modelo de dados da interface. Converter `"200"` em `200`, ou pegar o primeiro
+elemento de um array onde o Go declara um escalar, é contrato. Decidir qual dos
+campos de um formulário corresponde a qual campo do Go, ou achatar um objeto
+aninhado numa forma diferente de JSX, é modelagem — isso fica no call site e é
+divulgado no diff mecânico. Na dúvida, fica no call site: um `coerceIn` esperto
+demais esconde decisões de modelagem que alguém precisa ver.
+
+Como `params` e `body` são `Record<string, unknown>`, **o compilador não pega
+nada disso** — só aparece como 400 em runtime. É por isso que o checklist de
+porte exige exercitar cada comando por HTTP com a carga que a UI realmente monta.
 
 ### Contrato de domínio dormente
 
