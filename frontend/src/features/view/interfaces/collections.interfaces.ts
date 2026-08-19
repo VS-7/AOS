@@ -2,25 +2,23 @@
  * O que `features/view` usava de @igniter-js/collections, declarado aqui.
  *
  * O domínio view está dormente — o renderizador declarativo não tem backend
- * Go ainda. Quando tiver, este contrato passa a ser verificado contra ele;
- * por ora é o mínimo que faz a tela compilar.
+ * Go ainda. Quando tiver, este contrato passa a ser verificado contra ele.
  *
- * Shapes derived from how `presentation/helpers/view-data.helper.ts` and
- * `presentation/pages/($view)/index.tsx` actually use them (`result.spec.
- * root`, `result.spec.elements`, `result.view`, `result.renderedAt`), not
- * guessed from the original package's own types (unavailable — the package
- * isn't installed and never will be).
+ * `Spec` now defers to the real type from @json-render/core (installed).
+ * Result wrapper types below may contain partially-formed or corrupted specs
+ * (e.g., circular refs serialized as "[Circular]" strings), so they are
+ * typed loosely to match the server-side shape from Igniter.
  */
-export interface Spec {
-  root: string;
-  elements: Record<string, { type: string; props?: Record<string, unknown>; [key: string]: unknown }>;
-  state?: Record<string, unknown>;
-  [key: string]: unknown;
-}
+export type { Spec } from "@json-render/core";
 
 export interface CollectionViewRenderResult {
   view?: unknown;
-  spec?: Spec;
+  spec?: {
+    root?: string;
+    elements?: Record<string, unknown>;
+    state?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
   renderedAt?: string;
   [key: string]: unknown;
 }

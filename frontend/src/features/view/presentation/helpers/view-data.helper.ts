@@ -75,7 +75,8 @@ export class ViewDataHelper {
 
     const rendered = result.spec;
     if (this._has_named_elements(rendered.elements)) {
-      return rendered;
+    // Type assertion: validated root and elements above, now assignable to Spec
+    return rendered as unknown as Spec;
     }
 
     const viewSpec = (result.view as ViewDefinition | undefined)?.spec;
