@@ -180,7 +180,7 @@ export function TaskDetailsMain({
 
   async function handleStartTask() {
     const { error } = await client.task.start.mutate({
-      params: { id: task.id },
+      params: { task: task.id },
       body: { delegate: true },
     });
 
@@ -214,7 +214,7 @@ export function TaskDetailsMain({
       }
 
       const { error } = await client.task.setStatus.mutate({
-        params: { id: task.id },
+        params: { task: task.id },
         body: { status },
       });
 
@@ -233,7 +233,7 @@ export function TaskDetailsMain({
     }
 
     const { error } = await client.task.setStatus.mutate({
-      params: { id: task.id },
+      params: { task: task.id },
       body: { status },
     });
 
@@ -254,7 +254,7 @@ export function TaskDetailsMain({
   ) {
     try {
       await client.task.update.mutate({
-        params: { id: task.id },
+        params: { task: task.id },
         body: { priority },
       });
       toast.success("Priority updated");
@@ -267,7 +267,7 @@ export function TaskDetailsMain({
   async function handleAssigneeChange(assignee: string | undefined) {
     try {
       await client.task.update.mutate({
-        params: { id: task.id },
+        params: { task: task.id },
         body: { assigned: assignee },
       });
       toast.success(assignee ? "Assigned" : "Unassigned");
@@ -280,7 +280,7 @@ export function TaskDetailsMain({
   async function handleTypeChange(type: string) {
     try {
       await client.task.update.mutate({
-        params: { id: task.id },
+        params: { task: task.id },
         body: { type },
       });
       toast.success("Type updated");
@@ -293,7 +293,7 @@ export function TaskDetailsMain({
   async function handleDueDateChange(dueAt: string | undefined) {
     try {
       await client.task.update.mutate({
-        params: { id: task.id },
+        params: { task: task.id },
         body: { dueAt },
       });
       toast.success(dueAt ? "Due date set" : "Due date removed");
@@ -305,7 +305,7 @@ export function TaskDetailsMain({
 
   async function handleDelete() {
     try {
-      await client.task.delete.mutate({ params: { id: task.id } });
+      await client.task.delete.mutate({ params: { task: task.id } });
       toast.success(`Task ${task.id} deleted`);
       navigate({ to: "/tasks" });
     } catch (error) {
@@ -514,7 +514,7 @@ export function TaskDetailsMain({
             }
 
             const { error } = await client.task.setStatus.mutate({
-              params: { id: finishTransition.state.task.id },
+              params: { task: finishTransition.state.task.id },
               body: input,
             });
 

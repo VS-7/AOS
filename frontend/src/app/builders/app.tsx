@@ -284,6 +284,26 @@ export class AosApp<
                 // Call the mutate function
                 const mutateFn = clientController[action].mutate;
                 result = await mutateFn(payload);
+
+                // [Business Rule]: AOS's client never throws from mutate() —
+                // a domain failure comes back as `{ data: undefined, error }`,
+                // not a caught exception (see lib/aos-facade.ts's own doc
+                // comment on the throw->return inversion this app deliberately
+                // made). This builder was ported from a codebase where the
+                // client threw, so it never checked `result.error` here —
+                // every ported form reported success on a rejected mutation,
+                // and `form.reset()` below reseeded the form with the raw
+                // `{data, error}` envelope instead of the entity it wrapped.
+                // Re-throwing the envelope's error routes it through the same
+                // catch block a thrown client's error already goes through,
+                // rather than duplicating the setError/onResponse handling.
+                if (result && typeof result === "object" && "error" in result && "data" in result) {
+                  const envelope = result as { data: unknown; error?: { code?: string; message?: string } };
+                  if (envelope.error) {
+                    throw Object.assign(new Error(envelope.error.message ?? "the call failed"), { code: envelope.error.code });
+                  }
+                  result = envelope.data;
+                }
               } else if (onSubmit) {
                 // If no mutation path, just execute the custom onSubmit
                 result = await onSubmit(data);

@@ -1,48 +1,18 @@
-import { useEffect, useState } from "react";
 import type { JSX } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  createRootRoute,
   createRoute,
   createRouter,
   redirect,
-  Outlet,
-  Link,
-  useRouterState,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { client, isDesktop, setWorkspace } from "@/lib/client";
-import { logout } from "@/lib/auth";
-import { useRealtime } from "@/lib/realtime";
-import {
-  listThemes,
-  resolveAppearance,
-  selectTheme,
-  storedChoice,
-  watchSystemAppearance,
-  type AppearancePreference,
-  type ThemeSummary,
-} from "@/lib/theme";
+import { client } from "@/lib/client";
 import { ChatContent } from "@/features/chat/presentation/components/chat-content";
 import { Failure } from "@/components/Failure";
 import { TasksPage } from "@/features/task/presentation/pages/(main)";
 import { TaskDetailsPage } from "@/features/task/presentation/pages/($id)";
 import { MemoryGraph } from "@/features/memory/MemoryGraph";
 import { FilesPage } from "@/features/file/FilesPage";
-import { ApprovalModal } from "@/components/ApprovalModal";
-import {
-  SidebarProvider,
-  Sidebar,
-  SidebarHeader,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarInset,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
+import { aos } from "@/app/aos";
 
 /**
  * The router, ported from the original's `@tanstack/react-router` route tree
@@ -52,8 +22,18 @@ import {
  * page already fetches its own data with TanStack Query against
  * `client.invoke` — a router loader would just be a second place doing the
  * same fetch. See docs/06 - Frontend/React 19 e Bindings.md.
+ *
+ * `rootRoute` is `aos.rootRoute`, not a second `createRootRoute(...)` this
+ * file builds itself — see `app/aos.tsx`'s doc comment on `.withLayout(...)`
+ * for why: `aos.page(...)` (what `TasksPage`/`TaskDetailsPage` are built
+ * with) always parents its route to the `aos` instance's own root, so this
+ * file has to use that same object as its actual root for the tree to be
+ * one connected router rather than two, with pages silently rendering
+ * outside the app shell. `RootLayout` moved to `app/root-layout.tsx` for
+ * the same reason: `aos.tsx` needs it before `router.tsx` can even define
+ * `rootRoute`, so it can't live here.
  */
-const rootRoute = createRootRoute({ component: RootLayout });
+const rootRoute = aos.rootRoute;
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -76,41 +56,6 @@ const chatRoute = createRoute({
     const { chatId } = chatRoute.useParams();
     return <ChatContent chatId={chatId} />;
   },
-});
-
-/**
- * `TasksPage`/`TaskDetailsPage` come from `aos.page(...).build()` (see
- * `app/builders/page.ts`), which hardcodes `getParentRoute` to the `aos`
- * app instance's own internal root route — a separate `createRootRoute`
- * call made inside `AosApp.build()`, never mounted by this file's
- * `createRouter`. Left alone, that breaks navigation: TanStack Router
- * resolves the *matched ancestor chain* for beforeLoad/loader execution and
- * component nesting by walking each route's `parentRoute` reference
- * (`buildRouteBranch` in `@tanstack/router-core`), not by the `addChildren`
- * nesting below — so the pages would render outside `RootLayout` entirely
- * (no sidebar, no ApprovalModal), parented to a route this router never
- * initializes.
- *
- * `.update({ getParentRoute })` retargets each built route's parent to this
- * file's real `rootRoute` before `createRouter` processes the tree, which
- * is enough: both root routes compute to the same `"__root__"` id/`"/"`
- * fullPath, so path resolution for `/tasks` and `/tasks/$id` is unaffected.
- * Every future `aos.page(...)` route wired into this router needs the same
- * retarget until Task 10 either makes `router.tsx`'s root the `aos`
- * instance's root, or `page.ts` accepts an injectable parent.
- *
- * `.update()`'s public type (`UpdatableRouteOptions`) does not include
- * `getParentRoute` — TanStack does not officially support re-parenting a
- * built route — even though the runtime implementation is a plain
- * `Object.assign(this.options, options)` that accepts it fine (see
- * `@tanstack/router-core`'s `route.js`). The cast documents that this
- * relies on that internal, untyped-but-functional behavior.
- */
-(TasksPage.update as (options: { getParentRoute: () => typeof rootRoute }) => unknown)({
-  getParentRoute: () => rootRoute,
-});
-(TaskDetailsPage.update as (options: { getParentRoute: () => typeof rootRoute }) => unknown)({
-  getParentRoute: () => rootRoute,
 });
 
 const memoriesRoute = createRoute({
@@ -173,145 +118,4 @@ declare module "@tanstack/react-router" {
   interface Register {
     router: typeof router;
   }
-}
-
-/** The app shell: sidebar navigation, theme picker, connection status, and the routed page. */
-function RootLayout(): JSX.Element {
-  const queryClient = useQueryClient();
-  const connection = useRealtime(queryClient);
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-
-  const workspace = useQuery({
-    queryKey: ["workspace"],
-    queryFn: async () => {
-      const out = (await client.invoke("workspace_get", {
-        _reasoning: "the application is starting",
-      })) as { id: string; name: string };
-      setWorkspace(out.id);
-      return out;
-    },
-  });
-
-  return (
-    <SidebarProvider>
-      <Sidebar>
-        <SidebarHeader>
-          <h1 className="px-2 text-sm font-medium tracking-tight">{workspace.data?.name ?? "AOS"}</h1>
-        </SidebarHeader>
-        <SidebarContent>
-          <SidebarGroup>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname.startsWith("/chat")}>
-                  <Link to="/">Chat</Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/tasks"}>
-                  <Link to="/tasks">Tasks</Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/memories"}>
-                  <Link to="/memories">Memories</Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/files"}>
-                  <Link to="/files">Files</Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroup>
-        </SidebarContent>
-        <SidebarFooter>
-          <ThemePicker />
-          <span className="status" data-state={connection} aria-live="polite">
-            <span className="dot" />
-            {connection === "open" ? "connected" : connection}
-          </span>
-          <span className="status">{isDesktop() ? "desktop" : "browser"}</span>
-          <button
-            type="button"
-            className="status"
-            onClick={() => {
-              // A hard reload, deliberately — the same shape as the
-              // original's own auth-state transitions (see OnboardingForm's
-              // init step). AuthGate lives above this whole tree, so it is
-              // what re-checks status() and shows LoginPage next; there is
-              // no lighter-weight way to hand control back to it from here.
-              void logout().finally(() => window.location.reload());
-            }}
-          >
-            Sign out
-          </button>
-        </SidebarFooter>
-      </Sidebar>
-
-      <SidebarInset>
-        <div className="main">
-          <SidebarTrigger className="self-start" />
-          {workspace.error && <Failure error={workspace.error} />}
-          <Outlet />
-        </div>
-      </SidebarInset>
-
-      <ApprovalModal />
-    </SidebarProvider>
-  );
-}
-
-/** The theme picker, and the listener that keeps `auto` following the system. */
-function ThemePicker(): JSX.Element {
-  const initial = storedChoice();
-  const [theme, setTheme] = useState(initial.theme);
-  const [preference, setPreference] = useState<AppearancePreference>(initial.appearance);
-  const [themes, setThemes] = useState<ThemeSummary[]>([]);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    listThemes().then(setThemes).catch(() => setFailed(true));
-  }, []);
-
-  useEffect(() => {
-    selectTheme(theme, preference).catch(() => setFailed(true));
-  }, [theme, preference]);
-
-  useEffect(() => {
-    // Only while the preference is auto: somebody who chose dark did not ask to
-    // be switched to light at sunrise.
-    if (preference !== "auto") return;
-    return watchSystemAppearance(() => {
-      void selectTheme(theme, "auto");
-    });
-  }, [preference, theme]);
-
-  if (failed) return <span className="status">theme unavailable</span>;
-
-  return (
-    <>
-      <label className="status">
-        Theme
-        <select value={theme} onChange={(e) => setTheme(e.target.value)} aria-label="Theme">
-          {themes.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="status">
-        {resolveAppearance(preference)}
-        <select
-          value={preference}
-          onChange={(e) => setPreference(e.target.value as AppearancePreference)}
-          aria-label="Appearance"
-        >
-          <option value="auto">Follow the system</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
-      </label>
-    </>
-  );
 }

@@ -76,7 +76,7 @@ export const TaskListRow = React.memo(function TaskListRow({
     async (priority: FractalTask["priority"]) => {
       try {
         await aos.client.task.update.mutate({
-          params: { id: task.id },
+          params: { task: task.id },
           body: { priority },
         });
         toast.success(
@@ -94,7 +94,7 @@ export const TaskListRow = React.memo(function TaskListRow({
     async (assignee: string | undefined) => {
       try {
         await aos.client.task.update.mutate({
-          params: { id: task.id },
+          params: { task: task.id },
           body: { assigned: assignee },
         });
         const assignedView = resolveAssignee(
@@ -118,7 +118,7 @@ export const TaskListRow = React.memo(function TaskListRow({
     async (status: FractalTask["status"]) => {
       try {
         await aos.client.task.update.mutate({
-          params: { id: task.id },
+          params: { task: task.id },
           body: { status },
         });
         toast.success(`Moved to ${TaskHelper.getStatus(status).label}`);
@@ -134,7 +134,7 @@ export const TaskListRow = React.memo(function TaskListRow({
     async (dueAt: string | undefined) => {
       try {
         await aos.client.task.update.mutate({
-          params: { id: task.id },
+          params: { task: task.id },
           body: { dueAt },
         });
         toast.success(dueAt ? `Due date set` : "Due date removed");
@@ -148,7 +148,7 @@ export const TaskListRow = React.memo(function TaskListRow({
 
   const handleDelete = useCallback(async () => {
     try {
-      await aos.client.task.delete.mutate({ params: { id: task.id } });
+      await aos.client.task.delete.mutate({ params: { task: task.id } });
       toast.success(`Task ${task.id} deleted`);
       router.invalidate();
     } catch (error) {
@@ -181,7 +181,7 @@ export const TaskListRow = React.memo(function TaskListRow({
     async (type: string) => {
       try {
         await aos.client.task.update.mutate({
-          params: { id: task.id },
+          params: { task: task.id },
           body: { type },
         });
         toast.success(`Type updated`);
@@ -197,7 +197,7 @@ export const TaskListRow = React.memo(function TaskListRow({
     async (project: string | undefined) => {
       try {
         await aos.client.task.update.mutate({
-          params: { id: task.id },
+          params: { task: task.id },
           body: { project },
         });
         toast.success(project ? `Project updated` : "Project removed");

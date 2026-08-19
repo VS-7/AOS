@@ -209,7 +209,7 @@ export function TasksPageInner() {
           }
 
           const { error } = await aos.client.task.setStatus.mutate({
-            params: { id: finishTransition.state.task.id },
+            params: { task: finishTransition.state.task.id },
             body: input,
           });
 

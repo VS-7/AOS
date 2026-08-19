@@ -51,8 +51,10 @@ export function TodoItem({ todo }: TodoItemProps) {
         >
           <SplitPageLayout.WidgetItem className="group relative pr-7">
             <StatusIcon className={`size-3.5 shrink-0 mt-0.5 ${statusColor}`} />
+            {/* Go's `Todo` field is `title`, not `description` — see
+                `interfaces/task.interfaces.ts`'s `FractalTaskTodoSchema`. */}
             <span className={`text-xs leading-snug line-clamp-1 flex-1 ${isFinished ? "line-through text-muted-foreground" : ""}`}>
-              {todo.description}
+              {todo.title}
             </span>
           </SplitPageLayout.WidgetItem>
         </div>
@@ -64,7 +66,7 @@ export function TodoItem({ todo }: TodoItemProps) {
         onMouseEnter={handleMouseEnterContent}
         onMouseLeave={handleMouseLeaveContent}
       >
-        <p className="text-xs font-medium leading-snug">{todo.description}</p>
+        <p className="text-xs font-medium leading-snug">{todo.title}</p>
         <div className="flex items-center gap-2">
           <StatusIcon className={`size-3 shrink-0 ${statusColor}`} />
           <span className="text-sm capitalize text-muted-foreground">
@@ -77,10 +79,11 @@ export function TodoItem({ todo }: TodoItemProps) {
             <Badge variant="secondary" className="text-sm h-4 px-1.5">{todo.agent}</Badge>
           </div>
         )}
-        {todo.instructions && (
+        {/* Go's field is `content`, not `instructions` — same schema note. */}
+        {todo.content && (
           <div className="space-y-1">
-            <span className="text-sm text-muted-foreground">Instructions</span>
-            <p className=" truncate">{todo.instructions}</p>
+            <span className="text-sm text-muted-foreground">Notes</span>
+            <p className=" truncate">{todo.content}</p>
           </div>
         )}
         {todo.output && Object.keys(todo.output).length > 0 && (

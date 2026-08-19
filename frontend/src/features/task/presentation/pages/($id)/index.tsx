@@ -20,15 +20,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
   })
   .use(WorkspacePageMiddleware())
   .withLoader(async ({ client, request, response }) => {
-    // Every `task.getById`/`update`/`setStatus` call in this file sent
-    // `{ task: id }` in the source — Go's actual input field for all four
-    // of `tasks_get`/`update`/`set-status`/`delete` is `id`
-    // (`internal/domain/task/schema.go`), confirmed by a live 400 from
-    // `tasks_get` during this port's verification ("id is required").
-    // `comment`/`todo` commands genuinely use `task` (a foreign key to the
-    // parent task) — this file never calls those, so every occurrence
-    // here was the same bug, not a mix.
-    const result = await client.task.getById.query({ params: { id: request.params.id } });
+    const result = await client.task.getById.query({ params: { task: request.params.id } });
     // See `(main)/index.tsx`'s loader for why this cast is needed —
     // the facade returns `Envelope<unknown>`, not a typed payload.
     const task = (result.data as { task: FractalTaskWithContext } | undefined)?.task;
@@ -60,7 +52,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
         return;
       }
       const { error } = await aos.client.task.setStatus.mutate({
-        params: { id: task.id },
+        params: { task: task.id },
         body: { status },
       });
       if (error) {
@@ -74,7 +66,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
 
     async function handlePriorityChange(priority: FractalTaskPriority) {
       try {
-        await aos.client.task.update.mutate({ params: { id: task.id }, body: { priority } });
+        await aos.client.task.update.mutate({ params: { task: task.id }, body: { priority } });
         toast.success("Priority updated");
         router.invalidate();
       } catch {
@@ -84,7 +76,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
 
     async function handleAssigneeChange(assignee: string | undefined) {
       try {
-        await aos.client.task.update.mutate({ params: { id: task.id }, body: { assigned: assignee } });
+        await aos.client.task.update.mutate({ params: { task: task.id }, body: { assigned: assignee } });
         toast.success(assignee ? "Assigned" : "Unassigned");
         router.invalidate();
       } catch {
@@ -94,7 +86,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
 
     async function handleTypeChange(type: string) {
       try {
-        await aos.client.task.update.mutate({ params: { id: task.id }, body: { type } });
+        await aos.client.task.update.mutate({ params: { task: task.id }, body: { type } });
         toast.success("Type updated");
         router.invalidate();
       } catch {
@@ -104,7 +96,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
 
     async function handleDueDateChange(dueAt: string | undefined) {
       try {
-        await aos.client.task.update.mutate({ params: { id: task.id }, body: { dueAt } });
+        await aos.client.task.update.mutate({ params: { task: task.id }, body: { dueAt } });
         toast.success(dueAt ? "Due date set" : "Due date removed");
         router.invalidate();
       } catch {
@@ -114,7 +106,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
 
     async function handleProjectChange(project: string | undefined) {
       try {
-        await aos.client.task.update.mutate({ params: { id: task.id }, body: { project } });
+        await aos.client.task.update.mutate({ params: { task: task.id }, body: { project } });
         toast.success(project ? "Project updated" : "Project cleared");
         router.invalidate();
       } catch {
@@ -124,7 +116,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
 
     async function handleGoalChange(goal: string | undefined) {
       try {
-        await aos.client.task.update.mutate({ params: { id: task.id }, body: { goal } });
+        await aos.client.task.update.mutate({ params: { task: task.id }, body: { goal } });
         toast.success(goal ? "Goal updated" : "Goal cleared");
         router.invalidate();
       } catch {
@@ -176,7 +168,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
             }
 
             const { error } = await aos.client.task.setStatus.mutate({
-              params: { id: finishTransition.state.task.id },
+              params: { task: finishTransition.state.task.id },
               body: input,
             });
 

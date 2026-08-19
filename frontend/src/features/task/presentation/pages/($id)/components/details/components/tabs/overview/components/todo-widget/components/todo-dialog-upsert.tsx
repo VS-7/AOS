@@ -41,10 +41,16 @@ export function TodoDialogUpsert({ taskId, todo, onCreated, children }: TodoDial
 
   const isEdit = !!todo
 
+  // Reads `todo.title`/`todo.content` — Go's real `Todo` field names (see
+  // `interfaces/task.interfaces.ts`'s `FractalTaskTodoSchema` doc comment)
+  // — while keeping this form's own field names (`description`/
+  // `instructions`) unchanged; the outgoing rename back to `title`/
+  // `content` happens in `command-map.ts`'s `todo.create`/`todo.update`
+  // entries, not here.
   const initialValues = React.useMemo(() => ({
-    description: todo?.description || "",
+    description: todo?.title || "",
     agent: todo?.agent || "",
-    instructions: todo?.instructions || "",
+    instructions: todo?.content || "",
   }), [todo])
 
   const form = aos.useForm({

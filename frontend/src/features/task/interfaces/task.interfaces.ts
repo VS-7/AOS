@@ -73,11 +73,18 @@ export const FractalTaskFinishOperationSchema = z.enum([
  * - **in_review** — Execution complete. Waiting for review or approval.
  * - **finished** — Successfully completed.
  */
+// Go's real todo lifecycle (`internal/domain/todo/entity.go`'s `Status`
+// const) is `pending, in_progress, blocked, finished, skipped` — this file's
+// source had `todo, in_progress, in_review, finished`, which doesn't match
+// at two of four values (`todo`→`pending`, no `in_review` for a todo — that
+// belongs to the *task* lifecycle, not the todo one — and Go additionally
+// has `blocked`/`skipped`, which this port's UI had no config for).
 export const FractalTodoStatusSchema = z.enum([
-  "todo",
+  "pending",
   "in_progress",
-  "in_review",
+  "blocked",
   "finished",
+  "skipped",
 ]);
 
 /**
@@ -107,6 +114,13 @@ export const FractalAttachmentSchema = z.object({
  * Schema for a sub-task or step within a larger task's plan.
  * Todos break down a task into ordered, executable steps that an agent can pick up individually.
  */
+// Go's `Todo` (`internal/domain/todo/entity.go`) has `title`/`content`, not
+// `description`/`instructions` — and no `agent`/`output` field at all (a
+// todo cannot be assigned to a specific agent server-side, and there is no
+// stored "output" of running one). `agent`/`output` are kept, always
+// `undefined` against this backend, so the widget compiles without
+// asserting a capability that doesn't exist; `order`/`evidence` are added
+// because Go actually has them and nothing here read them before.
 export const FractalTaskTodoSchema = z.object({
   id: z
     .string()
@@ -119,31 +133,39 @@ export const FractalTaskTodoSchema = z.object({
     .describe(
       "ID of the parent task. Used for file path resolution and scoping.",
     ),
-  description: z
+  title: z
     .string()
     .describe(
-      "Description of the step or action. Be specific — this is what the assigned agent will execute.",
+      "What this step is. Be specific — this is what the assigned agent will execute.",
     ),
-  status: FractalTodoStatusSchema.default("todo").describe(
-    "Current status of this todo. Follows the lifecycle: todo → in_progress → in_review → finished.",
+  status: FractalTodoStatusSchema.default("pending").describe(
+    "Current status of this todo. Follows the lifecycle: pending → in_progress → (blocked) → finished, with skipped reachable from any non-terminal state.",
   ),
+  order: z
+    .number()
+    .optional()
+    .describe("Position in the plan. Steps are listed by it."),
+  evidence: z
+    .string()
+    .optional()
+    .describe("What was actually verified, concretely."),
   agent: z
     .string()
     .optional()
     .describe(
-      "ID of the agent responsible for executing this todo. Must match a registered Fractal agent ID (e.g., 'atlas').",
+      "Not a real Go field — see this schema's doc comment. Always undefined against this backend.",
     ),
-  instructions: z
+  content: z
     .string()
     .optional()
     .describe(
-      "Prompt or instruction given to the assigned agent. Provides context and behavioral guidance for execution.",
+      "Notes on this step, in Markdown.",
     ),
   output: z
     .any()
     .optional()
     .describe(
-      "Output result produced by the agent after execution. Auto-populated when the agent completes the todo.",
+      "Not a real Go field — see this schema's doc comment. Always undefined against this backend.",
     ),
 });
 
@@ -162,7 +184,11 @@ export const FractalCommentSchema = z.object({
     .describe(
       "ID of the parent task. Used for file path resolution and scoping.",
     ),
-  body: z
+  // Go's stored `Comment` (internal/domain/comment/entity.go) has no
+  // `body` field at all — the persisted text is `content`. `body` is only
+  // a *write*-side name (comment.create/update's input field), which is
+  // why the create/update schemas below keep it; this is the read model.
+  content: z
     .string()
     .describe(
       "Markdown content of the comment. Supports code blocks, lists, mentions (@username), and formatted text.",

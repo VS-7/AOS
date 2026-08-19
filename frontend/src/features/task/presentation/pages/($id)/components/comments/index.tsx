@@ -116,11 +116,8 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
   );
 
   const { data: commentsData, isLoading: isLoadingComments } =
-    // Go's `comment.list` input field is `task` (`internal/domain/comment/
-    // schema.go`'s `ListInput.Task`, `json:"task"`), not `taskId` — the
-    // source sent the wrong key here.
     aos.client.comment.list.useQuery({
-      params: { task: taskId },
+      params: { taskId },
       enabled: !!taskId,
     });
 
@@ -144,21 +141,15 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
       body: "",
     },
     onSubmit: (values) => ({
-      // Same `task`-not-`taskId` correction as the query above; Go's
-      // `comment.create` input field is also `task`.
-      params: { task: taskId },
+      params: { taskId },
       body: {
         body:
           replyTarget && replyTarget.depth >= 2
             ? ensureMentionPrefix(values.body, replyTarget.comment.author)
             : values.body,
         attachments: [],
-        // Go's `comment.create` input field for the reply target is
-        // `parent` (`CreateInput.Parent`, `json:"parent"`) — the source
-        // sent `replyToId`, a name that exists on neither the Go input nor
-        // the stored `Comment` entity (which persists it as `parentId`).
         ...(replyTarget
-          ? { parent: getReplyTargetParentId(replyTarget) }
+          ? { replyToId: getReplyTargetParentId(replyTarget) }
           : {}),
       },
     }),
@@ -171,9 +162,11 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
       form.reset();
       setReplyTarget(null);
       // Query key shape is the facade's own: `[feature, action,
-      // flattenArgs(opts)]` (`lib/aos-facade.ts`) — must match the
-      // `useQuery` call above (`params: { task: taskId }`) exactly.
-      void queryClient.invalidateQueries({ queryKey: ["comment", "list", { task: taskId }] });
+      // flattenArgs(opts)]` (`lib/aos-facade.ts`) — the *unrenamed*
+      // payload the ported code passed, matching the `useQuery` call
+      // above (`params: { taskId }`) exactly. The `task`/`taskId` rename
+      // itself lives in `command-map.ts` now, not here.
+      void queryClient.invalidateQueries({ queryKey: ["comment", "list", { taskId }] });
     },
   });
 

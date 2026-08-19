@@ -1,4 +1,6 @@
 import { AosStore } from "./builders/store";
+import { client } from "@/lib/client";
+import { session } from "@/lib/auth";
 import type {
   FractalWorkspaceDirectoryAgent,
   FractalWorkspaceDirectoryUser,
@@ -22,11 +24,26 @@ interface WorkspaceTaskType {
  * minimum this vertical slice needs to typecheck and render, built with the
  * real `AosStore` builder (`app/builders/store.ts`, already shipped by
  * Tasks 1-5, never previously exercised end-to-end) rather than an ad hoc
- * shim. Task 10 almost certainly replaces every store here with a real one
- * backed by actual Go commands — `workspace`/`projects`/`goals` start
- * empty because there is no `workspace.directory`, `project.list`, or
- * `goal.list` Go command yet (see `lib/command-map.ts`: `project.*` and
- * `goal.*` are dormant).
+ * shim.
+ *
+ * Two of the five are wired to real data via `.withPreload(...)`, which
+ * `AosApp.build()`'s root `beforeLoad` awaits for every store before any
+ * page's own loader runs (see `app/builders/app.tsx`):
+ *
+ * - `auth.user` — AOS's real, already-working session (`lib/auth.ts`'s
+ *   `session()`), the same one `<AuthGate>` already established before
+ *   this router ever mounts.
+ * - `workspace.current` — the real, already-registered `workspace_get`
+ *   command, called directly (not through the facade — this store isn't
+ *   part of the ported Fractal frontend, so it has no Fractal call-name to
+ *   translate) exactly the way `app/root-layout.tsx`'s own workspace query
+ *   already does.
+ *
+ * `workspace.directory`, `projects`, and `goals` stay empty: there is no
+ * Go command to populate them from yet (`command-map.ts` marks
+ * `workspace.listMembers`, `project.list`, and `goal.list` all dormant).
+ * Faking that data would be worse than an honest empty state, so this
+ * stays exactly that until those commands exist.
  */
 
 const workspaceStore = AosStore.create("workspace")
@@ -37,11 +54,37 @@ const workspaceStore = AosStore.create("workspace")
     },
     current: null as { id: string; name: string; tasks: WorkspaceTaskType[] } | null,
   })
+  .withPreload(async (ctx) => {
+    try {
+      const out = (await client.invoke("workspace_get", {
+        _reasoning: "populating the workspace store's current-workspace snapshot (task-type taxonomy, name) at app start",
+      })) as { id: string; name: string; tasks?: WorkspaceTaskType[] };
+      return {
+        ...ctx.state.get(),
+        current: { id: out.id, name: out.name, tasks: out.tasks ?? [] },
+      };
+    } catch {
+      // No workspace registered yet, or the daemon isn't reachable — the
+      // rest of the app already has its own failure handling for that
+      // (see root-layout.tsx's own `workspace.error` rendering); this
+      // store just stays at its empty default rather than throwing out of
+      // the root beforeLoad, which would take every route down with it.
+      return ctx.state.get();
+    }
+  })
   .build();
 
 const authStore = AosStore.create("auth")
   .withState({
     user: null as AuthSelfProfile | null,
+  })
+  .withPreload(async (ctx) => {
+    try {
+      const { user } = await session();
+      return { ...ctx.state.get(), user };
+    } catch {
+      return ctx.state.get();
+    }
   })
   .build();
 

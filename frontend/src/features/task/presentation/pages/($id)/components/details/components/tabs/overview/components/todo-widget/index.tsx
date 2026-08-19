@@ -13,10 +13,8 @@ interface TodoWidgetProps {
 export function TodoWidget({ taskId }: TodoWidgetProps) {
   const { data: todosData, refetch } = aos.client.todo.list.useQuery({
     enabled: !!taskId,
-    // Go's `todo.list` input field is `task` (`internal/domain/todo/
-    // schema.go`'s `ListInput.Task`, `json:"task"`), not `taskId`.
     params: {
-      task: taskId,
+      taskId,
     },
   });
 

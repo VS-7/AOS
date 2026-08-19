@@ -1,7 +1,7 @@
 import { useMutation, useQuery, type UseMutationResult, type UseQueryResult } from "@tanstack/react-query";
 import type { UseMutationOptions } from "@tanstack/react-query";
 import { client } from "./client";
-import { COMMAND_MAP, type MapEntry } from "./command-map";
+import { COMMAND_MAP, type CommandDescriptor, type MapEntry } from "./command-map";
 import type { CommandKey } from "./schema";
 
 /** The code the UI recognizes as "the Go side doesn't have this yet". */
@@ -51,6 +51,25 @@ function toEnvelopeError(err: unknown): EnvelopeError {
 }
 
 /**
+ * Renames the keys `descriptor.renameIn` names, leaving every other key as
+ * it was. A no-op when there's nothing to rename — the common case, most
+ * commands need no adaptation at all.
+ */
+function applyRenameIn(payload: Record<string, unknown>, renameIn?: Record<string, string>): Record<string, unknown> {
+  if (!renameIn) return payload;
+  const renamed: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    renamed[renameIn[key] ?? key] = value;
+  }
+  return renamed;
+}
+
+/** Normalizes a plain `CommandKey` string into the same shape a `CommandDescriptor` already has, so `call()` only has one path to follow. */
+function resolveDescriptor(entry: CommandKey | CommandDescriptor): CommandDescriptor {
+  return typeof entry === "string" ? { key: entry } : entry;
+}
+
+/**
  * The single point through which the 207 call sites in the ported frontend pass.
  */
 export async function call(feature: string, action: string, opts?: CallOpts): Promise<Envelope<unknown>> {
@@ -67,19 +86,28 @@ export async function call(feature: string, action: string, opts?: CallOpts): Pr
     return { data: undefined, error: { code: DORMANT_CODE, message: `the "${feature}" domain does not exist in the Go backend yet` } };
   }
 
-  const payload = flattenArgs(opts);
+  const rawPayload = flattenArgs(opts);
   try {
+    if (typeof entry === "function") {
+      const data = await entry(rawPayload);
+      return { data, error: undefined };
+    }
+
     // `client.invoke<K extends CommandKey>` infers K from both arguments at
-    // once. `entry` narrows to CommandKey already (the `function` branch is
-    // ruled out above), but a wide, dynamically-looked-up CommandKey gives
-    // no single K TypeScript can pin down, so it can't check the payload
-    // against that command's specific input schema. `as CommandKey` here is
-    // the same type restated, not a widening; `as never` on the payload is
-    // the narrowest way to hand over a shape whose fields vary per command
-    // — the real safety net is Go's own input validation on the other side.
-    const data = typeof entry === "function"
-      ? await entry(payload)
-      : await client.invoke(entry as CommandKey, { ...payload, _reasoning: `interface: ${path}` } as never);
+    // once. `descriptor.key` narrows to CommandKey already, but a wide,
+    // dynamically-looked-up CommandKey gives no single K TypeScript can pin
+    // down, so it can't check the payload against that command's specific
+    // input schema. `as CommandKey` here is the same type restated, not a
+    // widening; `as never` on the payload is the narrowest way to hand over
+    // a shape whose fields vary per command — the real safety net is Go's
+    // own input validation on the other side.
+    const descriptor = resolveDescriptor(entry);
+    const payload = applyRenameIn(rawPayload, descriptor.renameIn);
+    const raw = await client.invoke(descriptor.key as CommandKey, { ...payload, _reasoning: `interface: ${path}` } as never);
+    // Only a defined result gets wrapped — an empty/void response has
+    // nothing worth nesting, and wrapping `undefined` as `{ [key]:
+    // undefined }` would just trade one falsy shape for a different one.
+    const data = descriptor.wrapOut && raw !== undefined ? { [descriptor.wrapOut]: raw } : raw;
     return { data, error: undefined };
   } catch (err) {
     return { data: undefined, error: toEnvelopeError(err) };

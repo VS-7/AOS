@@ -14,19 +14,23 @@ function getMentionLabel(author: string) {
   return `@${author.trim().replace(/^@+/, "").replace(/\s+/g, "_")}`;
 }
 
+// Reads `comment.content` — Go's stored `Comment` has no `body` field, only
+// `content` (`internal/domain/comment/entity.go`); `body` is a write-side
+// name for comment.create/update's input, not what a fetched comment
+// carries back. See `interfaces/task.interfaces.ts`'s `FractalCommentSchema`.
 function getRenderedBody(comment: FractalComment, mentionedAuthor?: string) {
   if (!mentionedAuthor) {
-    return comment.body;
+    return comment.content;
   }
 
   const mention = getMentionLabel(mentionedAuthor);
-  const body = comment.body.trimStart();
+  const body = comment.content.trimStart();
 
   if (body.startsWith(mention)) {
-    return comment.body;
+    return comment.content;
   }
 
-  return `${mention} ${comment.body}`;
+  return `${mention} ${comment.content}`;
 }
 
 function shouldCollapseComment(body: string) {

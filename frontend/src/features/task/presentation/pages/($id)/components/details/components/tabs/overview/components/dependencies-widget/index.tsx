@@ -46,7 +46,11 @@ export function DependenciesWidget({ task }: DependenciesWidgetProps) {
   ).length;
 
   const { data: tasksData } = aos.client.task.list.useQuery({
-    query: { limit: "200" },
+    // Go's `task.list` input declares `limit` as `int`
+    // (`internal/domain/task/schema.go`) — the quoted string here decodes
+    // fine for most JSON libraries but fails Go's strict `int` unmarshal
+    // (a hard 400), so this sends a real number.
+    query: { limit: 200 },
     enabled: pickerOpen,
   });
   const tasks: FractalTask[] =
@@ -60,9 +64,7 @@ export function DependenciesWidget({ task }: DependenciesWidgetProps) {
   async function persistDependsOn(next: string[]) {
     setIsMutating(true);
     const { error } = await aos.client.task.update.mutate({
-      // Go's `task.update` input field is `id`, not `task` — see the
-      // port's field-name notes in `($id)/index.tsx`'s loader.
-      params: { id: task.id },
+      params: { task: task.id },
       body: { dependsOn: next },
     });
 
