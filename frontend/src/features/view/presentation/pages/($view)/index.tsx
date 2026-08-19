@@ -142,7 +142,9 @@ export const ViewPage = aos
             }}
           >
             <div className="flex h-full min-h-0 w-full flex-1 flex-col">
-              <ViewRenderer spec={spec} handlers={handlers} />
+              {/* CAST: Our local Spec (props?: unknown) vs json-render's Spec (props: unknown)
+                  stems from zod 3 vs 4 mismatch. View is dormant; revisit when Go backend exists. */}
+              <ViewRenderer spec={spec as any} handlers={handlers} />
             </div>
           </CollectionViewProvider>
         </PageBody>

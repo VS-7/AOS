@@ -92,6 +92,8 @@
     "radix-ui": "^1.1.2",
     "react": "^19.0.0",
     "react-day-picker": "^9.4.4",
+    "react-dnd": "^16.0.1",
+    "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "^19.0.0",
     "react-force-graph-3d": "^1.29.1",
     "react-hook-form": "^7.54.2",
