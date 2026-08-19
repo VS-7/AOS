@@ -13,6 +13,44 @@ import {
 
 export type ThemeMode = "light" | "dark" | "system";
 
+/**
+ * Converts one palette out of `themes_get`'s response
+ * (`internal/domain/theme/entity.go`'s `Palette`, nested under
+ * `theme.variants.{light,dark}`) into the shape `FractalThemeSettings`
+ * expects, for `setPreset`/`update` below.
+ *
+ * task-12 round 3: two differences from a plain pass-through, ruled on
+ * explicitly rather than guessed —
+ *
+ * - `semantic` → `semanticColors`: same data, Go just names the key
+ *   differently. A straight rename, nothing lost.
+ * - `fonts`: Go's `Palette` has no such field at all — a theme preset
+ *   carries colours and a corner radius, never a font choice. Left
+ *   **absent** here on purpose, not defaulted to `{}` or invented from
+ *   somewhere else: `fromStoredFont(undefined)` (this feature's own
+ *   helper, `presentation/helpers/font-settings.helper.ts`) already
+ *   renders that as the explicit "system default" sentinel, which reads
+ *   the same whether nothing was ever set or a preset switch just
+ *   supplied no font — this file has no way to tell those apart, so it
+ *   doesn't pretend to. Before this comment existed, the one caller that
+ *   assigns this object as `theme.settings` directly (`update`'s
+ *   `updatedSettings` branch, below) silently wiped out whatever font was
+ *   previously chosen on every full preset switch — the "honestly empty
+ *   vs actually unavailable" confusion flagged elsewhere in this port.
+ * `radius`/`windows` need no truncation guard beyond `Palette`'s existing
+ * `,omitempty`: an absent one here is an absent one there too.
+ */
+function paletteFromApi(
+  palette: (Record<string, unknown> & { semantic?: Record<string, string> }) | undefined,
+): Partial<FractalThemeSettings> {
+  if (!palette) return {};
+  const { semantic, ...rest } = palette;
+  return {
+    ...rest,
+    semanticColors: semantic ?? {},
+  } as Partial<FractalThemeSettings>;
+}
+
 export type ThemeIconSet = "minimal" | "standard" | "complete" | "none";
 
 export type ThemeIconsConfig = {
@@ -65,8 +103,21 @@ export const ThemeStore = AosStore.create("theme")
   })
   .addAction('setPreset', (ctx) => async (preset: string) => {
     const response = await api.theme.get.query({ params: { theme: preset } });
-    if (response.data?.theme?.theme) {
-      ctx.state.set({ theme: { preset, settings: response.data.theme.theme } })
+    // task-12 round 3: `themes_get` nests palettes under
+    // `theme.variants.{light,dark}` — `.theme.theme` was reading past the
+    // real data on every call. See `paletteFromApi`'s own comment above
+    // for what does and doesn't carry over from Go's `Palette`.
+    const variants = (response.data as { theme?: { variants?: Record<string, Record<string, unknown>> } } | undefined)?.theme?.variants;
+    if (variants) {
+      ctx.state.set({
+        theme: {
+          preset,
+          settings: {
+            light: paletteFromApi(variants.light),
+            dark: paletteFromApi(variants.dark),
+          },
+        },
+      });
     }
   })
   .addAction('setSettings', (ctx) => (settings: Record<string, FractalThemeSettings>) => ctx.state.set({ theme: { settings } }))
@@ -117,8 +168,16 @@ export const ThemeStore = AosStore.create("theme")
     // 1. Se o preset ou o modo mudou, carregamos os dados base do tema da API
     if (isPresetChanged || isModeChanged) {
       const { data } = await api.theme.get.query({ params: { theme: newPreset } });
-      if (data?.theme?.theme) {
-        themeBaseSettings = data.theme.theme;
+      // task-12 round 3: same `.theme.variants` fix as `setPreset` above —
+      // `paletteFromApi` is what keeps `themeBaseSettings.light`/`.dark`
+      // shaped the way `FractalThemeSettingsSchema` (and the merge below)
+      // expects, `fonts` included-but-absent rather than silently missing.
+      const variants = (data as { theme?: { variants?: Record<string, Record<string, unknown>> } } | undefined)?.theme?.variants;
+      if (variants) {
+        themeBaseSettings = {
+          light: paletteFromApi(variants.light),
+          dark: paletteFromApi(variants.dark),
+        };
       }
     }
 
@@ -163,6 +222,12 @@ export const ThemeStore = AosStore.create("theme")
         userSettings
       );
 
+    // On a full preset switch this assigns `themeBaseSettings` straight
+    // through, bypassing the merge below entirely — `paletteFromApi`
+    // (top of file) is what makes that safe: `fonts` stays absent rather
+    // than merged from the previous preset or fabricated, so a preset
+    // switch is honest about supplying no font opinion instead of quietly
+    // resetting one that was set.
     const updatedSettings = isPresetChanged && themeBaseSettings.dark && themeBaseSettings.light
       ? themeBaseSettings
       : {

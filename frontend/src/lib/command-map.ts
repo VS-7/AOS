@@ -280,13 +280,19 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // call `api.theme.get.query({ params: { theme: preset } })`. Go's
   // `GetInput` (`internal/domain/theme/schema.go`) names that field `id`,
   // with `validate:"required,notblank"` — every call 400'd. `renameIn`
-  // fixes the wire mismatch; it does not fix the read on the other side
-  // (`response.data?.theme?.theme` — Go's `GetOutput.Theme` has no nested
-  // `.theme`, only `id`/`name`/`author`/`builtin`/`variants` keyed by
-  // light/dark `Palette`), which stays broken and is a task-12 escalation:
-  // reshaping `variants.{light,dark}` into the flat `FractalThemeSettings`
-  // shape `theme.store.ts` expects is a real data-model decision, not a
-  // wire-level one `renameIn`/`coerceIn` can express.
+  // fixes that wire mismatch.
+  //
+  // The response shape (`response.data?.theme?.theme` reading past Go's
+  // real `theme.variants.{light,dark}`) can't be fixed here — `wrapOut`
+  // only adds one nesting level to a bare entity, it can't rename a key
+  // several levels inside an already-shaped `Output` struct — so that part
+  // is a call-site fix (`theme.store.ts`'s own `paletteFromApi` and its
+  // two callers), ruled on explicitly (task-12 round 2's side-by-side
+  // comparison) rather than guessed: five of six `Palette` fields already
+  // match `FractalThemeSettings` by name, `semantic`/`semanticColors` is a
+  // plain rename, and `fonts` is a genuine gap — Go's `Palette` has no such
+  // field at all, made visible with a comment at the read site rather than
+  // silently defaulted.
   "theme.get": { key: "themes_get", renameIn: { theme: "id" } },
   "theme.list": "themes_list",
 
