@@ -991,11 +991,14 @@ reexport — conferir com `grep -n "export .*FractalTodo" "$AOS/src/features/tas
 
 ```bash
 cd "$AOS/src/features/task"
-perl -pi -e 's{\@app/}{\@/}g' $(find . -type f \( -name '*.ts' -o -name '*.tsx' \))
-perl -pi -e 's{\@/\@core/}{\@/core/}g' $(find . -type f \( -name '*.ts' -o -name '*.tsx' \))
-perl -pi -e 's{from "\@/igniter"}{from "\@/app/aos"}g' $(find . -type f \( -name '*.ts' -o -name '*.tsx' \))
-perl -pi -e 's{\bigniter\.}{aos.}g' $(find . -type f \( -name '*.ts' -o -name '*.tsx' \))
-perl -pi -e 's{\bigniter\b}{aos}g' $(find . -type f \( -name '*.ts' -o -name '*.tsx' \))
+# NUNCA use `$(find ...)` sem aspas aqui — ver o aviso abaixo.
+find . -type f \( -name '*.ts' -o -name '*.tsx' \) -print0 | xargs -0 perl -pi -e '
+  s{\@app/}{\@/}g;
+  s{\@/\@core/}{\@/core/}g;
+  s{from "\@/igniter"}{from "\@/app/aos"}g;
+  s{\bigniter\.}{aos.}g;
+  s{\bigniter\b}{aos}g;
+'
 grep -rn "igniter" . || echo "sem resíduo"
 ```
 
@@ -1169,11 +1172,11 @@ export interface ResponseWithCTA<TData> {
 
 ```bash
 cd "$AOS/src"
-FILES=$(find features core -name '*.ts')
-perl -pi -e 's{\@/\@core/}{\@/core/}g' $FILES
-perl -pi -e 's{from "\@/features/([a-z]+)/\1\.interfaces"}{from "\@/features/$1/interfaces/$1.interfaces"}g' $FILES
+find features core -name '*.ts' -print0 > /tmp/port-files.z   # ver o aviso abaixo
+xargs -0 perl -pi -e 's{\@/\@core/}{\@/core/}g' < /tmp/port-files.z
+xargs -0 perl -pi -e 's{from "\@/features/([a-z]+)/\1\.interfaces"}{from "\@/features/$1/interfaces/$1.interfaces"}g' < /tmp/port-files.z
 # os recuperados referenciam vizinhos por caminho relativo raso
-perl -pi -e 's{from "\.\./([a-z]+)/\1\.interfaces"}{from "\@/features/$1/interfaces/$1.interfaces"}g' $FILES
+xargs -0 perl -pi -e 's{from "\.\./([a-z]+)/\1\.interfaces"}{from "\@/features/$1/interfaces/$1.interfaces"}g' < /tmp/port-files.z
 ```
 
 - [ ] **Step 4: Substituir os tipos de `@igniter-js/collections`**
@@ -1429,15 +1432,19 @@ os imports reescritos.
 
 ```bash
 cd "$AOS/src"
-FILES=$(find features hooks app components -type f \( -name '*.ts' -o -name '*.tsx' \))
-perl -pi -e 's{\@app/}{\@/}g' $FILES
-perl -pi -e 's{\@/\@core/}{\@/core/}g' $FILES
-perl -pi -e 's{from "\@/igniter"}{from "\@/app/aos"}g' $FILES
-perl -pi -e 's{from "\@/lib/stores"}{from "\@/app/lib/stores"}g' $FILES
-perl -pi -e 's{from "\@/lib/triggers"}{from "\@/app/lib/triggers"}g' $FILES
-perl -pi -e 's{from "\@/features/([a-z]+)/\1\.interfaces"}{from "\@/features/$1/interfaces/$1.interfaces"}g' $FILES
-perl -pi -e 's{\bigniter\.}{aos.}g' $FILES
-perl -pi -e 's{\bigniter\b}{aos}g' $FILES
+# NUNCA `FILES=$(find ...)` com `$FILES` sem aspas: no zsh isso NÃO faz
+# word-splitting em newline, então o perl recebe UM nome de arquivo
+# multi-linha, escreve o erro no stderr e SAI COM 0 sem tocar em nada.
+# Silencioso, e aqui seriam ~500 arquivos não reescritos.
+find features hooks app components -type f \( -name '*.ts' -o -name '*.tsx' \) -print0 > /tmp/port-files.z
+xargs -0 perl -pi -e 's{\@app/}{\@/}g' < /tmp/port-files.z
+xargs -0 perl -pi -e 's{\@/\@core/}{\@/core/}g' < /tmp/port-files.z
+xargs -0 perl -pi -e 's{from "\@/igniter"}{from "\@/app/aos"}g' < /tmp/port-files.z
+xargs -0 perl -pi -e 's{from "\@/lib/stores"}{from "\@/app/lib/stores"}g' < /tmp/port-files.z
+xargs -0 perl -pi -e 's{from "\@/lib/triggers"}{from "\@/app/lib/triggers"}g' < /tmp/port-files.z
+xargs -0 perl -pi -e 's{from "\@/features/([a-z]+)/\1\.interfaces"}{from "\@/features/$1/interfaces/$1.interfaces"}g' < /tmp/port-files.z
+xargs -0 perl -pi -e 's{\bigniter\.}{aos.}g' < /tmp/port-files.z
+xargs -0 perl -pi -e 's{\bigniter\b}{aos}g' < /tmp/port-files.z
 grep -rn "@igniter-js\|@app/" . | head -20 || echo "sem resíduo"
 ```
 
