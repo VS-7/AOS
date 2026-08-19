@@ -2,10 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import chatDmWithAgentScreenshot from "@/public/screenshots/chat-dm-with-agent.png";
-import fileExplorerScreenshot from "@/public/screenshots/file-explorer.png";
-import taskDetailsScreenshot from "@/public/screenshots/task-details.png";
-import taskListScreenshot from "@/public/screenshots/task-list.png";
+import { PLACEHOLDER_IMAGE } from "@/assets/placeholder";
 
 interface CarouselImageAnimation {
   focalPoint: {
@@ -33,7 +30,7 @@ const FADE_TRANSITION = {
 
 const screenshots: CarouselImage[] = [
   {
-    src: chatDmWithAgentScreenshot,
+    src: PLACEHOLDER_IMAGE,
     alt: "Talk with your Copilot to turn intent into action, keep context alive across sessions, and coordinate specialist agents inside your workspace.",
     animation: {
       focalPoint: { x: 0, y: 18 },
@@ -45,7 +42,7 @@ const screenshots: CarouselImage[] = [
     },
   },
   {
-    src: fileExplorerScreenshot,
+    src: PLACEHOLDER_IMAGE,
     alt: "Explore your files, decisions, and references in an adaptive space that connects what you do to the real context of the work.",
     animation: {
       focalPoint: { x: 0, y: 0 },
@@ -57,7 +54,7 @@ const screenshots: CarouselImage[] = [
     },
   },
   {
-    src: taskDetailsScreenshot,
+    src: PLACEHOLDER_IMAGE,
     alt: "Open tasks with clarity, track plans, status, and next steps, and let Fractal help you orchestrate execution end to end.",
     animation: {
       focalPoint: { x: 90, y: 0 },
@@ -69,7 +66,7 @@ const screenshots: CarouselImage[] = [
     },
   },
   {
-    src: taskListScreenshot,
+    src: PLACEHOLDER_IMAGE,
     alt: "See your work as a continuous flow that helps you prioritize, track, and move tasks forward with continuity and supervision.",
     animation: {
       focalPoint: { x: 50, y: 28 },

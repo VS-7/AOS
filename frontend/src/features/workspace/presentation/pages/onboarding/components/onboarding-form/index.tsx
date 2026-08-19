@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 
 import { FractalAuthOnboardingSchema } from "@/features/auth/schemas/auth.schema";
 
-import landscapeBg from "@/public/backgrounds/landscape.png";
+import { PLACEHOLDER_IMAGE } from "@/assets/placeholder";
 import { OnboardingFormWelcomeStep } from "./steps/onboarding-form-welcome-step";
 import { OnboardingFormUserStep } from "./steps/onboarding-form-user-step";
 import { OnboardingFormSecurityStep } from "./steps/onboarding-form-security-step";
@@ -338,7 +338,7 @@ export function OnboardingForm() {
       {/* Feature Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <img
-          src={landscapeBg}
+          src={PLACEHOLDER_IMAGE}
           alt=""
           aria-hidden
           className="size-full object-cover"

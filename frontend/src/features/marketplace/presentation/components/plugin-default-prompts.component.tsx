@@ -2,8 +2,7 @@ import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
 import { PluginLogo } from "@/features/marketplace/presentation/components/plugin-card.component";
-import promptsBgLight from "@/public/marketplace-prompts-bg-light.jpg";
-import promptsBgDark from "@/public/marketplace-prompts-bg-dark.jpg";
+import { PLACEHOLDER_IMAGE } from "@/assets/placeholder";
 import { cn } from "@/lib/utils";
 
 interface PluginDefaultPromptsProps {
@@ -37,13 +36,13 @@ export function PluginDefaultPrompts({
       )}
     >
       <img
-        src={promptsBgLight}
+        src={PLACEHOLDER_IMAGE}
         alt=""
         aria-hidden
         className="absolute inset-0 size-full object-cover dark:hidden"
       />
       <img
-        src={promptsBgDark}
+        src={PLACEHOLDER_IMAGE}
         alt=""
         aria-hidden
         className="absolute inset-0 hidden size-full object-cover dark:block"
