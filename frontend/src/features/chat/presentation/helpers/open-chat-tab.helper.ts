@@ -1,16 +1,221 @@
+import { aos } from "@/app/aos";
+import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
+import type { ViewportTabState } from "@/features/workspace/presentation/stores/viewport.store";
+
+export interface OpenChatTabParams {
+  chatId: string;
+  title?: string;
+}
+
 /**
- * Adapter gap, not a Task-9 stub: `chat` is not a deferred neighbouring
- * feature (it already has a real, hand-built implementation in AOS — see
- * `features/chat/presentation/`). Fractal's original opened a chat inside a
- * multi-tab side panel; AOS's chat is a single routed page
- * (`/chat/$chatId`, see `router.tsx`), which has no equivalent "open as a
- * tab" affordance yet.
+ * Reads the chat id stored on a viewport tab, if any.
  *
- * Wiring this to `router.navigate(...)` would import `router.tsx` from
- * inside `features/chat`, and `router.tsx` imports the ported `task` pages
- * that call this helper — a real circular import, not just a smell. Left as
- * an inert no-op until AOS's chat UX grows a place for this to open into.
+ * @param tab - Viewport tab (or metadata-bearing slice).
+ * @returns Chat id when the tab is a chat surface.
  */
-export function openChatTab(_args: { chatId: string; title?: string }): void {
-  // Intentionally inert — see file header.
+export function getTabChatId(tab: {
+  metadata?: Record<string, string | number | boolean>;
+}): string | null {
+  return typeof tab.metadata?.chatId === "string" ? tab.metadata.chatId : null;
+}
+
+/**
+ * Resolves the active chat from the current viewport tab.
+ *
+ * Prefer this over pathname `/chats/$id` when the sidebar opens chats as
+ * workspace tabs — the route may stay on `/` / management pages.
+ *
+ * @param activeTab - Currently focused viewport tab.
+ * @returns Chat id when a chat tab is active.
+ */
+export function resolveActiveChatId(
+  activeTab: ViewportTabState | undefined | null,
+): string | undefined {
+  if (!activeTab || activeTab.type !== "chat") {
+    return undefined;
+  }
+
+  return getTabChatId(activeTab) ?? undefined;
+}
+
+/**
+ * Finds an existing private agent DM chat id from the local chat list.
+ *
+ * Matches participant agent rows, or legacy slug-as-id chats during migration.
+ *
+ * @param chats - Chats already loaded in the client store.
+ * @param agentId - Agent slug.
+ * @returns Matching chat id when present.
+ */
+export function findAgentDmChatId(
+  chats: Array<Pick<Chat, "id" | "kind" | "participants">>,
+  agentId: string,
+): string | undefined {
+  const match = chats.find((chat) => {
+    if (chat.id === agentId) {
+      return true;
+    }
+    if (chat.kind && chat.kind !== "dm") {
+      return false;
+    }
+    return (chat.participants ?? []).some(
+      (participant) =>
+        participant.type === "agent" && participant.id === agentId,
+    );
+  });
+  return match?.id;
+}
+
+/**
+ * Opens (or focuses) a chat viewport tab for the given chat id.
+ * Dedupes by chat id so the same thread reuses one tab.
+ *
+ * @param params - Chat id and optional tab title.
+ * @returns The focused or newly created tab id.
+ *
+ * @example
+ * ```typescript
+ * openChatTab({ chatId: "550e8400-…", title: "Atlas" });
+ * ```
+ */
+export function openChatTab(params: OpenChatTabParams): string {
+  const { chatId, title } = params;
+  const tabs = aos.stores.viewport.state.tabs.items;
+
+  const existing = tabs.find(
+    (tab) => tab.type === "chat" && getTabChatId(tab) === chatId,
+  );
+
+  if (existing) {
+    if (title && existing.title !== title) {
+      aos.stores.viewport.actions.updateTab(existing.id, { title });
+    }
+    aos.stores.viewport.actions.setActiveTab(existing.id);
+    return existing.id;
+  }
+
+  const createdTabId = aos.stores.viewport.actions.createTab({
+    type: "chat",
+    title: title ?? chatId,
+    closable: true,
+    url: undefined,
+    metadata: {
+      chatId,
+    },
+  });
+
+  if (createdTabId) {
+    aos.stores.viewport.actions.setActiveTab(createdTabId);
+  }
+
+  return createdTabId;
+}
+
+/**
+ * Finds or creates a private user↔agent DM, then opens it as a viewport tab.
+ *
+ * @param params - Agent slug and optional title.
+ * @returns The focused or newly created tab id.
+ */
+export async function openAgentDmTab(params: {
+  agentId: string;
+  title?: string;
+}): Promise<string> {
+  const response = await aos.client.chat.findOrCreateDm.mutate({
+    body: {
+      agent: params.agentId,
+      ...(params.title ? { title: params.title } : {}),
+    },
+  });
+  // Frontend mutate returns Igniter envelope `{ data, error }` — never read `.chat` on the root.
+  const chat = (
+    response as { data?: { chat?: Chat }; error?: unknown } | null | undefined
+  )?.data?.chat;
+  if ((response as { error?: unknown } | null)?.error || !chat?.id) {
+    throw new Error("Unable to open agent DM.");
+  }
+  return openChatTab({
+    chatId: chat.id,
+    title: params.title ?? chat.title ?? params.agentId,
+  });
+}
+
+/**
+ * Finds an existing private user↔user DM chat id from the local chat list.
+ *
+ * @param chats - Chats already loaded in the client store.
+ * @param userId - Peer user id.
+ * @param selfUserId - Current user id (both must be participants).
+ * @returns Matching chat id when present.
+ */
+export function findUserDmChatId(
+  chats: Array<Pick<Chat, "id" | "kind" | "participants">>,
+  userId: string,
+  selfUserId: string,
+): string | undefined {
+  const match = chats.find((chat) => {
+    if (chat.kind && chat.kind !== "dm") {
+      return false;
+    }
+    const participants = chat.participants ?? [];
+    const hasPeer = participants.some(
+      (participant) =>
+        participant.type === "user" && participant.id === userId,
+    );
+    const hasSelf = participants.some(
+      (participant) =>
+        participant.type === "user" && participant.id === selfUserId,
+    );
+    const hasAgent = participants.some(
+      (participant) => participant.type === "agent",
+    );
+    return hasPeer && hasSelf && !hasAgent;
+  });
+  return match?.id;
+}
+
+/**
+ * Finds or creates a private user↔user DM, then opens it as a viewport tab.
+ *
+ * @param params - Peer user id and optional title.
+ * @returns The focused or newly created tab id.
+ */
+export async function openUserDmTab(params: {
+  userId: string;
+  title?: string;
+}): Promise<string> {
+  const response = await aos.client.chat.findOrCreateDm.mutate({
+    body: {
+      user: params.userId,
+      ...(params.title ? { title: params.title } : {}),
+    },
+  });
+  // Frontend mutate returns Igniter envelope `{ data, error }` — never read `.chat` on the root.
+  const chat = (
+    response as { data?: { chat?: Chat }; error?: unknown } | null | undefined
+  )?.data?.chat;
+  if ((response as { error?: unknown } | null)?.error || !chat?.id) {
+    throw new Error("Unable to open user DM.");
+  }
+  return openChatTab({
+    chatId: chat.id,
+    title: params.title ?? chat.title ?? params.userId,
+  });
+}
+
+/**
+ * Closes the viewport tab bound to a chat id, if one is open.
+ *
+ * @param chatId - Chat id to close.
+ */
+export function closeChatTab(chatId: string): void {
+  const tab = aos.stores.viewport.state.tabs.items.find(
+    (item) => item.type === "chat" && getTabChatId(item) === chatId,
+  );
+
+  if (!tab) {
+    return;
+  }
+
+  aos.stores.viewport.actions.closeTab(tab.id);
 }

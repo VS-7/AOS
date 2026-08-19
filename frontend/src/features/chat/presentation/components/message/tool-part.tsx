@@ -1,26 +1,41 @@
-import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput, isErrorOutput, type ToolState } from "@/components/ui/tool";
-import type { Part } from "@/features/chat/interfaces/chat.interfaces";
+import React from "react";
+import {
+  Tool,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+} from "@/components/ui/tool";
+import type { ToolUIPart, DynamicToolUIPart } from "ai";
+import { ToolUIHelper } from "../../helpers/tool-ui.helper";
 
-/** Renders one tool invocation: its call part, and its result part once one arrives. */
-export function ToolBlock({ call, result }: { call: Part; result?: Part }) {
-  const toolName = call.toolName ?? "Tool";
-  const reasoning =
-    call.input && typeof call.input === "object"
-      ? (call.input as Record<string, unknown>)["_reasoning"]
-      : undefined;
-
-  const state: ToolState = !result ? "running" : isErrorOutput(result.output) ? "error" : "done";
+/**
+ * @component ToolBlock
+ * @description Renders a block representing a tool call and its output.
+ */
+export function ToolBlock({ part }: { part: ToolUIPart | DynamicToolUIPart }) {
+  const toolName = "toolName" in part ? part.toolName : part.type.split("-").slice(1).join("-");
+  const config = ToolUIHelper.getConfig(toolName);
+  const reasoning = (part.input as any)?._reasoning;
 
   return (
     <Tool className="mb-1.5">
       <ToolHeader
+        // `part.state` is the AI SDK's richer lifecycle union (see
+        // `components/ui/tool.tsx`'s `ToolPart` doc comment); `ToolHeader`'s
+        // own `state` prop predates that and only accepts the coarser
+        // three-way `ToolState`. Cast rather than widen a shared UI
+        // primitive's prop for this one caller.
+        state={part.state as any}
         toolName={toolName}
-        state={state}
-        reasoning={typeof reasoning === "string" ? reasoning : undefined}
+        title={config.title}
+        reasoning={reasoning}
       />
       <ToolContent>
-        <ToolInput input={call.input} />
-        {result && <ToolOutput output={result.output} />}
+        <ToolInput input={part.input} />
+        {"output" in part && (
+          <ToolOutput output={part.output} {...({ errorText: (part as any).errorText } as any)} />
+        )}
       </ToolContent>
     </Tool>
   );

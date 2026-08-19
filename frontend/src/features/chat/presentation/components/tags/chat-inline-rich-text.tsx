@@ -1,20 +1,60 @@
-import { cn } from "@/lib/utils";
+import * as React from "react"
+import { cn } from "@/lib/utils"
+import { ChatInlineMarkupHelper } from "../../helpers/chat-inline-markup.helper"
+import { ChatInlineMentionTag } from "./chat-inline-mention-tag"
+import { ChatInlineSourceTag } from "./chat-inline-source-tag"
 
-/**
- * An inline rich-text fragment embedded inside a `<chat-inline-rich-text>`
- * tag. Minimal — renders the text as-is. What "rich" meant for this original
- * tag (bold/italic/code spans, or a nested render of the same markdown
- * pipeline) isn't verifiable from the reconstructed source alone; rather than
- * guess at formatting behaviour, this stays a plain, honest span until the
- * chat feature's own port pins down the real contract.
- */
+interface ChatInlineRichTextProps {
+  className?: string
+  inlineTagClassName?: string
+  text: string
+}
+
 export function ChatInlineRichText({
-  text,
   className,
-}: {
-  text: string;
-  className?: string;
-  inlineTagClassName?: string;
-}) {
-  return <span className={cn("align-middle", className)}>{text}</span>;
+  inlineTagClassName,
+  text,
+}: ChatInlineRichTextProps) {
+  const tokens = React.useMemo(() => ChatInlineMarkupHelper.parse(text), [text])
+
+  return (
+    <span className={cn("whitespace-pre-wrap break-words", className)}>
+      {tokens.map((token, index) => {
+        if (token.type === "text") {
+          return (
+            <React.Fragment key={`text-${index}`}>
+              {token.value}
+            </React.Fragment>
+          )
+        }
+
+        if (token.type === "mention") {
+          return (
+            <span
+              className="align-middle"
+              data-inline-markup={token.markup}
+              key={`mention-${token.id}-${index}`}
+            >
+              <ChatInlineMentionTag className={inlineTagClassName} id={token.id} />
+            </span>
+          )
+        }
+
+        return (
+          <span
+            className="align-middle"
+            data-inline-markup={token.markup}
+            key={`source-${token.sourceType}-${token.name}-${index}`}
+          >
+            <ChatInlineSourceTag
+              className={inlineTagClassName}
+              name={token.name}
+              path={token.path}
+              sourceType={token.sourceType}
+            />
+          </span>
+        )
+      })}
+    </span>
+  )
 }

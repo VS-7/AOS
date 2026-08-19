@@ -17,17 +17,36 @@ export const InstallModelSchema = z.object({
 export type ListModelsInput = Partial<z.infer<typeof ListModelsSchena>>
 export type InstalModelInput = z.infer<typeof InstallModelSchema>
 
+/**
+ * `capabilities` — absent from this file's source; reconstructed from
+ * `presentation/components/settings/.../models-section.tsx`'s
+ * `supportsCapability`/`getFirstModel` helpers, its only consumer.
+ */
+export interface FractalModelProviderOptionCapabilities {
+  fast?: boolean;
+  reasoning?: boolean;
+  vision?: boolean;
+  realtime?: boolean;
+  voice?: boolean;
+  image?: boolean;
+  video?: boolean;
+}
+
 export interface FractalModelProviderOption {
   id: string;
   name: string;
-  enabled: boolean
+  enabled: boolean;
+  capabilities?: FractalModelProviderOptionCapabilities;
 }
 
 export interface FractalModelProvider {
   id: string;
   name: string;
   description: string;
-  logo: string;
+  // `{ light, dark }`, not a single URL — reconstructed from
+  // `hooks/use-provider-logo.ts`, this field's only consumer, which picks
+  // one per the active theme mode.
+  logo: { light: string; dark: string };
   configured: boolean;
   default: boolean;
   auth: FractalModelProviderAuth;

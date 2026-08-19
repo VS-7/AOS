@@ -136,14 +136,14 @@ export function TaskDetailsMain({
   const allTodosCompleted =
     totalTodos > 0 ? todoStats.completed === totalTodos : true;
   const showApproveButton = task.status === "in_review" && allTodosCompleted;
-  // Source read `message.metadata.{type,execution.status,runs}` — a
-  // Fractal-only message shape. AOS's real `Message` (`features/chat/
-  // interfaces/chat.interfaces.ts`) carries the same information as
-  // `author.type` and `runs` directly on the message, not nested under a
-  // `metadata` object, so this reads those instead.
+  // Task 9 replaced `chat.interfaces.ts`'s `Message` (this file's original
+  // target, mirroring AOS's Go entity directly) with the recovered
+  // Fractal `FractalChatMessage` — `runs` now lives at `message.metadata.
+  // runs`, matching the source shape this comment used to say AOS didn't
+  // have. See `chat.interfaces.ts`'s own doc comment for the full story.
   const isLiveChatRunning = Boolean(
     liveChat?.messages.some((message) =>
-      (message.runs ?? []).some(
+      (message.metadata?.runs ?? []).some(
         (run) => run.status === "pending" || run.status === "running",
       ),
     ),

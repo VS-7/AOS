@@ -110,3 +110,10 @@ export interface FractalInstructionDeleteParams {
 export type FractalInstructionDeleteResult = ResponseWithCTA<{
   id: string;
 }>;
+
+/**
+ * Alias for the freshly-copied `v401/web` presentation code, which
+ * imports the `Fractal`-prefixed name — same reasoning as `skill.
+ * interfaces.ts`'s `FractalSkill` alias.
+ */
+export type FractalInstruction = Instruction;

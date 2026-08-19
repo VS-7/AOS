@@ -375,3 +375,12 @@ export interface ISkillService {
    */
   preview(source: SkillRemoteSourceInput): Promise<SkillServicePreviewResult>;
 }
+
+/**
+ * Alias for the freshly-copied `v401/web` presentation code, which
+ * imports the `Fractal`-prefixed name (same pattern as `agent.
+ * interfaces.ts`'s `Agent`→`FractalAgent`) — added rather than renaming
+ * `Skill` throughout this file, which earlier tasks (2-8) already wrote
+ * and other code already consumes under the bare name.
+ */
+export type FractalSkill = Skill;

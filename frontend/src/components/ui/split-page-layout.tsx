@@ -1,12 +1,10 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-// `ResizableHandle`/`ResizablePanel`/`ResizablePanelGroup` were imported
-// but never referenced anywhere in this file (same dead-import pattern as
-// `IgniterResponse` and `project.helper.ts`'s `FractalProject`). Dropped
-// rather than adding a `resizable.tsx` wrapper (and the `react-resizable-
-// panels` dependency it needs) for code that never runs — `components/ui/
-// resizable.tsx` does not exist anywhere in the extraction this was ported
-// from, so there was nothing to copy even if it had been used.
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import {
   Accordion,
   AccordionContent,

@@ -24,6 +24,13 @@ export const FractalProjectSchema = z.object({
   content: z.string().optional(),
   /** Absolute path to the project's directory on the host machine. Creates a symlink when provided. */
   path: z.string().optional(),
+  /**
+   * Absent from this file's source — reconstructed from `presentation/
+   * pages/($id)/index.tsx`'s upsert form and `.../tabs/files.tsx`'s file
+   * browser, both of which read/write `project.source` as the linked
+   * source directory (workspace-relative, unlike `path` above).
+   */
+  source: z.string().optional(),
   /** ISO timestamp of when the project was created. Auto-generated. */
   createdAt: z.string(),
   /** ISO timestamp of when the project was last updated. Auto-generated. */

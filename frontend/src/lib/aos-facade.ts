@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useMutation, useQuery, type UseMutationResult, type UseQueryResult } from "@tanstack/react-query";
 import type { UseMutationOptions } from "@tanstack/react-query";
 import { client } from "./client";
@@ -31,6 +32,18 @@ export interface CallOpts {
   params?: Record<string, unknown>;
   body?: Record<string, unknown>;
   enabled?: boolean;
+  /** Passed straight through to `@tanstack/react-query`'s `useQuery`. */
+  staleTime?: number;
+  /**
+   * The original generated query hook called this on every successful
+   * fetch — a React Query v4-era `useQuery` option v5 (installed here)
+   * dropped in favor of `useEffect`-on-`data`. `ActionNode.useQuery`
+   * simulates it that way (see its implementation below) rather than
+   * teaching every ported call site the v5 pattern; first hit at
+   * `use-chat.ts`, the same "one file's error, many files' problem"
+   * shape `useMutation`'s own options fix (above) already documents.
+   */
+  onSuccess?: (data: any) => void;
 }
 
 /**
@@ -144,10 +157,30 @@ export async function call(feature: string, action: string, opts?: CallOpts): Pr
   }
 }
 
+/**
+ * `Envelope<any>`/`UseQueryResult<any>` here, not `<unknown>`: the Go
+ * registry is untyped JSON per command, and this facade has no per-command
+ * response-type map (`CommandKey` only names the call, not its shape) — so
+ * every one of the 26 ported features reads `.data.someField` straight off
+ * a query/mutation result the way the original generated Igniter client's
+ * *typed* client let them. `unknown` forced every such read through a cast
+ * or narrowing; across the Task 9 bulk copy that was 187 errors in 70
+ * files, all the same shape ("Property X does not exist on type '{}'" —
+ * `unknown`'s `||`/`??` fallback narrows to the structural empty-object
+ * type, not the array/object the ported code assumes). `any` is the
+ * accurate type for "Go can return anything here, unverified" — this is
+ * the visible, disclosed version of that fact rather than 70 files each
+ * hiding their own cast. Re-typing this properly (a `CommandKey` →
+ * response-shape map) is future work; this task's job is compiling the
+ * copy, not building that map. `call()`'s own `Envelope<unknown>` (the
+ * internal function, not this public interface) is left alone — internal
+ * code benefits from the stricter type; only the ported-code-facing
+ * surface is loosened.
+ */
 interface ActionNode {
-  query(opts?: CallOpts): Promise<Envelope<unknown>>;
-  mutate(opts?: CallOpts): Promise<Envelope<unknown>>;
-  useQuery(opts?: CallOpts): UseQueryResult<unknown>;
+  query(opts?: CallOpts): Promise<Envelope<any>>;
+  mutate(opts?: CallOpts): Promise<Envelope<any>>;
+  useQuery(opts?: CallOpts): UseQueryResult<any>;
   /**
    * `options` accepts the same `onSuccess`/`onError`/`onSettled` callbacks
    * `@tanstack/react-query`'s own `useMutation` does — `mutationFn` is
@@ -158,10 +191,16 @@ interface ActionNode {
    * ("Expected 0 arguments, but got 1") — a common enough React Query
    * pattern that every other feature is likely to hit it too, so this is
    * fixed at the facade rather than worked around per call site.
+   *
+   * `& { loading: boolean }`: the Fractal original's generated mutation
+   * hook exposed `.loading`, not React Query's own `.isPending` — 30 call
+   * sites across 18 freshly-copied files (Task 9) read `.loading`
+   * directly. Adding the alias here, once, is the fix; teaching every one
+   * of those files React Query's naming is the alternative this avoids.
    */
   useMutation(
-    options?: Omit<UseMutationOptions<Envelope<unknown>, Error, CallOpts | undefined>, "mutationFn">,
-  ): UseMutationResult<Envelope<unknown>, Error, CallOpts | undefined>;
+    options?: Omit<UseMutationOptions<Envelope<any>, Error, CallOpts | undefined>, "mutationFn">,
+  ): UseMutationResult<Envelope<any>, Error, CallOpts | undefined> & { loading: boolean };
 }
 
 export type AosClient = Record<string, Record<string, ActionNode>>;
@@ -174,8 +213,8 @@ function actionNode(feature: string, action: string): ActionNode {
     // The ported code reads `q.data?.tasks`, not `q.data.data.tasks` — so
     // the hook unwraps the envelope and hands back the payload directly,
     // which is what a useQuery is expected to return.
-    useQuery: (opts) =>
-      useQuery({
+    useQuery: (opts) => {
+      const result = useQuery({
         queryKey: [feature, action, flattenArgs(opts)],
         queryFn: async () => {
           const r = await call(feature, action, opts);
@@ -199,15 +238,32 @@ function actionNode(feature: string, action: string): ActionNode {
           return r.data ?? null;
         },
         enabled: opts?.enabled ?? true,
+        staleTime: opts?.staleTime,
         // Dormant doesn't get better by retrying.
         retry: false,
-      }),
+      });
 
-    useMutation: (options) =>
-      useMutation({
+      // Simulates React Query v4's `onSuccess` callback — see `CallOpts.
+      // onSuccess`'s doc comment for why this facade offers it at all.
+      const onSuccess = opts?.onSuccess;
+      React.useEffect(() => {
+        if (result.isSuccess) {
+          onSuccess?.(result.data);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [result.isSuccess, result.data]);
+
+      return result;
+    },
+
+    useMutation: (options) => {
+      const mutation = useMutation({
         ...options,
         mutationFn: (opts?: CallOpts) => call(feature, action, opts),
-      }),
+      });
+      // See the `.loading` doc comment on `ActionNode.useMutation` above.
+      return { ...mutation, loading: mutation.isPending };
+    },
   };
 }
 

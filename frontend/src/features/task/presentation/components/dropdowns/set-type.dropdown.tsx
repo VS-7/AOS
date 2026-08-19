@@ -11,7 +11,7 @@ interface SetTypeDropdownProps {
 }
 
 export function SetTypeDropdown({ currentType, onTypeChange }: SetTypeDropdownProps) {
-  // The source read this off `igniter.useContext().workspaces` — Fractal's
+  // The source read this off `aos.useContext().workspaces` — Fractal's
   // global route context, populated by a `withContext(...)` this vertical
   // slice's `aos.tsx` doesn't wire (route context is empty here). Every
   // other place `task` reads the workspace's task-type taxonomy

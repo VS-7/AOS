@@ -1,0 +1,144 @@
+import { useRouter } from "@tanstack/react-router";
+import { aos } from "@/app/aos";
+import { SettingsSectionShell } from "../../../section-shell";
+import {
+  FormSection,
+  FormSectionContent,
+  FormSectionDescription,
+  FormSectionHeader,
+  FormSectionTitle,
+} from "@/components/ui/form-section";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from "@/components/ui/form";
+import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { FractalWorkspaceGitSchema } from "@/features/workspace/schemas/workspace.schema";
+import { toast } from "sonner";
+import { FractalAppError } from "@/core/errors/fractal.error";
+
+export function WorkspaceGitSection() {
+  const router = useRouter();
+  
+  // `aos.useContext()` is Fractal's global route context (`withContext(...)`),
+  // which this port's `app/aos.tsx` never wires (see `task`'s own `set-type.
+  // dropdown.tsx` doc comment on the same gap) -- always `{}` here in practice.
+  // Cast, not a real typed context: these settings screens read aggregated
+  // config/agents/profile-update fields off it that have no other source yet.
+  const context = aos.useContext() as any;
+  const currentWorkspace = context.workspaces?.current;
+
+  const form = aos.useForm({
+    schema: FractalWorkspaceGitSchema,
+    mode: "onChange",
+    mutation: "workspace.update",
+    values: {
+      branchPrefix: currentWorkspace?.git?.branchPrefix || "",
+      forcePush: currentWorkspace?.git?.forcePush || false,
+      commitInstructions: currentWorkspace?.git?.commitInstructions || "",
+      prInstructions: currentWorkspace?.git?.prInstructions || "",
+    },
+    onSubmit: (values) => ({
+      body: { git: values },
+      params: { id: currentWorkspace?.id },
+    }),
+    onResponse: ({ error }) => {
+      if (error) {
+        if (error instanceof FractalAppError) {
+          toast.error(error.message);
+          return;
+        }
+
+        console.error(error);
+        toast.error(error.message || "Failed to update git settings");
+        return;
+      }
+
+      toast.success("Git settings updated successfully!");
+      router.invalidate();
+    },
+  });
+
+  return (
+    <Form form={form} className="flex h-full flex-1 flex-col overflow-y-auto">
+      <SettingsSectionShell>
+        <FormSection>
+          <FormSectionHeader>
+            <FormSectionTitle>Workflow</FormSectionTitle>
+            <FormSectionDescription>Basic git automation behavior.</FormSectionDescription>
+          </FormSectionHeader>
+          <FormSectionContent className="divide-y divide-border">
+            <FormField
+              control={form.control}
+              name="branchPrefix"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
+                  <div className="flex-1 space-y-0.5">
+                    <FormLabel>Branch prefix</FormLabel>
+                    <FormDescription>Prefix used when creating new branches.</FormDescription>
+                  </div>
+                  <FormControl>
+                    <Input className="max-w-50" placeholder="e.g. agent/" {...field} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="forcePush"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
+                  <div className="space-y-0.5">
+                    <FormLabel>Always force push</FormLabel>
+                    <FormDescription>Enable force pushing by default on agent branches.</FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+          </FormSectionContent>
+        </FormSection>
+
+        <FormSection>
+          <FormSectionHeader>
+            <FormSectionTitle>Instructions</FormSectionTitle>
+            <FormSectionDescription>Tell agents how to format git messages.</FormSectionDescription>
+          </FormSectionHeader>
+          <FormSectionContent className="divide-y divide-border">
+            <FormField
+              control={form.control}
+              name="commitInstructions"
+              render={({ field }) => (
+                <FormItem className="gap-4 p-4">
+                  <div className="mb-4 space-y-0.5">
+                    <FormLabel>Commit instructions</FormLabel>
+                    <FormDescription>Custom rules for writing commit messages.</FormDescription>
+                  </div>
+                  <FormControl>
+                    <Textarea placeholder="Instructions here..." className="min-h-25" {...field} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="prInstructions"
+              render={({ field }) => (
+                <FormItem className="gap-4 p-4">
+                  <div className="mb-4 space-y-0.5">
+                    <FormLabel>Pull request instructions</FormLabel>
+                    <FormDescription>Custom rules for writing PR descriptions.</FormDescription>
+                  </div>
+                  <FormControl>
+                    <Textarea placeholder="Instructions here..." className="min-h-25" {...field} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+          </FormSectionContent>
+        </FormSection>
+      </SettingsSectionShell>
+    </Form>
+  );
+}

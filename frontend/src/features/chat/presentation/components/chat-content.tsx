@@ -1,61 +1,78 @@
-import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Page, PageBody, PageHeader } from "@/components/ui/page";
+import { aos } from "@/app/aos";
 import { AvatarAgentFallback } from "@/components/ui/avatar";
 import { Hash } from "lucide-react";
-import { client } from "@/lib/client";
-import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
+import * as React from "react";
 import { useChat } from "@/features/chat/presentation/hooks/use-chat";
-import { ChatMessageList } from "@/features/chat/presentation/components/chat-message-list";
-import { ChatComposer } from "@/features/chat/presentation/components/composer/chat-composer";
 import { ComposerHelper } from "@/features/chat/presentation/helpers/composer.helper";
-import type { StreamingAnswer } from "@/lib/realtime";
+import { ChatComposer } from "@/features/chat/presentation/pages/($id)/components/chat-composer.component";
+import { ChatMessageList } from "@/features/chat/presentation/pages/($id)/components/chat-message-list.component";
 
 interface ChatContentProps {
   chatId: string;
   userName?: string;
+  userId?: string;
 }
 
 /**
- * Shared chat surface — ported from the original's ChatContent. That
- * component reads self identity from an auth session and a workspace
- * directory of human users; AOS has neither built yet (single-operator
- * model, see ChatThreadHelper), so `userName` defaults straight to "You"
- * instead of resolving through a directory that doesn't exist.
+ * Shared chat surface used by the `/chats/$id` page and the viewport chat panel.
+ *
+ * Self identity always comes from the auth session — never from
+ * `config.user` (that is the installation owner profile, not the logged-in member).
  */
-export function ChatContent({ chatId, userName = "You" }: ChatContentProps) {
-  const agentsQuery = useQuery({
-    queryKey: ["agents"],
-    queryFn: async () =>
-      (await client.invoke("agents_list", { _reasoning: "the chat screen is open" })) as { agents: Agent[] },
-  });
-  const agents = agentsQuery.data?.agents ?? [];
+export function ChatContent({ chatId, userName, userId }: ChatContentProps) {
+  const { items: agents } = aos.stores.agent.useState();
+  const directoryUsers = aos.stores.workspace.useState(
+    (s) => s.directory?.users ?? [],
+  );
+  const authUser = aos.stores.auth.useState((s) => s.user);
+
+  const resolvedUserName =
+    userName ??
+    authUser?.name?.trim() ??
+    authUser?.username?.trim() ??
+    "You";
+  const resolvedUserId = userId ?? authUser?.id ?? "user";
+
+  const usersById = React.useMemo(() => {
+    const map = new Map(
+      directoryUsers.map((user) => [user.id, user] as const),
+    );
+
+    // Directory is viewer-relative (self excluded). Re-inject the session
+    // profile so own messages resolve name/image without falling back to
+    // installation `config.user`.
+    if (authUser?.id) {
+      map.set(authUser.id, {
+        id: authUser.id,
+        name: authUser.name,
+        username: authUser.username,
+        email: authUser.email,
+        image: authUser.image,
+      });
+    }
+
+    return map;
+  }, [authUser, directoryUsers]);
 
   const liveChat = useChat({ chatId });
   const chat = liveChat.chat;
+  if (!chat) return null;
 
-  const streaming = useQuery<StreamingAnswer>({
-    queryKey: ["chat", chatId, "streaming"],
-    queryFn: () => ({ text: "", reasoning: "" }),
-    enabled: chatId !== "",
-    staleTime: Infinity,
-  });
-
-  const directAgent = React.useMemo(() => {
-    if (!chat) return undefined;
-    return agents.find(
-      (agent) =>
-        agent.id === chat.id ||
-        (chat.participants ?? []).some((p) => p.type === "agent" && p.id === agent.id),
-    );
-  }, [agents, chat]);
-
-  if (liveChat.isLoading) {
-    return <p className="empty">Reading the conversation…</p>;
-  }
-  if (!chat) {
-    return null;
-  }
+  const isAgentDirectMessage = ComposerHelper.isAgentDirectMessage(
+    chat,
+    agents,
+  );
+  const directAgent = isAgentDirectMessage
+    ? agents.find(
+        (agent) =>
+          agent.id === chat.id ||
+          (chat.participants ?? []).some(
+            (participant) =>
+              participant.type === "agent" && participant.id === agent.id,
+          ),
+      )
+    : undefined;
 
   return (
     <Page>
@@ -67,6 +84,7 @@ export function ChatContent({ chatId, userName = "You" }: ChatContentProps) {
             ) : (
               <Hash className="size-3.5 text-muted-foreground" />
             )}
+
             <div className="min-w-0 flex items-center">
               <h1 className="text-xs font-semibold text-foreground leading-3">
                 {directAgent ? directAgent.name : chat.title}
@@ -75,19 +93,22 @@ export function ChatContent({ chatId, userName = "You" }: ChatContentProps) {
           </div>
         </div>
       </PageHeader>
-      <PageBody className="min-h-0 overflow-hidden overflow-y-hidden relative flex flex-col gap-3">
-        <div className="min-h-0 flex-1 overflow-hidden pb-24">
-          <ChatMessageList agents={agents} chat={chat} userName={userName} />
-        </div>
-
-        {streaming.data?.text ? (
-          <div className="px-6 text-sm text-muted-foreground">{streaming.data.text}</div>
-        ) : null}
-
+      <PageBody className="min-h-0 overflow-hidden overflow-y-hidden relative">
+        <ChatMessageList
+          agents={agents}
+          chat={chat}
+          isRefreshing={liveChat.isRefreshing}
+          onReactionToggled={liveChat.refresh}
+          persistedMessageIds={liveChat.persistedMessageIds}
+          selfUserId={authUser?.id}
+          userName={resolvedUserName}
+          usersById={usersById}
+        />
         <ChatComposer
           agents={agents}
           chat={chat}
-          isDirectMessage={ComposerHelper.isAgentDirectMessage(chat)}
+          isDirectMessage={isAgentDirectMessage}
+          userId={resolvedUserId}
         />
       </PageBody>
     </Page>

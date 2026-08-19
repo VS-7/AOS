@@ -11,14 +11,26 @@ import {
   FileTextIcon,
   WrenchIcon,
 } from "lucide-react"
-import type { Chat, Message } from "@/features/chat/interfaces/chat.interfaces"
+import type { Chat, FractalChatMessage } from "@/features/chat/interfaces/chat.interfaces"
 
 /**
  * A stored message is finished by the time chats_get returns it — the
  * in-progress turn is the separate streaming answer (lib/realtime.ts). This
- * timeline shows what happened, not a live per-part status; see
- * features/agent/presentation/helpers/agent-tool-thinking.helper.ts for why
- * AOS's Part has no such status to show.
+ * timeline shows what happened, not a live per-part status.
+ *
+ * Task 9 replaced `chat.interfaces.ts`'s `Message`/`Part` (which mirrored
+ * AOS's Go entity directly) with the recovered Fractal `FractalChatMessage`
+ * (`UIMessage<FractalChatMessageMetadata>` from the `ai` SDK — see
+ * `features/chat/interfaces/chat.interfaces.ts`'s doc comment) so the bulk
+ * of the freshly-copied chat/agent/workspace presentation code — which
+ * imports that exact type — compiles. This file is the one hand-adapted
+ * casualty of that swap: it's the sole consumer task's execution tab reads
+ * (`liveChat.messages`), so it must keep working, but the AI-SDK part
+ * union's tool-call variant now carries the tool name *in* `part.type`
+ * (`"tool-${name}"` or `"dynamic-tool"` + `.toolName`) instead of a
+ * `.toolName` field on a `"tool-call"` part — reading a still-real field
+ * through an `any` cast rather than exhaustively narrowing a union this
+ * function only cares about loosely.
  */
 type TimelineEvent = {
   id: string
@@ -27,34 +39,37 @@ type TimelineEvent = {
   detail: string
 }
 
-function toExecutionEvents(messages: Message[]): TimelineEvent[] {
+function toExecutionEvents(messages: FractalChatMessage[]): TimelineEvent[] {
   const events: TimelineEvent[] = []
 
   for (const message of messages) {
-    if (message.role !== "assistant" && message.author?.type !== "agent") continue
+    if (message.role !== "assistant" && message.metadata?.type !== "agent") continue
 
-    for (const [index, part] of (message.parts ?? []).entries()) {
+    for (const [index, rawPart] of (message.parts ?? []).entries()) {
       const id = `${message.id}:${index}`
+      // Loosely typed on purpose — see this file's top comment.
+      const part = rawPart as any
 
       if (part.type === "reasoning") {
-        const detail = part.text?.trim()
+        const detail = (part.text as string | undefined)?.trim()
         if (!detail) continue
         events.push({ id, kind: "reasoning", title: "Reasoning", detail })
         continue
       }
 
-      if (part.type === "tool-call" || part.type === "tool-result") {
-        const toolName = part.toolName ?? "Tool"
-        const detail =
-          part.type === "tool-result" ? stringify(part.output) : `Tool call: ${toolName}`
-        events.push({ id, kind: "tool", title: toolName, detail })
+      if (part.type === "text") {
+        const detail = (part.text as string | undefined)?.trim()
+        if (!detail) continue
+        events.push({ id, kind: "text", title: "Response", detail })
         continue
       }
 
-      if (part.type === "text") {
-        const detail = part.text?.trim()
-        if (!detail) continue
-        events.push({ id, kind: "text", title: "Response", detail })
+      const isToolPart = typeof part.type === "string" && (part.type.startsWith("tool-") || part.type === "dynamic-tool")
+      if (isToolPart) {
+        const toolName = part.toolName ?? (part.type as string).replace(/^tool-/, "") ?? "Tool"
+        const hasOutput = part.state === "output-available" && part.output !== undefined
+        const detail = hasOutput ? stringify(part.output) : `Tool call: ${toolName}`
+        events.push({ id, kind: "tool", title: toolName, detail })
       }
     }
   }
@@ -80,7 +95,7 @@ function eventIcon(kind: TimelineEvent["kind"]) {
 
 export interface ChatTimelineProps {
   chatId?: string
-  messages?: Message[]
+  messages?: FractalChatMessage[]
   isLoading?: boolean
   title?: string
 }
@@ -142,7 +157,7 @@ function ChatTimelineView({
   title,
 }: {
   isLoading: boolean
-  messages: Message[]
+  messages: FractalChatMessage[]
   title: string
 }) {
   const events = toExecutionEvents(messages)

@@ -103,3 +103,11 @@ export const AuthOnboardingSchema = z.object({
 });
 
 export type AuthOnboarding = z.infer<typeof AuthOnboardingSchema>;
+
+/**
+ * Aliases for the freshly-copied `v401/web` presentation code, which
+ * imports the `Fractal`-prefixed names — same reasoning as `agent.
+ * interfaces.ts`'s `FractalAgent`.
+ */
+export type FractalAuthChangePassword = AuthChangePassword;
+export type FractalAuthOnboarding = AuthOnboarding;

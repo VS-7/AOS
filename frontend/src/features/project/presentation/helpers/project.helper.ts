@@ -1,14 +1,8 @@
+import type { FractalProject } from "@/features/project/interfaces/project.interfaces";
+
 /**
  * @class ProjectHelper
  * @description Provides standardized helpers for project management and UI rendering.
- *
- * Copied verbatim from Fractal's `project.helper.ts` — it's a pure,
- * self-contained formatter with no store/backend dependency, unlike the
- * other `project`/`goal` pieces `task` reaches for. The one change: the
- * original's `import type { FractalProject } from
- * "@/features/project/interfaces/project.interfaces"` is dropped — it was
- * already a dead import there (never referenced in the file body), and
- * `project` isn't copied into AOS until Task 9.
  */
 export class ProjectHelper {
   /**

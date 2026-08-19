@@ -148,3 +148,17 @@ export interface IToolsetService {
   getTools(): Promise<Tool[]>;
   call(params: ToolsetCallInput): Promise<ToolsetServiceCallResponse>;
 }
+
+/**
+ * One environment-variable-shaped config requirement for a toolset
+ * connection (e.g. an API key a marketplace plugin needs). Not in this
+ * file's source — reconstructed from
+ * `features/marketplace/presentation/components/inventory/plugin-
+ * inventory-item-sheet.component.tsx`'s config tab, this type's sole
+ * consumer (`req.lookupKey`, `req.isSet`).
+ */
+export interface FractalToolsetConfigRequirement {
+  lookupKey: string;
+  isSet: boolean;
+  [key: string]: unknown;
+}

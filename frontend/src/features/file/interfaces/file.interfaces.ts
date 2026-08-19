@@ -43,6 +43,17 @@ export const FractalFileViewerSchema = z.enum([
   "spreadsheet",
   "archive",
   "other",
+  // Task 9 additions — this file's source enum lacked these, but
+  // `presentation/components/panels/files/helpers/files.helper.ts` (viewer
+  // resolution by extension) and `content/index.tsx`/`content/files-
+  // external-viewer.component.tsx` (viewer-specific rendering) switch on
+  // all five as their own distinct viewer kinds, not folded into
+  // `"spreadsheet"`/`"other"`.
+  "markdown",
+  "json",
+  "docx",
+  "xlsx",
+  "csv",
 ]);
 
 /**
@@ -263,4 +274,67 @@ export interface IFileService {
    * ```
    */
   create(params: FractalFileCreateInput): Promise<ResponseWithCTA<{ file: FractalFile }>>;
+}
+
+/**
+ * Inferred type alias for {@link FractalFileViewerSchema} — the source
+ * file had the schema but no bare exported type for it (same situation
+ * `task.interfaces.ts`'s doc comment describes for `FractalTaskStatus`).
+ * `presentation/helpers/file-viewer.helper.ts` reads this as a return type.
+ */
+export type FractalFileViewer = z.infer<typeof FractalFileViewerSchema>;
+
+/**
+ * The file explorer's UI-only "scope" — which changes/tree the panel shows:
+ * the live workspace, a task's worktree, or a specific branch. No Go
+ * command returns this shape (`file.explorer`/`file.changes`/`file.search`
+ * are all dormant in `lib/command-map.ts` — the UI-only concept has no
+ * backend truth to check against yet), so this is reconstructed purely
+ * from how `presentation/helpers/files-explorer.helper.ts` and
+ * `presentation/helpers/open-changes-tab.helper.ts` construct, parse, and
+ * compare it — not recovered from any extraction (no source file defines
+ * it either).
+ */
+export type FractalFileExplorerContext =
+  | { type: "main" }
+  | { type: "task"; taskId: string }
+  | { type: "branch"; branch: string };
+
+/**
+ * One entry in the changes/diff panel's file list. Same "no Go command
+ * returns this yet" situation as {@link FractalFileExplorerContext} —
+ * reconstructed from `presentation/helpers/changes.helper.ts`'s
+ * `formatChangeStatusLabel`/`changeStatusClassName` switches (the
+ * `status` union) and `changes-content.tsx`'s `file.path` read.
+ */
+export interface FractalFileChangeEntry {
+  path: string;
+  status: "added" | "modified" | "deleted" | "renamed" | "untracked";
+  /** Previous path for a renamed entry. */
+  oldPath?: string;
+  isBinary?: boolean;
+  additions?: number;
+  deletions?: number;
+}
+
+/**
+ * The file explorer/changes panel's combined server snapshot — flat path
+ * list plus an index for O(1) directory/file lookups, the task list used
+ * to label a `{ type: "task" }` context, and the changed-files list the
+ * Changes panel renders. Same reconstructed-from-usage situation as
+ * {@link FractalFileExplorerContext}; see `files-explorer-group.tsx`
+ * (`.paths`, `.pathIndex`), `files-explorer.helper.ts` (`.tasks`), and
+ * `changes-content.tsx` (`.files`).
+ */
+export interface FractalFileExplorerSnapshot {
+  paths: string[];
+  pathIndex: Record<string, { type: "file" | "directory"; [key: string]: unknown }>;
+  tasks?: Array<{ id: string; title: string }>;
+  files?: FractalFileChangeEntry[];
+  /** True for a read-only context (e.g. a non-checked-out branch). */
+  readOnly?: boolean;
+  /** Per-path git status, consumed opaquely by the `@pierre/trees` tree model. */
+  gitStatus?: unknown[];
+  /** Branch names offered by the explorer's context switcher. */
+  branches?: string[];
 }

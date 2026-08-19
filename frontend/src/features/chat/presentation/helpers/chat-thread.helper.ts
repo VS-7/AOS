@@ -1,35 +1,53 @@
-import type { Chat, Message } from "@/features/chat/interfaces/chat.interfaces";
-import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
+import type { UIMessage } from "ai"
+import type { FractalAgent } from "@/features/agent/interfaces/agent.interfaces"
+import type { Chat, FractalChatMessageMetadata } from "@/features/chat/interfaces/chat.interfaces"
+import type { FractalWorkspaceDirectoryUser } from "@/features/workspace/interfaces/directory.interfaces"
+import { MessageHelper } from "./message.helper"
 
 interface ResolveParticipantOptions {
-  agents: Agent[];
-  chat: Chat;
-  message: Message;
+  agents: FractalAgent[]
+  chat: Chat
+  message: UIMessage<FractalChatMessageMetadata>
   /** Viewer display name — fallback when the speaker is the current user. */
-  userName: string;
-  /** Viewer identifier — marks self vs peer. AOS has no user directory yet
-   * (single-operator model), so this is almost always the literal "user". */
-  selfUserId?: string;
+  userName: string
+  /** Viewer user id — marks self vs peer in multi-user threads. */
+  selfUserId?: string
+  /** Workspace directory users keyed by id (from `stores.workspace.directory`). */
+  usersById?: ReadonlyMap<string, FractalWorkspaceDirectoryUser>
 }
 
 export interface ChatMessageParticipant {
-  id: string;
-  kind: "user" | "agent";
-  label: string;
-  image?: string;
+  id: string
+  kind: "user" | "agent"
+  label: string
+  image?: string
 }
 
-/**
- * Ported from the original's ChatThreadHelper, adapted to AOS's Message shape
- * (Author/Runs are top-level Go struct fields, not AI-SDK metadata) and to
- * AOS having no workspace directory of human users yet — every non-agent
- * speaker resolves to the viewer.
- */
 export class ChatThreadHelper {
-  public static getMessageTimestamp(message: Message): Date | null {
-    if (!message.createdAt) return null;
-    const date = new Date(message.createdAt);
-    return Number.isNaN(date.getTime()) ? null : date;
+  public static getMessageTextParts(message: UIMessage<FractalChatMessageMetadata>) {
+    return MessageHelper.getMessageTextParts(message).map((text) => text.trim())
+  }
+
+  public static getMessageText(message: UIMessage<FractalChatMessageMetadata>) {
+    return MessageHelper.getMessageText(message).trim()
+  }
+
+  public static getMessageTimestamp(message: UIMessage<FractalChatMessageMetadata>) {
+    const metadata = message.metadata
+    const createdAt = metadata?.createdAt
+
+    if (!createdAt) {
+      return null
+    }
+
+    // @ts-expect-error - Expected don`t remove it!
+    const date = createdAt instanceof Date ? createdAt : new Date(createdAt)
+
+    if (Number.isNaN(date.getTime())) {
+      return null
+    }
+
+    return date
   }
 
   public static resolveParticipant({
@@ -38,87 +56,148 @@ export class ChatThreadHelper {
     message,
     userName,
     selfUserId,
+    usersById,
   }: ResolveParticipantOptions): ChatMessageParticipant {
-    if (message.author?.type === "agent") {
-      const agent = agents.find((item) => item.id === message.author?.id);
+    const metadata = message.metadata as FractalChatMessageMetadata | undefined
+
+    if (metadata?.type === "agent") {
+      const agent = agents.find((item) => item.id === metadata.data.id)
+
       return {
-        id: message.author.id,
+        id: metadata.data.id,
         kind: "agent",
         label: agent?.name || chat.title,
         image: agent?.image,
-      };
+      }
+    }
+
+    if (metadata?.type === "user") {
+      return ChatThreadHelper._resolve_user_participant({
+        userId: metadata.data.id,
+        userName,
+        selfUserId,
+        usersById,
+      })
     }
 
     if (message.role === "assistant") {
-      const directAgent = agents.find((item) => item.id === chat.id);
+      const directAgent = agents.find((item) => item.id === chat.id)
+
       return {
         id: directAgent?.id || chat.id,
         kind: "agent",
         label: directAgent?.name || chat.title,
         image: directAgent?.image,
-      };
+      }
     }
 
-    // Every human speaker is the viewer until AOS has a workspace directory
-    // of users — see docs/06 - Frontend/React 19 e Bindings.md.
-    return {
-      id: message.author?.id ?? selfUserId ?? "user",
-      kind: "user",
-      label: userName || "You",
-    };
+    return ChatThreadHelper._resolve_user_participant({
+      userId: selfUserId ?? "user",
+      userName,
+      selfUserId,
+      usersById,
+    })
   }
 
-  public static getInitials(value: string): string {
+  /**
+   * Resolves a human speaker label/image from the workspace directory.
+   */
+  private static _resolve_user_participant(params: {
+    userId: string
+    userName: string
+    selfUserId?: string
+    usersById?: ReadonlyMap<string, FractalWorkspaceDirectoryUser>
+  }): ChatMessageParticipant {
+    const profile = params.usersById?.get(params.userId)
+    const isSelf =
+      Boolean(params.selfUserId) && params.userId === params.selfUserId
+
+    const label =
+      profile?.name?.trim() ||
+      profile?.username?.trim() ||
+      (isSelf ? params.userName || "You" : undefined) ||
+      "Teammate"
+
+    return {
+      id: params.userId,
+      kind: "user",
+      label,
+      image: profile?.image,
+    }
+  }
+
+  public static getInitials(value: string) {
     return value
       .split(/\s+/)
       .filter(Boolean)
       .slice(0, 2)
       .map((part) => part.slice(0, 1).toUpperCase())
-      .join("");
+      .join("")
   }
 
-  public static formatMessageTime(value: Date): string {
+  public static formatMessageTime(value: Date) {
     return new Intl.DateTimeFormat("en-US", {
       hour: "numeric",
       minute: "2-digit",
-    }).format(value);
+    }).format(value)
   }
 
-  public static formatMessageDay(value: Date): string {
+  public static formatMessageDay(value: Date) {
     return new Intl.DateTimeFormat("en-US", {
       weekday: "short",
       month: "short",
       day: "numeric",
-    }).format(value);
+    }).format(value)
   }
 
-  public static isSameDay(left: Date | null, right: Date | null): boolean {
-    if (!left || !right) return false;
+  public static isSameDay(left: Date | null, right: Date | null) {
+    if (!left || !right) {
+      return false
+    }
+
     return (
       left.getFullYear() === right.getFullYear() &&
       left.getMonth() === right.getMonth() &&
       left.getDate() === right.getDate()
-    );
+    )
   }
 
-  /** Maximum gap between consecutive messages that still collapse into one visual group. */
-  public static readonly MESSAGE_GROUP_WINDOW_MS = 5 * 60 * 1000;
+  /**
+   * Maximum gap between consecutive messages that still collapse into one visual group.
+   */
+  public static readonly MESSAGE_GROUP_WINDOW_MS = 5 * 60 * 1000
 
-  /** Whether two consecutive messages should share avatar/header chrome. */
+  /**
+   * Whether two consecutive messages should share avatar/header chrome.
+   *
+   * Same participant within {@link ChatThreadHelper.MESSAGE_GROUP_WINDOW_MS}.
+   * When either timestamp is missing (optimistic/local messages), participant
+   * match alone is enough so rapid sends still group.
+   */
   public static isGroupedWithNeighbor(options: {
-    participantId: string;
-    neighborParticipantId?: string;
-    timestamp: Date | null;
-    neighborTimestamp: Date | null;
+    participantId: string
+    neighborParticipantId?: string
+    timestamp: Date | null
+    neighborTimestamp: Date | null
   }): boolean {
-    const { participantId, neighborParticipantId, timestamp, neighborTimestamp } = options;
+    const {
+      participantId,
+      neighborParticipantId,
+      timestamp,
+      neighborTimestamp,
+    } = options
 
-    if (!neighborParticipantId || neighborParticipantId !== participantId) return false;
-    if (!timestamp || !neighborTimestamp) return true;
+    if (!neighborParticipantId || neighborParticipantId !== participantId) {
+      return false
+    }
+
+    if (!timestamp || !neighborTimestamp) {
+      return true
+    }
 
     return (
       Math.abs(timestamp.getTime() - neighborTimestamp.getTime()) <
       ChatThreadHelper.MESSAGE_GROUP_WINDOW_MS
-    );
+    )
   }
 }

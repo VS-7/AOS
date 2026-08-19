@@ -1,28 +1,21 @@
 import * as React from "react";
+
+import type { OurFileRouter } from "@/lib/uploadthing";
+import type {
+  ClientUploadedFileData,
+  UploadFilesOptions,
+} from "uploadthing/types";
+
+import { generateReactHelpers } from "@uploadthing/react";
 import { toast } from "sonner";
+import { z } from "zod";
 
-/**
- * A file handed back to the editor after "upload".
- *
- * The original posts to `uploadthing`, a hosted third-party service — ruled
- * out in docs/06 - Frontend/Design System.md as incompatible with an
- * offline-first, self-hosted product. Until `File (Go)` exists to persist an
- * upload for real, this reads the file locally and hands back a blob URL:
- * the image/video/file shows up in the document immediately, honestly, and
- * without a network call — the real limitation is that a blob URL does not
- * survive a page reload. The original had exactly this fallback for its own
- * unauthenticated path (`URL.createObjectURL`); this is that path, not a
- * mock of it.
- */
-export interface UploadedFile {
-  key: string;
-  url: string;
-  name: string;
-  size: number;
-  type: string;
-}
+export type UploadedFile<T = unknown> = ClientUploadedFileData<T>;
 
-interface UseUploadFileProps {
+interface UseUploadFileProps extends Partial<Pick<
+  UploadFilesOptions<OurFileRouter["editorUploader"]>,
+  "headers" | "onUploadBegin" | "onUploadProgress" | "skipPolling"
+>> {
   onUploadComplete?: (file: UploadedFile) => void;
   onUploadError?: (error: unknown) => void;
 }
@@ -30,40 +23,70 @@ interface UseUploadFileProps {
 export function useUploadFile({
   onUploadComplete,
   onUploadError,
+  ...props
 }: UseUploadFileProps = {}) {
   const [uploadedFile, setUploadedFile] = React.useState<UploadedFile>();
   const [uploadingFile, setUploadingFile] = React.useState<File>();
-  const [progress, setProgress] = React.useState(0);
+  const [progress, setProgress] = React.useState<number>(0);
   const [isUploading, setIsUploading] = React.useState(false);
 
-  async function uploadFile(file: File): Promise<UploadedFile> {
+  async function uploadThing(file: File) {
     setIsUploading(true);
     setUploadingFile(file);
-    setProgress(0);
 
     try {
-      const local: UploadedFile = {
-        key: `local-${Date.now()}-${file.name}`,
-        url: URL.createObjectURL(file),
+      const res = await uploadFiles("editorUploader", {
+        ...props,
+        files: [file],
+        onUploadProgress: ({ progress }: { progress: number }) => {
+          setProgress(Math.min(progress, 100));
+        },
+      });
+
+      setUploadedFile(res[0]);
+
+      onUploadComplete?.(res[0]);
+
+      return uploadedFile;
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+
+      const message =
+        errorMessage.length > 0
+          ? errorMessage
+          : "Something went wrong, please try again later.";
+
+      toast.error(message);
+
+      onUploadError?.(error);
+
+      // Mock upload for unauthenticated users
+      // toast.info('User not logged in. Mocking upload process.');
+      const mockUploadedFile = {
+        key: "mock-key-0",
+        appUrl: `https://mock-app-url.com/${file.name}`,
         name: file.name,
         size: file.size,
         type: file.type,
+        url: URL.createObjectURL(file),
+      } as UploadedFile;
+
+      // Simulate upload progress
+      let progress = 0;
+
+      const simulateProgress = async () => {
+        while (progress < 100) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          progress += 2;
+          setProgress(Math.min(progress, 100));
+        }
       };
 
-      // There is nothing to await locally; the progress steps exist so the
-      // upload-toast UI (which expects to animate) has something to show.
-      for (let step = 0; step < 5; step++) {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        setProgress(Math.round(((step + 1) / 5) * 100));
-      }
+      await simulateProgress();
 
-      setUploadedFile(local);
-      onUploadComplete?.(local);
-      return local;
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "The file could not be read.");
-      onUploadError?.(error);
-      throw error;
+      setUploadedFile(mockUploadedFile);
+
+      return mockUploadedFile;
     } finally {
       setProgress(0);
       setIsUploading(false);
@@ -71,5 +94,34 @@ export function useUploadFile({
     }
   }
 
-  return { isUploading, progress, uploadedFile, uploadFile, uploadingFile };
+  return {
+    isUploading,
+    progress,
+    uploadedFile,
+    uploadFile: uploadThing,
+    uploadingFile,
+  };
+}
+
+export const { uploadFiles, useUploadThing } =
+  generateReactHelpers<OurFileRouter>();
+
+export function getErrorMessage(err: unknown) {
+  const unknownError = "Something went wrong, please try again later.";
+
+  if (err instanceof z.ZodError) {
+    const errors = err.issues.map((issue) => issue.message);
+
+    return errors.join("\n");
+  }
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return unknownError;
+}
+
+export function showErrorToast(err: unknown) {
+  const errorMessage = getErrorMessage(err);
+
+  return toast.error(errorMessage);
 }

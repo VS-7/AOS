@@ -52,12 +52,37 @@ export const FractalRoutineScheduledTriggerSchema = z.object({
 });
 
 /**
+ * Schema for an activity-event trigger configuration. Absent from this
+ * file's source alongside webhook/scheduled — reconstructed from
+ * `presentation/consts/routine-triggers.ts`'s own `"activity"` variant of
+ * `RoutineTriggerFormValue`, which this schema must match for
+ * `RoutineTriggerTypeId` (`FractalRoutine["triggers"][number]["type"]`) to
+ * include `"activity"` at all — see that file's `ROUTINE_TRIGGER_TYPE_ORDER`
+ * and `presentation/components/triggers/activity-trigger-row.tsx`.
+ */
+export const FractalRoutineActivityTriggerSchema = z.object({
+  type: z.literal("activity"),
+  config: z.object({
+    namespace: z.string().describe("Activity namespace to listen on."),
+    event: z.string().describe("Activity event name within the namespace."),
+    filters: z.array(
+      z.object({
+        path: z.string(),
+        operator: z.enum(["eq", "neq", "contains"]),
+        value: z.string(),
+      }),
+    ).optional(),
+  }),
+});
+
+/**
  * Discriminated union for routine triggers.
- * Supports webhook and scheduled trigger types.
+ * Supports webhook, scheduled, and activity trigger types.
  */
 export const FractalRoutineTriggerSchema = z.discriminatedUnion("type", [
   FractalRoutineWebhookTriggerSchema,
   FractalRoutineScheduledTriggerSchema,
+  FractalRoutineActivityTriggerSchema,
 ]);
 
 /**
@@ -94,6 +119,10 @@ export const FractalRunSchema = z.object({
   id: z.string().describe("Unique identifier for the run (UUID)."),
   routine: z.string().describe("Parent routine ID."),
   agent: z.string().describe("Agent slug that executed this run."),
+  // Absent from this file's source — reconstructed from
+  // `presentation/pages/($id)/components/routine-run-history.tsx`'s
+  // `triggerLabel` switch, this field's only consumer.
+  trigger: z.enum(["manual", "scheduled", "webhook", "activity"]).optional(),
   status: FractalRunStatusSchema.describe(
     "Current execution status of the run.",
   ),
@@ -256,6 +285,30 @@ export type FractalRoutineUpdateInput = z.infer<
 export type FractalRoutineListQueryInput = z.infer<
   typeof FractalRoutineListQuerySchema
 >;
+
+/**
+ * Reserved routine agent targets — not resolved to a real agent record.
+ * Absent from this file's source; reconstructed from
+ * `presentation/helpers/routine.helper.ts`'s own `RESERVED_AGENTS` const
+ * (`["orchestrator", "all"] as const satisfies readonly
+ * FractalRoutineReservedAgent[]`), its only consumer.
+ */
+export type FractalRoutineReservedAgent = "orchestrator" | "all";
+
+/**
+ * One filter clause on an `"activity"` routine trigger — narrows which
+ * activity events fire the routine. Absent from this file's source (the
+ * trigger schemas above have no `filters` field yet); reconstructed from
+ * `presentation/components/triggers/activity-trigger-row.tsx`'s filter
+ * editor (the `operator` union matches its `<Select>` options exactly) and
+ * `presentation/consts/routine-triggers.ts`'s `filters?:
+ * FractalRoutineActivityFilter[]` field.
+ */
+export interface FractalRoutineActivityFilter {
+  path: string;
+  operator: "eq" | "neq" | "contains";
+  value: string;
+}
 
 /**
  * Input type for firing a routine.

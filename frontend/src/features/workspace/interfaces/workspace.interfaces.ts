@@ -1,4 +1,15 @@
 import { z } from "zod";
+import type { FractalWorkspaceMemberSchema } from "@/features/workspace/schemas/workspace.schema";
+
+/**
+ * `FractalWorkspaceMember` — absent from `index/`, present in
+ * `_extracted/v401/server/src/features/workspace/interfaces/workspace.
+ * interfaces.ts` as `z.infer<typeof FractalWorkspaceMemberSchema>`. The
+ * schema itself already lives in this feature's own `schemas/workspace.
+ * schema.ts` (a pristine `v401/web` copy), so only the inferred type is
+ * added here, per the task brief's explicit note on this gap.
+ */
+export type FractalWorkspaceMember = z.infer<typeof FractalWorkspaceMemberSchema>;
 
 /**
  * PRUNED (beyond Steps 4/5's sanctioned scope — flagged for review, see
@@ -227,7 +238,7 @@ export interface FractalWorkspaceTickInput {
  *
  * @description
  * Captures the queue/job identity and the resulting dispatched job id
- * whenever available from `@igniter-js/jobs` runtime.
+ * whenever available from `@aos-js/jobs` runtime.
  */
 export interface FractalWorkspaceTickDispatchEntry {
   /**

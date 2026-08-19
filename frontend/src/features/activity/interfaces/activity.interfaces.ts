@@ -29,3 +29,27 @@ export interface FractalActivityList {
   unread: number;
   actor: string;
 }
+
+/**
+ * One registered activity event type, as `GET /activity/events` (not yet a
+ * live command — `activity.listEvents` is `null` in `lib/command-map.ts`)
+ * would return it: which namespace/event pair it is, an optional
+ * human-readable description, and the JSON Schema of its payload, used to
+ * derive filterable field names for routine triggers.
+ *
+ * Not in any extraction (activity's own `entity.go`/`schema.go` mirror
+ * above has no notion of a *catalog* of event types, only individual
+ * `Activity` records) — reconstructed from
+ * `presentation/helpers/activity-event.helper.ts`'s `FractalActivityEventHelper`,
+ * this type's sole consumer.
+ */
+export interface FractalActivityEventDefinition {
+  namespace: string;
+  event: string;
+  title?: string;
+  description?: string;
+  schema: {
+    properties?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+}

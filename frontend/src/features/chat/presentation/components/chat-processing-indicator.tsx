@@ -1,40 +1,27 @@
 import * as React from "react"
+import { aos } from "@/app/aos"
+import { useRealtime } from "@/hooks/use-realtime"
 import { DotmSquare4 } from "@/components/ui/dotm-square-4"
-import type { Agent } from "@/features/agent/interfaces/agent.interfaces"
-import type { Chat } from "@/features/chat/interfaces/chat.interfaces"
 
 interface ChatProcessingIndicatorProps {
-  agents: Agent[]
-  chat: Chat
+  chatId: string
 }
 
-/**
- * Ported from the original, which read live per-agent occupancy off a
- * WebSocket-fed store (igniter.stores.agent). AOS has no such store; the
- * same "who's working on this" fact is derived from the last Run recorded
- * on each message (see internal/domain/chat/entity.go's Run.Status), which
- * chats_get already returns and lib/realtime.ts already keeps fresh.
- */
-export function ChatProcessingIndicator({ agents, chat }: ChatProcessingIndicatorProps) {
-  const workingAgentIds = React.useMemo(() => {
-    const ids = new Set<string>()
-    for (const message of chat.messages) {
-      for (const run of message.runs ?? []) {
-        if (run.status === "pending" || run.status === "running") {
-          ids.add(run.agentId)
-        }
-      }
-    }
-    return [...ids]
-  }, [chat.messages])
+export function ChatProcessingIndicator({ chatId }: ChatProcessingIndicatorProps) {
+  const agents = aos.stores.agent.useState((s) => s.items)
+  const occupancy = aos.stores.agent.useState((s) => s.occupancy[chatId] ?? [])
 
-  if (workingAgentIds.length === 0) {
+  if (occupancy.length === 0) {
     return null
   }
 
-  const typingAgents = workingAgentIds.map(
-    (id) => agents.find((agent) => agent.id === id)?.name ?? id,
-  )
+  const typingAgents = occupancy
+    .map((id) => agents.find((agent) => agent.id === id)?.name)
+    .filter(Boolean)
+
+  if (typingAgents.length === 0) {
+    return null
+  }
 
   const label = typingAgents.length === 1
     ? `${typingAgents[0]} is working...`
