@@ -64,7 +64,13 @@ Wails3 + React 19; services; bindings; WebSocket; 38 temas; aparência nativa.
 
 **Notas:** [[Wails3 Services]] · [[React 19 e Bindings]] · [[Design System]] · [[Temas]] · [[Theme (Go)]] · [[File (Go)]] · [[ADR-0002 Wails3 no lugar de Electron]]
 **Entrega:** app desktop com chat, board de tasks e grafo de memórias.
-**Parcialmente entregue** em `v0.8.0-fase7`. Compila e roda: binário desktop de 13 MB contra os 578 MB do Electron do original, 38 temas com contraste WCAG AA verificado, cliente unificado, realtime com backoff, e as três telas. **Não entregue:** o porte fiel dos 121 componentes do design system, as outras 18 rotas, o catálogo de componentes gerado, testes de frontend, e [[File (Go)]] inteiro. A janela nunca foi aberta e olhada. As notas [[React 19 e Bindings]] e [[Design System]] ficam `em-construcao` por isso.
+**Entregue** em `v0.9.0-fase7`, em duas etapas. `v0.8.0-fase7` compilava e rodava — 38 temas com contraste WCAG AA verificado, cliente unificado, realtime com backoff, as três telas — mas sem o design system, sem as outras rotas, sem testes de frontend e sem [[File (Go)]], e a janela nunca tinha sido aberta.
+
+O branch `feat/port-fractal-frontend` fechou isso: os 120 componentes e as 26 features vieram da extração em `_extracted/v401/` em vez de reescritos, sobre a árvore de rotas do TanStack Router, com 48 testes e `wails3 dev` funcionando. [[File (Go)]] tem backend, HTTP e UI. A marca do produto original saiu junto, e a varredura achou quatro defeitos vivos que ela escondia.
+
+**Uma decisão de arquitetura da fase quase se perdeu no caminho:** o `//go:embed all:dist` do desktop engolia os 135 MB de sourcemap que o vite emite, levando o binário a 199 MB. O argumento inteiro de [[ADR-0002 Wails3 no lugar de Electron]] é tamanho de binário. A cópia para `cmd/aos-desktop/dist` agora exclui `*.map` — os mapas continuam em `frontend/dist` para simbolizar stack trace — e o binário voltou a 64 MB.
+
+**Não entregue, e movido para a Fase 8:** o catálogo de componentes gerado (`task gen-components`), que é pré-requisito de [[View (Go)]] e por isso pertence à fase que a implementa. [[Design System]] fica `em-construcao` por ele e pela acessibilidade nunca medida por ferramenta.
 
 ### Fase 8 — Ecossistema
 `skill`, `toolset`, `collection` e `view` dinâmicas, `artifact`, `template`, `instruction`, `project`, `goal`, `bot`, `tunnel`, `marketplace`.

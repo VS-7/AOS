@@ -114,31 +114,35 @@ O gerador lê os `spec.ts` e emite o catálogo Go. Um componente removido no Rea
 
 ## Estado — Fase 7
 
-**As três telas que definem o produto existem**, com o comportamento que a nota
-descreve:
+**O design system está portado.** 120 componentes em
+`frontend/src/components/ui/`, copiados da extração em `_extracted/v401/` em vez
+de reescritos, com Radix, Plate, cmdk, sonner, framer-motion, lucide e
+hugeicons instalados. Isso era a lacuna que esta nota chamava de "este não é o
+design system"; deixou de ser.
 
-| Tela | O que está lá |
-|---|---|
-| **Chat** | Partes tipadas — texto, reasoning colapsado por padrão, tool call com input e output, aviso quando a saída foi truncada. Enter envia, shift-enter quebra linha. |
-| **Board** | Oito colunas, arraste que chama `tasks_set-status` — a mesma validação de qualquer superfície — e um `select` ao lado, porque arrastar não é alcançável pelo teclado. A recusa é mostrada em vez de o cartão voltar sem explicação. |
-| **Grafo** | Force-directed em ~60 linhas, cor por token de categoria, raio pela confiança, aresta tracejada vermelha para `supersedes`. Layout determinístico: o mesmo grafo tem a mesma forma duas vezes. |
+**Zero cores literais.** Todo valor vem de `var(--token)`. A hipótese do porte
+se confirmou: os componentes leem os mesmos tokens que o CSS de layout já lia,
+então trocar marcação não trocou paleta. Há agora um `theme-contract.test.ts`
+afirmando isso, em vez da leitura manual que a fase anterior registrou.
 
-**Zero cores literais.** Todo valor vem de `var(--token)`; o CSS de layout não
-tem um hex sequer. Verificado por leitura, não por lint — o lint que a nota pede
-não existe.
+As três telas que definem o produto continuam lá — chat com partes tipadas,
+board de oito colunas com arraste **e** `select` (arrastar não é alcançável pelo
+teclado), e grafo force-directed determinístico — agora dentro da árvore de
+rotas completa em vez de um `useState` entre três telas.
 
 ### O que NÃO está pronto
 
-**Este não é o design system.** A nota fala de 121 componentes shadcn portados
-fielmente com Radix, Plate, cmdk, sonner, framer-motion, lucide e hugeicons.
-O que existe é CSS de layout escrito contra os mesmos tokens que aqueles
-componentes vão ler — de modo que o porte troque marcação, não paleta. Nenhum
-componente do design system foi portado.
+**O catálogo gerado não existe.** É o que mantém esta nota `em-construcao`.
+`spec.ts` ao lado de cada componente, `task gen-components` e
+`internal/domain/view/components.gen.go` continuam sendo trabalho não feito, e
+sem eles [[Views Declarativas]] não tem o que validar contra — a nota chama isso
+de *"adição obrigatória"*.
 
-**O catálogo gerado não existe.** `spec.ts` ao lado de cada componente,
-`task gen-components` e `internal/domain/view/components.gen.go` são trabalho não
-feito. Sem eles, [[Views Declarativas]] não tem o que validar contra — e a nota
-chama isso de *"adição obrigatória"*.
+O material para gerá-lo, porém, chegou com o porte: o frontend já traz
+`features/view/presentation/components/registry/definitions/catalog.definitions.ts`,
+410 linhas de definições zod por componente. O catálogo Go é a geração a partir
+dele, não uma descrição escrita do zero. Trabalho da Fase 8, junto de
+[[View (Go)]].
 
 **Acessibilidade parcial.** Há foco visível, `aria-label` nos controles, `role`
 nas regiões, o board é operável por teclado e o modal de aprovação é um

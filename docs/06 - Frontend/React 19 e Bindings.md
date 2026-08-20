@@ -2,7 +2,7 @@
 tags: [frontend, react, wails, bindings]
 aliases: [React 19, Bindings, Frontend]
 fase: 7
-status: em-construcao
+status: pronto
 origem: "[[Camada @app (Web UI)]]"
 ---
 
@@ -129,17 +129,16 @@ Um modal global escuta `approval.request`, mostra a tool, o payload formatado e 
 
 ## Critério de pronto
 
-- [ ] SPA rodando no navegador e no desktop com o mesmo bundle
+- [x] SPA rodando no navegador e no desktop com o mesmo bundle
 - [x] Tipos gerados do registry, verificados no CI
 - [x] Realtime com reconexão
 - [x] Chat, board de tasks e grafo de memórias funcionando
 
 ## Estado — Fase 7
 
-`npx tsc --noEmit` limpo; `vite build` produz 255 KB (79 KB comprimido).
-`task gen-schema` emite **71 comandos, 974 linhas** de TypeScript do registry Go,
-e `task check` falha se o gerado divergir do commitado — que é a propriedade que
-o original obtém com o caller tipado do Igniter.
+`npx tsc --noEmit` limpo. `task gen-schema` emite **71 comandos** de TypeScript
+do registry Go, e `task check` falha se o gerado divergir do commitado — que é a
+propriedade que o original obtém com o caller tipado do Igniter.
 
 **O cliente unificado existe e é uma interface com dois transportes.** Nenhum
 componente sabe onde está rodando: `isDesktop()` escolhe o binding Wails ou o
@@ -154,18 +153,28 @@ invalidam o cache do TanStack Query em vez de virarem estado de componente,
 então uma tela re-renderiza porque o dado dela mudou — venha a mudança da própria
 mutação ou de um agente trabalhando em segundo plano.
 
-### O que NÃO está pronto, e por quê
+### O que o porte fechou
 
-**A nota fica `em-construcao`.** Três das quatro caixas do critério estão
-marcadas; a primeira — *"SPA rodando no navegador e no desktop com o mesmo
-bundle"* — está construída e **não foi observada rodando**. Nada nesta fase
-abriu a janela e clicou.
+As três lacunas que mantinham esta nota `em-construcao` foram fechadas pelo
+branch `feat/port-fractal-frontend`:
 
-Nenhum teste de frontend existe. A nota pede cinco (cliente unificado com
-transporte falso, reconexão, streaming incremental, modal de aprovação,
-acessibilidade) e nenhum está escrito: não há runner de teste no `package.json`.
-É a lacuna mais séria da fase e está aqui em vez de escondida atrás de três
-caixas marcadas.
+**Roteamento existe.** TanStack Router com a árvore de rotas do original, não
+mais `useState` entre três telas. As 26 features estão portadas, com 74 páginas.
 
-**Roteamento não existe.** A navegação é `useState` entre três telas. TanStack
-Router e as 21 rotas da seção 5.2 do PROMPT são trabalho não feito.
+**Testes existem.** Cinco arquivos, 48 testes, com `vitest` no `package.json`.
+Cobrem o que era a lacuna mais séria da fase: a fachada renderizando hooks reais
+através de `QueryClientProvider`, o mapa de eventos de realtime, o contrato de
+tema, e a tabela de comandos. A revisão final do branch registrou uma lição
+sobre isso — a suíte ficou vermelha por quatro tasks porque não era um gate.
+
+**A janela foi aberta.** `wails3 dev` roda: falhava por ERESOLVE no `npm
+install` (o `--legacy-peer-deps` estava só no Taskfile raiz, e o wails3 usa
+outro caminho de instalação), corrigido movendo a flag para `frontend/.npmrc`.
+
+### O que ainda não está pronto
+
+**O bundle é grande.** O chunk principal tem 10,5 MB (3,0 MB comprimido) e o
+Monaco outros 4,0 MB. O aviso do vite sobre chunks acima de 500 kB é legítimo:
+não há `manualChunks` nem import dinâmico separando o editor do resto. O binário
+desktop fica em 64 MB — contra os 578 MB do Electron do original, mas cinco vezes
+o que era antes do porte.

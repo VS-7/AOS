@@ -152,9 +152,19 @@ tasks:
     cmds:
       # The embed pattern cannot reach outside cmd/aos-desktop, so the bundle
       # is copied in first. The copy is generated and ignored by Git.
+      #
+      # Source maps are deliberately left behind. vite.config.ts emits them
+      # because a stack trace from a user's machine is unreadable without
+      # one, and its comment says they cost disk and nothing at runtime —
+      # true when a server hands out the bundle, false here: main.go embeds
+      # this directory with `all:dist`, so every .map would be compiled into
+      # the binary every user downloads. They are 135 MB against the
+      # bundle's 54, which would put the desktop build at 199 MB — against
+      # the 578 MB Electron figure ADR-0002 is argued on. The maps stay in
+      # frontend/dist, where symbolication can still reach them.
       - rm -rf cmd/aos-desktop/dist
       - mkdir -p cmd/aos-desktop/dist
-      - cp -R frontend/dist/. cmd/aos-desktop/dist/
+      - cd frontend/dist && find . -type f ! -name '*.map' -exec rsync -R {} ../../cmd/aos-desktop/dist/ \;
       - CGO_ENABLED=1 go build -trimpath -ldflags="{{.LDFLAGS}}" -o dist/aos-desktop ./cmd/aos-desktop
 
   build:cli:
