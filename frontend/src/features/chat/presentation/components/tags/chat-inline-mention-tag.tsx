@@ -1,40 +1,24 @@
-import { useQuery } from "@tanstack/react-query";
-import { AtSignIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { client } from "@/lib/client";
+import { AtSign } from "lucide-react"
+import { aos } from "@/app/aos"
+import { cn } from "@/lib/utils"
 
-interface AgentSummary {
-  id: string;
-  name: string;
+interface ChatInlineMentionTagProps {
+  className?: string
+  id: string
 }
 
-/**
- * An inline @mention chip, resolving an agent id to its display name.
- *
- * Minimal — ported ahead of the rest of the chat feature because
- * markdown-content.tsx (the shared renderer) needs it to render an inline
- * `<chat-mention>` tag. Fills in once the chat feature's own components land.
- */
-export function ChatInlineMentionTag({ id, className }: { id: string; className?: string }) {
-  const agents = useQuery({
-    queryKey: ["agents"],
-    queryFn: async () =>
-      (await client.invoke("agents_list", { _reasoning: "resolving an inline mention" })) as {
-        agents: AgentSummary[];
-      },
-  });
-
-  const name = agents.data?.agents.find((a) => a.id === id)?.name ?? id;
-
+export function ChatInlineMentionTag({ className, id }: ChatInlineMentionTagProps) {
   return (
-    <span
+    <button
       className={cn(
-        "inline-flex items-center gap-0.5 rounded-md bg-accent px-1.5 py-0.5 text-xs font-medium text-accent-foreground",
+        "inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 text-[12px] font-medium text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200",
         className,
       )}
+      onClick={() => aos.stores.viewport.actions.openSettings("workspace.agents")}
+      type="button"
     >
-      <AtSignIcon className="size-3" />
-      {name}
-    </span>
-  );
+      <AtSign className="size-3.5 shrink-0" />
+      <span className="truncate">{id}</span>
+    </button>
+  )
 }

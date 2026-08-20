@@ -6,30 +6,68 @@
     <title>AOS</title>
     <script>
       /*
-       * The stored theme is applied before the first paint. Without this the
-       * page renders in the default palette and then switches, and every reload
-       * flashes.
+       * The stored appearance is applied before the first paint. Without this
+       * the page renders on tokens.css's built-in defaults and then switches,
+       * and every reload flashes.
+       *
+       * It reads `aos:theme` — the key `AosStore.create("theme")` actually
+       * writes (`<appPrefix>:<name>`, see app/builders/store.ts). This script
+       * previously read `aos.theme` in the shape `lib/theme.ts` used to
+       * persist, which nothing has written since the shell moved to the
+       * ported ThemeProvider: the lookup always missed, so no appearance class
+       * reached <html> until React mounted and every `dark:`-variant rule in
+       * the ported tree rendered its light branch over a dark surface for the
+       * first frame.
+       *
+       * Only the two colours that cover the whole viewport are set here, taken
+       * straight from the palette as authored (plain hex — valid CSS, no
+       * conversion needed). The rest of the token set lands a moment later
+       * from ThemeProvider, which is the one place the oklch derivation lives;
+       * duplicating that maths here would be a second copy to keep in sync.
+       *
+       * The literals below are the AOS default palette
+       * (features/theme/services/theme/data/themes/aos.theme.ts) — what a
+       * first run, with nothing stored yet, has to paint.
        */
       (function () {
+        var FALLBACK = {
+          dark: { surface: "#0d0b08", ink: "#f5f5f5" },
+          light: { surface: "#f5f5f5", ink: "#0d0b08" },
+        };
+        var root = document.documentElement;
+        var stored = null;
         try {
-          var stored = JSON.parse(localStorage.getItem("aos.theme") || "null");
-          if (!stored) return;
-          var root = document.documentElement;
-          var appearance =
-            stored.appearance === "auto"
-              ? window.matchMedia("(prefers-color-scheme: dark)").matches
-                ? "dark"
-                : "light"
-              : stored.appearance;
-          root.classList.add(appearance);
-          if (stored.tokens) {
-            for (var token in stored.tokens) {
-              root.style.setProperty("--" + token, stored.tokens[token]);
-            }
-          }
+          stored = JSON.parse(localStorage.getItem("aos:theme") || "null");
         } catch (e) {
           /* A storage that cannot be read is a page that starts on the default. */
         }
+
+        var mode = (stored && stored.mode) || "system";
+        var appearance =
+          mode === "light" || mode === "dark"
+            ? mode
+            : window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+
+        root.classList.remove("light", "dark");
+        root.classList.add(appearance);
+
+        var settings =
+          (stored && stored.theme && stored.theme.settings && stored.theme.settings[appearance]) ||
+          FALLBACK[appearance];
+        var surface = settings.surface || FALLBACK[appearance].surface;
+        var ink = settings.ink || FALLBACK[appearance].ink;
+
+        root.style.setProperty("--background", surface);
+        root.style.setProperty("--sidebar", surface);
+        root.style.setProperty("--foreground", ink);
+        root.style.setProperty("--sidebar-foreground", ink);
+
+        /* ThemeProvider forces `solid` off the native shell; match it here so
+           app.css's `[data-windows="blur"] body { background: transparent }`
+           doesn't blank the first frame in the browser. */
+        root.dataset.windows = window.aos ? settings.windows || "blur" : "solid";
       })();
     </script>
   </head>

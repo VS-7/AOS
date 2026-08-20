@@ -39,6 +39,27 @@ export const Tool = ({ className, ...props }: ToolProps) => (
  */
 export type ToolState = "running" | "done" | "error";
 
+/**
+ * `features/chat/presentation/helpers/tool-ui.helper.ts` (Task 9) imports
+ * this for `ToolPart["state"]` alone. Not this file's own `ToolState`
+ * (`"running"|"done"|"error"`, a coarser three-way status this file's own
+ * components render) — the AI SDK `ToolUIPart`'s finer-grained lifecycle
+ * states, matching that helper's registry keys exactly (`input-streaming`,
+ * `input-available`, `output-available`, `output-error`, plus the
+ * approval-flow states `approval-requested`/`approval-responded`/
+ * `output-denied`).
+ */
+export interface ToolPart {
+  state:
+    | "input-streaming"
+    | "input-available"
+    | "output-available"
+    | "output-error"
+    | "approval-requested"
+    | "approval-responded"
+    | "output-denied";
+}
+
 const statusLabels: Record<ToolState, string> = {
   running: "Running",
   done: "Completed",

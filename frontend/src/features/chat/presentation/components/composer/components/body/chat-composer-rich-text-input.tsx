@@ -3,13 +3,11 @@ import { Node } from "@tiptap/core"
 import Placeholder from "@tiptap/extension-placeholder"
 import StarterKit from "@tiptap/starter-kit"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { FileLinkIcon, Folder01Icon, SparklesIcon } from "@hugeicons/core-free-icons"
-import { AtSignIcon } from "lucide-react"
+import { AtIcon, FileLinkIcon, Folder01Icon, SparklesIcon } from "@hugeicons/core-free-icons"
 import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor } from "@tiptap/react"
 import { usePromptInputAttachments } from "@/components/ui/prompt-input"
 import { cn } from "@/lib/utils"
 import { ComposerHelper } from "@/features/chat/presentation/helpers/composer.helper"
-import { ChatInlineMarkupHelper } from "@/features/chat/presentation/helpers/chat-inline-markup.helper"
 import {
   CHAT_COMPOSER_MENTION_NODE,
   CHAT_COMPOSER_SOURCE_NODE,
@@ -43,7 +41,7 @@ function MentionBadgeView(props: { node: { attrs: { id?: string } } }) {
       className="mx-0.5 align-middle inline-flex h-7 items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 text-[12px] font-medium text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
       contentEditable={false}
     >
-      <AtSignIcon className="size-3.5 shrink-0" />
+      <HugeiconsIcon icon={AtIcon} className="size-3.5 shrink-0" />
       <span className="truncate">{props.node.attrs.id ?? ""}</span>
     </NodeViewWrapper>
   )
@@ -247,7 +245,7 @@ export const ChatComposerRichTextInput = React.forwardRef<ChatComposerRichTextIn
     }
 
     const currentCaret = getChatComposerSelectionOffset(editor.state)
-    editor.commands.setContent(createChatComposerDocument(value), false)
+    editor.commands.setContent(createChatComposerDocument(value), { emitUpdate: false } as any)
     editor.commands.setTextSelection(getChatComposerSelectionPosition(editor.state, currentCaret))
     lastKnownValueRef.current = value
   }, [editor, value])
@@ -257,7 +255,7 @@ export const ChatComposerRichTextInput = React.forwardRef<ChatComposerRichTextIn
       return
     }
 
-    editor.commands.setContent(createChatComposerDocument(nextValue), false)
+    editor.commands.setContent(createChatComposerDocument(nextValue), { emitUpdate: false } as any)
     editor.commands.setTextSelection(getChatComposerSelectionPosition(editor.state, nextCaret))
     editor.commands.focus()
     lastKnownValueRef.current = nextValue
@@ -270,7 +268,7 @@ export const ChatComposerRichTextInput = React.forwardRef<ChatComposerRichTextIn
         return
       }
 
-      editor.commands.setContent(createChatComposerDocument(""), false)
+      editor.commands.setContent(createChatComposerDocument(""), { emitUpdate: false } as any)
       editor.commands.setTextSelection(1)
       editor.commands.focus()
       lastKnownValueRef.current = ""
@@ -286,10 +284,9 @@ export const ChatComposerRichTextInput = React.forwardRef<ChatComposerRichTextIn
       const currentValue = serializeChatComposerDocument(editor.state.doc)
       const caret = getChatComposerSelectionOffset(editor.state)
       const mentionState = ComposerHelper.getActiveMention(currentValue, caret)
-      const markup = ChatInlineMarkupHelper.buildMentionTag({ id: agentId })
       const result = mentionState
-        ? replaceRange(currentValue, mentionState.range.start, mentionState.range.end, markup)
-        : insertAt(currentValue, caret, markup)
+        ? replaceRange(currentValue, mentionState.range.start, mentionState.range.end, ComposerHelper.buildInlineMentionTag(agentId))
+        : insertAt(currentValue, caret, ComposerHelper.buildInlineMentionTag(agentId))
 
       applyNextValue(result.nextValue, result.nextCaret)
     },
@@ -301,7 +298,7 @@ export const ChatComposerRichTextInput = React.forwardRef<ChatComposerRichTextIn
       const currentValue = serializeChatComposerDocument(editor.state.doc)
       const caret = getChatComposerSelectionOffset(editor.state)
       const mentionState = ComposerHelper.getActiveMention(currentValue, caret)
-      const markup = ChatInlineMarkupHelper.buildSourceTag(reference)
+      const markup = ComposerHelper.buildInlineSourceTag(reference)
       const result = mentionState
         ? replaceRange(currentValue, mentionState.range.start, mentionState.range.end, markup)
         : insertAt(currentValue, caret, markup)

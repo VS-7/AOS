@@ -15,13 +15,19 @@ import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
  * `userId` through here to resolve message authorship client-side; AOS's
  * chats_send derives the author from the authenticated caller server-side
  * (see internal/domain/chat/service.go's Send), so there is nothing for a
- * client-supplied id to do.
+ * client-supplied id to do — kept optional and unused rather than dropped,
+ * since `presentation/components/composer/hooks/use-chat-composer.ts`
+ * (Task 9's pristine copy) destructures it from this same props type.
+ * `onFailed` is the same situation: declared for that destructure, not
+ * wired to anything that calls it yet.
  */
 export interface ChatComposerProps {
   agents: Agent[];
   chat: Chat;
   isDirectMessage?: boolean;
-  onSent?: () => void;
+  onSent?: (message: import("@/features/chat/interfaces/chat.interfaces").ChatMessage) => void;
+  onFailed?: (messageId?: string) => void;
+  userId?: string;
 }
 
 export type ComposerReferenceKind = "file" | "folder" | "skill" | "instruction";
@@ -61,6 +67,18 @@ export interface ComposerMentionTarget {
 export interface ComposerAttachedFile {
   filename?: string;
   mediaType: string;
+  url: string;
+}
+
+/**
+ * A recorded-but-not-yet-sent voice note, held in the composer while the
+ * user reviews/confirms it. Shape read off `hooks/use-chat-composer-
+ * audio.ts`'s own `setPendingAudioClip` calls, this type's origin.
+ */
+export interface PendingAudioClip {
+  blob: Blob;
+  durationMs: number;
+  filename: string;
   url: string;
 }
 

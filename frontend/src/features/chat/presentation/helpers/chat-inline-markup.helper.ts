@@ -250,7 +250,7 @@ export class ChatInlineMarkupHelper {
     for (const match of markup.matchAll(ChatInlineMarkupHelper.ATTRIBUTE_PATTERN)) {
       const key = match[1]
       const value = match[2] ?? ""
-      if (key) attributes[key] = value
+      attributes[key] = value
     }
 
     return attributes
@@ -360,8 +360,7 @@ export class ChatInlineMarkupHelper {
     const childNodes = [...element.childNodes]
 
     for (let index = 0; index < Math.min(nodeOffset, childNodes.length); index += 1) {
-      const child = childNodes[index]
-      if (child) offset += ChatInlineMarkupHelper.getNodeLength(child)
+      offset += ChatInlineMarkupHelper.getNodeLength(childNodes[index])
     }
 
     return offset

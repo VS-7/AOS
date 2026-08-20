@@ -85,8 +85,17 @@ async function httpRequest<T>(path: string, init?: RequestInit): Promise<T> {
  * client.ts's client.invoke makes, and for the same reason: there is no
  * reliable synchronous "am I in the desktop window" signal, but attempting
  * the call is itself the reliable signal.
+ *
+ * `desktopMethod` may be `null` for an endpoint AuthService does not bind
+ * at all (see AuthService's own doc comment in
+ * internal/transport/wailsvc/auth.go for which five it binds). Trying
+ * `desktopCall` for a method that will never exist would still pay the
+ * full retry budget in desktop-transport.ts before falling back — a
+ * multi-second stall for no gain, since the answer is already known
+ * without asking. `null` skips straight to HTTP instead.
  */
-async function call<T>(desktopMethod: string, desktopArgs: unknown[], httpPath: string, httpInit?: RequestInit): Promise<T> {
+async function call<T>(desktopMethod: string | null, desktopArgs: unknown[], httpPath: string, httpInit?: RequestInit): Promise<T> {
+  if (desktopMethod === null) return httpRequest<T>(httpPath, httpInit);
   try {
     return await desktopCall<T>(desktopMethod, ...desktopArgs);
   } catch {
@@ -129,4 +138,22 @@ export async function logout(): Promise<void> {
 /** Reads the account the current session belongs to. */
 export function session(): Promise<{ user: PublicUser }> {
   return call<{ user: PublicUser }>("Session", [], "/api/auth/session");
+}
+
+/**
+ * Changes the current session's password.
+ *
+ * Desktop method is `null` on purpose: AuthService binds only Status,
+ * Login, Onboarding, Logout and Session, not this. The HTTP route is real
+ * and fully wired (internal/transport/authapi), so this goes straight
+ * there instead of burning the desktop retry budget on a method call that
+ * would always fail.
+ */
+export async function changePassword(current: string, next: string): Promise<void> {
+  await call<Record<string, never>>(
+    null,
+    [],
+    "/api/auth/password",
+    { method: "POST", headers: jsonHeaders, body: JSON.stringify({ current, next }) },
+  );
 }

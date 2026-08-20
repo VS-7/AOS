@@ -50,166 +50,97 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  /*
+   * The whole scale, not only the four shadcn's own stylesheet names.
+   * Tailwind ships defaults for `xs`/`2xl`/`3xl`/`4xl` (0.125/1/1.5/2rem) and
+   * leaving them alone made them ignore the theme's corner radius *and* fall
+   * out of order: with `--radius: 1rem` the overridden `rounded-xl` (20px)
+   * came out rounder than the untouched `rounded-2xl` (16px), which is 18 of
+   * the ported components rendering a corner the theme never asked for.
+   * `max(0px, ...)` because `--radius` is `0rem` on the "none" radius setting,
+   * and a negative border-radius is invalid CSS — the declaration would be
+   * dropped rather than clamped.
+   */
+  --radius-xs: max(0px, calc(var(--radius) - 8px));
+  --radius-sm: max(0px, calc(var(--radius) - 4px));
+  --radius-md: max(0px, calc(var(--radius) - 2px));
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 16px);
+  --radius-4xl: calc(var(--radius) + 24px);
+}
+
+@layer base {
+  /*
+   * Tailwind v4's preflight resets every element to `border: 0 solid` — width
+   * zero, and *no colour*, which in CSS means `currentColor`. The ported
+   * components were written against shadcn's own stylesheet, which pairs that
+   * reset with this rule; without it every one of the ~380 bare `border`,
+   * `border-t`, `border-b`, `divide-*` classes in the ported tree drew its
+   * line in the text colour instead of the border token — a bright line on
+   * dark themes, a harsh one on light. This is the "white lines out of
+   * nowhere". It belongs in `base` so any explicit `border-<colour>` utility
+   * (which lands in `utilities`) still wins.
+   */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--border);
+  }
+
+  /*
+   * Same reasoning for the focus ring: shadcn's components say `outline-none`
+   * then `focus-visible:outline-1`, expecting the colour to come from here.
+   */
+  * {
+    outline-color: color-mix(in oklab, var(--ring) 50%, transparent);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* The desktop window is translucent; the browser has nothing behind it. */
+  :root[data-windows="blur"] body {
+    background: transparent;
+  }
 }
 
 /*
- * The hand-written layout below predates the ported design system (121 shadcn
- * components — see docs/06 - Frontend/Design System.md) and is kept only until
- * each screen's markup is replaced with the ported components that read the
- * same tokens. Nothing here overrides a Tailwind utility class.
+ * Nothing else lives in this file on purpose.
+ *
+ * What used to be here — a hand-written shell (`.main`, `.card`, `.chat`,
+ * `.board`, `.graph`, `.approval`, …) plus blanket `button` / `input` /
+ * `textarea` element rules — predated the ported design system and was
+ * written for three screens that `app/aos.tsx` no longer mounts: the shell is
+ * `features/workspace/.../layout` now, not `app/root-layout.tsx`. Every one of
+ * those class names had zero call sites left in the live tree.
+ *
+ * The element rules were worse than dead. They sat *outside* any cascade
+ * layer, and unlayered declarations outrank every layered one regardless of
+ * specificity — so `button { background: var(--secondary); border: 1px solid
+ * var(--border); border-radius: …; padding: … }` beat `bg-primary`,
+ * `rounded-md` and `px-4` on all 54 files' worth of ported buttons, and
+ * `input, textarea { background: var(--input); width: 100% }` did the same to
+ * every field (using `--input`, which is a *border* colour in this token set,
+ * as a fill). That is the "wrong borders": a border the design system never
+ * asked for, on everything.
+ *
+ * Anything global that has to be added later belongs in `@layer base` above,
+ * never at the top level of this file.
  */
-
-* { box-sizing: border-box; }
-
-html, body, #root { height: 100%; margin: 0; }
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
-  font-size: 14px;
-  line-height: 1.55;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* The desktop window is translucent; the browser has nothing behind it. */
-:root[data-windows="blur"] body { background: transparent; }
-
-button {
-  font: inherit;
-  color: inherit;
-  background: var(--secondary);
-  border: 1px solid var(--border);
-  border-radius: calc(var(--radius) * 0.5);
-  padding: 0.4rem 0.8rem;
-  cursor: pointer;
-}
-button:hover { background: var(--accent); }
-button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-button[disabled] { opacity: 0.5; cursor: default; }
-
-input, textarea {
-  font: inherit;
-  color: inherit;
-  background: var(--input);
-  border: 1px solid var(--border);
-  border-radius: calc(var(--radius) * 0.5);
-  padding: 0.5rem 0.7rem;
-  width: 100%;
-}
-input:focus-visible, textarea:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-
-/*
- * No blanket `a { color }` rule: the ported design system's own components
- * (SidebarMenuButton and friends) set their own link/text colour, including
- * the distinct one for data-active — a global override here was flattening
- * that back to one colour for every nav item regardless of which page is
- * open. Nothing left in src/features renders a plain, unstyled <a>.
- */
-
-/*
- * The app shell (sidebar, nav, workspace header) is now the ported
- * SidebarProvider/Sidebar/SidebarInset from components/ui/sidebar.tsx — see
- * src/router.tsx — which brings its own Tailwind-based layout. What remains
- * here is the content area and the three screens' own markup, still hand-
- * written pending their own pass through the design system.
- */
-.main { overflow: auto; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; min-height: 0; }
-.main > header { margin-bottom: 1rem; }
-.main h2 { margin: 0; font-size: 1.1rem; }
-.main .subtitle { color: var(--muted-foreground); margin: 0.25rem 0 0; }
-
-.card {
-  background: var(--card);
-  color: var(--card-foreground);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0.85rem 1rem;
-}
-
-.empty {
-  color: var(--muted-foreground);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-  padding: 2rem;
-  text-align: center;
-}
-
-.status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--muted-foreground);
-  font-size: 0.8rem;
-}
-.status .dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--muted-foreground); }
-.status[data-state="open"] .dot { background: var(--primary); }
-.status[data-state="reconnecting"] .dot { background: var(--destructive); }
-
-/* Chat */
-.chat { display: grid; grid-template-rows: 1fr auto; gap: 1rem; flex: 1; min-height: 0; }
-.messages { overflow: auto; display: flex; flex-direction: column; gap: 0.75rem; padding-right: 0.5rem; }
-.message { display: flex; flex-direction: column; gap: 0.35rem; }
-.message .who { font-size: 0.75rem; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.05em; }
-.message .body { white-space: pre-wrap; }
-.message[data-role="user"] .body { background: var(--secondary); border-radius: var(--radius); padding: 0.6rem 0.85rem; align-self: flex-start; }
-
-/* Reasoning is collapsed by default: the prompt asks the agent for a decision,
-   not a transcript of its thinking, and the interface says the same thing. */
-.message details.reasoning summary { cursor: pointer; color: var(--muted-foreground); font-size: 0.8rem; }
-.message details.reasoning .body { color: var(--muted-foreground); font-size: 0.85rem; }
-
-.toolcall { border: 1px solid var(--border); border-radius: calc(var(--radius) * 0.5); padding: 0.5rem 0.7rem; }
-.toolcall summary { cursor: pointer; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
-.toolcall pre { margin: 0.5rem 0 0; overflow: auto; font-size: 0.8rem; color: var(--muted-foreground); }
-.toolcall .truncated { color: var(--destructive); font-size: 0.75rem; }
-
-.composer { display: flex; gap: 0.5rem; align-items: flex-end; }
-.composer textarea { resize: vertical; min-height: 3.5rem; }
-
-/* Board */
-.board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(14rem, 1fr); gap: 0.75rem; overflow-x: auto; flex: 1; min-height: 0; }
-.column { display: flex; flex-direction: column; gap: 0.5rem; min-height: 0; }
-.column > h3 { margin: 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-foreground); }
-.column .cards { display: flex; flex-direction: column; gap: 0.5rem; overflow: auto; padding: 0.25rem; border-radius: var(--radius); min-height: 4rem; }
-.column .cards[data-over="true"] { background: var(--accent); outline: 2px dashed var(--ring); }
-.task { cursor: grab; }
-.task h4 { margin: 0 0 0.25rem; font-size: 0.9rem; }
-.task .meta { display: flex; gap: 0.5rem; flex-wrap: wrap; color: var(--muted-foreground); font-size: 0.75rem; }
-.task .progress { height: 0.25rem; background: var(--input); border-radius: 999px; overflow: hidden; margin-top: 0.5rem; }
-.task .progress > span { display: block; height: 100%; background: var(--primary); }
-
-/* Memory graph */
-.graph { display: grid; grid-template-columns: 1fr 18rem; gap: 1rem; flex: 1; min-height: 0; }
-.graph svg { width: 100%; height: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
-.graph .node { cursor: pointer; }
-.graph .node:focus-visible { outline: 2px solid var(--ring); }
-.graph .edge { stroke: var(--border); stroke-width: 1; }
-.graph .edge[data-kind="supersedes"] { stroke: var(--destructive); stroke-dasharray: 4 3; }
-.graph aside { overflow: auto; display: flex; flex-direction: column; gap: 0.75rem; }
-.legend { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-.legend span { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; color: var(--muted-foreground); }
-.legend i { width: 0.6rem; height: 0.6rem; border-radius: 50%; display: inline-block; }
-
-/* The approval modal, which is the interface half of ADR-0007. */
-.approval-backdrop {
-  position: fixed; inset: 0; display: grid; place-items: center;
-  background: oklch(0 0 0 / 0.5); z-index: 50; padding: 1rem;
-}
-.approval {
-  background: var(--popover); color: var(--popover-foreground);
-  border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 1.25rem; width: min(34rem, 100%);
-  display: flex; flex-direction: column; gap: 0.75rem;
-}
-.approval pre { background: var(--muted); padding: 0.6rem; border-radius: calc(var(--radius) * 0.5); overflow: auto; font-size: 0.8rem; margin: 0; }
-.approval .actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
-.approval .risk { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
-.approval .risk[data-risk="high"] { color: var(--destructive); }
-
-.error { color: var(--destructive); }
-.error .cta { color: var(--muted-foreground); font-size: 0.85rem; }

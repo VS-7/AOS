@@ -8,6 +8,11 @@
 /testdata/**/large/
 /coverage.out
 
+# A stray desktop binary in the repo root. `task build:desktop` writes to
+# /dist/ (ignored above); an 18 MB build output was once committed here by
+# hand, and this is what keeps it from happening again.
+/aos-desktop
+
 # The desktop's copy of the frontend bundle. `task build:desktop` puts it there
 # because a Go embed pattern cannot reach outside its own package; committing a
 # build output would put a stale interface in the history.
@@ -33,3 +38,6 @@
 # A stock `wails3 init` scaffold kept alongside the real project purely as a
 # reference for what a default Wails3 app looks like — not part of AOS.
 /exemplo-wails3-ultima-versao/
+
+# Scratch da execução de planos (superpowers SDD) — não é artefato do projeto
+.superpowers/

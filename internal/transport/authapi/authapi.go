@@ -22,6 +22,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/OWNER/aos/internal/core/apperr"
+	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/domain/auth"
 )
@@ -38,6 +39,12 @@ const cookieSession = "sessionToken"
 type Config struct {
 	Service *auth.Service
 	Log     *slog.Logger
+
+	// Clock is the same one the auth domain mints tokens against. It is here
+	// because onboarding's response carries a display-only expiry this layer
+	// computes itself (see onboarding), and a handler that read the wall
+	// clock directly would drift from the service that issued the token.
+	Clock clockx.Clock
 }
 
 // New builds the router. It is mounted by the caller — see httpapi's
@@ -47,7 +54,10 @@ func New(cfg Config) http.Handler {
 	if cfg.Log == nil {
 		cfg.Log = slog.Default()
 	}
-	s := &server{svc: cfg.Service, log: cfg.Log}
+	if cfg.Clock == nil {
+		cfg.Clock = clockx.System{}
+	}
+	s := &server{svc: cfg.Service, log: cfg.Log, clock: cfg.Clock}
 
 	r := chi.NewRouter()
 	r.Get("/status", s.status)
@@ -60,8 +70,9 @@ func New(cfg Config) http.Handler {
 }
 
 type server struct {
-	svc *auth.Service
-	log *slog.Logger
+	svc   *auth.Service
+	log   *slog.Logger
+	clock clockx.Clock
 }
 
 // status answers "what should this page show" without requiring a
@@ -129,7 +140,7 @@ func (s *server) onboarding(w http.ResponseWriter, r *http.Request) {
 	// its own doc: it is the first, indefinite credential of the account. A
 	// far-future date here is display-only; the token has no ExpiresAt on
 	// the server side to actually enforce one.
-	s.writeSession(w, out.User, out.Token, time.Now().AddDate(10, 0, 0))
+	s.writeSession(w, out.User, out.Token, s.clock.Now().AddDate(10, 0, 0))
 }
 
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {

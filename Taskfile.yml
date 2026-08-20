@@ -124,8 +124,25 @@ tasks:
   frontend:
     desc: Build the single-page application
     dir: frontend
+    # task-12 (round 2): `vite build`'s default V8 heap ceiling isn't enough
+    # for this tree (16953+ modules, dozens of Shiki/Monaco language chunks)
+    # — a bare `task build:desktop` OOMs (exit 134) inside this step on a
+    # shell that hasn't separately exported NODE_OPTIONS. Setting it here,
+    # scoped to this task, is what makes the *documented* command
+    # (`task build:desktop`, no env setup required) actually succeed —
+    # relying on the caller's shell already having it exported made the
+    # gate pass only by accident of environment, never for real.
+    env:
+      NODE_OPTIONS: --max-old-space-size=8192
     cmds:
-      - npm ci --silent || npm install --silent
+      # task-12: root pins zod ^3.25.76 (satisfies @ai-sdk/gateway's
+      # `^3.25.76 || ^4.1.8`), but @json-render/shadcn peer-depends on
+      # zod ^4.0.0 — a plain `npm ci`/`npm install` hits ERESOLVE on a
+      # fresh install every time, deterministically (confirmed: ci ac4540b
+      # already had to install @json-render itself with --legacy-peer-deps
+      # for the same reason). Without this flag, `build:desktop` cannot get
+      # past this step on a clean checkout or CI cache miss.
+      - npm ci --legacy-peer-deps --silent || npm install --legacy-peer-deps --silent
       - npx tsc --noEmit
       - npx vite build
 

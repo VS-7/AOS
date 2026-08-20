@@ -65,7 +65,7 @@ func post(t *testing.T, srv *httptest.Server, path string, body any, bearer stri
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := http.NewRequest(http.MethodPost, srv.URL+path, bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+path, bytes.NewReader(raw))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func post(t *testing.T, srv *httptest.Server, path string, body any, bearer stri
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	var env envelope
 	if err := json.NewDecoder(res.Body).Decode(&env); err != nil {
 		t.Fatal(err)
@@ -87,7 +87,7 @@ func post(t *testing.T, srv *httptest.Server, path string, body any, bearer stri
 
 func get(t *testing.T, srv *httptest.Server, path, bearer string) (*http.Response, envelope) {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodGet, srv.URL+path, nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func get(t *testing.T, srv *httptest.Server, path, bearer string) (*http.Respons
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	var env envelope
 	if err := json.NewDecoder(res.Body).Decode(&env); err != nil {
 		t.Fatal(err)

@@ -12,7 +12,7 @@ type Gate = { checking: true } | { checking: false; onboarded: boolean; authenti
  * itself once a session exists.
  *
  * Ported from the original's route-level guard (OnboardingPage/LoginPage
- * sit ahead of every other route in @app/router.tsx) as a gate around the
+ * sit ahead of every other route in @/router.tsx) as a gate around the
  * whole router instead of a per-route beforeLoad: every route here needs
  * the same answer to "is anyone signed in", so asking once is the faithful
  * behaviour, not a shortcut.

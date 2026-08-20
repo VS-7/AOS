@@ -52,7 +52,11 @@ function walk(dir, acc = []) {
     return acc;
   }
   for (const entry of entries) {
-    if (entry.startsWith(".") || entry === "_scripts") continue;
+    // `superpowers/` holds SDD specs and plans — process artifacts of one
+    // branch, not notes of the specification vault. They carry no vault
+    // frontmatter and link to nothing, which is correct for what they are;
+    // walking them only produces orphans and missing-field noise.
+    if (entry.startsWith(".") || entry === "_scripts" || entry === "superpowers") continue;
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) walk(full, acc);
     else if (extname(entry) === ".md") acc.push(full);

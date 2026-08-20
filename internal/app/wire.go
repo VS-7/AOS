@@ -135,6 +135,12 @@ type App struct {
 	// listening, so a publisher never has to check.
 	Events *realtime.Hub
 
+	// Clock is the one every service here was built with. It is exported for
+	// the same reason env is kept: Serve builds transports of its own, and a
+	// transport that read the wall clock directly would disagree with the
+	// domain that issued the record it is describing.
+	Clock clockx.Clock
+
 	// env is kept so that Serve reads the same layered settings the rest of
 	// the wiring did, rather than a second resolver that could disagree.
 	env *env.Resolver
@@ -517,6 +523,7 @@ func New(opts Options) (*App, error) {
 		Worker:       pool,
 		Subconscious: observer,
 
+		Clock:   clock,
 		env:     resolver,
 		closers: closers,
 	}, nil
