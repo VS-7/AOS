@@ -182,6 +182,18 @@ func errNotFound(id string, known []string) error {
 		})
 }
 
+// errRecordNotFound names both the collection and the record: an agent asking
+// for a row it typed wrong needs to know which of the two ids was the miss.
+func errRecordNotFound(collectionID, id string) error {
+	return apperr.New("COLLECTION_RECORD_NOT_FOUND").
+		Causer("collection.RecordService").
+		Msgf("collection %q has no record %q", collectionID, id).
+		Issue("collection", collectionID).
+		Issue("id", id).
+		Status(apperr.StatusNotFound).
+		CTA(apperr.CallToAction{Label: "list the collection's records before reading, updating or deleting one by id"})
+}
+
 func errNameInvalid(id string) error {
 	return apperr.New("COLLECTION_NAME_INVALID").
 		Causer("collection.DescriptorFor").

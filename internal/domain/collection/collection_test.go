@@ -9,6 +9,7 @@ import (
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/collections"
+	"github.com/OWNER/aos/internal/core/ids"
 	"github.com/OWNER/aos/internal/domain/collection"
 )
 
@@ -495,6 +496,312 @@ func TestCreateRefusesAnIncoherentSchema(t *testing.T) {
 	svc, _, _ := newTestService()
 	_, err := svc.Create(ctx(), collection.CreateInput{ID: "empty", Name: "Empty", Format: collection.FormatMarkdown})
 	if code := codeOf(t, err); code != "AOS_COLLECTION_NO_FIELDS" {
+		t.Fatalf("code = %q", code)
+	}
+}
+
+// fakeRecordRepo is the in-memory collection.RecordRepo one collection's
+// records live in. Like fakeRepo, it does no IO: the domain's tests run on
+// fakes, never on a filesystem.
+type fakeRecordRepo struct {
+	items map[string]collections.Record
+}
+
+func (r *fakeRecordRepo) Get(_ context.Context, key collections.Key) (*collections.Record, error) {
+	rec, ok := r.items[key["id"]]
+	if !ok {
+		return nil, collections.NotFoundError("records", key)
+	}
+	out := rec
+	return &out, nil
+}
+
+// List applies Filters by simple equality — enough to prove RecordQuery
+// actually reaches collections.Query, without reimplementing the ordering and
+// pagination the real engine's List already has its own tests for.
+func (r *fakeRecordRepo) List(_ context.Context, q collections.Query) ([]collections.Record, error) {
+	out := make([]collections.Record, 0, len(r.items))
+	for _, rec := range r.items {
+		match := true
+		for field, want := range q.Filters {
+			if rec.Fields[field] != want {
+				match = false
+				break
+			}
+		}
+		if match {
+			out = append(out, rec)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeRecordRepo) Create(_ context.Context, v *collections.Record) error {
+	if r.items == nil {
+		r.items = map[string]collections.Record{}
+	}
+	r.items[v.Key["id"]] = *v
+	return nil
+}
+
+func (r *fakeRecordRepo) Update(_ context.Context, v *collections.Record, _ collections.Version) error {
+	if r.items == nil {
+		r.items = map[string]collections.Record{}
+	}
+	r.items[v.Key["id"]] = *v
+	return nil
+}
+
+func (r *fakeRecordRepo) Delete(_ context.Context, key collections.Key) error {
+	delete(r.items, key["id"])
+	return nil
+}
+
+// Version makes fakeRecordRepo satisfy collections.Versioned, the same as the
+// real fscollections.Repo does — which is what RecordService's best-effort
+// CreatedAt/UpdatedAt stamping reads.
+func (r *fakeRecordRepo) Version(_ context.Context, key collections.Key) (collections.Version, error) {
+	if _, ok := r.items[key["id"]]; !ok {
+		return collections.Version{}, collections.NotFoundError("records", key)
+	}
+	return collections.Version{ModTime: at}, nil
+}
+
+// fakeRecordRepos is the in-memory collection.RecordRepositories: it hands out
+// one fakeRecordRepo per collection id, the same way the real
+// internal/adapters/fscollections implementation hands out one Repo per
+// collection's Model[collections.Record].
+type fakeRecordRepos struct {
+	byCollection map[string]*fakeRecordRepo
+}
+
+func (f *fakeRecordRepos) For(c collection.Collection) (collection.RecordRepo, error) {
+	if f.byCollection == nil {
+		f.byCollection = map[string]*fakeRecordRepo{}
+	}
+	repo, ok := f.byCollection[c.ID]
+	if !ok {
+		repo = &fakeRecordRepo{}
+		f.byCollection[c.ID] = repo
+	}
+	return repo, nil
+}
+
+// newRecordService seeds a fakeRepo with c already declared — Task 5's tests
+// are about records, not about declaring collections, which Task 4 already
+// covers above — and wires a fresh fakeRecordRepos and a sequence of ids
+// behind it.
+func newRecordService(t *testing.T, c collection.Collection) collection.RecordService {
+	t.Helper()
+	repo := &fakeRepo{items: map[string]collection.Collection{c.ID: c}}
+	svc := collection.NewService(collection.Deps{
+		Repo: repo, Registry: collections.NewRegistry(), Clock: clockx.Fixed{At: at},
+		RecordRepos: &fakeRecordRepos{}, IDs: &ids.Sequence{Prefix: "rec"},
+	})
+	return svc.Records()
+}
+
+// A record is validated against its collection's declaration before it is
+// stored, and normalised by the collection's hooks. Neither is optional: the
+// point of declaring a schema is that what is stored matches it.
+func TestCreatingARecordValidatesAndNormalises(t *testing.T) {
+	c := crm()
+	c.Fields = append(c.Fields, collection.Field{Name: "createdAt", Type: collection.TypeDate})
+	c.Hooks = []collection.Hook{{On: "create", Action: collection.ActionSetTimestamp, Field: "createdAt"}}
+	svc := newRecordService(t, c)
+
+	rec, err := svc.Create(ctx(), "contacts", map[string]any{"name": "Ada", "stage": "lead"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Data["createdAt"] != at.Format(time.RFC3339) {
+		t.Fatalf("the hook did not run: %v", rec.Data)
+	}
+	// And the refusal path, from the same service: validation is not optional.
+	if _, err := svc.Create(ctx(), "contacts", map[string]any{"stage": "lead"}); err == nil {
+		t.Fatal("a record missing a required field was stored")
+	}
+}
+
+// The unique check needs what is already stored, so the service is what
+// fetches it and hands it to Validate — the domain function stays pure.
+func TestCreatingASecondRecordWithADuplicateUniqueValueIsRefused(t *testing.T) {
+	svc := newRecordService(t, crm())
+
+	if _, err := svc.Create(ctx(), "contacts", map[string]any{"name": "Ada", "email": "a@b.c"}); err != nil {
+		t.Fatal(err)
+	}
+	// The unique check needs what is already stored, so the service is what
+	// fetches it and hands it to Validate — the domain function stays pure.
+	_, err := svc.Create(ctx(), "contacts", map[string]any{"name": "Grace", "email": "a@b.c"})
+	if code := codeOf(t, err); code != "AOS_COLLECTION_FIELD_NOT_UNIQUE" {
+		t.Fatalf("code = %q", code)
+	}
+}
+
+// A record in a collection nobody declared is refused, naming it, rather than
+// creating the collection implicitly. An implicit collection is a typo that
+// becomes a schema.
+func TestARecordInAnUnknownCollectionIsRefused(t *testing.T) {
+	svc := newRecordService(t, crm())
+
+	// An implicit collection is a typo that becomes a schema.
+	_, err := svc.Create(ctx(), "contatos", map[string]any{"name": "Ada"})
+	if code := codeOf(t, err); code != "AOS_COLLECTION_NOT_FOUND" {
+		t.Fatalf("code = %q", code)
+	}
+	var app *apperr.Error
+	_ = errors.As(err, &app)
+	if app.Issues["collection"] != "contatos" {
+		t.Fatalf("the error does not name what was asked for: %v", app.Issues)
+	}
+}
+
+// Update revalidates. A record that was valid when written and invalid after
+// an edit is exactly what validation is for.
+func TestUpdatingARecordRevalidates(t *testing.T) {
+	svc := newRecordService(t, crm())
+	rec, err := svc.Create(ctx(), "contacts", map[string]any{"name": "Ada", "stage": "lead"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A record that was valid when written and invalid after an edit is
+	// exactly what validation is for.
+	_, err = svc.Update(ctx(), "contacts", rec.ID, map[string]any{"name": "Ada", "stage": "talvez"})
+	if code := codeOf(t, err); code != "AOS_COLLECTION_FIELD_NOT_IN_ENUM" {
+		t.Fatalf("code = %q", code)
+	}
+	// And the stored record is untouched: a refused update is not a partial one.
+	again, err := svc.Get(ctx(), "contacts", rec.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Data["stage"] != "lead" {
+		t.Fatalf("stage = %v, want the refused update to have changed nothing", again.Data["stage"])
+	}
+}
+
+// The Markdown body of a record is content, not a field: it round-trips
+// without being declared in the schema.
+func TestARecordsBodyIsNotAField(t *testing.T) {
+	svc := newRecordService(t, crm())
+
+	// The Markdown body is content, not a column: it round-trips without being
+	// declared, and declaring every note-taking collection a "content" field
+	// would be describing the format twice.
+	rec, err := svc.CreateWithContent(ctx(), "contacts",
+		map[string]any{"name": "Ada"}, "Conheceu o Babbage numa festa.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := svc.Get(ctx(), "contacts", rec.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Content != "Conheceu o Babbage numa festa." {
+		t.Fatalf("content = %q", again.Content)
+	}
+	if _, isField := again.Data["content"]; isField {
+		t.Fatal("the body leaked into the fields")
+	}
+}
+
+// TestListingRecordsReturnsWhatWasCreated, ordered and filtered as asked —
+// RecordQuery is only worth having if it actually reaches the engine's Query.
+func TestListingRecordsReturnsWhatWasCreated(t *testing.T) {
+	svc := newRecordService(t, crm())
+	for _, name := range []string{"Ada", "Grace"} {
+		if _, err := svc.Create(ctx(), "contacts", map[string]any{"name": name}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	all, err := svc.List(ctx(), "contacts", collection.RecordQuery{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("List = %d records, want 2", len(all))
+	}
+
+	filtered, err := svc.List(ctx(), "contacts", collection.RecordQuery{Filters: map[string]any{"name": "Ada"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(filtered) != 1 || filtered[0].Data["name"] != "Ada" {
+		t.Fatalf("filtered List = %+v, want just Ada", filtered)
+	}
+}
+
+// TestListingAnUnknownCollectionIsRefused: List goes through the same
+// declaration lookup Create does, and refuses the same way.
+func TestListingAnUnknownCollectionIsRefused(t *testing.T) {
+	svc := newRecordService(t, crm())
+	_, err := svc.List(ctx(), "contatos", collection.RecordQuery{})
+	if code := codeOf(t, err); code != "AOS_COLLECTION_NOT_FOUND" {
+		t.Fatalf("code = %q", code)
+	}
+}
+
+// TestGettingAnUnknownRecordIsNotFound names both the collection and the
+// record, so an agent that typed the id wrong knows which one missed.
+func TestGettingAnUnknownRecordIsNotFound(t *testing.T) {
+	svc := newRecordService(t, crm())
+	_, err := svc.Get(ctx(), "contacts", "does-not-exist")
+	if code := codeOf(t, err); code != "AOS_COLLECTION_RECORD_NOT_FOUND" {
+		t.Fatalf("code = %q", code)
+	}
+}
+
+// TestUpdatingAnUnknownRecordIsNotFound: the same refusal Get gives, since
+// there is nothing to revalidate against.
+func TestUpdatingAnUnknownRecordIsNotFound(t *testing.T) {
+	svc := newRecordService(t, crm())
+	_, err := svc.Update(ctx(), "contacts", "does-not-exist", map[string]any{"name": "Ada"})
+	if code := codeOf(t, err); code != "AOS_COLLECTION_RECORD_NOT_FOUND" {
+		t.Fatalf("code = %q", code)
+	}
+}
+
+// TestDeletingARecordRemovesIt.
+func TestDeletingARecordRemovesIt(t *testing.T) {
+	svc := newRecordService(t, crm())
+	rec, err := svc.Create(ctx(), "contacts", map[string]any{"name": "Ada"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Delete(ctx(), "contacts", rec.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Get(ctx(), "contacts", rec.ID); err == nil {
+		t.Fatal("the record was still readable after being deleted")
+	}
+}
+
+// TestDeletingFromAnUnknownCollectionIsRefused: Delete goes through the same
+// declaration lookup the other operations do.
+func TestDeletingFromAnUnknownCollectionIsRefused(t *testing.T) {
+	svc := newRecordService(t, crm())
+	err := svc.Delete(ctx(), "contatos", "any-id")
+	if code := codeOf(t, err); code != "AOS_COLLECTION_NOT_FOUND" {
+		t.Fatalf("code = %q", code)
+	}
+}
+
+// TestCreateWithContentRunsUpdateHooksToo: an unknown hook action is refused
+// on update the same way it is on create — hooks are not a create-only pass.
+func TestUpdateRefusesAnUnknownHookAction(t *testing.T) {
+	c := crm()
+	c.Hooks = []collection.Hook{{On: "update", Action: "runShellCommand", Field: "name"}}
+	svc := newRecordService(t, c)
+
+	rec, err := svc.Create(ctx(), "contacts", map[string]any{"name": "Ada"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = svc.Update(ctx(), "contacts", rec.ID, map[string]any{"name": "Ada Lovelace"})
+	if code := codeOf(t, err); code != "AOS_COLLECTION_HOOK_UNKNOWN" {
 		t.Fatalf("code = %q", code)
 	}
 }

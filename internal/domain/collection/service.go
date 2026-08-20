@@ -10,21 +10,42 @@ import (
 // Service is the collection aggregate: the agent-facing surface that turns a
 // declaration into a registered collection, and back out again.
 type Service struct {
-	repo     Repository
-	registry *collections.Registry
-	clock    Clock
+	repo        Repository
+	registry    *collections.Registry
+	clock       Clock
+	recordRepos RecordRepositories
+	ids         IDs
 }
 
 // Deps is what the service is built from.
+//
+// RecordRepos and IDs are only used by Records() — declaring a collection
+// needs neither a repository factory for its rows nor an id generator, the
+// caller supplies the collection's own id. They are still here, on the same
+// Deps, rather than on a second constructor: one aggregate, one place to wire
+// it, and Task 10's wiring passes all five at once.
 type Deps struct {
-	Repo     Repository
-	Registry *collections.Registry
-	Clock    Clock
+	Repo        Repository
+	Registry    *collections.Registry
+	Clock       Clock
+	RecordRepos RecordRepositories
+	IDs         IDs
 }
 
 // NewService wires the service over its ports.
 func NewService(d Deps) *Service {
-	return &Service{repo: d.Repo, registry: d.Registry, clock: d.Clock}
+	return &Service{
+		repo: d.Repo, registry: d.Registry, clock: d.Clock,
+		recordRepos: d.RecordRepos, ids: d.IDs,
+	}
+}
+
+// Records returns the aggregate for this collection's rows. It is a method
+// rather than a second top-level constructor because a record is meaningless
+// without the declaration it is validated against, and the two aggregates
+// share the repository that reads that declaration.
+func (s *Service) Records() RecordService {
+	return &recordService{decls: s.repo, repos: s.recordRepos, clock: s.clock, ids: s.ids}
 }
 
 // ListInput selects the declarations List returns. It has no filter today: a
