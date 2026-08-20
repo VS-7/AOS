@@ -58,21 +58,53 @@ func (m Model[T]) WritePattern() (*Pattern, error) {
 	return nil, errNoWritablePattern(m.Name)
 }
 
-// WritePatternFor picks the writable pattern a key can actually fill.
+// WritePatternFor picks the most specific writable pattern a key can fill.
 //
-// A collection with one shape does not need it. One with several does: a run
-// belongs either to a task or to a routine, and the two live in different
-// directories with different placeholders. Choosing by the fields the record
-// carries is what lets one collection hold both — and falling back to the first
-// writable pattern keeps the single-shape case behaving exactly as before.
+// A collection with one shape does not need it. One with several does, for
+// two different reasons. A run belongs either to a task or to a routine, and
+// the two live in different directories with disjoint placeholders — any
+// pattern that fills at all is the right one, because only one ever can. A
+// skill-scoped collection, view, agent, template or goal is the harder case:
+// its workspace pattern ({id}) and its skill-scoped pattern ({skill, id})
+// are not disjoint — a key carrying both id and skill satisfies the
+// workspace pattern too, trivially, since fills only checks that a pattern's
+// own placeholders are present, never that the key carries nothing more.
+//
+// The first version of this method returned the first writable pattern that
+// filled, in declaration order. That was correct for the disjoint case
+// (registry.go happens to declare the more specific "runs" patterns before
+// the less specific one, so first-match landed right by coincidence) and
+// silently wrong for the overlapping case: a skill-scoped agent, collection,
+// view, template or goal was always written to its workspace path — the
+// first, least specific pattern that could possibly fill — never its own
+// skill directory, and read back with Skill empty, because the workspace
+// pattern has no {skill} placeholder to populate it from. Nothing caught
+// this until a skill could actually be installed and its own agent turned
+// out to live at .aos/agents/{id}/AGENT.md instead of inside the skill's
+// directory. Picking the pattern whose own field set the key fills most
+// completely — the most specific match — is what makes both cases correct
+// at once: a key with {id} alone still lands on the workspace pattern
+// (nothing more specific fills), and a key with {id, skill} lands on the
+// skill-scoped one, because it fills more of what a candidate pattern asks
+// for. Falling back to the first writable pattern when nothing fills at all
+// keeps that corner — a record with no path fields set — behaving as before.
 func (m Model[T]) WritePatternFor(k Key) (*Pattern, error) {
+	var best *Pattern
+	bestFields := -1
 	for _, p := range m.Patterns {
-		if !p.Writable() {
+		if !p.Writable() || !fills(p, k) {
 			continue
 		}
-		if fills(p, k) {
-			return p, nil
+		// Strictly greater, so a tie keeps the earlier-declared pattern: the
+		// natives declare the more general shape first everywhere two
+		// patterns could ever fill the same number of fields, and this is
+		// what keeps that order meaningful rather than incidental.
+		if n := len(p.Fields()); n > bestFields {
+			best, bestFields = p, n
 		}
+	}
+	if best != nil {
+		return best, nil
 	}
 	return m.WritePattern()
 }
