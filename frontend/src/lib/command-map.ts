@@ -484,14 +484,42 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "artifact.delete": null,
   "artifact.getById": null,
   "artifact.list": null,
-  "collection.createRecord": null,
-  "collection.delete": null,
-  "collection.deleteRecord": null,
-  "collection.getById": null,
-  "collection.getRecordById": null,
-  "collection.list": null,
-  "collection.listRecords": null,
-  "collection.updateRecord": null,
+  // task-10: the `collection` domain is lit — `internal/domain/collection/
+  // commands.go` registers all nine. Every `collections_*` field name
+  // below comes from that file's own Input structs, not guessed.
+  //
+  // `collections_get`/`collections_delete` name the collection `id`; the
+  // ported UI calls that param `collection` on both
+  // (`.../pages/($id)/index.tsx`'s `getById`,
+  // `plugin-detail-section.component.tsx`'s `deleteCollection`) — hence
+  // `renameIn: { collection: "id" }` on each. The four `records-*`
+  // commands take `collection` (the parent) and `id` (the record) — the UI
+  // already calls the parent `collection` (matches, no rename) but calls
+  // the record `record` on `getRecordById`/`updateRecord`/`deleteRecord`
+  // (`.../records/($record)/index.tsx`), hence `renameIn: { record: "id" }`
+  // on those three; `records-create` has no record id to rename at all.
+  //
+  // `collections_get` answers bare (`*Collection`); the loader reads
+  // `collection.data.collection` — `wrapOut: "collection"`. `collections_
+  // create` has no live caller yet — the "add collection" flow was never
+  // ported — so nothing here is asserted for it beyond the field names.
+  "collection.createRecord": "collections_records-create",
+  "collection.delete": { key: "collections_delete", renameIn: { collection: "id" } },
+  "collection.deleteRecord": { key: "collections_records-delete", renameIn: { record: "id" } },
+  "collection.getById": { key: "collections_get", renameIn: { collection: "id" }, wrapOut: "collection" },
+  "collection.getRecordById": { key: "collections_records-get", renameIn: { record: "id" } },
+  "collection.list": "collections_list",
+  // `collection.listRecords` is disclosed, not fixed: `records-list`
+  // answers `{records: Record[], total}` (`RecordsListOutput`,
+  // `internal/domain/collection/commands.go`); the live call site
+  // (`.../pages/($id)/index.tsx`) reads `records.data ?? []` — the bare
+  // array itself, not a field nested one level in. `wrapOut` only adds a
+  // nesting level to a bare entity; it cannot strip one that is already
+  // there, so this is a call-site fix (read `records.data?.records`)
+  // for whoever un-dormants this page next, the same class of gap
+  // `memory.graph`'s own comment above describes.
+  "collection.listRecords": "collections_records-list",
+  "collection.updateRecord": { key: "collections_records-update", renameIn: { record: "id" } },
   "goal.create": null,
   "goal.delete": null,
   "goal.getById": null,
@@ -519,10 +547,45 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "project.getById": null,
   "project.list": null,
   "project.update": null,
-  "skill.delete": null,
-  "skill.install": null,
-  "skill.list": null,
-  "skill.update": null,
+  // task-10: the `skill` domain is lit — `internal/domain/skill/
+  // commands.go` registers list/install/create/update/delete.
+  //
+  // `skill.delete`/`skill.update` name the skill `skill` on the ported UI
+  // (`marketplace/[name]/inner.tsx`'s `deletePlugin`/`updatePlugin`, both
+  // `{ params: { skill: installedSkill.id } }`); Go's `DeleteInput`/
+  // `UpdateInput` name it `id` — `renameIn: { skill: "id" }` on both.
+  // `updatePlugin` sends `{ active }`, which is `UpdateInput.Active`
+  // verbatim — no further coercion needed, and this is the whole reason
+  // `skills_update` exists at all rather than only `skills_delete`/
+  // `skills_install`: the ported UI's only "update" is this on/off toggle,
+  // which is also the only field `skill.Installer.Update` lets change in
+  // place (see its own doc comment) — the two were sized to match, not
+  // discovered to.
+  //
+  // `skill.install`'s live caller (`marketplace-install-button.component.
+  // tsx`) sends `{ source: "aos/registry", skill: pluginName }` — a
+  // registry address plus a name, for installing a *named* package from a
+  // marketplace. `InstallRequest.Source` (`internal/domain/skill/
+  // commands.go`) is a location a `Fetcher` can actually read from — this
+  // build's only `Fetcher` is `skillfetch.Local`, a local directory, which
+  // "aos/registry" is not and never resolves to; `skill` (the plugin name)
+  // has no field to land in at all and is dropped, the same way any other
+  // field Go's decoder does not recognise is. Installing a marketplace
+  // skill by name therefore fails today with a real, honest fetch error
+  // instead of a silent no-op — disclosed here because there is no
+  // registry `Fetcher` in this build for `renameIn`/`coerceIn` to bridge
+  // to, not because the mapping is wrong.
+  //
+  // `skill.list` answers `{skills: Skill[], total}` (`ListOutput`); every
+  // live caller (`use-chat-composer.ts`, both marketplace pages) reads
+  // `.data?.skills` directly — matches with no `wrapOut`. Its own `query:
+  // "..."` search field has no Go counterpart (`ListInput` takes only
+  // `_reasoning`) and is dropped, the same class of gap as `skill.install`'s
+  // `skill` field.
+  "skill.delete": { key: "skills_delete", renameIn: { skill: "id" } },
+  "skill.install": "skills_install",
+  "skill.list": "skills_list",
+  "skill.update": { key: "skills_update", renameIn: { skill: "id" } },
   "template.create": null,
   "template.delete": null,
   // Found by the final-review sweep's corrected pattern — same shape as
@@ -533,10 +596,38 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "template.list": null,
   "template.update": null,
   "token.regenerate": null,
-  "toolset.delete": null,
-  "toolset.getById": null,
-  "toolset.getConfig": null,
-  "toolset.updateConfig": null,
+  // task-10: the `toolset` domain is lit — `internal/domain/toolset/
+  // commands.go` registers get/get-config/update-config/delete for the UI
+  // (list/call are agent/CLI-only, per the closed table).
+  //
+  // Every live caller (`plugin-inventory-item-sheet.component.tsx`,
+  // `plugin-detail-section.component.tsx`) names the toolset `toolset` —
+  // `{ params: { toolset: toolsetId } }` on all four; Go names it `id` —
+  // `renameIn: { toolset: "id" }` on all four.
+  //
+  // `getById`/`getConfig` both answer bare (`*Toolset`,
+  // `toolsets_get`/`toolsets_get-config` share one handler —
+  // `internal/domain/toolset/commands.go`'s own comment on `get-config`
+  // says so). `detailQuery` reads `detailQuery.data.toolset` (`"toolset"
+  // in detailQuery.data`) — `wrapOut: "toolset"` on `getById`.
+  // `getConfig`'s own reads (`configQuery.data?.requirements`,
+  // `.connectionType`) name fields `Toolset` does not have at all — no
+  // "requirements" list, no "connectionType" alongside `Type` — a shape
+  // this rebuild's toolset has no equivalent for, disclosed rather than
+  // guessed at with a `wrapOut` that cannot invent fields that are not
+  // there.
+  //
+  // `updateConfig`'s live caller sends `{ values: <env map> }` — a UI name
+  // for what `UpdateConfigInput.Env` is — `coerceIn` turns it into `{env:
+  // value}`, merged over the renamed `id`.
+  "toolset.delete": { key: "toolsets_delete", renameIn: { toolset: "id" } },
+  "toolset.getById": { key: "toolsets_get", renameIn: { toolset: "id" }, wrapOut: "toolset" },
+  "toolset.getConfig": { key: "toolsets_get-config", renameIn: { toolset: "id" } },
+  "toolset.updateConfig": {
+    key: "toolsets_update-config",
+    renameIn: { toolset: "id" },
+    coerceIn: { values: (value) => ({ env: value }) },
+  },
   "tunnel.getStatus": null,
   "tunnel.start": null,
   "tunnel.stop": null,
@@ -544,17 +635,64 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "user.delete": null,
   "user.list": null,
   "user.update": null,
-  "view.delete": null,
-  "view.executeAction": null,
-  "view.getById": null,
-  "view.list": null,
-  "view.render": null,
+  // task-10: the `view` domain is lit — `internal/domain/view/
+  // commands.go` registers list/get/render/execute-action/delete for the
+  // UI (create/components/scaffold are agent/CLI-only, per the closed
+  // table).
+  //
+  // `getById`/`render`/`delete` all name the view `view` on the ported UI
+  // (`view/presentation/pages/($view)/index.tsx`'s loader,
+  // `plugin-detail-section.component.tsx`'s `deleteView`); Go names it
+  // `id` on all three — `renameIn: { view: "id" }`.
+  //
+  // `getById` answers bare (`*View`); the loader reads
+  // `viewResult.data?.view` — `wrapOut: "view"`.
+  //
+  // `render`'s live caller reads `renderResult.data?.result` as a
+  // `ViewRenderResult` (a `json-render` `Spec`) — the original's render
+  // endpoint evaluated a `json-render` document. This rebuild's
+  // `views_render` (`Service.Render`, `internal/domain/view/service.go`)
+  // answers `Rendered{view, records, renderedAt}` instead: the declared
+  // tree plus the rows it binds to, not a pre-evaluated spec — a different
+  // rendering model, not a renamed field, so there is no `result` for
+  // `wrapOut` to nest anything under. Disclosed rather than forced: the
+  // page that reads `ViewDataHelper.getSpec(renderResult)` needs its own
+  // adapter from `{view, records}` to a `Spec` when this page is un-
+  // dormanted, which is a UI decision this map cannot make.
+  //
+  // `executeAction`'s live caller sends `{ params: { view, actionId },
+  // body: { params } }` and reads `response.data?.result`.
+  // `ExecuteActionInput` (same file) names the view `id`, the action
+  // `label`, and its arguments `input` — `renameIn: { view: "id", actionId:
+  // "label" }` plus `coerceIn` folding the UI's own `params` object into
+  // `input`. The response is `wrapOut: "result"`: `views_execute-action`
+  // answers whatever the dispatched command returns, bare
+  // (`json.RawMessage`, `Service.ExecuteAction`'s own signature) — nesting
+  // it under `result` matches the read, but the fields the UI reads *off*
+  // that result (`success`, `updates`) are the original's own action
+  // protocol, not something every registered command answers; whether a
+  // given action's result actually has them depends on which command the
+  // view's own tree names, which is a call-site concern this map cannot
+  // resolve generically.
+  //
+  // `view.list` has no live caller yet — no page lists views directly —
+  // so it is mapped on field names alone.
+  "view.delete": { key: "views_delete", renameIn: { view: "id" } },
+  "view.executeAction": {
+    key: "views_execute-action",
+    renameIn: { view: "id", actionId: "label" },
+    coerceIn: { params: (value) => ({ input: value }) },
+    wrapOut: "result",
+  },
+  "view.getById": { key: "views_get", renameIn: { view: "id" }, wrapOut: "view" },
+  "view.list": "views_list",
+  "view.render": { key: "views_render", renameIn: { view: "id" } },
 };
 
 /** The domains the Go backend does not have yet, whole. */
 export const DORMANT_DOMAINS: ReadonlySet<string> = new Set([
-  "artifact", "collection", "goal", "instruction", "marketplace", "model",
-  "project", "skill", "template", "token", "toolset", "tunnel", "user", "view",
+  "artifact", "goal", "instruction", "marketplace", "model",
+  "project", "template", "token", "tunnel", "user",
 ]);
 
 /** Whether the whole domain is dormant — what the route shows as a panel. */
