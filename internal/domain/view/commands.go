@@ -247,11 +247,11 @@ save it.`,
 
 // compile-time proof that the handlers match the command signature.
 var (
-	_ func(context.Context, ListInput) (ListOutput, error)          = (*Service)(nil).List
-	_ func(context.Context, GetInput) (*View, error)                = (*Service)(nil).Get
-	_ func(context.Context, CreateInput) (*View, error)             = (*Service)(nil).Create
-	_ func(context.Context, DeleteInput) error                      = (*Service)(nil).Delete
-	_ func(context.Context, RenderInput) (*Rendered, error)         = (*Service)(nil).Render
-	_ func(context.Context, ScaffoldInput) (*View, error)           = (*Service)(nil).Scaffold
+	_ func(context.Context, ListInput) (ListOutput, error)               = (*Service)(nil).List
+	_ func(context.Context, GetInput) (*View, error)                     = (*Service)(nil).Get
+	_ func(context.Context, CreateInput) (*View, error)                  = (*Service)(nil).Create
+	_ func(context.Context, DeleteInput) error                           = (*Service)(nil).Delete
+	_ func(context.Context, RenderInput) (*Rendered, error)              = (*Service)(nil).Render
+	_ func(context.Context, ScaffoldInput) (*View, error)                = (*Service)(nil).Scaffold
 	_ func(context.Context, ExecuteActionInput) (json.RawMessage, error) = (*Service)(nil).ExecuteAction
 )

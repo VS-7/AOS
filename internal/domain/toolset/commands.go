@@ -147,8 +147,8 @@ func statusPtr(s Status) *Status { return &s }
 
 // compile-time proof that the handlers match the command signature.
 var (
-	_ func(context.Context, GetInput) (*Toolset, error)               = (*Service)(nil).Get
-	_ func(context.Context, CallInput) (CallOutput, error)            = (*Service)(nil).Call
-	_ func(context.Context, UpdateConfigInput) (*Toolset, error)      = (*Service)(nil).UpdateConfig
-	_ func(context.Context, DeleteInput) (DeleteOutput, error)        = (*Service)(nil).Delete
+	_ func(context.Context, GetInput) (*Toolset, error)          = (*Service)(nil).Get
+	_ func(context.Context, CallInput) (CallOutput, error)       = (*Service)(nil).Call
+	_ func(context.Context, UpdateConfigInput) (*Toolset, error) = (*Service)(nil).UpdateConfig
+	_ func(context.Context, DeleteInput) (DeleteOutput, error)   = (*Service)(nil).Delete
 )

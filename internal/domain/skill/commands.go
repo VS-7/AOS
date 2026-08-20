@@ -193,7 +193,7 @@ func falsePtr() *bool { v := false; return &v }
 
 // compile-time proof that the handlers match the command signature.
 var (
-	_ func(context.Context, string) (*Skill, error)      = (*Installer)(nil).Get
+	_ func(context.Context, string) (*Skill, error)       = (*Installer)(nil).Get
 	_ func(context.Context) (ListOutput, error)           = (*Installer)(nil).List
 	_ func(context.Context, InstallInput) (*Skill, error) = (*Installer)(nil).Install
 	_ func(context.Context, UninstallInput) error         = (*Installer)(nil).Uninstall

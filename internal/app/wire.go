@@ -450,7 +450,7 @@ func New(opts Options) (*App, error) {
 			// Only mcp-server::stdio connects in this build; the other four
 			// Types decode and list but refuse Call as not yet available —
 			// see toolset.Service.Call and mcpclient's own doc.
-			toolset.MCPStdio: func() toolset.Adapter { return mcpclient.NewStdio() },
+			toolset.MCPStdio: mcpclient.NewStdio,
 		},
 		Activities: activitySvc,
 		Env:        resolver,

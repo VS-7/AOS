@@ -317,8 +317,8 @@ data can have written anything.`,
 
 // compile-time proof that the handlers match the command signature.
 var (
-	_ func(context.Context, ListInput) (ListOutput, error)   = (*Service)(nil).List
-	_ func(context.Context, GetInput) (*Collection, error)   = (*Service)(nil).Get
+	_ func(context.Context, ListInput) (ListOutput, error)    = (*Service)(nil).List
+	_ func(context.Context, GetInput) (*Collection, error)    = (*Service)(nil).Get
 	_ func(context.Context, CreateInput) (*Collection, error) = (*Service)(nil).Create
 	_ func(context.Context, DeleteInput) error                = (*Service)(nil).Delete
 )
