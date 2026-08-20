@@ -16,12 +16,15 @@ func Validate(v View, c collection.Collection, cmds Commands) error {
 	return validateNode(v.Tree, c, cmds, "tree")
 }
 
-// validateNode checks one node and then its children, in an order the tests
-// pin down: the children-acceptance check runs before the required-prop
-// check, not after. A leaf component's own required props (Badge needs a
-// "text") would otherwise mask the fact that it was never allowed to have
-// children in the first place — the wrong one of two true refusals to report
-// first.
+// validateNode checks one node and then its children. The children-acceptance
+// check happens to run before the required-prop check; that ordering is
+// arbitrary, not a design choice — when a node has both defects (say, an
+// unnested Badge given children it cannot accept and missing the "text" it
+// requires), an agent fixing the first refusal still has to come back for the
+// second regardless of which one is reported first. TestChildrenUnderALeafComponentAreRefused
+// pins this particular order down only so the suite has one deterministic
+// answer to assert on; do not read it as an argument that a structural error
+// is more foundational than a content error, because none is being made.
 func validateNode(n Node, c collection.Collection, cmds Commands, path string) error {
 	spec, ok := LookupComponent(n.Component)
 	if !ok {
@@ -89,10 +92,17 @@ func checkRequiredProps(n Node, properties map[string]any, required []any, path 
 }
 
 // checkPropTypes checks every prop the node actually gives against the type
-// the catalog declares for it. A prop the component does not declare at all
-// is not this check's concern — additionalProperties is a schema detail the
-// frontend enforces at render time, not one of the five refusals this domain
-// promises.
+// the catalog declares for it, and, where the catalog also declares an enum,
+// against the list of values the design system actually accepts. A prop the
+// component does not declare at all is not this check's concern —
+// additionalProperties is a schema detail the frontend enforces at render
+// time, not one of the refusals this domain promises.
+//
+// The enum check is not one of the five the brief named, but this domain
+// exists for one promise — a view that would render blank is never written —
+// and a value the design system rejects breaks that promise just as surely
+// as a wrong type does: the catalog already carries the accepted values, so
+// there is nothing to justify accepting a value it does not list.
 func checkPropTypes(n Node, properties map[string]any, path string) error {
 	for name, val := range n.Props {
 		propSchema, ok := properties[name].(map[string]any)
@@ -100,10 +110,15 @@ func checkPropTypes(n Node, properties map[string]any, path string) error {
 			continue
 		}
 		types := schemaTypes(propSchema)
-		if len(types) == 0 || matchesAny(val, types) {
-			continue
+		if len(types) > 0 && !matchesAny(val, types) {
+			return errPropWrongType(path, n.Component, name, primaryType(types))
 		}
-		return errPropWrongType(path, n.Component, name, primaryType(types))
+		if val == nil {
+			continue // null is only reachable here when the type check above admitted it
+		}
+		if allowed := schemaEnum(propSchema); len(allowed) > 0 && !inEnum(val, allowed) {
+			return errPropNotInEnum(path, n.Component, name, val, allowed)
+		}
 	}
 	return nil
 }
@@ -175,6 +190,45 @@ func typeNames(t any) []string {
 func allowsNull(propSchema map[string]any) bool {
 	for _, t := range schemaTypes(propSchema) {
 		if t == "null" {
+			return true
+		}
+	}
+	return false
+}
+
+// schemaEnum reads the admissible literal values out of a prop's schema,
+// including one nested inside an "anyOf" branch — the same nullable shape
+// schemaTypes decodes for the type, e.g. Badge's variant:
+// {anyOf: [{type: "string", enum: [...]}, {type: "null"}]}. A prop with no
+// enum returns nil, which the caller reads as "no membership constraint".
+func schemaEnum(propSchema map[string]any) []any {
+	if propSchema == nil {
+		return nil
+	}
+	if e, ok := propSchema["enum"].([]any); ok {
+		return e
+	}
+	if anyOf, ok := propSchema["anyOf"].([]any); ok {
+		for _, item := range anyOf {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if e := schemaEnum(m); e != nil {
+				return e
+			}
+		}
+	}
+	return nil
+}
+
+// inEnum reports whether val is one of allowed. Both sides come from the
+// same source — a literal in Node.Props and the catalog's own JSON — so a
+// plain interface comparison is enough: every enum in this catalog is a list
+// of strings, and val already passed the type check by the time this runs.
+func inEnum(val any, allowed []any) bool {
+	for _, item := range allowed {
+		if item == val {
 			return true
 		}
 	}

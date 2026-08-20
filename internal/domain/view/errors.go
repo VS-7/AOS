@@ -42,6 +42,24 @@ func errPropWrongType(at, component, prop, want string) error {
 		CTA(apperr.CallToAction{Label: "send " + prop + " as " + want})
 }
 
+// errPropNotInEnum is refused for the same reason a wrong type is: the design
+// system rejects a value outside its enum, and letting that reach the
+// frontend renders wrong instead of not rendering at all — the promise this
+// domain exists to keep. "allowed" carries the accepted values because the
+// agent's next move is to pick one of them.
+func errPropNotInEnum(at, component, prop string, got any, allowed []any) error {
+	return apperr.New("VIEW_PROP_NOT_IN_ENUM").
+		Causer("view.Validate").
+		Msgf("%s (%s) gives %q the value %v, which is not one of the values the component accepts", at, component, prop, got).
+		Issue("at", at).
+		Issue("component", component).
+		Issue("prop", prop).
+		Issue("given", got).
+		Issue("allowed", allowed).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{Label: "use one of the values in the issue \"allowed\""})
+}
+
 // errBindUnknownField is refused at write time rather than left to render:
 // the original renders the bind against nothing and shows nothing, silently.
 func errBindUnknownField(at, field, collectionID string) error {

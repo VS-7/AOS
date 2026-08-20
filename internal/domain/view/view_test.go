@@ -559,21 +559,105 @@ func TestCreateRefusesAnEmptyID(t *testing.T) {
 // service holds underneath — the same defect this codebase has already shipped
 // four times over, for a map or a slice that crossed a cache boundary
 // uncopied.
+// TestReturnedViewsAreImmutableToTheCaller mutates through every
+// reference-typed field a caller can reach off a returned View — Tree.Props
+// (including a map nested inside a map, inside a slice), Tree.Bind,
+// Tree.Actions[i].Input and Source.Filter — and checks that none of it
+// reaches what the service holds. Mutating Tree.Component, a string, would
+// prove nothing: Go's own struct copy already isolates that regardless of
+// whether cloneView/cloneNode/cloneSource exist at all.
 func TestReturnedViewsAreImmutableToTheCaller(t *testing.T) {
-	svc := newService(t, withCollection(contactsSchema()))
-	mustCreateView(t, svc, "crm", view.Source{Collection: "contacts"})
+	svc := newService(t, withCollection(contactsSchema()), withCommands("do-thing"))
+
+	_, err := svc.Create(ctx(), view.CreateInput{
+		ID: "crm",
+		Source: view.Source{
+			Collection: "contacts",
+			Filter:     map[string]any{"stage": "won"},
+		},
+		Tree: view.Node{
+			Component: "Text",
+			Props: map[string]any{
+				"text": "orig",
+				// Not a prop Text declares — the validator only checks
+				// declared props, so this is free to carry an arbitrary
+				// nested shape purely to exercise the deep copy: a map
+				// inside a map inside a slice.
+				"meta": map[string]any{
+					"tags": []any{
+						map[string]any{"nested": "orig"},
+					},
+				},
+			},
+			Bind:    map[string]string{"extra": "name"},
+			Actions: []view.Action{{Label: "Go", Command: "do-thing", Input: map[string]any{"k": "orig"}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
 
 	got, err := svc.Get(ctx(), view.GetInput{ID: "crm"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	got.Tree.Component = "Corrupted"
+
+	got.Source.Filter["stage"] = "corrupted"
+	got.Tree.Props["text"] = "corrupted"
+	meta, _ := got.Tree.Props["meta"].(map[string]any)
+	tags, _ := meta["tags"].([]any)
+	tag0, _ := tags[0].(map[string]any)
+	tag0["nested"] = "corrupted"
+	got.Tree.Bind["extra"] = "corrupted"
+	got.Tree.Actions[0].Input["k"] = "corrupted"
 
 	again, err := svc.Get(ctx(), view.GetInput{ID: "crm"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again.Tree.Component == "Corrupted" {
-		t.Fatal("mutating a View returned by Get corrupted what the service holds")
+
+	if again.Source.Filter["stage"] == "corrupted" {
+		t.Fatal("mutating Source.Filter corrupted what the service holds")
+	}
+	if again.Tree.Props["text"] == "corrupted" {
+		t.Fatal("mutating Tree.Props corrupted what the service holds")
+	}
+	againMeta, _ := again.Tree.Props["meta"].(map[string]any)
+	againTags, _ := againMeta["tags"].([]any)
+	againTag0, _ := againTags[0].(map[string]any)
+	if againTag0["nested"] == "corrupted" {
+		t.Fatal("mutating a map nested inside Tree.Props corrupted what the service holds")
+	}
+	if again.Tree.Bind["extra"] == "corrupted" {
+		t.Fatal("mutating Tree.Bind corrupted what the service holds")
+	}
+	if again.Tree.Actions[0].Input["k"] == "corrupted" {
+		t.Fatal("mutating Tree.Actions[i].Input corrupted what the service holds")
+	}
+}
+
+// A prop with a declared enum is refused when the value is not one of it —
+// the design system would otherwise render it wrong rather than not render
+// it at all. Badge.variant is a real catalog enum, nullable via the anyOf
+// shape zod-to-json-schema emits for an optional field.
+func TestAPropOutsideItsDeclaredEnumIsRefusedNamingIt(t *testing.T) {
+	svc := newService(t, withCollection(contactsSchema()))
+	_, err := svc.Create(ctx(), view.CreateInput{
+		ID: "crm", Source: view.Source{Collection: "contacts"},
+		Tree: view.Node{Component: "Badge", Props: map[string]any{"text": "x", "variant": "banana"}},
+	})
+	var app *apperr.Error
+	if !errors.As(err, &app) {
+		t.Fatalf("err is %T", err)
+	}
+	if app.Code != "AOS_VIEW_PROP_NOT_IN_ENUM" {
+		t.Fatalf("code = %q", app.Code)
+	}
+	if app.Issues["prop"] != "variant" {
+		t.Fatalf("the error does not name the prop: %v", app.Issues)
+	}
+	allowed, _ := app.Issues["allowed"].([]any)
+	if len(allowed) == 0 {
+		t.Fatalf("the error does not list the accepted values: %v", app.Issues)
 	}
 }
