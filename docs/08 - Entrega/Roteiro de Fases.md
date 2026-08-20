@@ -78,6 +78,31 @@ O branch `feat/port-fractal-frontend` fechou isso: os 120 componentes e as 26 fe
 **Notas:** [[Skill (Go)]] · [[Toolset (Go)]] · [[Collection (Go)]] · [[View (Go)]] · [[Views Declarativas]] · [[Artifact (Go)]] · [[Artifacts e Estáticos]] · [[Template (Go)]] · [[Instruction (Go)]] · [[Project (Go)]] · [[Goal (Go)]] · [[Bot (Go)]] · [[Tunnel (Go)]] · [[Marketplace (Go)]] · [[ADR-0014 Liquid para templates]] · [[ADR-0015 Skills com permissões declaradas]]
 **Entrega:** instalar uma skill que traz agente, coleção e view próprios.
 
+**Núcleo parcialmente entregue.** A fatia vertical de `collection`, `view`,
+`toolset` e `skill` está construída, registrada em `wire.go` e acesa na
+interface: os quatro saíram de `DORMANT_DOMAINS` e os 21 caminhos que a UI
+chama foram exercitados por HTTP real, autenticados, todos despachando ao
+domínio. `task check` verde com 92 pacotes acima do piso de cobertura.
+
+Ao construí-la, a fase encontrou um defeito de motor da Fase 1 que ninguém
+tinha alcançado: `Model.WritePatternFor` devolvia o primeiro padrão gravável
+que a chave preenchia, e o padrão de workspace precisa só de `{id}` — então
+`agents`, `templates`, `goals`, `collections` e `views` gravavam **fora** do
+diretório da skill mesmo quando a chave trazia `skill`. A tese "instalar uma
+skill instala uma equipe" não funcionava. Corrigido no motor, com table-test
+por nativo multi-padrão.
+
+**Falta para fechar o núcleo:** o watcher que registra uma coleção quando um
+`schema.json` aparece em disco (e com ele o resíduo A2, a árvore de arquivos
+que não se atualiza sozinha), e `TestTheDeliveryOfPhaseEight`, que é a
+afirmação sobre a qual a fase é julgada. Sem ele, o percurso completo —
+instalar, criar registro na mesma sessão, renderizar, desinstalar — não tem
+teste automatizado que o afirme ponta a ponta.
+
+**Fora do núcleo, declarado:** os outros quatro tipos de toolset, fetch remoto
+de skill, e os oito domínios restantes (`artifact`, `template`, `instruction`,
+`project`, `goal`, `bot`, `tunnel`, `marketplace`).
+
 ### Fase 9 — Distribuição
 Cross-compile, empacotamento, auto-update, `SKILL.md` publicada, completions.
 
