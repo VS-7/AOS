@@ -54,3 +54,35 @@ func TestTheCatalogIsSorted(t *testing.T) {
 		}
 	}
 }
+
+// A caller mutating what Catalog hands back must not corrupt the
+// package-level catalog: sync.Once builds it once, so a shared reference
+// would stay corrupted for every later caller, for the life of the process.
+func TestCatalogIsImmutableToTheCaller(t *testing.T) {
+	specs := view.Catalog()
+	found := false
+	for i := range specs {
+		if specs[i].Name != "Card" {
+			continue
+		}
+		found = true
+		specs[i].Props["title"] = "mutated"
+		specs[i].Slots = append(specs[i].Slots, "corrupted")
+	}
+	if !found {
+		t.Fatal("Card is missing")
+	}
+
+	fresh, ok := view.LookupComponent("Card")
+	if !ok {
+		t.Fatal("Card is missing")
+	}
+	if title, _ := fresh.Props["title"].(string); title == "mutated" {
+		t.Fatal("mutating a Props map returned by Catalog corrupted the package-level catalog")
+	}
+	for _, slot := range fresh.Slots {
+		if slot == "corrupted" {
+			t.Fatal("appending to a Slots slice returned by Catalog corrupted the package-level catalog")
+		}
+	}
+}

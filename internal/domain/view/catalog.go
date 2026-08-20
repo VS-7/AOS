@@ -56,7 +56,9 @@ func loadCatalog() {
 func Catalog() []ComponentSpec {
 	catalogOnce.Do(loadCatalog)
 	out := make([]ComponentSpec, len(catalog))
-	copy(out, catalog)
+	for i, s := range catalog {
+		out[i] = cloneSpec(s)
+	}
 	return out
 }
 
@@ -64,5 +66,49 @@ func Catalog() []ComponentSpec {
 func LookupComponent(name string) (ComponentSpec, bool) {
 	catalogOnce.Do(loadCatalog)
 	s, ok := catalogByID[name]
-	return s, ok
+	if !ok {
+		return ComponentSpec{}, false
+	}
+	return cloneSpec(s), true
+}
+
+// cloneSpec deep-copies the two reference-typed fields of a ComponentSpec.
+//
+// copy() on the outer slice was not enough: Props and Slots would still be
+// shared with the package-level catalog underneath it, so a caller mutating
+// spec.Props would corrupt what every later caller — for the life of the
+// process, since sync.Once never rebuilds it — receives from Catalog and
+// LookupComponent.
+func cloneSpec(s ComponentSpec) ComponentSpec {
+	out := s
+	if s.Props != nil {
+		out.Props, _ = cloneJSON(s.Props).(map[string]any)
+	}
+	if s.Slots != nil {
+		out.Slots = append([]string(nil), s.Slots...)
+	}
+	return out
+}
+
+// cloneJSON deep-copies a value shaped by encoding/json.Unmarshal into an
+// any: maps, slices, and scalars, recursively. Props is exactly that — a JSON
+// Schema tree read off components.json — so nothing else has to be handled.
+func cloneJSON(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, val := range t {
+			out[k] = cloneJSON(val)
+		}
+		return out
+	case []any:
+		out := make([]any, len(t))
+		for i, val := range t {
+			out[i] = cloneJSON(val)
+		}
+		return out
+	default:
+		// string, float64, bool, nil: copied by value already.
+		return t
+	}
 }
