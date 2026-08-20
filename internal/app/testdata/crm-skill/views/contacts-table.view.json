@@ -1,0 +1,10 @@
+{
+  "id": "contacts-table",
+  "name": "Contacts",
+  "title": "Contacts",
+  "source": { "collection": "contacts" },
+  "tree": {
+    "component": "Table",
+    "props": { "columns": ["name", "stage"], "rows": [] }
+  }
+}
