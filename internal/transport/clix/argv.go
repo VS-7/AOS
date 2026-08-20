@@ -64,6 +64,19 @@ func CommandLineFor(d command.Descriptor, payload json.RawMessage) ([]string, er
 			continue
 		}
 		if text == "false" && isBool(raw) {
+			// A plain bool's zero value already reads as false when the flag
+			// is omitted, so leaving it out keeps a generated example short.
+			// A *bool is different: nil ("leave unchanged") and false
+			// ("explicitly set to false") are two distinct things a caller
+			// can mean — skills_update's own Active is exactly this — and
+			// omitting the flag here would silently turn "false" into "not
+			// given", which pflag can only be told apart from with the
+			// "--flag=false" equals form; "--flag false" is rejected the
+			// same way "--flag" bare would consume the wrong next token.
+			if !b.optionalBool(name) {
+				continue
+			}
+			argv = append(argv, "--"+name+"=false")
 			continue
 		}
 		argv = append(argv, "--"+name, text)

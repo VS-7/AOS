@@ -37,6 +37,34 @@ func errInstallNotApproved(source, reason string) error {
 		})
 }
 
+// errCollectionNameTaken is the controller ruling: an install that brings a
+// collection whose name is already registered is refused, naming the
+// collision, rather than letting collections.Registry.Register silently
+// replace whatever is there — see Installer.Install's own comment.
+func errCollectionNameTaken(name string) error {
+	return apperr.New("SKILL_COLLECTION_NAME_TAKEN").
+		Causer("skill.Installer.Install").
+		Msgf("a collection named %q is already registered", name).
+		Issue("collection", name).
+		Status(apperr.StatusConflict).
+		CTA(apperr.CallToAction{
+			Label: "rename the collection in the package's manifest, or remove the existing one first",
+		})
+}
+
+// errUpdateFailed wraps a failure writing an update to an already-installed
+// skill — turning Active on or off, the one field this domain lets change in
+// place.
+func errUpdateFailed(id string, cause error) error {
+	return apperr.New("SKILL_UPDATE_FAILED").
+		Causer("skill.Installer.Update").
+		Msgf("updating %q failed: %v", id, cause).
+		Issue("id", id).
+		Status(apperr.StatusInternalServerError).
+		Wrap(cause).
+		CTA(apperr.CallToAction{Label: "retry; if it persists, this is a bug"})
+}
+
 func errNotFound(id string) error {
 	return apperr.New("SKILL_NOT_FOUND").
 		Causer("skill.Installer.Get").

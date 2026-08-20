@@ -14,8 +14,10 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/OWNER/aos/internal/adapters/fscollections"
 	"github.com/OWNER/aos/internal/app"
 	"github.com/OWNER/aos/internal/core/clockx"
+	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/core/env"
 	"github.com/OWNER/aos/internal/core/identity"
@@ -23,15 +25,19 @@ import (
 	"github.com/OWNER/aos/internal/domain/activity"
 	"github.com/OWNER/aos/internal/domain/agent"
 	"github.com/OWNER/aos/internal/domain/chat"
+	"github.com/OWNER/aos/internal/domain/collection"
 	"github.com/OWNER/aos/internal/domain/comment"
 	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/domain/gateway"
 	"github.com/OWNER/aos/internal/domain/job"
 	"github.com/OWNER/aos/internal/domain/memory"
 	"github.com/OWNER/aos/internal/domain/routine"
+	"github.com/OWNER/aos/internal/domain/skill"
 	"github.com/OWNER/aos/internal/domain/task"
 	"github.com/OWNER/aos/internal/domain/theme"
 	"github.com/OWNER/aos/internal/domain/todo"
+	"github.com/OWNER/aos/internal/domain/toolset"
+	"github.com/OWNER/aos/internal/domain/view"
 	"github.com/OWNER/aos/internal/domain/workspace"
 	"github.com/OWNER/aos/internal/transport/clix"
 	"github.com/OWNER/aos/internal/transport/httpapi"
@@ -86,6 +92,15 @@ var excluded = map[string]string{
 	"routines_fire": "executes a real turn against a model. Running it on four surfaces " +
 		"would be four turns. Covered by the routine suite and end to end by " +
 		"TestTheDeliveryOfPhaseSix.",
+	"toolsets_call": "the one boundary where this system executes something outside its " +
+		"own process — spawning an MCP server five times over would leave five " +
+		"processes behind. Covered by the toolset suite over a fake Adapter.",
+	"skills_install": "asks a person for approval before writing; the parity harness has " +
+		"no way to answer that channel, and answering it automatically would stop " +
+		"testing the one thing ADR-0007 exists to guarantee. Covered by the skill " +
+		"suite, which drives the same Install with AcceptedAll set.",
+	"skills_create": "the same operation as skills_install, under the name a script or an " +
+		"agent assembling a package reaches for — same reason, same exclusion.",
 }
 
 // scenario describes one command well enough to run it on every surface.
@@ -454,6 +469,121 @@ var scenarios = map[string]scenario{
 		Payload: theme.DeleteInput{ID: "midnight", Reasoning: reason()},
 		Seed:    seedTheme,
 	},
+
+	// The ecosystem slice (Task 10).
+	"collections_list": {
+		Payload: collection.ListInput{Reasoning: reason()},
+		Seed:    seedCollection,
+	},
+	"collections_get": {
+		Payload: collection.GetInput{ID: "contacts", Reasoning: reason()},
+		Seed:    seedCollection,
+	},
+	"collections_create": {
+		Payload: collection.CreateInput{
+			ID: "deals", Name: "Deals", Format: collection.FormatJSON,
+			Fields:    []collection.Field{{Name: "title", Type: collection.TypeString, Required: true}},
+			Reasoning: reason(),
+		},
+	},
+	"collections_delete": {
+		Payload: collection.DeleteInput{ID: "contacts", Reasoning: reason()},
+		Seed:    seedCollection,
+	},
+	"collections_records-list": {
+		Payload: collection.RecordsListInput{Collection: "contacts", Reasoning: reason()},
+		Seed:    seedCollectionRecord,
+	},
+	"collections_records-get": {
+		Payload: collection.RecordsGetInput{Collection: "contacts", ID: "m-1", Reasoning: reason()},
+		Seed:    seedCollectionRecord,
+	},
+	"collections_records-create": {
+		Payload: collection.RecordsCreateInput{
+			Collection: "contacts", Data: map[string]any{"name": "Grace Hopper"}, Reasoning: reason(),
+		},
+		Seed: seedCollection,
+	},
+	"collections_records-update": {
+		Payload: collection.RecordsUpdateInput{
+			Collection: "contacts", ID: "m-1", Data: map[string]any{"name": "Ada, Countess of Lovelace"}, Reasoning: reason(),
+		},
+		Seed: seedCollectionRecord,
+	},
+	"collections_records-delete": {
+		Payload: collection.RecordsDeleteInput{Collection: "contacts", ID: "m-1", Reasoning: reason()},
+		Seed:    seedCollectionRecord,
+	},
+
+	"views_list": {
+		Payload: view.ListInput{Reasoning: reason()},
+		Seed:    seedView,
+	},
+	"views_get": {
+		Payload: view.GetInput{ID: "contacts-table", Reasoning: reason()},
+		Seed:    seedView,
+	},
+	"views_create": {
+		Payload: view.CreateRequest{
+			ID: "deals-table", Title: "Deals", Source: view.Source{Collection: "contacts"},
+			Tree:      json.RawMessage(`{"component":"Table","props":{"columns":["name"],"rows":[]}}`),
+			Reasoning: reason(),
+		},
+		Seed: seedCollection,
+	},
+	"views_delete": {
+		Payload: view.DeleteInput{ID: "contacts-table", Reasoning: reason()},
+		Seed:    seedView,
+	},
+	"views_render": {
+		Payload: view.RenderInput{ID: "contacts-table", Reasoning: reason()},
+		Seed:    seedView,
+	},
+	"views_execute-action": {
+		Payload: view.ExecuteActionInput{ID: "contacts-table", Label: "Refresh", Reasoning: reason()},
+		Seed:    seedView,
+	},
+	"views_components": {
+		Payload: view.ComponentsInput{Reasoning: reason()},
+	},
+	"views_scaffold": {
+		Payload: view.ScaffoldInput{Collection: "contacts", Kind: view.KindTable, Reasoning: reason()},
+		Seed:    seedCollection,
+	},
+
+	"toolsets_list": {
+		Payload: toolset.ListInput{Reasoning: reason()},
+		Seed:    seedToolset,
+	},
+	"toolsets_get": {
+		Payload: toolset.GetInput{ID: "gh", Reasoning: reason()},
+		Seed:    seedToolset,
+	},
+	"toolsets_get-config": {
+		Payload: toolset.GetInput{ID: "gh", Reasoning: reason()},
+		Seed:    seedToolset,
+	},
+	"toolsets_update-config": {
+		Payload: toolset.UpdateConfigInput{ID: "gh", Description: ptr("Reconfigured"), Reasoning: reason()},
+		Seed:    seedToolset,
+	},
+	"toolsets_delete": {
+		Payload: toolset.DeleteInput{ID: "gh", Reasoning: reason()},
+		Seed:    seedToolset,
+	},
+
+	"skills_list": {
+		Payload: skill.ListInput{Reasoning: reason()},
+		Seed:    seedSkill,
+	},
+	"skills_update": {
+		Payload: skill.UpdateInput{ID: "crm", Active: ptr(false), Reasoning: reason()},
+		Seed:    seedSkill,
+	},
+	"skills_delete": {
+		Payload: skill.DeleteInput{ID: "crm", Reasoning: reason()},
+		Seed:    seedSkill,
+	},
 }
 
 func seedTheme(t *testing.T, a *app.App) {
@@ -519,6 +649,99 @@ func seedJob(t *testing.T, a *app.App) {
 	}
 	if _, err := a.Queue.Enqueue(parityCtx(), job.Job{
 		ID: "j-1", Queue: job.QueueChat, Kind: "turn",
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// seedCollection declares one workspace collection every collections_* and
+// views_* scenario below builds on.
+func seedCollection(t *testing.T, a *app.App) {
+	t.Helper()
+	if _, err := a.Collections.Create(parityCtx(), collection.CreateInput{
+		ID: "contacts", Name: "Contacts", Format: collection.FormatJSON,
+		Fields: []collection.Field{{Name: "name", Type: collection.TypeString, Required: true}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// seedCollectionRecord files the one row every records-get/update/delete
+// scenario names by id. ids.Sequence hands out "m-1" on the first call a
+// fresh app makes to it, and nothing between a fresh app and this call asks
+// it for one — collection declarations carry their own id, not a generated
+// one — so the id is deterministic without this test naming it twice.
+func seedCollectionRecord(t *testing.T, a *app.App) {
+	t.Helper()
+	seedCollection(t, a)
+	if _, err := a.Collections.Records().Create(parityCtx(), "contacts", map[string]any{"name": "Ada Lovelace"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// scaffoldedTableTree is the exact shape view.Scaffold produces for a Table
+// over seedCollection's "contacts" — proven to pass Validate by the view
+// domain's own scaffold tests, reused here rather than invented so a parity
+// fixture is never the first place this shape is tried.
+func scaffoldedTableTree() view.Node {
+	return view.Node{
+		Component: "Table",
+		Props:     map[string]any{"columns": []any{"name"}, "rows": []any{}},
+		Actions:   []view.Action{{Label: "Refresh", Command: "collections_list"}},
+	}
+}
+
+// seedView composes one view over seedCollection's "contacts" — a Table
+// whose one action dispatches collections_list, so views_execute-action has
+// something real and deterministic to invoke.
+func seedView(t *testing.T, a *app.App) {
+	t.Helper()
+	seedCollection(t, a)
+	if _, err := a.Views.Create(parityCtx(), view.CreateInput{
+		ID: "contacts-table", Title: "Contacts",
+		Source: view.Source{Collection: "contacts"},
+		Tree:   scaffoldedTableTree(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// seedToolset writes one toolset's declaration directly through the same
+// filesystem repository the daemon's own wiring builds (collections.ModelOf
+// plus fscollections.New), bypassing toolset.Service — which deliberately
+// has no Create of its own; a toolset reaches disk the way every native
+// record does, never through this domain (see toolset.Repository's own
+// doc). Command is "true": get, get-config, update-config, list and delete
+// never connect to it, and toolsets_call — the one command that would — is
+// excluded above.
+func seedToolset(t *testing.T, a *app.App) {
+	t.Helper()
+	model, err := collections.ModelOf[toolset.Toolset]("toolsets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := fscollections.New(a.Workspace, model)
+	ts := toolset.Toolset{
+		ID: "gh", Type: toolset.MCPStdio, Status: toolset.StatusEnabled,
+		Command: "true", CreatedAt: refTime, UpdatedAt: refTime,
+	}
+	if err := repo.Create(context.Background(), &ts); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// seedSkill installs the committed crm-skill fixture (internal/app/testdata/
+// crm-skill) through the Go API directly, with consent already given —
+// AcceptedAll, not the approval channel skills_install itself always goes
+// through (see the "skills_install" exclusion above). Every other Seed
+// helper in this file does the same thing for the same reason: it drives
+// the domain, not a surface, to set up state a surface is then tested
+// against.
+func seedSkill(t *testing.T, a *app.App) {
+	t.Helper()
+	if _, err := a.Skills.Install(parityCtx(), skill.InstallInput{
+		Source:      "testdata/crm-skill",
+		AcceptedAll: func(skill.Permissions) bool { return true },
 	}); err != nil {
 		t.Fatal(err)
 	}

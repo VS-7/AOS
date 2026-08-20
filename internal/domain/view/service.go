@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/OWNER/aos/internal/core/collections"
+	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/domain/collection"
 )
 
@@ -44,12 +45,14 @@ func (*Service) Components(context.Context) ([]ComponentSpec, error) {
 // agent composing screens lists what exists before naming a new one, and a
 // workspace declares few enough views that listing all of them is never a
 // cost worth guarding — the same call Collection.List already makes.
-type ListInput struct{}
+type ListInput struct {
+	command.Reasoning
+}
 
 // ListOutput is every view declared in the workspace.
 type ListOutput struct {
-	Views []View `json:"views"`
-	Total int    `json:"total"`
+	Views []View `json:"views" jsonschema:"Every view declared in the workspace, including what a skill brought."`
+	Total int    `json:"total" jsonschema:"How many there are."`
 }
 
 // GetInput names one view.
@@ -61,35 +64,43 @@ type ListOutput struct {
 // (View.Skill), so a caller that got an id from List has what it needs to
 // hand back here.
 type GetInput struct {
-	ID    string `json:"id"`
-	Skill string `json:"skill,omitempty"`
+	ID    string `json:"id" jsonschema:"Identifier of the view." validate:"required,notblank"`
+	Skill string `json:"skill,omitempty" jsonschema:"The skill this view ships with, when it is skill-scoped. Required to resolve one — views_list reports it on every entry."`
+
+	command.Reasoning
 }
 
 // CreateInput composes a new view. Validate runs against it before anything
 // is written — see Create.
 type CreateInput struct {
-	ID          string `json:"id"`
-	Name        string `json:"name,omitempty"`
-	Title       string `json:"title,omitempty"`
-	Description string `json:"description,omitempty"`
-	Scope       string `json:"scope,omitempty"`
-	Skill       string `json:"skill,omitempty"`
-	Source      Source `json:"source"`
-	Tree        Node   `json:"tree"`
+	ID          string `json:"id" jsonschema:"Identifier for the view. Also its file name: lowercase, digits, hyphen and underscore only." validate:"required,notblank"`
+	Name        string `json:"name,omitempty" jsonschema:"Human name of the view. Example: \"Deals by stage\"."`
+	Title       string `json:"title,omitempty" jsonschema:"Heading the frontend shows above the rendered tree."`
+	Description string `json:"description,omitempty" jsonschema:"What this view is for."`
+	Scope       string `json:"scope,omitempty" jsonschema:"user or skill. Defaults to user."`
+	Skill       string `json:"skill,omitempty" jsonschema:"The skill this view ships with, when Scope is skill."`
+	Source      Source `json:"source" jsonschema:"Where this view's data comes from."`
+	Tree        Node   `json:"tree" jsonschema:"The composed tree of catalog components this view renders."`
+
+	command.Reasoning
 }
 
 // DeleteInput names the view to remove. Skill is the same optional
 // qualifier GetInput takes, for the same reason.
 type DeleteInput struct {
-	ID    string `json:"id"`
-	Skill string `json:"skill,omitempty"`
+	ID    string `json:"id" jsonschema:"Identifier of the view to remove." validate:"required,notblank"`
+	Skill string `json:"skill,omitempty" jsonschema:"The skill this view ships with, when it is skill-scoped."`
+
+	command.Reasoning
 }
 
 // RenderInput names the view to resolve against its source data. Skill is
 // the same optional qualifier GetInput takes, for the same reason.
 type RenderInput struct {
-	ID    string `json:"id"`
-	Skill string `json:"skill,omitempty"`
+	ID    string `json:"id" jsonschema:"Identifier of the view to render." validate:"required,notblank"`
+	Skill string `json:"skill,omitempty" jsonschema:"The skill this view ships with, when it is skill-scoped."`
+
+	command.Reasoning
 }
 
 // Rendered is a view with its source data attached — what the frontend's
@@ -103,8 +114,10 @@ type Rendered struct {
 // ScaffoldInput names the collection and the shape of screen to compose one
 // for.
 type ScaffoldInput struct {
-	Collection string `json:"collection"`
-	Kind       Kind   `json:"kind,omitempty"`
+	Collection string `json:"collection" jsonschema:"Id of the collection to compose a screen for." validate:"required,notblank"`
+	Kind       Kind   `json:"kind,omitempty" jsonschema:"table, board or detail. Defaults to table."`
+
+	command.Reasoning
 }
 
 // ExecuteActionInput names the view and the action within it (by Label, not
@@ -113,9 +126,11 @@ type ScaffoldInput struct {
 // only what the button's own declaration did not already fix, such as which
 // record was clicked.
 type ExecuteActionInput struct {
-	ID    string         `json:"id"`
-	Label string         `json:"label"`
-	Input map[string]any `json:"input,omitempty"`
+	ID    string         `json:"id" jsonschema:"Identifier of the view the action belongs to." validate:"required,notblank"`
+	Label string         `json:"label" jsonschema:"Label of the action within the view's tree, as declared." validate:"required,notblank"`
+	Input map[string]any `json:"input,omitempty" jsonschema:"Arguments to invoke the command with, merged over the action's own declared input."`
+
+	command.Reasoning
 }
 
 // List returns every declared view.
@@ -166,7 +181,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*View, error) {
 		return nil, errIDRequired()
 	}
 
-	c, err := s.collections.Get(ctx, in.Source.Collection)
+	c, err := s.collections.Get(ctx, in.Source.Collection, in.Skill)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +247,7 @@ func (s *Service) Render(ctx context.Context, in RenderInput) (*Rendered, error)
 		q.Desc = v.Source.Sort[0].Desc
 	}
 
-	records, err := s.collections.ListRecords(ctx, v.Source.Collection, q)
+	records, err := s.collections.ListRecords(ctx, v.Source.Collection, v.Skill, q)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +260,7 @@ func (s *Service) Render(ctx context.Context, in RenderInput) (*Rendered, error)
 // what Create receives already survives its own validation. See scaffold.go.
 func (s *Service) Scaffold(ctx context.Context, in ScaffoldInput) (*View, error) {
 	id := strings.TrimSpace(in.Collection)
-	c, err := s.collections.Get(ctx, id)
+	c, err := s.collections.Get(ctx, id, "")
 	if err != nil {
 		return nil, err
 	}

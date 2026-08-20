@@ -21,6 +21,12 @@ type Repository interface {
 	Get(ctx context.Context, key collections.Key) (*Skill, error)
 	List(ctx context.Context, q collections.Query) ([]Skill, error)
 	Create(ctx context.Context, v *Skill) error
+
+	// Update is here for one caller: skills_update turning a skill's Active
+	// flag on or off without touching anything else about it — see
+	// Installer.Update. Nothing about content, permissions or inventory is
+	// mutable in place; that goes through Uninstall and a fresh Install.
+	Update(ctx context.Context, v *Skill, expect collections.Version) error
 	Delete(ctx context.Context, key collections.Key) error
 }
 
@@ -47,6 +53,18 @@ type Repository interface {
 type Collections interface {
 	Create(ctx context.Context, in collection.CreateInput) (*collection.Collection, error)
 	Delete(ctx context.Context, in collection.DeleteInput) error
+
+	// Exists reports whether name is already registered — native or dynamic
+	// — before Install writes anything. A package that names a collection
+	// already taken is refused here, naming the collision, rather than
+	// silently replacing whatever collections.Registry.Register would
+	// otherwise let it replace: Register's own replace-by-design is for a
+	// skill reinstalling over its own prior registration, not for two
+	// unrelated declarations racing for one name. Whether a skill's
+	// collection should eventually be namespaced (crm/contacts) is a
+	// separate, open naming decision — refusing here keeps that option
+	// open instead of deciding it by accident.
+	Exists(name string) bool
 }
 
 // Views is the slice of the view domain this package needs, for the same

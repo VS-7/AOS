@@ -31,8 +31,16 @@ type Repository interface {
 // let a change to its service signature break this one without either
 // package's tests noticing until the wiring in internal/app failed to build.
 type Collections interface {
-	Get(ctx context.Context, id string) (*collection.Collection, error)
-	ListRecords(ctx context.Context, id string, q collection.RecordQuery) ([]collection.Record, error)
+	// Get resolves a collection by id. skill, when not empty, is the view's
+	// own — a skill-scoped view's source is commonly that same skill's own
+	// collection, and a collection scoped to a skill is unreachable by id
+	// alone (collection.GetInput's own doc explains why: it lives under a
+	// second, skill-qualified pattern). skill is a hint, not a requirement:
+	// an implementation tries it first and falls back to the workspace-
+	// scoped id, so a skill's view sourcing a workspace collection still
+	// resolves.
+	Get(ctx context.Context, id, skill string) (*collection.Collection, error)
+	ListRecords(ctx context.Context, id, skill string, q collection.RecordQuery) ([]collection.Record, error)
 }
 
 // Commands is the slice of the command registry an Action needs: whether a

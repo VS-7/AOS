@@ -64,6 +64,7 @@ type Installer struct {
 	views       Views
 	hooks       Hooks
 	toolsets    Toolsets
+	clock       Clock
 }
 
 // NewInstaller wires the installer over its ports.
@@ -81,6 +82,7 @@ func NewInstaller(d Deps) *Installer {
 	return &Installer{
 		fetcher: d.Fetcher, verifier: verifier, approver: d.Approver, applier: applier,
 		repo: d.Repo, collections: d.Collections, views: d.Views, hooks: d.Hooks, toolsets: d.Toolsets,
+		clock: d.Clock,
 	}
 }
 
@@ -112,7 +114,9 @@ type UninstallInput struct {
 // The order is the decision, not an implementation detail. Fetch reads the
 // package; VerifyManifest checks its content against what it declared,
 // before anyone is asked to approve anything — a human should consent to
-// something already checked, not to a promise. Consent comes before Apply
+// something already checked, not to a promise. The collision check runs
+// next, for the same reason: a person should not be asked to approve an
+// install that is going to be refused anyway. Consent comes before Apply
 // runs: nothing touches the workspace until a person has agreed, because an
 // agent calling skills_install does not authorise itself (ADR-0007). Apply
 // itself registers the skill's own record last, so a partial failure leaves
@@ -134,6 +138,19 @@ func (i *Installer) Install(ctx context.Context, in InstallInput) (*Skill, error
 	diff, err := i.verifier.VerifyManifest(pkg)
 	if err != nil {
 		return nil, err
+	}
+
+	// A collection whose name is already registered is refused, naming the
+	// collision, rather than silently replacing it — collections.Registry.
+	// Register replaces by design (a skill reinstalling over its own prior
+	// registration depends on that), so the refusal belongs here, before
+	// anything is written, not inside Register. Checked before every
+	// collection the package declares, not just the first, so one install
+	// either brings all of them or none of them.
+	for _, c := range pkg.Collections {
+		if i.collections.Exists(c.ID) {
+			return nil, errCollectionNameTaken(c.ID)
+		}
 	}
 
 	if in.AcceptedAll == nil || !in.AcceptedAll(diff.Permissions) {

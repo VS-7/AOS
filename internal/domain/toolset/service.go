@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/OWNER/aos/internal/core/collections"
+	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/domain/activity"
 )
 
@@ -64,7 +65,9 @@ func (s *Service) List(ctx context.Context) ([]Toolset, error) {
 
 // GetInput names one toolset.
 type GetInput struct {
-	ID string `json:"id" jsonschema:"Identifier of the toolset."`
+	ID string `json:"id" jsonschema:"Identifier of the toolset." validate:"required,notblank"`
+
+	command.Reasoning
 }
 
 // Get reads one toolset's configuration.
@@ -92,9 +95,11 @@ func (s *Service) get(ctx context.Context, id string) (*Toolset, error) {
 // CallInput names a tool call: which toolset, which tool, and its argument
 // payload.
 type CallInput struct {
-	ID    string          `json:"id" jsonschema:"Identifier of the toolset to call."`
-	Tool  string          `json:"tool" jsonschema:"Name of the tool, as published by the connected target."`
+	ID    string          `json:"id" jsonschema:"Identifier of the toolset to call." validate:"required,notblank"`
+	Tool  string          `json:"tool" jsonschema:"Name of the tool, as published by the connected target." validate:"required,notblank"`
 	Input json.RawMessage `json:"input,omitempty" jsonschema:"Arguments for the tool. Opaque to this service — call toolsets_get with schema:true first."`
+
+	command.Reasoning
 }
 
 // CallOutput is what a tool call returned.
@@ -197,7 +202,7 @@ func (s *Service) audit(ctx context.Context, id, tool string, dur time.Duration,
 // replace the field wholesale — there is no per-key merge, so removing one
 // header means sending the whole remaining set.
 type UpdateConfigInput struct {
-	ID string `json:"id" jsonschema:"Identifier of the toolset to reconfigure."`
+	ID string `json:"id" jsonschema:"Identifier of the toolset to reconfigure." validate:"required,notblank"`
 
 	Description *string           `json:"description,omitempty" jsonschema:"New description. Omit to leave unchanged."`
 	Status      *Status           `json:"status,omitempty" jsonschema:"New lifecycle status: enabled or disabled. Omit to leave unchanged."`
@@ -206,6 +211,8 @@ type UpdateConfigInput struct {
 	Env         map[string]string `json:"env,omitempty" jsonschema:"New environment, replacing the old one wholesale."`
 	BaseURL     *string           `json:"baseUrl,omitempty" jsonschema:"New base URL. Omit to leave unchanged."`
 	Headers     map[string]string `json:"headers,omitempty" jsonschema:"New headers, replacing the old ones wholesale."`
+
+	command.Reasoning
 }
 
 // UpdateConfig changes the describable parts of a toolset's configuration.
@@ -253,7 +260,9 @@ func (s *Service) UpdateConfig(ctx context.Context, in UpdateConfigInput) (*Tool
 
 // DeleteInput names one toolset to remove.
 type DeleteInput struct {
-	ID string `json:"id" jsonschema:"Identifier of the toolset to delete."`
+	ID string `json:"id" jsonschema:"Identifier of the toolset to delete." validate:"required,notblank"`
+
+	command.Reasoning
 }
 
 // DeleteOutput confirms what was removed.

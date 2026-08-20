@@ -133,6 +133,18 @@ func errActionNotDeclared(id, label string) error {
 // realistically fail to marshal; the check exists because errcheck requires
 // it, and because "cannot realistically fail" is not the same as "cannot
 // fail".
+// errTreeInvalid guards decoding views_create's wire-shaped Tree back into a
+// Node — see CreateRequest's own doc comment on why Tree travels the command
+// surface as a raw JSON object rather than as Node itself.
+func errTreeInvalid(cause error) error {
+	return apperr.New("VIEW_TREE_INVALID").
+		Causer("view.Register").
+		Msgf("tree does not decode as a view node: %v", cause).
+		Status(apperr.StatusBadRequest).
+		Wrap(cause).
+		CTA(apperr.CallToAction{Label: "send tree as {component, props?, bind?, children?, actions?}, nested arbitrarily"})
+}
+
 func errActionInputInvalid(id, label string, cause error) error {
 	return apperr.New("VIEW_ACTION_INPUT_INVALID").
 		Causer("view.Service.ExecuteAction").

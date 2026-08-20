@@ -1,0 +1,280 @@
+# tool: Toolsets
+
+A toolset is configured once and called by id thereafter. Its own tools are
+never registered into the agent's tool list — they are reached only through
+toolsets_call, which is the one place this system executes something outside
+its own process.
+
+## Commands
+- **list** — every configured toolset
+- **get** — one toolset's full configuration
+- **get-config** — the same read, for a caller only editing its configuration
+- **call** — run one of its tools
+- **update-config** — reconfigure it
+- **delete** — remove it
+
+## When to use
+- **Before calling a tool you have not called yet:** get it first — the
+  configuration and status tell you whether it is even reachable
+- **A capability outside what this system's own domains cover:** call
+  toolsets_call rather than assuming a native command exists
+
+## When NOT to use
+- Not to reach a native domain — toolsets are for integrations this system
+  does not itself implement
+
+Composite tool `Toolsets` with 6 actions: call, delete, get, get-config, list, update-config.
+
+A disabled toolset keeps its configuration and refuses call — disable rather
+than delete a misbehaving one, so the work of getting it right is not lost.
+
+call is opaque both ways: the input and the result are relayed to and from
+whatever the connected target defines, not interpreted here.
+
+## Usage
+Call as `Toolsets({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### toolsets_call
+
+Run one tool of a connected toolset.
+
+The one boundary where this system executes something outside its own
+process: connects, calls one tool, closes, and audits the attempt regardless
+of outcome.
+
+Input and the result are opaque to this service — call toolsets_get first if
+the tool's own argument shape is not already known.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the toolset to call."
+    },
+    "tool": {
+      "type": "string",
+      "description": "Name of the tool, as published by the connected target."
+    },
+    "input": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 255
+      },
+      "description": "Arguments for the tool. Opaque to this service — call toolsets_get with schema:true first."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "tool",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### toolsets_delete
+
+Remove a toolset.
+
+Remove a toolset's configuration. Idempotent: deleting what is already gone succeeds rather than erroring.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the toolset to delete."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### toolsets_get
+
+Read one toolset's configuration.
+
+Read a toolset in full: its connection settings and its lifecycle status.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the toolset."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### toolsets_get-config
+
+Read one toolset's configuration, for editing.
+
+The same read as toolsets_get — a toolset's configuration is not split
+into a separate document — named for a caller opening it specifically to
+change its settings.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the toolset."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### toolsets_list
+
+List every configured toolset.
+
+Every toolset configured in this workspace, with its type and lifecycle status.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### toolsets_update-config
+
+Reconfigure a toolset.
+
+Change the describable parts of a toolset's configuration. A field left
+nil is unchanged; Args, Env and Headers, given at all, replace the field
+wholesale — there is no per-key merge.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the toolset to reconfigure."
+    },
+    "description": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New description. Omit to leave unchanged."
+    },
+    "status": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New lifecycle status: enabled or disabled. Omit to leave unchanged."
+    },
+    "command": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New command for mcp-server::stdio. Omit to leave unchanged."
+    },
+    "args": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "New argument list, replacing the old one wholesale."
+    },
+    "env": {
+      "type": "object",
+      "description": "New environment, replacing the old one wholesale.",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "baseUrl": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New base URL. Omit to leave unchanged."
+    },
+    "headers": {
+      "type": "object",
+      "description": "New headers, replacing the old ones wholesale.",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+

@@ -207,6 +207,18 @@ func parseArg(f boundField, raw string) (any, error) {
 	}
 }
 
+// optionalBool reports whether the flag named name is a *bool field — one
+// where nil ("leave unchanged") and false ("explicitly set to false") are
+// different meanings, unlike a plain bool's zero value.
+func (b *binder) optionalBool(name string) bool {
+	for _, f := range b.fields {
+		if f.name == name {
+			return f.kind == bindBool && f.typ.Kind() == reflect.Pointer
+		}
+	}
+	return false
+}
+
 // ArgNames returns the positional argument names, for the usage line.
 func (b *binder) ArgNames() []string {
 	out := make([]string, 0, len(b.args))

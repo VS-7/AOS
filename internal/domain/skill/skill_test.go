@@ -552,6 +552,10 @@ func (r *recordingRepo) Create(ctx context.Context, v *skill.Skill) error {
 	return r.inner.Create(ctx, v)
 }
 
+func (r *recordingRepo) Update(ctx context.Context, v *skill.Skill, expect collections.Version) error {
+	return r.inner.Update(ctx, v, expect)
+}
+
 func (r *recordingRepo) Delete(ctx context.Context, key collections.Key) error {
 	*r.order = append(*r.order, "files removed")
 	return r.inner.Delete(ctx, key)
@@ -683,6 +687,61 @@ func TestAFailureWhileApplyingLeavesNothingRegistered(t *testing.T) {
 	}
 }
 
+// TestInstallRefusesACollectionNameAlreadyRegistered is the controller
+// ruling: an install that brings a collection whose name is already
+// registered is refused, naming the collision, rather than silently
+// replacing the existing registration — which is what
+// collections.Registry.Register alone would do, since it replaces by
+// design (a skill reinstalling over its own prior registration depends on
+// that). The refusal has to sit here, in Install, before anything is
+// written; nothing is approved, nothing is fetched-and-discarded, and the
+// pre-existing "contacts" survives untouched.
+func TestInstallRefusesACollectionNameAlreadyRegistered(t *testing.T) {
+	reg := collections.NewRegistry()
+	collRepo := fakes.NewRepo[collection.Collection]("collections")
+	collSvc := collection.NewService(collection.Deps{
+		Repo: collRepo, Registry: reg, Clock: clockx.Fixed{At: refTime},
+	})
+
+	// A workspace collection named "contacts" already exists — unrelated to
+	// the crm-skill fixture, which also declares one by that name.
+	preexisting, err := collSvc.Create(ctx(), collection.CreateInput{
+		ID: "contacts", Name: "Contacts", Format: collection.FormatJSON,
+		Fields: []collection.Field{{Name: "name", Type: collection.TypeString}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	inst, files := newInstaller(t, reg,
+		withApprover(recordingApproverFunc(func() { t.Fatal("a collision must be refused before a person is asked") })),
+		withCollections(collSvc),
+	)
+
+	_, err = inst.Install(ctx(), skill.InstallInput{Source: crmSource, AcceptedAll: acceptAll})
+	if err == nil {
+		t.Fatal("an install colliding with an already-registered collection reported success")
+	}
+	if code := codeOf(t, err); code != "AOS_SKILL_COLLECTION_NAME_TAKEN" {
+		t.Fatalf("code = %q, want AOS_SKILL_COLLECTION_NAME_TAKEN", code)
+	}
+
+	// The pre-existing registration is untouched, not replaced.
+	got, gerr := collSvc.Get(ctx(), collection.GetInput{ID: "contacts"})
+	if gerr != nil {
+		t.Fatalf("the pre-existing collection was removed: %v", gerr)
+	}
+	if got.Description != preexisting.Description {
+		t.Fatal("the pre-existing collection was replaced, not merely left alone")
+	}
+	if wrote := files.paths(); len(wrote) != 0 {
+		t.Fatalf("a refused install still wrote files: %v", wrote)
+	}
+	if _, err := inst.Get(ctx(), "crm"); err == nil {
+		t.Fatal("the skill is listed as installed after a refused install")
+	}
+}
+
 // failingRepo makes Create fail, so a test can drive Apply past the point
 // where Files.Write has already succeeded — the case round 1 fixed for
 // collections and views and left open for everything Files places: an agent
@@ -705,6 +764,10 @@ func (r *failingRepo) List(ctx context.Context, q collections.Query) ([]skill.Sk
 
 func (r *failingRepo) Create(context.Context, *skill.Skill) error {
 	return r.err
+}
+
+func (r *failingRepo) Update(ctx context.Context, v *skill.Skill, expect collections.Version) error {
+	return r.inner.Update(ctx, v, expect)
 }
 
 func (r *failingRepo) Delete(ctx context.Context, key collections.Key) error {

@@ -96,7 +96,7 @@ type fakeCollections struct {
 	records map[string][]collection.Record
 }
 
-func (f *fakeCollections) Get(_ context.Context, id string) (*collection.Collection, error) {
+func (f *fakeCollections) Get(_ context.Context, id, _ string) (*collection.Collection, error) {
 	c, ok := f.schemas[id]
 	if !ok {
 		return nil, apperr.New("TEST_COLLECTION_NOT_FOUND").
@@ -110,7 +110,7 @@ func (f *fakeCollections) Get(_ context.Context, id string) (*collection.Collect
 	return &out, nil
 }
 
-func (f *fakeCollections) ListRecords(_ context.Context, id string, q collection.RecordQuery) ([]collection.Record, error) {
+func (f *fakeCollections) ListRecords(_ context.Context, id, _ string, q collection.RecordQuery) ([]collection.Record, error) {
 	recs := append([]collection.Record(nil), f.records[id]...)
 	if q.OrderBy != "" {
 		sort.Slice(recs, func(i, j int) bool {

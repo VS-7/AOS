@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/OWNER/aos/internal/core/collections"
+	"github.com/OWNER/aos/internal/core/command"
 )
 
 // Service is the collection aggregate: the agent-facing surface that turns a
@@ -51,12 +52,14 @@ func (s *Service) Records() RecordService {
 // ListInput selects the declarations List returns. It has no filter today: a
 // workspace declares few enough collections that listing all of them is never
 // a cost worth guarding.
-type ListInput struct{}
+type ListInput struct {
+	command.Reasoning
+}
 
 // ListOutput is every collection declared in the workspace.
 type ListOutput struct {
-	Collections []Collection `json:"collections"`
-	Total       int          `json:"total"`
+	Collections []Collection `json:"collections" jsonschema:"Every collection declared in the workspace, including what a skill brought."`
+	Total       int          `json:"total" jsonschema:"How many there are."`
 }
 
 // GetInput names one declaration.
@@ -70,28 +73,46 @@ type ListOutput struct {
 // List returns already carries its own Skill (Collection.Skill), so a caller
 // that got an id from List has what it needs to hand back here.
 type GetInput struct {
-	ID    string `json:"id"`
-	Skill string `json:"skill,omitempty"`
+	ID    string `json:"id" jsonschema:"Identifier of the collection." validate:"required,notblank"`
+	Skill string `json:"skill,omitempty" jsonschema:"The skill this collection ships with, when it is skill-scoped. Required to resolve one — collections_list reports it on every entry."`
+
+	command.Reasoning
 }
 
 // CreateInput declares a new collection.
 type CreateInput struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Scope       Scope  `json:"scope,omitempty"`
-	Skill       string `json:"skill,omitempty"`
-	Format      Format `json:"format"`
+	ID          string `json:"id" jsonschema:"Identifier for the collection. Also its directory name: lowercase, digits, hyphen and underscore only." validate:"required,notblank"`
+	Name        string `json:"name" jsonschema:"Human name of the collection. Example: \"Contacts\"." validate:"required,notblank"`
+	Description string `json:"description,omitempty" jsonschema:"What this collection is for."`
+	Scope       Scope  `json:"scope,omitempty" jsonschema:"workspace or skill. Defaults to workspace."`
+	Skill       string `json:"skill,omitempty" jsonschema:"The skill this collection ships with, when Scope is skill."`
+	Format      Format `json:"format" jsonschema:"md or json — how each record of this collection is laid out on disk." validate:"required,notblank"`
 
-	Fields []Field `json:"fields"`
-	Hooks  []Hook  `json:"hooks,omitempty"`
+	Fields []Field `json:"fields" jsonschema:"The declared columns of a record. At least one is required."`
+	Hooks  []Hook  `json:"hooks,omitempty" jsonschema:"Declarative normalisations applied to a record on create or update."`
+
+	command.Reasoning
 }
 
 // DeleteInput removes a declaration. Skill is the same optional qualifier
 // GetInput takes, for the same reason.
 type DeleteInput struct {
-	ID    string `json:"id"`
-	Skill string `json:"skill,omitempty"`
+	ID    string `json:"id" jsonschema:"Identifier of the collection to remove." validate:"required,notblank"`
+	Skill string `json:"skill,omitempty" jsonschema:"The skill this collection ships with, when it is skill-scoped."`
+
+	command.Reasoning
+}
+
+// Exists reports whether name is already registered in the runtime registry
+// — native or dynamic. skill.Installer.Install calls this before writing
+// anything, to refuse an install whose collection collides with a name
+// already taken rather than let collections.Registry.Register silently
+// replace it (Register's own replace-by-design is for a skill reinstalling
+// over itself, not for two unrelated declarations racing for one name — see
+// skill/install.go's own comment on the ruling this exists for).
+func (s *Service) Exists(name string) bool {
+	_, ok := s.registry.Lookup(name)
+	return ok
 }
 
 // List returns every declared collection.
