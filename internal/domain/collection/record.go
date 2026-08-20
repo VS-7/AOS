@@ -11,13 +11,16 @@ import (
 // Record is one row under a collection: the domain's view of a
 // collections.Record, translated back and forth by RecordService.
 //
-// It carries its own identity and timestamps, which collections.Record — the
-// engine's type — does not: an engine record is a Key, a Fields map and a
-// body, with no opinion about time. A collection that wants a queryable
-// "created at" or "updated at" field declares one and a setTimestamp hook
-// stamps it, the same as any other field; CreatedAt and UpdatedAt here are a
-// best-effort convenience read from the record's storage version, not a
-// second, competing source of truth for that field.
+// It carries its own identity, which collections.Record — the engine's type —
+// does not: an engine record is a Key, a Fields map and a body, indexed by
+// path alone. CreatedAt and UpdatedAt are not a second source of truth for
+// that concept: they are a read-back projection of whatever the collection's
+// own "createdAt"/"updatedAt" fields hold, when it declares them (typically
+// stamped by a setTimestamp hook, the same mechanism Validate already
+// enforces every other field through). A collection that never declared
+// either field has nothing to report, and reports it honestly — zero, not a
+// borrowed file modification time that stops meaning "created" the moment the
+// record is next edited.
 type Record struct {
 	ID         string         `json:"id" jsonschema:"Identifier of this record, unique within its collection."`
 	Collection string         `json:"collection" jsonschema:"Id of the collection this record belongs to."`
@@ -29,8 +32,8 @@ type Record struct {
 	// describing the format twice.
 	Content string `json:"content,omitempty" jsonschema:"The Markdown body, for a collection of format md. Empty for json, and for a record with no body."`
 
-	CreatedAt time.Time `json:"createdAt" jsonschema:"When the record was written. Best-effort: read from the file's storage version, not tracked separately."`
-	UpdatedAt time.Time `json:"updatedAt" jsonschema:"When the record was last written. Best-effort, from the same source as createdAt."`
+	CreatedAt time.Time `json:"createdAt" jsonschema:"When the record was created. Zero unless the collection declares a createdAt field and stamps it — this only reads that field back."`
+	UpdatedAt time.Time `json:"updatedAt" jsonschema:"When the record was last written. Zero unless the collection declares an updatedAt field and stamps it — this only reads that field back."`
 }
 
 // RecordQuery selects the records List returns. It is the domain's shape of
@@ -112,10 +115,7 @@ func (s *recordService) List(ctx context.Context, collectionID string, q RecordQ
 	}
 	out := make([]Record, 0, len(rows))
 	for i := range rows {
-		// Timestamps are not stamped here: List answers "what is here", and a
-		// Version lookup per row would be a file stat for every record in the
-		// collection to fill in a field nothing in this method's tests reads.
-		out = append(out, recordFrom(collectionID, &rows[i]))
+		out = append(out, recordFrom(c, &rows[i]))
 	}
 	return out, nil
 }
@@ -135,8 +135,7 @@ func (s *recordService) Get(ctx context.Context, collectionID, id string) (*Reco
 	if err != nil {
 		return nil, errRecordNotFound(collectionID, id)
 	}
-	out := recordFrom(collectionID, rec)
-	stampVersion(ctx, repo, key, &out)
+	out := recordFrom(c, rec)
 	return &out, nil
 }
 
@@ -187,8 +186,7 @@ func (s *recordService) CreateWithContent(ctx context.Context, collectionID stri
 		return nil, err
 	}
 
-	out := recordFrom(collectionID, rec)
-	stampVersion(ctx, repo, key, &out)
+	out := recordFrom(c, rec)
 	return &out, nil
 }
 
@@ -236,8 +234,7 @@ func (s *recordService) Update(ctx context.Context, collectionID, id string, dat
 		return nil, err
 	}
 
-	out := recordFrom(collectionID, rec)
-	stampVersion(ctx, repo, key, &out)
+	out := recordFrom(c, rec)
 	return &out, nil
 }
 
@@ -255,36 +252,55 @@ func (s *recordService) Delete(ctx context.Context, collectionID, id string) err
 }
 
 // recordFrom translates the engine's record into the domain's.
-func recordFrom(collectionID string, rec *collections.Record) Record {
-	data := rec.Fields
-	if data == nil {
-		data = map[string]any{}
+//
+// Data is a fresh copy of rec.Fields, never the map itself. rec.Fields may be
+// the exact map instance a repository's in-memory index (or, in a test, a
+// fake's own store) is holding — collections.WithoutBody clones for the same
+// reason. Handing that map out directly would let a caller's mutation of the
+// returned Record.Data reach back into the repository's own state, corrupting
+// it for every other reader until the next write invalidates it.
+func recordFrom(c Collection, rec *collections.Record) Record {
+	data := make(map[string]any, len(rec.Fields))
+	for k, v := range rec.Fields {
+		data[k] = v
 	}
 	return Record{
 		ID:         rec.Key["id"],
-		Collection: collectionID,
+		Collection: c.ID,
 		Data:       data,
 		Content:    rec.Content,
+		CreatedAt:  declaredTimestamp(c, data, "createdAt"),
+		UpdatedAt:  declaredTimestamp(c, data, "updatedAt"),
 	}
 }
 
-// stampVersion fills CreatedAt and UpdatedAt from the repository's storage
-// version, when the repository can report one. Both come from the same
-// modification time: unlike a declared field a setTimestamp hook stamps, the
-// engine does not separately track when a file was first written versus last
-// rewritten, and reporting one borrowed value as two is more honest than
-// leaving the more visible of the two blank.
-func stampVersion(ctx context.Context, repo RecordRepo, key collections.Key, r *Record) {
-	versioned, ok := repo.(collections.Versioned)
+// declaredTimestamp reads Record.CreatedAt/UpdatedAt back out of the record's
+// own declared data, rather than deriving them from anything the storage
+// layer tracks. It returns the zero time whenever there is nothing honest to
+// report: the field is not declared, absent, or not a value ApplyHooks'
+// setTimestamp action could have produced.
+func declaredTimestamp(c Collection, data map[string]any, field string) time.Time {
+	if !declaresField(c, field) {
+		return time.Time{}
+	}
+	s, ok := data[field].(string)
 	if !ok {
-		return
+		return time.Time{}
 	}
-	v, err := versioned.Version(ctx, key)
+	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {
-		return
+		return time.Time{}
 	}
-	r.CreatedAt = v.ModTime
-	r.UpdatedAt = v.ModTime
+	return t
+}
+
+func declaresField(c Collection, name string) bool {
+	for _, f := range c.Fields {
+		if f.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // existingFields lists the stored Fields of a collection's records, but only

@@ -557,16 +557,6 @@ func (r *fakeRecordRepo) Delete(_ context.Context, key collections.Key) error {
 	return nil
 }
 
-// Version makes fakeRecordRepo satisfy collections.Versioned, the same as the
-// real fscollections.Repo does — which is what RecordService's best-effort
-// CreatedAt/UpdatedAt stamping reads.
-func (r *fakeRecordRepo) Version(_ context.Context, key collections.Key) (collections.Version, error) {
-	if _, ok := r.items[key["id"]]; !ok {
-		return collections.Version{}, collections.NotFoundError("records", key)
-	}
-	return collections.Version{ModTime: at}, nil
-}
-
 // fakeRecordRepos is the in-memory collection.RecordRepositories: it hands out
 // one fakeRecordRepo per collection id, the same way the real
 // internal/adapters/fscollections implementation hands out one Repo per
@@ -803,5 +793,113 @@ func TestUpdateRefusesAnUnknownHookAction(t *testing.T) {
 	_, err = svc.Update(ctx(), "contacts", rec.ID, map[string]any{"name": "Ada Lovelace"})
 	if code := codeOf(t, err); code != "AOS_COLLECTION_HOOK_UNKNOWN" {
 		t.Fatalf("code = %q", code)
+	}
+}
+
+// TestRecordTimestampsAreAProjectionOfDeclaredFields: CreatedAt/UpdatedAt on
+// the domain Record are read back from the collection's own declared
+// createdAt/updatedAt fields — the same fields a setTimestamp hook stamps and
+// Validate already enforces — not derived from anything the storage layer
+// tracks on its own.
+func TestRecordTimestampsAreAProjectionOfDeclaredFields(t *testing.T) {
+	c := crm()
+	c.Fields = append(c.Fields,
+		collection.Field{Name: "createdAt", Type: collection.TypeDate},
+		collection.Field{Name: "updatedAt", Type: collection.TypeDate},
+	)
+	c.Hooks = []collection.Hook{
+		{On: "create", Action: collection.ActionSetTimestamp, Field: "createdAt"},
+		{On: "create", Action: collection.ActionSetTimestamp, Field: "updatedAt"},
+	}
+	svc := newRecordService(t, c)
+
+	rec, err := svc.Create(ctx(), "contacts", map[string]any{"name": "Ada"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rec.CreatedAt.Equal(at) || !rec.UpdatedAt.Equal(at) {
+		t.Fatalf("CreatedAt = %v, UpdatedAt = %v, want both %v", rec.CreatedAt, rec.UpdatedAt, at)
+	}
+}
+
+// TestRecordTimestampsAreZeroWhenNotDeclared: a collection that never
+// declared createdAt/updatedAt fields has nothing to report, and reports it
+// honestly as zero rather than borrowing a file's modification time.
+func TestRecordTimestampsAreZeroWhenNotDeclared(t *testing.T) {
+	svc := newRecordService(t, crm())
+	rec, err := svc.Create(ctx(), "contacts", map[string]any{"name": "Ada"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rec.CreatedAt.IsZero() || !rec.UpdatedAt.IsZero() {
+		t.Fatalf("CreatedAt = %v, UpdatedAt = %v, want both zero", rec.CreatedAt, rec.UpdatedAt)
+	}
+}
+
+// TestRecordsDataIsIndependentOfStorage: a caller mutating the Data map a
+// service call handed back must not corrupt what the repository holds for
+// the next reader. recordFrom must copy rec.Fields, never hand out the map
+// itself — the same defect WithoutBody guards against for the engine's own
+// in-memory index.
+func TestRecordsDataIsIndependentOfStorage(t *testing.T) {
+	svc := newRecordService(t, crm())
+	rec, err := svc.Create(ctx(), "contacts", map[string]any{"name": "Ada"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec.Data["name"] = "mutated by the caller"
+
+	again, err := svc.Get(ctx(), "contacts", rec.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Data["name"] != "Ada" {
+		t.Fatalf("stored name = %v, want the caller's mutation to not have reached storage", again.Data["name"])
+	}
+}
+
+// countingRecordRepo wraps fakeRecordRepo to count List calls: it is the
+// proof that existingFields' conditional actually skips the scan, not merely
+// that Validate tolerates a nil slice of existing records.
+type countingRecordRepo struct {
+	*fakeRecordRepo
+	listCalls int
+}
+
+func (r *countingRecordRepo) List(ctx context.Context, q collections.Query) ([]collections.Record, error) {
+	r.listCalls++
+	return r.fakeRecordRepo.List(ctx, q)
+}
+
+type countingRecordRepos struct {
+	repo *countingRecordRepo
+}
+
+func (f *countingRecordRepos) For(collection.Collection) (collection.RecordRepo, error) {
+	return f.repo, nil
+}
+
+// TestCreatingARecordSkipsTheExistingScanWithoutAUniqueField: an unconditional
+// List on every Create would make every collection pay for a constraint most
+// do not declare. This is what proves the skip actually happens, rather than
+// just trusting the conditional's own comment.
+func TestCreatingARecordSkipsTheExistingScanWithoutAUniqueField(t *testing.T) {
+	c := crm()
+	for i := range c.Fields {
+		c.Fields[i].Unique = false
+	}
+	repo := &fakeRepo{items: map[string]collection.Collection{c.ID: c}}
+	repos := &countingRecordRepos{repo: &countingRecordRepo{fakeRecordRepo: &fakeRecordRepo{}}}
+	svc := collection.NewService(collection.Deps{
+		Repo: repo, Registry: collections.NewRegistry(), Clock: clockx.Fixed{At: at},
+		RecordRepos: repos, IDs: &ids.Sequence{Prefix: "rec"},
+	}).Records()
+
+	if _, err := svc.Create(ctx(), "contacts", map[string]any{"name": "Ada"}); err != nil {
+		t.Fatal(err)
+	}
+	if repos.repo.listCalls != 0 {
+		t.Fatalf("List was called %d times; a collection with no Unique field must not pay for the scan", repos.repo.listCalls)
 	}
 }
