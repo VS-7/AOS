@@ -101,6 +101,29 @@ func (m Model[T]) MatchPath(rel string) (*Pattern, Key, bool) {
 // {agent, id}; for tasks just {id}.
 type Key map[string]string
 
+// Record is the T of a collection whose fields were declared at runtime rather
+// than as a Go struct.
+//
+// Everything the engine does around a record — matching a path to a pattern,
+// choosing a writable pattern for a key, the atomic write, the per-file lock,
+// the CAS check on Version, the Changed event — looks at the pattern and the
+// key, never inside T. That is what lets a collection an agent invented at
+// 14:00 be a Model[Record] instead of a second engine.
+type Record struct {
+	// Key is the placeholder values that identify this record, exactly as for
+	// a native: it lives in the path and is never written into the body.
+	Key Key
+
+	// Fields is the declared data. internal/domain/collection validates it
+	// against the collection's schema before it ever reaches here — the engine
+	// stores what it is given.
+	Fields map[string]any
+
+	// Content is the Markdown body, for a collection with FormatMarkdown. A
+	// FormatJSON collection leaves it empty.
+	Content string
+}
+
 // Clone returns an independent copy, so a caller cannot mutate a key the engine
 // is still holding.
 func (k Key) Clone() Key {
