@@ -30,6 +30,13 @@ linters:
         - pattern: ^math/rand(/v2)?\.
           msg: "inject a Rand instead of using math/rand directly — it would make a golden unstable"
       analyze-types: true
+    misspell:
+      # "comando" is Portuguese, not a misspelling of "commando": the comments
+      # that use it are quoting section titles of the Portuguese specification
+      # vault under docs/ verbatim, and a quote that is silently corrected is
+      # no longer a quote.
+      ignore-rules:
+        - comando
     revive:
       rules:
         - name: context-as-argument

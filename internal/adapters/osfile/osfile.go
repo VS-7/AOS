@@ -63,7 +63,9 @@ func (FS) ReadFile(_ context.Context, path string, limit int64) ([]byte, bool, e
 	if err != nil {
 		return nil, false, wrapNotExist(err)
 	}
-	defer f.Close()
+	// Read-only handle: a Close error here reports nothing the read did not
+	// already report, and there is no buffered write to lose.
+	defer func() { _ = f.Close() }()
 
 	buf := make([]byte, limit+1)
 	n, err := io.ReadFull(f, buf)

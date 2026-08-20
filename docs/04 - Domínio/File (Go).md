@@ -97,7 +97,7 @@ func (s *service) resolve(ctx context.Context, p string) (string, error) {
 
 ## Critério de pronto
 
-- [ ] Explorador de arquivos funcionando na UI — backend pronto (`internal/domain/file`, HTTP em `/api/file`); UI (Monaco + árvore) ainda não portada, ver [[Files (Frontend)]]
+- [x] Explorador de arquivos funcionando na UI — backend em `internal/domain/file`, HTTP em `/api/file`, e a UI (árvore, menu de contexto, editor Monaco) portada no branch do frontend. Pendência conhecida: a árvore não se atualiza sozinha — `files:changed` está mapeado para `collection.changed`, que nada no Go publica ainda; ver [[Collection (Go)]] na Fase 8
 - [x] Contenção compartilhada com o sandbox — `internal/core/pathx`
 - [x] Sem superfície CLI nem MCP — `Service` não é `command.Descriptor`; roteado direto em `internal/transport/fileapi`, fora do registry
 

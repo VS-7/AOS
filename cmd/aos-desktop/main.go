@@ -239,4 +239,3 @@ func introspectWorkspace(ctx context.Context, client *daemonclient.Client, root 
 	}
 	return envelope.Data.Workspace.ID, nil
 }
-
