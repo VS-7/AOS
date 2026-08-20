@@ -110,7 +110,7 @@ type Toolset struct {
 	// spawn and its arguments. Either may contain ${env.VAR} placeholders,
 	// resolved just before Connect — see Interpolate.
 	Command string   `yaml:"command,omitempty" json:"command,omitempty" jsonschema:"Binary to spawn for mcp-server::stdio. May reference \\${env.VAR}."`
-	Args    []string `yaml:"args,omitempty" json:"args,omitempty" jsonschema:"Arguments passed to Command. Each may reference \\${env.VAR}."`
+	Args    []string `yaml:"args,omitempty" json:"args,omitempty" jsonschema:"Arguments passed to Command. Each may reference \\${env.VAR} — but a value resolved here lands in the child process's argv, visible to any co-resident user via ps for the process's lifetime. Put secrets in Env, not here."`
 
 	// Env is passed to the spawned process, on top of a minimal PATH/HOME —
 	// never the daemon's own environment, which the child has no business

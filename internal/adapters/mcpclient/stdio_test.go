@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/OWNER/aos/internal/adapters/mcpclient"
+	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/domain/testsuite"
 	"github.com/OWNER/aos/internal/domain/toolset"
@@ -117,5 +118,46 @@ func TestStdioCallsATool(t *testing.T) {
 	}
 	if len(out) == 0 {
 		t.Fatal("Call returned an empty result")
+	}
+}
+
+// TestConnectRejectsReservedEnvKeys is the regression test for the finding
+// that childEnv used to append the toolset's Env after PATH/HOME rather than
+// filtering it: os/exec documents that a duplicate key means the last value
+// wins, so a toolset declaring its own PATH silently overrode the daemon's,
+// and nothing stopped a toolset from injecting a shared library into the
+// spawned process via LD_PRELOAD or DYLD_INSERT_LIBRARIES. Each of these must
+// now be refused, naming the offending variable, rather than silently
+// dropped or silently accepted.
+func TestConnectRejectsReservedEnvKeys(t *testing.T) {
+	base := testServerToolset(t)
+
+	cases := []struct {
+		name string
+		key  string
+	}{
+		{"PATH override", "PATH"},
+		{"LD_PRELOAD", "LD_PRELOAD"},
+		{"DYLD_INSERT_LIBRARIES", "DYLD_INSERT_LIBRARIES"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := base
+			ts.Env = map[string]string{tc.key: "/tmp/whatever"}
+
+			a := mcpclient.NewStdio()
+			err := a.Connect(context.Background(), ts)
+			_ = a.Close()
+			if err == nil {
+				t.Fatalf("Connect accepted a toolset declaring %s", tc.key)
+			}
+			e, ok := apperr.As(err)
+			if !ok {
+				t.Fatalf("err is %T, want *apperr.Error", err)
+			}
+			if e.Issues["variable"] != tc.key {
+				t.Fatalf("the error does not name the rejected variable: %v", e.Issues)
+			}
+		})
 	}
 }

@@ -18,9 +18,11 @@ import (
 	"os"
 	"os/exec"
 	"sort"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/domain/toolset"
@@ -48,13 +50,27 @@ func NewStdio() toolset.Adapter { return &stdio{} }
 // ts arrives with every ${env.VAR} placeholder already resolved by
 // toolset.Service — this adapter never sees the literal placeholder, only the
 // secret or setting it named.
+//
+// A value interpolated into Args lands in the child's argv, which is visible
+// to any co-resident user for the process's lifetime via `ps`. Rejecting
+// interpolation in Args outright was considered and rejected: most uses there
+// are not secrets — a workspace path is the obvious one — and refusing all of
+// them would break real configurations to guard against a minority case. The
+// guard instead lives where the author of a toolset actually reads it: the
+// jsonschema description on Toolset.Args says a resolved value is visible in
+// the process table and that secrets belong in Env.
 func (s *stdio) Connect(ctx context.Context, ts toolset.Toolset) error {
 	if ts.Command == "" {
 		return fmt.Errorf("mcp-server::stdio toolset %q has no command", ts.ID)
 	}
 
+	env, eerr := childEnv(ts.Env)
+	if eerr != nil {
+		return eerr
+	}
+
 	cmd := exec.CommandContext(ctx, ts.Command, ts.Args...) //nolint:gosec // Command is workspace configuration, not a request payload
-	cmd.Env = childEnv(ts.Env)
+	cmd.Env = env
 
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    build.Name + "-toolset-client",
@@ -133,12 +149,41 @@ func (s *stdio) Close() error {
 	return session.Close()
 }
 
+// reservedEnvKey reports whether a toolset's Env may not set k.
+//
+// PATH and HOME are refused because the daemon chooses them for the child,
+// not the toolset — os/exec documents that a duplicate key in Env means the
+// last value wins, so a toolset declaring its own PATH would silently
+// override the one childEnv just built.
+//
+// Anything beginning LD_ or DYLD_ is refused as a blanket prefix rule rather
+// than an exhaustive name list (LD_PRELOAD, LD_LIBRARY_PATH,
+// DYLD_INSERT_LIBRARIES, DYLD_LIBRARY_PATH, ...): a name list is a list
+// somebody has to keep current against every dynamic loader variable a
+// platform ever ships, and missing one silently reopens exactly this hole. A
+// toolset declaration arrives inside an installable skill package as of the
+// next task; without this, that package could inject a shared library into
+// every process this daemon spawns on someone's behalf.
+func reservedEnvKey(k string) bool {
+	switch k {
+	case "PATH", "HOME":
+		return true
+	}
+	return strings.HasPrefix(k, "LD_") || strings.HasPrefix(k, "DYLD_")
+}
+
 // childEnv builds the spawned process's environment from a minimal allowlist
 // plus the toolset's own, already-interpolated Env — never this daemon's full
 // environment, which the child has no business reading. Keys are sorted so
 // the child's environment is deterministic across runs, which matters for
 // diagnosing "it worked yesterday" reports.
-func childEnv(extra map[string]string) []string {
+//
+// A reserved key is refused rather than silently dropped: dropping it would
+// leave the toolset's author with a variable that quietly has no effect, and
+// this codebase has had to undo that silent-loss pattern before. Refusing
+// names the variable, in the same shape as toolset.Interpolate's own failure
+// on a missing ${env.VAR}.
+func childEnv(extra map[string]string) ([]string, error) {
 	out := []string{"PATH=" + os.Getenv("PATH")}
 	if home := os.Getenv("HOME"); home != "" {
 		out = append(out, "HOME="+home)
@@ -149,7 +194,24 @@ func childEnv(extra map[string]string) []string {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
+		if reservedEnvKey(k) {
+			return nil, errEnvRejected(k)
+		}
 		out = append(out, k+"="+extra[k])
 	}
-	return out
+	return out, nil
+}
+
+// errEnvRejected fires when a toolset's Env sets a variable this adapter
+// reserves for itself: PATH, HOME, or anything controlling the dynamic
+// loader.
+func errEnvRejected(name string) error {
+	return apperr.New("MCPCLIENT_ENV_REJECTED").
+		Causer("mcpclient.stdio.Connect").
+		Msgf("toolset env may not set %q: it is reserved by this adapter", name).
+		Issue("variable", name).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{
+			Label: "remove PATH, HOME, and any LD_*/DYLD_* variable from the toolset's env",
+		})
 }

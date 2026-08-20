@@ -95,6 +95,26 @@ func RunAdapterContract(t *testing.T, c AdapterContract) {
 		if _, err := a.Call(ctx, "this-tool-does-not-exist-anywhere", nil); err == nil {
 			t.Fatal("calling an unknown tool reported success")
 		}
+
+		// An error return alone cannot distinguish "errored gracefully" from
+		// "errored and took the connection down with it" — both look like a
+		// non-nil error from the line above. Proving the connection still
+		// answers afterwards is the only way to tell those apart, and that
+		// distinction is the whole reason this suite exists instead of a
+		// reading of the adapter's code.
+		tools, err := a.ListTools(ctx)
+		if err != nil {
+			t.Fatalf("ListTools after a failed call: %v — the connection did not survive it", err)
+		}
+		found := false
+		for _, spec := range tools {
+			if spec.Name == c.ExpectTool {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("ListTools after a failed call no longer reports %q — the connection did not survive it", c.ExpectTool)
+		}
 	})
 
 	t.Run(c.Name+"/Close is idempotent", func(t *testing.T) {
