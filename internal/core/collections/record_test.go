@@ -143,3 +143,31 @@ func TestWithoutBodyClonesARecordsFields(t *testing.T) {
 		t.Fatalf("mutating the WithoutBody result changed the original: %v", r.Fields)
 	}
 }
+
+// TestWithoutBodyClonesNestedStructures: the earlier clone was one level
+// deep — a fresh outer map, but its values copied by reference — which is not
+// enough for a Fields map decoded from JSON or YAML, where a "list" field is
+// a []any and an object field is a map[string]any, either possibly nested
+// arbitrarily. This is what proves the clone goes all the way down, not just
+// across the top-level keys.
+func TestWithoutBodyClonesNestedStructures(t *testing.T) {
+	r := &collections.Record{
+		Key: collections.Key{"id": "ada"},
+		Fields: map[string]any{
+			"name":    "Ada",
+			"address": map[string]any{"city": "London"},
+			"tags":    []any{"vip", map[string]any{"kind": "founder"}},
+		},
+	}
+	light := collections.WithoutBody(r)
+
+	light.Fields["address"].(map[string]any)["city"] = "corrupted"
+	light.Fields["tags"].([]any)[1].(map[string]any)["kind"] = "corrupted"
+
+	if got := r.Fields["address"].(map[string]any)["city"]; got != "London" {
+		t.Fatalf("mutating the nested map in the WithoutBody result changed the original: %v", got)
+	}
+	if got := r.Fields["tags"].([]any)[1].(map[string]any)["kind"]; got != "founder" {
+		t.Fatalf("mutating the nested slice element in the WithoutBody result changed the original: %v", got)
+	}
+}

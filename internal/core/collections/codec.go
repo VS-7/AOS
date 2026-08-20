@@ -281,15 +281,14 @@ func WithoutBody[T any](v *T) *T {
 		light := *rec
 		light.Content = ""
 		light.Key = rec.Key.Clone()
-		// Fields is a map: a shallow struct copy still shares the same
-		// backing map with the record the in-memory index holds. Without
-		// this clone, a caller mutating the WithoutBody result mutates the
-		// index too.
-		fields := make(map[string]any, len(rec.Fields))
-		for k, val := range rec.Fields {
-			fields[k] = val
+		// Fields is a map, and its values may themselves be maps or slices —
+		// a "list" field, a JSON-format collection's nested object. A shallow
+		// struct copy still shares all of that with the record the in-memory
+		// index holds; CloneJSON is what keeps a caller's mutation of the
+		// result from reaching into the index at any depth.
+		if rec.Fields != nil {
+			light.Fields, _ = CloneJSON(rec.Fields).(map[string]any)
 		}
-		light.Fields = fields
 		return any(&light).(*T)
 	}
 

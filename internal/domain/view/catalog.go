@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+
+	"github.com/OWNER/aos/internal/core/collections"
 )
 
 // componentsJSON is generated from the React catalog by
@@ -78,37 +80,18 @@ func LookupComponent(name string) (ComponentSpec, bool) {
 // shared with the package-level catalog underneath it, so a caller mutating
 // spec.Props would corrupt what every later caller — for the life of the
 // process, since sync.Once never rebuilds it — receives from Catalog and
-// LookupComponent.
+// LookupComponent. Props is deep-copied via collections.CloneJSON rather than
+// a private copy of the same function: Props is a JSON Schema tree read off
+// components.json, exactly the kind of arbitrarily nested JSON/YAML-decoded
+// value CloneJSON exists for, and a second implementation here would be one
+// more copy of it free to drift from the first.
 func cloneSpec(s ComponentSpec) ComponentSpec {
 	out := s
 	if s.Props != nil {
-		out.Props, _ = cloneJSON(s.Props).(map[string]any)
+		out.Props, _ = collections.CloneJSON(s.Props).(map[string]any)
 	}
 	if s.Slots != nil {
 		out.Slots = append([]string(nil), s.Slots...)
 	}
 	return out
-}
-
-// cloneJSON deep-copies a value shaped by encoding/json.Unmarshal into an
-// any: maps, slices, and scalars, recursively. Props is exactly that — a JSON
-// Schema tree read off components.json — so nothing else has to be handled.
-func cloneJSON(v any) any {
-	switch t := v.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(t))
-		for k, val := range t {
-			out[k] = cloneJSON(val)
-		}
-		return out
-	case []any:
-		out := make([]any, len(t))
-		for i, val := range t {
-			out[i] = cloneJSON(val)
-		}
-		return out
-	default:
-		// string, float64, bool, nil: copied by value already.
-		return t
-	}
 }

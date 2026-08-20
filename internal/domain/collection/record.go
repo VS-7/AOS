@@ -253,17 +253,18 @@ func (s *recordService) Delete(ctx context.Context, collectionID, id string) err
 
 // recordFrom translates the engine's record into the domain's.
 //
-// Data is a fresh copy of rec.Fields, never the map itself. rec.Fields may be
-// the exact map instance a repository's in-memory index (or, in a test, a
-// fake's own store) is holding — collections.WithoutBody clones for the same
-// reason. Handing that map out directly would let a caller's mutation of the
-// returned Record.Data reach back into the repository's own state, corrupting
-// it for every other reader until the next write invalidates it.
+// Data is a deep copy of rec.Fields, via collections.CloneJSON, never the map
+// itself and never a one-level copy of it. rec.Fields may be the exact map
+// instance a repository's in-memory index (or, in a test, a fake's own store)
+// is holding, and its values can themselves be maps or slices — a "list"
+// field, a JSON-format collection's nested object. Handing any of that out by
+// reference, at any depth, would let a caller's mutation of the returned
+// Record.Data reach back into the repository's own state, corrupting it for
+// every other reader until the next write invalidates it.
 func recordFrom(c Collection, rec *collections.Record) Record {
-	data := make(map[string]any, len(rec.Fields))
-	for k, v := range rec.Fields {
-		data[k] = v
-	}
+	// CloneJSON returns a freshly allocated map even when rec.Fields is a nil
+	// map, so there is no separate nil-guard needed here.
+	data, _ := collections.CloneJSON(rec.Fields).(map[string]any)
 	return Record{
 		ID:         rec.Key["id"],
 		Collection: c.ID,

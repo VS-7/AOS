@@ -859,6 +859,32 @@ func TestRecordsDataIsIndependentOfStorage(t *testing.T) {
 	}
 }
 
+// TestRecordsDataIsIndependentOfStorageAtEveryDepth: a one-level copy of
+// rec.Fields is not enough — "tags" is a declared list field, and a caller
+// mutating a map nested inside it must not reach what the repository holds,
+// the same as mutating a top-level key must not.
+func TestRecordsDataIsIndependentOfStorageAtEveryDepth(t *testing.T) {
+	svc := newRecordService(t, crm())
+	rec, err := svc.Create(ctx(), "contacts", map[string]any{
+		"name": "Ada",
+		"tags": []any{"vip", map[string]any{"kind": "founder"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec.Data["tags"].([]any)[1].(map[string]any)["kind"] = "corrupted"
+
+	again, err := svc.Get(ctx(), "contacts", rec.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := again.Data["tags"].([]any)[1].(map[string]any)["kind"]
+	if got != "founder" {
+		t.Fatalf("nested tags value = %v, want the caller's mutation to not have reached storage", got)
+	}
+}
+
 // countingRecordRepo wraps fakeRecordRepo to count List calls: it is the
 // proof that existingFields' conditional actually skips the scan, not merely
 // that Validate tolerates a nil slice of existing records.
