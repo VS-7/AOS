@@ -165,6 +165,110 @@ func TestRoundTripForEveryNativeCollection(t *testing.T) {
 	}
 }
 
+// mostSpecificKeyFor fills the placeholders of the most specific writable
+// pattern a model declares — the one with the most fields, the same
+// selection WritePatternFor itself makes. It is keyFor's mirror: keyFor
+// exercises the first, least specific writable pattern (the workspace
+// shape); this exercises the one a skill-scoped record actually needs.
+func mostSpecificKeyFor(t *testing.T, m collections.Model[record], suffix string) (collections.Key, *collections.Pattern) {
+	t.Helper()
+	var best *collections.Pattern
+	for _, p := range m.Patterns {
+		if !p.Writable() {
+			continue
+		}
+		if best == nil || len(p.Fields()) > len(best.Fields()) {
+			best = p
+		}
+	}
+	if best == nil {
+		t.Fatal("no writable pattern")
+	}
+	k := collections.Key{}
+	for _, f := range best.Fields() {
+		k[f] = f + "-" + suffix
+	}
+	return k, best
+}
+
+// TestRoundTripForTheMostSpecificPatternOfEveryNative is
+// TestRoundTripForEveryNativeCollection's counterpart for the shape that
+// test never reaches: keyFor there always fills only the first, least
+// specific writable pattern — the workspace one — so a native whose
+// skill-scoped pattern's fields are a superset of the workspace pattern's
+// never had its own write path exercised on a real filesystem.
+//
+// This is the shape the round 2 engine fix is for: WritePatternFor used to
+// return the first writable pattern that filled, in declaration order, and
+// every native below declares its workspace pattern first — so a
+// skill-scoped key used to round-trip through the *workspace* path anyway,
+// silently, and come back with Skill (or whichever field the more specific
+// pattern alone captures) empty. This test creates through the most
+// specific pattern and asserts the file is at the path that pattern builds,
+// not merely that some Get finds it — Get's own wildcard scan was already
+// forgiving enough to hide a write landing in the wrong place.
+func TestRoundTripForTheMostSpecificPatternOfEveryNative(t *testing.T) {
+	ctx := context.Background()
+	for _, desc := range collections.Natives() {
+		writable := 0
+		for _, p := range desc.Patterns {
+			if p.Writable() {
+				writable++
+			}
+		}
+		if writable < 2 {
+			continue // no second shape to distinguish from the first
+		}
+		t.Run(desc.Name, func(t *testing.T) {
+			m := modelFor(t, desc.Name)
+			root := t.TempDir()
+			repo := fscollections.New(root, m)
+			key, pattern := mostSpecificKeyFor(t, m, "2")
+
+			want := &record{Title: "most specific shape", Content: "body\n"}
+			applyKey(want, key)
+
+			if err := repo.Create(ctx, want); err != nil {
+				t.Fatalf("create: %v", err)
+			}
+
+			// The file must be at the path the most specific pattern builds,
+			// not at whatever the first writable pattern would have built.
+			rel, err := pattern.Build(key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, statErr := os.Stat(filepath.Join(root, rel)); statErr != nil {
+				t.Fatalf("record was not written at %s, the most specific pattern's path: %v", rel, statErr)
+			}
+
+			got, err := repo.Get(ctx, key)
+			if err != nil {
+				t.Fatalf("get: %v", err)
+			}
+			if collections.KeyOf(got).String() != key.String() {
+				t.Fatalf("key round-tripped as %s, want %s — a placeholder was left unpopulated because the "+
+					"record landed on a less specific pattern", collections.KeyOf(got), key)
+			}
+
+			list, err := repo.List(ctx, collections.Query{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(list) != 1 {
+				t.Fatalf("list returned %d records, want 1", len(list))
+			}
+
+			if err := repo.Delete(ctx, key); err != nil {
+				t.Fatalf("delete: %v", err)
+			}
+			if _, err := repo.Get(ctx, key); !errors.Is(err, apperr.ErrNotFound) {
+				t.Fatalf("get after delete = %v", err)
+			}
+		})
+	}
+}
+
 // TestRepositoryContract runs the port contract against the filesystem
 // implementation. The fake runs the same suite.
 func TestRepositoryContract(t *testing.T) {

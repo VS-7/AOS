@@ -1,0 +1,10 @@
+{
+  "id": "contacts",
+  "name": "Contacts",
+  "description": "People this CRM tracks.",
+  "format": "md",
+  "fields": [
+    { "name": "name", "type": "string", "required": true },
+    { "name": "stage", "type": "enum", "required": true, "enum": ["lead", "qualified", "won", "lost"] }
+  ]
+}

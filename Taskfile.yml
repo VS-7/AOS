@@ -63,6 +63,7 @@ tasks:
       - task: gen-catalog
       - task: gen-tokens
       - task: gen-schema
+      - task: gen-components
 
   gen-catalog:
     desc: Rebuild the error catalog from the apperr.New calls in the tree
@@ -79,6 +80,14 @@ tasks:
     desc: Rebuild the TypeScript types from the Go command registry
     cmds:
       - go run ./tools/genschema
+
+  gen-components:
+    desc: Rebuild the component catalog the view domain validates against
+    dir: frontend
+    # The only generator that runs from TypeScript to Go: what a zod schema
+    # declares is not readable as text, so it has to be evaluated. See the
+    # script's own comment.
+    cmds: [npx tsx scripts/gen-components.mjs]
 
   vet:
     cmds: [go vet ./...]
@@ -114,6 +123,7 @@ tasks:
     cmds:
       - task: gen
       - git diff --exit-code -- internal/core/apperr/catalog.gen.go
+      - git diff --exit-code -- internal/domain/view/components.json
       - task: vet
       - task: lint
       - task: test

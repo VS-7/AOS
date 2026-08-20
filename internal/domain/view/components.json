@@ -1,0 +1,2984 @@
+[
+  {
+    "name": "Accordion",
+    "description": "Collapsible sections. Items as [{title, content}]. Type 'single' (default) or 'multiple'.",
+    "category": "navigation",
+    "props": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "title",
+              "content"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "single",
+                "multiple"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "type"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "ActivityItem",
+    "description": "Quiet activity/check row — icon · title · optional trailing status. Default variant is pill.",
+    "category": "data",
+    "props": {
+      "type": "object",
+      "properties": {
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Lucide icon name"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "success",
+                "warning",
+                "danger",
+                "muted"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "meta": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Trailing status label"
+        },
+        "variant": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "plain",
+                "pill"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "icon",
+        "tone",
+        "title",
+        "meta",
+        "status",
+        "variant",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "ActivityList",
+    "description": "Stack of Codex-style pill rows. Bind items via $state to an array.",
+    "category": "data",
+    "props": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "icon": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "tone": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "success",
+                          "warning",
+                          "danger",
+                          "muted"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "meta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "status": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "icon",
+                  "tone",
+                  "title",
+                  "meta",
+                  "status"
+                ],
+                "additionalProperties": false
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "emptyText": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "items",
+        "emptyText",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Alert",
+    "description": "Alert banner",
+    "category": "feedback",
+    "props": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "info",
+                "success",
+                "warning",
+                "error"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "title",
+        "message",
+        "type"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Avatar",
+    "description": "User avatar with fallback initials",
+    "category": "data",
+    "props": {
+      "type": "object",
+      "properties": {
+        "src": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "sm",
+                "md",
+                "lg"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "src",
+        "name",
+        "size"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Badge",
+    "description": "Status badge with AOS color palette.",
+    "category": "data",
+    "props": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "variant": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "default",
+                "secondary",
+                "destructive",
+                "outline"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "size": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "sm",
+                "md",
+                "lg"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "color": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "gray",
+                "red",
+                "orange",
+                "amber",
+                "yellow",
+                "lime",
+                "green",
+                "emerald",
+                "teal",
+                "cyan",
+                "blue",
+                "indigo",
+                "violet",
+                "purple",
+                "fuchsia",
+                "pink",
+                "rose"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "text",
+        "variant",
+        "size",
+        "color",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Box",
+    "description": "Generic container — use className for full Tailwind control.",
+    "category": "layout",
+    "props": {
+      "type": "object",
+      "properties": {
+        "as": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "div",
+                "section",
+                "article",
+                "main"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "as",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "Button",
+    "description": "AOS button (shadcn variants). primary→default, danger→destructive.",
+    "category": "input",
+    "props": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "variant": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "default",
+                "outline",
+                "secondary",
+                "ghost",
+                "destructive",
+                "link",
+                "primary",
+                "danger"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "size": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "xs",
+                "sm",
+                "default",
+                "lg",
+                "icon",
+                "icon-sm",
+                "icon-lg"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "disabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "label",
+        "variant",
+        "size",
+        "disabled",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "ButtonGroup",
+    "description": "Segmented button group. Use { $bindState } on selected for selected value.",
+    "category": "input",
+    "props": {
+      "type": "object",
+      "properties": {
+        "buttons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "selected": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "buttons",
+        "selected"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Card",
+    "description": "Container card for content sections. Children render inside CardContent.",
+    "category": "layout",
+    "props": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "maxWidth": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "sm",
+                "md",
+                "lg",
+                "full"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "centered": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        },
+        "padding": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "none",
+                "sm",
+                "md"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "density": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "default",
+                "compact"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "title",
+        "description",
+        "maxWidth",
+        "centered",
+        "className",
+        "padding",
+        "density"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "Carousel",
+    "description": "Horizontally scrollable carousel of cards.",
+    "category": "navigation",
+    "props": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "title",
+              "description"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Checkbox",
+    "description": "Checkbox input. Use { $bindState } on checked for binding. Use checks for validation. validateOn controls timing (default: change).",
+    "category": "input",
+    "props": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "checked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "checks": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "type",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "validateOn": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "change",
+                "blur",
+                "submit"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "name",
+        "checked",
+        "checks",
+        "validateOn"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Collapsible",
+    "description": "Collapsible section with trigger. Children render inside.",
+    "category": "navigation",
+    "props": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "defaultOpen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "title",
+        "defaultOpen"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "DetailSection",
+    "description": "Linear-style collapsible detail section (chevron + quiet title).",
+    "category": "layout",
+    "props": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Stable accordion value id"
+        },
+        "defaultOpen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "title",
+        "value",
+        "defaultOpen",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "Dialog",
+    "description": "Modal dialog. Set openPath to a boolean state path. Use setState to toggle.",
+    "category": "feedback",
+    "props": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "openPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "description",
+        "openPath"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "DiffStats",
+    "description": "Colored +/− diff counter (same styling as the Changes panel).",
+    "category": "data",
+    "props": {
+      "type": "object",
+      "properties": {
+        "additions": {
+          "type": "number"
+        },
+        "deletions": {
+          "type": "number"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "sm",
+                "md"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "additions",
+        "deletions",
+        "size",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "DiffView",
+    "description": "Full text diff viewer using @pierre/diffs (same engine as Changes panel).",
+    "category": "data",
+    "props": {
+      "type": "object",
+      "properties": {
+        "oldContent": {
+          "type": "string"
+        },
+        "newContent": {
+          "type": "string"
+        },
+        "fileName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "diffStyle": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "unified",
+                "split"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "wordWrap": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "oldContent",
+        "newContent",
+        "fileName",
+        "diffStyle",
+        "wordWrap",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Drawer",
+    "description": "Bottom sheet drawer. Set openPath to a boolean state path. Use setState to toggle.",
+    "category": "feedback",
+    "props": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "openPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "description",
+        "openPath"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "DropdownMenu",
+    "description": "Dropdown menu with trigger button and selectable items. Use { $bindState } on value for selected item binding.",
+    "category": "input",
+    "props": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "items",
+        "value"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Grid",
+    "description": "Grid layout (1-6 columns)",
+    "category": "layout",
+    "props": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "gap": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "sm",
+                "md",
+                "lg",
+                "xl"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional CSS classes"
+        }
+      },
+      "required": [
+        "columns",
+        "gap",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "Heading",
+    "description": "Heading text (h1-h4)",
+    "category": "typography",
+    "props": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "level": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "h1",
+                "h2",
+                "h3",
+                "h4"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        },
+        "truncate": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "text",
+        "level",
+        "className",
+        "truncate"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Icon",
+    "description": "Dynamic Lucide icon resolved by name.",
+    "category": "typography",
+    "props": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Lucide icon name in PascalCase, e.g. GitBranch"
+        },
+        "size": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        },
+        "fallback": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "size",
+        "className",
+        "fallback"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Image",
+    "description": "Image component. Renders an img tag when src is provided, otherwise a placeholder.",
+    "category": "data",
+    "props": {
+      "type": "object",
+      "properties": {
+        "src": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "alt": {
+          "type": "string"
+        },
+        "width": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "height": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "src",
+        "alt",
+        "width",
+        "height"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Input",
+    "description": "Text input with AOS styling.",
+    "category": "input",
+    "props": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "text",
+                "email",
+                "password",
+                "number"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "placeholder": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "checks": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "type",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "validateOn": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "change",
+                "blur",
+                "submit"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "label",
+        "name",
+        "type",
+        "placeholder",
+        "value",
+        "checks",
+        "validateOn",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Link",
+    "description": "Anchor link. Bind on.press for click handler.",
+    "category": "input",
+    "props": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "href": {
+          "type": "string"
+        },
+        "external": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "variant": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "default",
+                "muted"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "label",
+        "href",
+        "external",
+        "variant",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "MarkdownContent",
+    "description": "Renders markdown with AOS MarkdownContent (tasks/chat parity). Bind content via $state, e.g. { $state: '/items/0/body' }.",
+    "category": "data",
+    "props": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "isUserMessage": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "content",
+        "isUserMessage",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Pagination",
+    "description": "Page navigation. Use { $bindState } on page for current page number.",
+    "category": "data",
+    "props": {
+      "type": "object",
+      "properties": {
+        "totalPages": {
+          "type": "number"
+        },
+        "page": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "totalPages",
+        "page"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Popover",
+    "description": "Popover that appears on click of trigger.",
+    "category": "feedback",
+    "props": {
+      "type": "object",
+      "properties": {
+        "trigger": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "trigger",
+        "content"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Progress",
+    "description": "Progress bar (value 0-100)",
+    "category": "data",
+    "props": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "max": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "value",
+        "max",
+        "label"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Radio",
+    "description": "Radio button group. Use { $bindState } on value for binding. Use checks for validation. validateOn controls timing (default: change).",
+    "category": "input",
+    "props": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "checks": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "type",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "validateOn": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "change",
+                "blur",
+                "submit"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "name",
+        "options",
+        "value",
+        "checks",
+        "validateOn"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "ScrollArea",
+    "description": "Scrollable region for sidebars and long content.",
+    "category": "layout",
+    "props": {
+      "type": "object",
+      "properties": {
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        },
+        "orientation": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "vertical",
+                "horizontal",
+                "both"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "className",
+        "orientation"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "SearchInput",
+    "description": "Sidebar search field (SplitPageLayout.SearchInput styling). Use { $bindState } on value.",
+    "category": "input",
+    "props": {
+      "type": "object",
+      "properties": {
+        "placeholder": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "placeholder",
+        "value",
+        "name",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Select",
+    "description": "Dropdown select input. Use { $bindState } on value for binding. Use checks for validation. validateOn controls timing (default: change).",
+    "category": "input",
+    "props": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "placeholder": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "checks": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "type",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "validateOn": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "change",
+                "blur",
+                "submit"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "name",
+        "options",
+        "placeholder",
+        "value",
+        "checks",
+        "validateOn"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Separator",
+    "description": "Visual separator line",
+    "category": "layout",
+    "props": {
+      "type": "object",
+      "properties": {
+        "orientation": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "horizontal",
+                "vertical"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "orientation",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Skeleton",
+    "description": "Loading placeholder skeleton",
+    "category": "feedback",
+    "props": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "height": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rounded": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "rounded"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Slider",
+    "description": "Range slider input. Use { $bindState } on value for binding.",
+    "category": "input",
+    "props": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "min": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "max": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "step": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "value": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "min",
+        "max",
+        "step",
+        "value"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Spinner",
+    "description": "Loading spinner indicator",
+    "category": "feedback",
+    "props": {
+      "type": "object",
+      "properties": {
+        "size": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "sm",
+                "md",
+                "lg"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "size",
+        "label"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "SplitPageContent",
+    "description": "Main content / detail column inside SplitPageLayout.",
+    "category": "layout",
+    "props": {
+      "type": "object",
+      "properties": {
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "SplitPageContentBody",
+    "description": "Scrollable detail body inside SplitPageContent.",
+    "category": "layout",
+    "props": {
+      "type": "object",
+      "properties": {
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "SplitPageContentHeader",
+    "description": "Detail header toolbar (title row + actions).",
+    "category": "layout",
+    "props": {
+      "type": "object",
+      "properties": {
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "SplitPageLayout",
+    "description": "Master-detail page shell (sidebar + content). Children: SplitPageSidebar + SplitPageContent.",
+    "category": "layout",
+    "props": {
+      "type": "object",
+      "properties": {
+        "variant": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "default",
+                "stacked"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "activeItemId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "variant",
+        "activeItemId",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "SplitPageSidebar",
+    "description": "Left sidebar column inside SplitPageLayout.",
+    "category": "layout",
+    "props": {
+      "type": "object",
+      "properties": {
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "SplitPageSidebarContent",
+    "description": "Scrollable list area inside the sidebar.",
+    "category": "layout",
+    "props": {
+      "type": "object",
+      "properties": {
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "SplitPageSidebarHeader",
+    "description": "Sticky header row inside the sidebar (search, tabs, actions).",
+    "category": "layout",
+    "props": {
+      "type": "object",
+      "properties": {
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "SplitPageSidebarItem",
+    "description": "Selectable sidebar row with title, meta, optional badge and diff stats.",
+    "category": "layout",
+    "props": {
+      "type": "object",
+      "properties": {
+        "itemIndex": {
+          "type": "number",
+          "description": "Index used to compare with /ui/selected"
+        },
+        "title": {
+          "type": "string"
+        },
+        "meta": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "badge": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "statusIcon": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Lucide icon for row status"
+        },
+        "statusTone": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "success",
+                "warning",
+                "danger",
+                "muted"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "additions": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "deletions": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "itemIndex",
+        "title",
+        "meta",
+        "badge",
+        "statusIcon",
+        "statusTone",
+        "additions",
+        "deletions",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Stack",
+    "description": "Flex container for layouts",
+    "category": "layout",
+    "props": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "horizontal",
+                "vertical"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gap": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "none",
+                "sm",
+                "md",
+                "lg",
+                "xl"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "align": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "start",
+                "center",
+                "end",
+                "stretch"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "justify": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "start",
+                "center",
+                "end",
+                "between",
+                "around"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "wrap": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "direction",
+        "gap",
+        "align",
+        "justify",
+        "wrap",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "Stat",
+    "description": "Metadata display — inline, tile, strip KPI cell, or Codex-style labeled row.",
+    "category": "data",
+    "props": {
+      "type": "object",
+      "properties": {
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Lucide icon name"
+        },
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "variant": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "inline",
+                "tile",
+                "strip",
+                "row"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "icon",
+        "label",
+        "value",
+        "variant",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Switch",
+    "description": "Toggle switch. Use { $bindState } on checked for binding. Use checks for validation. validateOn controls timing (default: change).",
+    "category": "input",
+    "props": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "checked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "checks": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "type",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "validateOn": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "change",
+                "blur",
+                "submit"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "name",
+        "checked",
+        "checks",
+        "validateOn"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Table",
+    "description": "Data table. columns: header labels. rows: 2D array of cell strings, e.g. [[\"Alice\",\"admin\"],[\"Bob\",\"user\"]].",
+    "category": "data",
+    "props": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "caption": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "columns",
+        "rows",
+        "caption"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Tabs",
+    "description": "Tab navigation. Use { $bindState } on value for active tab binding.",
+    "category": "navigation",
+    "props": {
+      "type": "object",
+      "properties": {
+        "tabs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "defaultValue": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "tabs",
+        "defaultValue",
+        "value"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [
+      "default"
+    ],
+    "acceptsChildren": true
+  },
+  {
+    "name": "TabsSubtle",
+    "description": "AOS subtle tabs (animated pill). Use { $bindState } on value for active tab.",
+    "category": "navigation",
+    "props": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
+              "icon": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Lucide icon name (PascalCase), e.g. GitPullRequest"
+              },
+              "count": {
+                "anyOf": [
+                  {
+                    "type": [
+                      "string",
+                      "number"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Optional count shown beside the tab (works with activeLabel)"
+              }
+            },
+            "required": [
+              "label",
+              "value",
+              "icon"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "activeLabel": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "items",
+        "value",
+        "activeLabel",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Text",
+    "description": "Paragraph text with AOS typography tokens.",
+    "category": "typography",
+    "props": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "variant": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "body",
+                "caption",
+                "muted",
+                "lead",
+                "code"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "weight": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "normal",
+                "medium",
+                "semibold"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "align": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "left",
+                "center",
+                "right"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "truncate": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "lines": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "className": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Additional Tailwind CSS classes"
+        }
+      },
+      "required": [
+        "text",
+        "variant",
+        "weight",
+        "align",
+        "truncate",
+        "lines",
+        "className"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Textarea",
+    "description": "Multi-line text input. Use { $bindState } on value for binding. Use checks for validation. validateOn controls timing (default: blur).",
+    "category": "input",
+    "props": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "placeholder": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rows": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "checks": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "type",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "validateOn": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "change",
+                "blur",
+                "submit"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "name",
+        "placeholder",
+        "rows",
+        "value",
+        "checks",
+        "validateOn"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Toggle",
+    "description": "Toggle button. Use { $bindState } on pressed for state binding.",
+    "category": "input",
+    "props": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "pressed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "variant": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "default",
+                "outline"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "pressed",
+        "variant"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "ToggleGroup",
+    "description": "Group of toggle buttons. Type 'single' (default) or 'multiple'. Use { $bindState } on value.",
+    "category": "input",
+    "props": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "single",
+                "multiple"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "type",
+        "value"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  },
+  {
+    "name": "Tooltip",
+    "description": "Hover tooltip. Shows content on hover over text.",
+    "category": "feedback",
+    "props": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "text"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "slots": [],
+    "acceptsChildren": false
+  }
+]

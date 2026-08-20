@@ -1,0 +1,489 @@
+# tool: Collections
+
+Data an agent shapes without a programmer: a schema, and the rows that
+follow it.
+
+A collection is a declaration — its fields, their types, what a hook
+normalises on write — and its records are the rows that declaration governs.
+"build me a CRM" becomes a collections_create for "contacts" plus the records
+an agent or a person files into it, nothing generated, nothing deployed.
+
+## Commands
+- **list** — every collection declared in the workspace, native and dynamic
+- **get** — one declaration, including a skill-scoped one (pass skill)
+- **create** — declare a new collection
+- **delete** — remove a declaration and unregister it
+- **records-list** — the rows of one collection
+- **records-get** — one row
+- **records-create** — file a new row
+- **records-update** — revalidate and rewrite a row
+- **records-delete** — remove a row
+
+## When to use
+- **Structured data with no fixed shape in this codebase:** declare a
+  collection before inventing a file format for it
+- **A skill's own collection:** list returns it with its Skill field; get and
+  delete need that field back to resolve it
+
+## When NOT to use
+- Not for anything already native (tasks, agents, memories) — those have
+  their own groups and their own validation
+- Not for one-off, unstructured content — that is a file
+
+Composite tool `Collections` with 9 actions: create, delete, get, list, records-create, records-delete, records-get, records-list, records-update.
+
+A record is validated against its collection's schema on every write, not
+only when it looks wrong: a hook runs before validation, so what fails or
+passes is what was actually stored, never what was typed before the hook
+touched it.
+
+A skill-scoped collection is removed automatically when its skill is
+uninstalled — deleting it directly, by hand, is rarely what you want while
+the skill is still installed.
+
+## Usage
+Call as `Collections({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### collections_create
+
+Declare a new collection.
+
+Declare a table: its fields and, optionally, the hooks that normalise a
+record before it is validated.
+
+The schema is checked for internal coherence — every ref points at something
+real, every enum has values, no field is named twice — before anything is
+written, and the collection is registered only once the write to disk has
+actually succeeded.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier for the collection. Also its directory name: lowercase, digits, hyphen and underscore only."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human name of the collection. Example: \"Contacts\"."
+    },
+    "description": {
+      "type": "string",
+      "description": "What this collection is for."
+    },
+    "scope": {
+      "type": "string",
+      "description": "workspace or skill. Defaults to workspace."
+    },
+    "skill": {
+      "type": "string",
+      "description": "The skill this collection ships with, when Scope is skill."
+    },
+    "format": {
+      "type": "string",
+      "description": "md or json — how each record of this collection is laid out on disk."
+    },
+    "fields": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the field. How a record refers to it."
+          },
+          "type": {
+            "type": "string",
+            "description": "One of: string, number, boolean, date, enum, ref, list."
+          },
+          "description": {
+            "type": "string",
+            "description": "What this field holds, for whoever fills it in."
+          },
+          "required": {
+            "type": "boolean",
+            "description": "Whether a record must give this field a value."
+          },
+          "enum": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The allowed values, for a field of type enum."
+          },
+          "ref": {
+            "type": "string",
+            "description": "The id of another collection, for a field of type ref."
+          },
+          "default": {
+            "description": "Value used when a create hook of action defaultTo applies."
+          },
+          "unique": {
+            "type": "boolean",
+            "description": "Whether two records of this collection may share this value."
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "additionalProperties": false
+      },
+      "description": "The declared columns of a record. At least one is required."
+    },
+    "hooks": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "on": {
+            "type": "string",
+            "description": "When this hook runs: create or update."
+          },
+          "action": {
+            "type": "string",
+            "description": "One of: setTimestamp, slugify, defaultTo, computeFrom."
+          },
+          "field": {
+            "type": "string",
+            "description": "The field this hook writes."
+          },
+          "from": {
+            "type": "string",
+            "description": "Source field, for slugify and computeFrom."
+          },
+          "value": {
+            "description": "The default value, for defaultTo."
+          }
+        },
+        "required": [
+          "on",
+          "action",
+          "field"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Declarative normalisations applied to a record on create or update."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "format",
+    "fields",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### collections_delete
+
+Remove a collection's declaration.
+
+Remove a declaration and unregister it. Its records go with it — nothing
+can resolve a write against a declaration that no longer exists.
+
+A skill-scoped collection is normally removed by uninstalling the skill, not
+by calling this directly while the skill is still installed.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the collection to remove."
+    },
+    "skill": {
+      "type": "string",
+      "description": "The skill this collection ships with, when it is skill-scoped."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### collections_get
+
+Read one collection's declaration.
+
+Read one collection: its fields, their types, and the hooks that
+normalise a record on write.
+
+A skill-scoped collection needs its Skill back to resolve — collections_list
+reports it on every entry, so a caller that listed first already has it.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the collection."
+    },
+    "skill": {
+      "type": "string",
+      "description": "The skill this collection ships with, when it is skill-scoped. Required to resolve one — collections_list reports it on every entry."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### collections_list
+
+List every declared collection.
+
+Every collection declared in the workspace — native and dynamic, workspace-scoped and skill-scoped alike.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### collections_records-create
+
+File a new row.
+
+Add a record to a collection.
+
+The declared hooks normalise the data first, then it is validated against the
+schema and, for a field declared unique, against what is already stored.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "collection": {
+      "type": "string",
+      "description": "Id of the collection to file the record into."
+    },
+    "data": {
+      "type": "object",
+      "description": "The record's fields, as declared by its collection's schema.",
+      "additionalProperties": true
+    },
+    "content": {
+      "type": "string",
+      "description": "The Markdown body, for a collection of format md. Ignored for json."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "collection",
+    "data",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### collections_records-delete
+
+Remove a row.
+
+Remove one record from a collection.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "collection": {
+      "type": "string",
+      "description": "Id of the record's collection."
+    },
+    "id": {
+      "type": "string",
+      "description": "Identifier of the record to remove."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "collection",
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### collections_records-get
+
+Read one row.
+
+Read one record of a collection in full.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "collection": {
+      "type": "string",
+      "description": "Id of the record's collection."
+    },
+    "id": {
+      "type": "string",
+      "description": "Identifier of the record."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "collection",
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### collections_records-list
+
+List a collection's rows.
+
+Every row of one collection matching the given filters and order.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "collection": {
+      "type": "string",
+      "description": "Id of the collection to list records from."
+    },
+    "filters": {
+      "type": "object",
+      "description": "Field values a record must match, by field name.",
+      "additionalProperties": true
+    },
+    "orderBy": {
+      "type": "string",
+      "description": "Name of a declared field to order by. Empty orders by path, which is stable."
+    },
+    "desc": {
+      "type": "boolean",
+      "description": "Reverse the order."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Maximum number of records to return. 0 means no limit."
+    },
+    "offset": {
+      "type": "integer",
+      "description": "Number of matching records to skip, for pagination."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "collection",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### collections_records-update
+
+Revalidate and rewrite a row.
+
+Replace a record's fields and revalidate them. A refusal leaves the
+stored record untouched — nothing between reading it and validating the new
+data can have written anything.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "collection": {
+      "type": "string",
+      "description": "Id of the record's collection."
+    },
+    "id": {
+      "type": "string",
+      "description": "Identifier of the record to rewrite."
+    },
+    "data": {
+      "type": "object",
+      "description": "The record's new fields, replacing the old ones wholesale.",
+      "additionalProperties": true
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "collection",
+    "id",
+    "data",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+

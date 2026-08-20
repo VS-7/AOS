@@ -124,7 +124,12 @@ describe("call", () => {
   });
 
   it("answers dormant without touching the network", async () => {
-    const r = await call("collection", "list");
+    // The example moved, the behaviour did not: `collection` was the
+    // stand-in dormant domain until task-10 lit it (along with `view`,
+    // `toolset` and `skill`). `instruction` is still whole-domain dormant
+    // — it is the same domain this file's `useQuery` comment already names
+    // — so it inherits the job of proving the short-circuit is real.
+    const r = await call("instruction", "list");
     expect(invoke).not.toHaveBeenCalled();
     expect(r.data).toBeUndefined();
     expect(r.error?.code).toBe(DORMANT_CODE);
@@ -242,7 +247,9 @@ describe("useQuery's queryFn", () => {
 
   it("resolves a dormant call to null data, not undefined", async () => {
     const { wrapper } = withQueryClient();
-    const { result } = renderHook(() => api.collection!.list!.useQuery(), { wrapper });
+    // `instruction`, not `collection`: task-10 lit `collection`, so it no
+    // longer exercises the dormant branch this test exists for.
+    const { result } = renderHook(() => api.instruction!.list!.useQuery(), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -316,13 +323,20 @@ describe("useQuery's onSuccess shim", () => {
     // tests above), and this shim's only condition is `result.isSuccess` —
     // it does not special-case dormant. A dormant screen's `onSuccess`, if
     // it has one, does get called once with `null`.
+    //
+    // `instruction`, not `collection`: task-10 lit `collection`. This one
+    // kept passing after that — a live call with no `invoke` mock also
+    // resolves to `null` — so it silently stopped being about dormancy at
+    // all. The `invoke` assertion below is what makes the next such move
+    // fail loudly instead of drifting.
     const onSuccess = vi.fn();
     const { wrapper } = withQueryClient();
-    const { result } = renderHook(() => api.collection!.list!.useQuery({ onSuccess }), { wrapper });
+    const { result } = renderHook(() => api.instruction!.list!.useQuery({ onSuccess }), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
 
+    expect(invoke).not.toHaveBeenCalled();
     expect(onSuccess).toHaveBeenCalledWith(null);
   });
 

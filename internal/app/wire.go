@@ -22,7 +22,10 @@ import (
 	"github.com/OWNER/aos/internal/adapters/fsthemes"
 	"github.com/OWNER/aos/internal/adapters/fsworkspace"
 	"github.com/OWNER/aos/internal/adapters/gitcli"
+	"github.com/OWNER/aos/internal/adapters/mcpclient"
 	"github.com/OWNER/aos/internal/adapters/osfile"
+	"github.com/OWNER/aos/internal/adapters/skillfetch"
+	"github.com/OWNER/aos/internal/adapters/skillfiles"
 	"github.com/OWNER/aos/internal/adapters/sqlitequeue"
 	"github.com/OWNER/aos/internal/adapters/supervise"
 	"github.com/OWNER/aos/internal/core/build"
@@ -37,6 +40,7 @@ import (
 	"github.com/OWNER/aos/internal/domain/agent"
 	"github.com/OWNER/aos/internal/domain/auth"
 	"github.com/OWNER/aos/internal/domain/chat"
+	"github.com/OWNER/aos/internal/domain/collection"
 	"github.com/OWNER/aos/internal/domain/comment"
 	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/domain/event"
@@ -45,9 +49,12 @@ import (
 	"github.com/OWNER/aos/internal/domain/job"
 	"github.com/OWNER/aos/internal/domain/memory"
 	"github.com/OWNER/aos/internal/domain/routine"
+	"github.com/OWNER/aos/internal/domain/skill"
 	"github.com/OWNER/aos/internal/domain/task"
 	"github.com/OWNER/aos/internal/domain/theme"
 	"github.com/OWNER/aos/internal/domain/todo"
+	"github.com/OWNER/aos/internal/domain/toolset"
+	"github.com/OWNER/aos/internal/domain/view"
 	"github.com/OWNER/aos/internal/domain/workspace"
 	"github.com/OWNER/aos/internal/runtime/agentloop"
 	"github.com/OWNER/aos/internal/runtime/prompt"
@@ -117,6 +124,24 @@ type App struct {
 	// Themes is the appearance of the application: the built-in presets and
 	// the user's, with the tokens every component reads.
 	Themes *theme.Service
+
+	// CollectionRegistry is what dynamic collections are registered into. It
+	// is exported for the same reason Clock is: Serve and the watcher build
+	// on it, and a test needs to assert that a collection an agent created
+	// is actually reachable.
+	//
+	// It is deliberately not called Collections — that name belongs to the
+	// service, and two fields one letter apart is how a test ends up
+	// asserting against the wrong one.
+	CollectionRegistry *collections.Registry
+
+	// Collections is the collection domain: declarations and their records.
+	Collections *collection.Service
+
+	// Views, Toolsets and Skills complete the ecosystem slice.
+	Views    *view.Service
+	Toolsets *toolset.Service
+	Skills   *skill.Installer
 
 	// Queue is the durable store behind the worker. It is exported so a test
 	// can enqueue and drain deterministically rather than waiting on a tick.
@@ -209,14 +234,24 @@ func New(opts Options) (*App, error) {
 	lock := collections.NewPathLock(filepath.Join(paths.Runtime(), "locks"))
 	cache := fscollections.NewIndex()
 
-	repos, err := newRepoSet(root, lock, cache)
-	if err != nil {
-		return nil, err
-	}
+	// The runtime registry every dynamic collection — one an agent declares,
+	// or one a skill brings — is registered into. Built once, here, and
+	// threaded through collection.Service and, later, Serve and the watcher
+	// (see the CollectionRegistry field's own doc comment on App).
+	collReg := collections.NewRegistry()
 
 	logger := logging.New(logging.Config{})
 	active := resolver.String(env.KeyWorkspaceID, "")
 	events := realtime.NewHub(logger, clock)
+
+	// Repositories are built only now, after events exists: the four
+	// ecosystem natives (collections, views, toolsets, skills) publish a
+	// Changed event on every write, and NewRepoSet needs the hub to build
+	// the publisher that carries it — see WithPublisher below.
+	repos, err := newRepoSet(root, lock, cache, collectionPublisher{hub: events, workspace: active})
+	if err != nil {
+		return nil, err
+	}
 
 	// The search index is per workspace and lives outside the user's repository
 	// so it is never committed (ADR-0013). Without an active workspace there is
@@ -387,6 +422,53 @@ func New(opts Options) (*App, error) {
 	activitySvc.AddSink(routineTriggers{routines: routineSvc})
 
 	reg := command.NewRegistry()
+
+	// The ecosystem slice (Task 10): structured data an agent shapes at
+	// runtime (collections), the screens composed over it (views), external
+	// connections reached through one call (toolsets), and the packages that
+	// bring all three together with agents and memories (skills).
+	collectionSvc := collection.NewService(collection.Deps{
+		Repo:     repos.collections,
+		Registry: collReg,
+		Clock:    clock,
+		RecordRepos: fscollections.NewRecordRepos(root,
+			fscollections.WithRecordLock(lock),
+			fscollections.WithRecordIndex(cache),
+			fscollections.WithRecordPublisher(collectionPublisher{hub: events, workspace: active}),
+		),
+		IDs: idgen,
+	})
+	viewSvc := view.NewService(view.Deps{
+		Repo:        repos.views,
+		Collections: collectionsForViews{svc: collectionSvc},
+		Commands:    registryCommands{reg: reg},
+		Clock:       clock,
+	})
+	toolsetSvc := toolset.NewService(toolset.Deps{
+		Repo: repos.toolsets,
+		Adapters: toolset.Adapters{
+			// Only mcp-server::stdio connects in this build; the other four
+			// Types decode and list but refuse Call as not yet available —
+			// see toolset.Service.Call and mcpclient's own doc.
+			toolset.MCPStdio: mcpclient.NewStdio,
+		},
+		Activities: activitySvc,
+		Env:        resolver,
+		Clock:      clock,
+		Log:        logger,
+	})
+	skillInstaller := skill.NewInstaller(skill.Deps{
+		Fetcher:     skillfetch.New(),
+		Approver:    broker,
+		Repo:        repos.skills,
+		Collections: collectionSvc,
+		Views:       viewSvc,
+		Files:       skillfiles.New(root),
+		Hooks:       noopSkillHooks{},
+		Toolsets:    noopSkillToolsets{},
+		Clock:       clock,
+	})
+
 	config.Register(reg, configSvc)
 	registerApprovals(reg, broker)
 	gateway.Register(reg, gatewaySvc)
@@ -400,6 +482,10 @@ func New(opts Options) (*App, error) {
 	routine.Register(reg, routineSvc)
 	activity.Register(reg, activitySvc)
 	theme.Register(reg, themeSvc)
+	collection.Register(reg, collectionSvc)
+	view.Register(reg, viewSvc)
+	toolset.Register(reg, toolsetSvc)
+	skill.Register(reg, skillInstaller)
 
 	assembler := prompt.NewAssembler(prompt.Deps{
 		Clock:  promptClock{clock: clock, zone: zoneFrom(configSvc, logger)},
@@ -523,6 +609,12 @@ func New(opts Options) (*App, error) {
 		Worker:       pool,
 		Subconscious: observer,
 
+		CollectionRegistry: collReg,
+		Collections:        collectionSvc,
+		Views:              viewSvc,
+		Toolsets:           toolsetSvc,
+		Skills:             skillInstaller,
+
 		Clock:   clock,
 		env:     resolver,
 		closers: closers,
@@ -570,9 +662,17 @@ type repoSet struct {
 	comments *fscollections.Repo[comment.Comment]
 	routines *fscollections.Repo[routine.Routine]
 	runs     *fscollections.Repo[routine.Run]
+
+	// The ecosystem slice (Task 10): unlike everything above, these four
+	// publish a Changed event on every write — see pub below and
+	// collectionPublisher in ecosystem.go.
+	collections *fscollections.Repo[collection.Collection]
+	views       *fscollections.Repo[view.View]
+	toolsets    *fscollections.Repo[toolset.Toolset]
+	skills      *fscollections.Repo[skill.Skill]
 }
 
-func newRepoSet(root string, lock *collections.PathLock, index *fscollections.Index) (repoSet, error) {
+func newRepoSet(root string, lock *collections.PathLock, index *fscollections.Index, pub collections.Publisher) (repoSet, error) {
 	agentModel, err := collections.ModelOf[agent.Agent]("agents")
 	if err != nil {
 		return repoSet{}, err
@@ -602,6 +702,22 @@ func newRepoSet(root string, lock *collections.PathLock, index *fscollections.In
 		return repoSet{}, err
 	}
 	runModel, err := collections.ModelOf[routine.Run]("runs")
+	if err != nil {
+		return repoSet{}, err
+	}
+	collectionModel, err := collections.ModelOf[collection.Collection]("collections")
+	if err != nil {
+		return repoSet{}, err
+	}
+	viewModel, err := collections.ModelOf[view.View]("views")
+	if err != nil {
+		return repoSet{}, err
+	}
+	toolsetModel, err := collections.ModelOf[toolset.Toolset]("toolsets")
+	if err != nil {
+		return repoSet{}, err
+	}
+	skillModel, err := collections.ModelOf[skill.Skill]("skills")
 	if err != nil {
 		return repoSet{}, err
 	}
@@ -637,6 +753,26 @@ func newRepoSet(root string, lock *collections.PathLock, index *fscollections.In
 		runs: fscollections.New(root, runModel,
 			fscollections.WithLock[routine.Run](lock),
 			fscollections.WithIndex[routine.Run](index),
+		),
+		collections: fscollections.New(root, collectionModel,
+			fscollections.WithLock[collection.Collection](lock),
+			fscollections.WithIndex[collection.Collection](index),
+			fscollections.WithPublisher[collection.Collection](pub),
+		),
+		views: fscollections.New(root, viewModel,
+			fscollections.WithLock[view.View](lock),
+			fscollections.WithIndex[view.View](index),
+			fscollections.WithPublisher[view.View](pub),
+		),
+		toolsets: fscollections.New(root, toolsetModel,
+			fscollections.WithLock[toolset.Toolset](lock),
+			fscollections.WithIndex[toolset.Toolset](index),
+			fscollections.WithPublisher[toolset.Toolset](pub),
+		),
+		skills: fscollections.New(root, skillModel,
+			fscollections.WithLock[skill.Skill](lock),
+			fscollections.WithIndex[skill.Skill](index),
+			fscollections.WithPublisher[skill.Skill](pub),
 		),
 	}, nil
 }

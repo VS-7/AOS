@@ -78,6 +78,18 @@ func jsonNameOf(f reflect.StructField) string {
 // it lacks a "---" would make the format less editable than it promises to be.
 func Decode[T any](data []byte, key Key, m Model[T]) (*T, error) {
 	v := new(T)
+
+	// A Record carries its schema in data, so there are no struct tags to
+	// reflect over. The branch is here rather than behind an interface because
+	// there is exactly one such type and naming it is clearer than a protocol
+	// with one implementer.
+	if rec, ok := any(v).(*Record); ok {
+		if err := decodeRecord(rec, data, key, m.Name, m.Format); err != nil {
+			return nil, err
+		}
+		return v, nil
+	}
+
 	rv := reflect.ValueOf(v).Elem()
 	if rv.Kind() != reflect.Struct {
 		return nil, errDecode(m.Name, key.String(), errNotAStruct)
@@ -113,6 +125,10 @@ func Decode[T any](data []byte, key Key, m Model[T]) (*T, error) {
 // collection:"content" are cleared before serialisation, so they never end up
 // duplicated in the front matter: the path is their only home.
 func Encode[T any](v *T, m Model[T]) ([]byte, error) {
+	if rec, ok := any(v).(*Record); ok {
+		return encodeRecord(rec, m.Name, m.Format)
+	}
+
 	rv := reflect.ValueOf(v).Elem()
 	if rv.Kind() != reflect.Struct {
 		return nil, errEncode(m.Name, errNotAStruct)
@@ -211,6 +227,10 @@ func setString(f reflect.Value, s string) {
 // KeyOf reads the path placeholders back out of a record, which is how the
 // engine knows where to write a value it was handed.
 func KeyOf[T any](v *T) Key {
+	if rec, ok := any(v).(*Record); ok {
+		return rec.Key.Clone()
+	}
+
 	rv := reflect.ValueOf(v).Elem()
 	if rv.Kind() != reflect.Struct {
 		return Key{}
@@ -232,6 +252,11 @@ func KeyOf[T any](v *T) Key {
 // FieldOf reads a front-matter field by its JSON name, for List filters and
 // ordering. It returns ok=false when the record has no such field.
 func FieldOf[T any](v *T, name string) (any, bool) {
+	if rec, ok := any(v).(*Record); ok {
+		val, found := rec.Fields[name]
+		return val, found
+	}
+
 	rv := reflect.ValueOf(v).Elem()
 	if rv.Kind() != reflect.Struct {
 		return nil, false
@@ -252,6 +277,21 @@ func FieldOf[T any](v *T, name string) (any, bool) {
 // skill document — while the workspace inventory only needs names, so caching
 // bodies would spend memory per workspace for nothing.
 func WithoutBody[T any](v *T) *T {
+	if rec, ok := any(v).(*Record); ok {
+		light := *rec
+		light.Content = ""
+		light.Key = rec.Key.Clone()
+		// Fields is a map, and its values may themselves be maps or slices —
+		// a "list" field, a JSON-format collection's nested object. A shallow
+		// struct copy still shares all of that with the record the in-memory
+		// index holds; CloneJSON is what keeps a caller's mutation of the
+		// result from reaching into the index at any depth.
+		if rec.Fields != nil {
+			light.Fields, _ = CloneJSON(rec.Fields).(map[string]any)
+		}
+		return any(&light).(*T)
+	}
+
 	clone := *v
 	rv := reflect.ValueOf(&clone).Elem()
 	if rv.Kind() != reflect.Struct {
@@ -261,4 +301,80 @@ func WithoutBody[T any](v *T) *T {
 		rv.Field(p.content).SetZero()
 	}
 	return &clone
+}
+
+// decodeRecord is Decode for a dynamic collection. The key comes from the path
+// and overwrites whatever the file claimed, for the same reason the native
+// path does it: the location is the identity.
+func decodeRecord(rec *Record, data []byte, key Key, name string, format Format) error {
+	rec.Fields = map[string]any{}
+	switch format {
+	case FormatJSON:
+		if len(bytes.TrimSpace(data)) > 0 {
+			if err := json.Unmarshal(data, &rec.Fields); err != nil {
+				return errDecode(name, key.String(), err)
+			}
+		}
+	default:
+		front, body := splitFrontMatter(data)
+		if len(bytes.TrimSpace(front)) > 0 {
+			if err := yaml.Unmarshal(front, &rec.Fields); err != nil {
+				return errDecode(name, key.String(), err)
+			}
+		}
+		rec.Content = string(body)
+	}
+	rec.Key = key.Clone()
+	return nil
+}
+
+// encodeRecord is the exact inverse. The key is not serialised: the path is
+// its only home, which is the same invariant Encode holds for a native's
+// collection:"path" fields.
+//
+// The Markdown branch mirrors Encode byte for byte — same delimiters, same
+// blank-line rule before the body, same forced trailing newline on the body —
+// because splitFrontMatter has to read back whatever this writes. A Record
+// that round-tripped only through its own format would be a second file
+// format wearing the first one's extension.
+//
+// The forced newline is not cosmetic here: ADR-0004 means these files are
+// meant to be versioned in git and edited by hand, and dynamic-collection
+// records are the ones an agent will create in the greatest number. A file
+// missing its final newline shows up as "\ No newline at end of file" in
+// every diff — a permanent, avoidable blemish on exactly the files users will
+// see most.
+func encodeRecord(rec *Record, name string, format Format) ([]byte, error) {
+	fields := rec.Fields
+	if fields == nil {
+		fields = map[string]any{}
+	}
+	if format == FormatJSON {
+		data, err := json.MarshalIndent(fields, "", "  ")
+		if err != nil {
+			return nil, errEncode(name, err)
+		}
+		return append(data, '\n'), nil
+	}
+
+	front, err := marshalYAML(fields)
+	if err != nil {
+		return nil, errEncode(name, err)
+	}
+
+	var b bytes.Buffer
+	b.WriteString("---\n")
+	b.Write(front)
+	if !bytes.HasSuffix(front, []byte("\n")) {
+		b.WriteByte('\n')
+	}
+	b.WriteString("---\n")
+	if rec.Content != "" {
+		b.WriteString("\n")
+		b.WriteString(rec.Content)
+		if !strings.HasSuffix(rec.Content, "\n") {
+			b.WriteByte('\n')
+		}
+	}
+	return b.Bytes(), nil
 }

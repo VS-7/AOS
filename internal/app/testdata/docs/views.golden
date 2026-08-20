@@ -1,0 +1,388 @@
+# tool: Views
+
+A view is a tree of catalog components, bound to a collection's data, stored
+as data — the frontend renders it the moment it is written.
+
+Every button a view offers names a real command in the registry, checked when
+the view is written and again when the button is pressed: a view is a
+description of a screen, not a second way to write data that skips the
+validation and the authorisation every other caller gets.
+
+## Commands
+- **list** — every view declared in the workspace, native and dynamic
+- **get** — one declaration, including a skill-scoped one (pass skill)
+- **render** — a view with its source data attached, ready to paint
+- **execute-action** — press a button: dispatch the command it names
+- **delete** — remove a view
+
+## When to use
+- **After a collection exists and needs a screen:** scaffold one, or compose
+  a tree by hand with create
+- **A skill-scoped view:** list returns it with its Skill field; get, render
+  and delete need that field back to resolve it
+
+## When NOT to use
+- Not to run logic — every action is a command call, never code
+
+Composite tool `Views` with 8 actions: components, create, delete, execute-action, get, list, render, scaffold.
+
+execute-action can invoke anything the view's own tree names, including a
+command that writes or deletes. Approve it the way you would approve calling
+that command directly — the button is a shortcut to the call, not a lighter
+version of it.
+
+## Usage
+Call as `Views({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### views_components
+
+List the catalog of components a view can compose.
+
+Every component the design system publishes: its name, its declared
+props and whether it accepts children — read this before composing a tree by
+hand, so create is not a guess.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### views_create
+
+Compose a new view.
+
+Declare a screen: a tree of catalog components bound to a collection's
+fields.
+
+The whole tree is validated against the source collection and against the
+command registry before anything is written — an unknown component, an unbound
+field or an action naming a command that does not exist is refused here, not
+discovered later as a blank screen.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier for the view. Also its file name: lowercase, digits, hyphen and underscore only."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human name of the view. Example: \"Deals by stage\"."
+    },
+    "title": {
+      "type": "string",
+      "description": "Heading the frontend shows above the rendered tree."
+    },
+    "description": {
+      "type": "string",
+      "description": "What this view is for."
+    },
+    "scope": {
+      "type": "string",
+      "description": "user or skill. Defaults to user."
+    },
+    "skill": {
+      "type": "string",
+      "description": "The skill this view ships with, when Scope is skill."
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "collection": {
+          "type": "string",
+          "description": "Id of the collection this view's data comes from."
+        },
+        "filter": {
+          "type": "object",
+          "description": "Field values a record must match, by field name.",
+          "additionalProperties": true
+        },
+        "sort": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "description": "Name of a declared field of the source collection to order by."
+              },
+              "desc": {
+                "type": "boolean",
+                "description": "Reverse the order. False sorts ascending."
+              }
+            },
+            "required": [
+              "field"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Fields to order the rows by, applied in order."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of records to render. 0 means no limit."
+        }
+      },
+      "description": "Where this view's data comes from.",
+      "required": [
+        "collection"
+      ],
+      "additionalProperties": false
+    },
+    "tree": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 255
+      },
+      "description": "The composed tree of catalog components: {component, props?, bind?, children?, actions?}, nested arbitrarily. Call views_components first to see what a component accepts."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "source",
+    "tree",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### views_delete
+
+Remove a view.
+
+Remove a view's declaration.
+
+A skill-scoped view is normally removed by uninstalling the skill, not by
+calling this directly while the skill is still installed.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the view to remove."
+    },
+    "skill": {
+      "type": "string",
+      "description": "The skill this view ships with, when it is skill-scoped."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### views_execute-action
+
+Press a button in a view.
+
+Dispatch the command one of a view's declared actions names, by its
+Label.
+
+This does not execute anything itself: it resolves the action the view
+already declared and validated, merges the caller's input over the action's
+own, and invokes the named command through the same registry a CLI or an MCP
+call would go through — the same input validation, the same authorisation.
+What this can do therefore depends entirely on what the button names: a
+read, or a delete, or anything registered.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the view the action belongs to."
+    },
+    "label": {
+      "type": "string",
+      "description": "Label of the action within the view's tree, as declared."
+    },
+    "input": {
+      "type": "object",
+      "description": "Arguments to invoke the command with, merged over the action's own declared input.",
+      "additionalProperties": true
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "label",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### views_get
+
+Read one view's declaration.
+
+Read one view's tree, unresolved — no source data attached. Use render to
+get the tree together with the rows it binds to.
+
+A skill-scoped view needs its Skill back to resolve — views_list reports it
+on every entry.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the view."
+    },
+    "skill": {
+      "type": "string",
+      "description": "The skill this view ships with, when it is skill-scoped. Required to resolve one — views_list reports it on every entry."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### views_list
+
+List every declared view.
+
+Every view declared in the workspace — native and dynamic, user-scoped and skill-scoped alike.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### views_render
+
+Resolve a view against its source data.
+
+The view's tree, with the rows its source names actually attached — what
+the frontend paints. No build, no deploy: this is called fresh every time the
+screen opens.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the view to render."
+    },
+    "skill": {
+      "type": "string",
+      "description": "The skill this view ships with, when it is skill-scoped."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### views_scaffold
+
+Compose a view an agent did not have to design by hand.
+
+Map a collection's declared fields to the component that shows each one,
+producing a tree that already survives what create would validate — this
+does not write anything, it only composes; call create with the result to
+save it.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "collection": {
+      "type": "string",
+      "description": "Id of the collection to compose a screen for."
+    },
+    "kind": {
+      "type": "string",
+      "description": "table, board or detail. Defaults to table."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "collection",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+

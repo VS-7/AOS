@@ -31,7 +31,7 @@ func newSeeder(lock *collections.PathLock, index *fscollections.Index, clock clo
 // the process was started in — creating a workspace writes into whichever
 // directory the caller named.
 func (s *seeder) serviceFor(root string) (*agent.Service, error) {
-	repos, err := newRepoSet(root, s.lock, s.index)
+	repos, err := newRepoSet(root, s.lock, s.index, collections.NopPublisher{})
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ const maxListedKeys = 50
 // a session, and the cheapest question in the system should not be answered by
 // loading every file in the repository.
 func (s *surveyor) Survey(ctx context.Context, root string) ([]workspace.CollectionSummary, error) {
-	repos, err := newRepoSet(root, s.lock, s.index)
+	repos, err := newRepoSet(root, s.lock, s.index, collections.NopPublisher{})
 	if err != nil {
 		return nil, err
 	}

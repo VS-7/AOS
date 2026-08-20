@@ -261,6 +261,107 @@ export interface CommandMap {
     /** What to say. Address a specific agent with @slug. */
     "text": string;
   }; output: unknown };
+  /** Declare a new collection. */
+  "collections_create": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** What this collection is for. */
+    "description"?: string;
+    /** The declared columns of a record. At least one is required. */
+    "fields": unknown;
+    /** md or json — how each record of this collection is laid out on disk. */
+    "format": string;
+    /** Declarative normalisations applied to a record on create or update. */
+    "hooks"?: unknown;
+    /** Identifier for the collection. Also its directory name: lowercase, digits, hyphen and underscore only. */
+    "id": string;
+    /** Human name of the collection. Example: "Contacts". */
+    "name": string;
+    /** workspace or skill. Defaults to workspace. */
+    "scope"?: string;
+    /** The skill this collection ships with, when Scope is skill. */
+    "skill"?: string;
+  }; output: unknown };
+  /** Remove a collection's declaration. */
+  "collections_delete": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the collection to remove. */
+    "id": string;
+    /** The skill this collection ships with, when it is skill-scoped. */
+    "skill"?: string;
+  }; output: unknown };
+  /** Read one collection's declaration. */
+  "collections_get": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the collection. */
+    "id": string;
+    /** The skill this collection ships with, when it is skill-scoped. Required to resolve one — collections_list reports it on every entry. */
+    "skill"?: string;
+  }; output: unknown };
+  /** List every declared collection. */
+  "collections_list": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+  }; output: unknown };
+  /** File a new row. */
+  "collections_records-create": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Id of the collection to file the record into. */
+    "collection": string;
+    /** The Markdown body, for a collection of format md. Ignored for json. */
+    "content"?: string;
+    /** The record's fields, as declared by its collection's schema. */
+    "data": Record<string, unknown>;
+  }; output: unknown };
+  /** Remove a row. */
+  "collections_records-delete": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Id of the record's collection. */
+    "collection": string;
+    /** Identifier of the record to remove. */
+    "id": string;
+  }; output: unknown };
+  /** Read one row. */
+  "collections_records-get": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Id of the record's collection. */
+    "collection": string;
+    /** Identifier of the record. */
+    "id": string;
+  }; output: unknown };
+  /** List a collection's rows. */
+  "collections_records-list": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Id of the collection to list records from. */
+    "collection": string;
+    /** Reverse the order. */
+    "desc"?: boolean;
+    /** Field values a record must match, by field name. */
+    "filters"?: Record<string, unknown>;
+    /** Maximum number of records to return. 0 means no limit. */
+    "limit"?: number;
+    /** Number of matching records to skip, for pagination. */
+    "offset"?: number;
+    /** Name of a declared field to order by. Empty orders by path, which is stable. */
+    "orderBy"?: string;
+  }; output: unknown };
+  /** Revalidate and rewrite a row. */
+  "collections_records-update": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Id of the record's collection. */
+    "collection": string;
+    /** The record's new fields, replacing the old ones wholesale. */
+    "data": Record<string, unknown>;
+    /** Identifier of the record to rewrite. */
+    "id": string;
+  }; output: unknown };
   /** Write a comment on a task. */
   "comments_create": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
@@ -584,6 +685,45 @@ export interface CommandMap {
     /** New triggers. Replaces the old ones whole; a webhook among them mints a new token. */
     "triggers"?: unknown;
   }; output: unknown };
+  /** Install a skill package, from a script or an agent assembling one. */
+  "skills_create": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Version to install — a tag or a commit. Empty installs whatever the source currently holds. */
+    "ref"?: string;
+    /** Where the package is. A local directory today. */
+    "source": string;
+  }; output: unknown };
+  /** Uninstall a skill. */
+  "skills_delete": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the skill to uninstall. */
+    "id": string;
+  }; output: unknown };
+  /** Install a skill package. */
+  "skills_install": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Version to install — a tag or a commit. Empty installs whatever the source currently holds. */
+    "ref"?: string;
+    /** Where the package is. A local directory today. */
+    "source": string;
+  }; output: unknown };
+  /** List every installed skill. */
+  "skills_list": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+  }; output: unknown };
+  /** Turn a skill's live behaviour on or off. */
+  "skills_update": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Turn this skill's hooks and toolsets on (true) or off (false). Omit to leave unchanged. */
+    "active"?: unknown;
+    /** Identifier of the skill to update. */
+    "id": string;
+  }; output: unknown };
   /** Cut the isolated checkout a task executes in. */
   "tasks_branch": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
@@ -824,6 +964,151 @@ export interface CommandMap {
     /** New title. */
     "title"?: unknown;
   }; output: unknown };
+  /** Run one tool of a connected toolset. */
+  "toolsets_call": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the toolset to call. */
+    "id": string;
+    /** Arguments for the tool. Opaque to this service — call toolsets_get with schema:true first. */
+    "input"?: unknown;
+    /** Name of the tool, as published by the connected target. */
+    "tool": string;
+  }; output: unknown };
+  /** Remove a toolset. */
+  "toolsets_delete": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the toolset to delete. */
+    "id": string;
+  }; output: unknown };
+  /** Read one toolset's configuration. */
+  "toolsets_get": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the toolset. */
+    "id": string;
+  }; output: unknown };
+  /** Read one toolset's configuration, for editing. */
+  "toolsets_get-config": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the toolset. */
+    "id": string;
+  }; output: unknown };
+  /** List every configured toolset. */
+  "toolsets_list": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+  }; output: unknown };
+  /** Reconfigure a toolset. */
+  "toolsets_update-config": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** New argument list, replacing the old one wholesale. */
+    "args"?: unknown;
+    /** New base URL. Omit to leave unchanged. */
+    "baseUrl"?: unknown;
+    /** New command for mcp-server::stdio. Omit to leave unchanged. */
+    "command"?: unknown;
+    /** New description. Omit to leave unchanged. */
+    "description"?: unknown;
+    /** New environment, replacing the old one wholesale. */
+    "env"?: Record<string, string>;
+    /** New headers, replacing the old ones wholesale. */
+    "headers"?: Record<string, string>;
+    /** Identifier of the toolset to reconfigure. */
+    "id": string;
+    /** New lifecycle status: enabled or disabled. Omit to leave unchanged. */
+    "status"?: unknown;
+  }; output: unknown };
+  /** List the catalog of components a view can compose. */
+  "views_components": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+  }; output: unknown };
+  /** Compose a new view. */
+  "views_create": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** What this view is for. */
+    "description"?: string;
+    /** Identifier for the view. Also its file name: lowercase, digits, hyphen and underscore only. */
+    "id": string;
+    /** Human name of the view. Example: "Deals by stage". */
+    "name"?: string;
+    /** user or skill. Defaults to user. */
+    "scope"?: string;
+    /** The skill this view ships with, when Scope is skill. */
+    "skill"?: string;
+    /** Where this view's data comes from. */
+    "source": {
+    /** Id of the collection this view's data comes from. */
+    "collection": string;
+    /** Field values a record must match, by field name. */
+    "filter"?: Record<string, unknown>;
+    /** Maximum number of records to render. 0 means no limit. */
+    "limit"?: number;
+    /** Fields to order the rows by, applied in order. */
+    "sort"?: unknown;
+  };
+    /** Heading the frontend shows above the rendered tree. */
+    "title"?: string;
+    /** The composed tree of catalog components: {component, props?, bind?, children?, actions?}, nested arbitrarily. Call views_components first to see what a component accepts. */
+    "tree": unknown;
+  }; output: unknown };
+  /** Remove a view. */
+  "views_delete": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the view to remove. */
+    "id": string;
+    /** The skill this view ships with, when it is skill-scoped. */
+    "skill"?: string;
+  }; output: unknown };
+  /** Press a button in a view. */
+  "views_execute-action": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the view the action belongs to. */
+    "id": string;
+    /** Arguments to invoke the command with, merged over the action's own declared input. */
+    "input"?: Record<string, unknown>;
+    /** Label of the action within the view's tree, as declared. */
+    "label": string;
+  }; output: unknown };
+  /** Read one view's declaration. */
+  "views_get": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the view. */
+    "id": string;
+    /** The skill this view ships with, when it is skill-scoped. Required to resolve one — views_list reports it on every entry. */
+    "skill"?: string;
+  }; output: unknown };
+  /** List every declared view. */
+  "views_list": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+  }; output: unknown };
+  /** Resolve a view against its source data. */
+  "views_render": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the view to render. */
+    "id": string;
+    /** The skill this view ships with, when it is skill-scoped. */
+    "skill"?: string;
+  }; output: unknown };
+  /** Compose a view an agent did not have to design by hand. */
+  "views_scaffold": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Id of the collection to compose a screen for. */
+    "collection": string;
+    /** table, board or detail. Defaults to table. */
+    "kind"?: string;
+  }; output: unknown };
   /** Register a workspace and lay it out. */
   "workspace_create": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
@@ -918,6 +1203,15 @@ export const COMMAND_KEYS = [
   "chats_get",
   "chats_list",
   "chats_send",
+  "collections_create",
+  "collections_delete",
+  "collections_get",
+  "collections_list",
+  "collections_records-create",
+  "collections_records-delete",
+  "collections_records-get",
+  "collections_records-list",
+  "collections_records-update",
   "comments_create",
   "comments_delete",
   "comments_get",
@@ -947,6 +1241,11 @@ export const COMMAND_KEYS = [
   "routines_rotate",
   "routines_runs",
   "routines_update",
+  "skills_create",
+  "skills_delete",
+  "skills_install",
+  "skills_list",
+  "skills_update",
   "tasks_branch",
   "tasks_create",
   "tasks_delete",
@@ -964,6 +1263,20 @@ export const COMMAND_KEYS = [
   "todos_list",
   "todos_set-status",
   "todos_update",
+  "toolsets_call",
+  "toolsets_delete",
+  "toolsets_get",
+  "toolsets_get-config",
+  "toolsets_list",
+  "toolsets_update-config",
+  "views_components",
+  "views_create",
+  "views_delete",
+  "views_execute-action",
+  "views_get",
+  "views_list",
+  "views_render",
+  "views_scaffold",
   "workspace_create",
   "workspace_delete",
   "workspace_get",

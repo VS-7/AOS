@@ -61,13 +61,20 @@ describe("COMMAND_MAP", () => {
   });
 
   it("declares dormancy with null, never by omitting the key", () => {
-    expect("collection.list" in COMMAND_MAP).toBe(true);
-    expect(COMMAND_MAP["collection.list"]).toBeNull();
+    // task-10 lit `collection` (and `view`/`skill`/`toolset` with it) — see
+    // that entry's own comment. `goal` is still whole-domain dormant, so it
+    // takes over this assertion's job.
+    expect("goal.list" in COMMAND_MAP).toBe(true);
+    expect(COMMAND_MAP["goal.list"]).toBeNull();
   });
 
-  it("recognizes the 14 domains without a Go backend", () => {
-    expect(DORMANT_DOMAINS.size).toBe(14);
-    expect(isDormant("collection")).toBe(true);
+  it("recognizes the 10 domains without a Go backend", () => {
+    // task-10: `collection`, `view`, `toolset` and `skill` moved out of
+    // this set (14 -> 10) — every path they had is now a real mapping or
+    // an individually `null` one, not whole-domain dormancy.
+    expect(DORMANT_DOMAINS.size).toBe(10);
+    expect(isDormant("goal")).toBe(true);
+    expect(isDormant("collection")).toBe(false);
     expect(isDormant("task")).toBe(false);
   });
 });
