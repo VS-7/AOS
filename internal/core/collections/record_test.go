@@ -20,7 +20,7 @@ func TestARecordRoundTripsThroughMarkdown(t *testing.T) {
 	in := &collections.Record{
 		Key:     collections.Key{"id": "ada"},
 		Fields:  map[string]any{"name": "Ada Lovelace", "stage": "won", "score": 42},
-		Content: "Conheceu o Babbage numa festa.",
+		Content: "Conheceu o Babbage numa festa.\n",
 	}
 
 	raw, err := collections.Encode(in, model)
@@ -38,7 +38,7 @@ func TestARecordRoundTripsThroughMarkdown(t *testing.T) {
 	if out.Fields["name"] != "Ada Lovelace" || out.Fields["stage"] != "won" {
 		t.Fatalf("fields = %v", out.Fields)
 	}
-	if out.Content != "Conheceu o Babbage numa festa." {
+	if out.Content != "Conheceu o Babbage numa festa.\n" {
 		t.Fatalf("content = %q", out.Content)
 	}
 }
@@ -72,7 +72,7 @@ func TestARecordRoundTripsThroughJSON(t *testing.T) {
 	}
 	in := &collections.Record{
 		Key:    collections.Key{"id": "d1"},
-		Fields: map[string]any{"title": "Contrato anual", "amount": 1200.5, "open": true},
+		Fields: map[string]any{"title": "Contrato de manutenção", "amount": 1200.5, "open": true},
 	}
 
 	raw, err := collections.Encode(in, model)
@@ -83,7 +83,7 @@ func TestARecordRoundTripsThroughJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.Fields["title"] != "Contrato anual" || out.Fields["open"] != true {
+	if out.Fields["title"] != "Contrato de manutenção" || out.Fields["open"] != true {
 		t.Fatalf("fields = %v", out.Fields)
 	}
 }
@@ -125,5 +125,21 @@ func TestWithoutBodyDropsARecordsContent(t *testing.T) {
 	}
 	if light.Fields["name"] != "Ada" {
 		t.Fatalf("WithoutBody dropped the fields too: %v", light.Fields)
+	}
+}
+
+// The in-memory index holds exactly the value WithoutBody returns. A shallow
+// struct copy would still share Fields' backing map with the original — a
+// caller mutating the light copy would silently corrupt the index.
+func TestWithoutBodyClonesARecordsFields(t *testing.T) {
+	r := &collections.Record{
+		Key:    collections.Key{"id": "ada"},
+		Fields: map[string]any{"name": "Ada"},
+	}
+	light := collections.WithoutBody(r)
+	light.Fields["name"] = "corrupted"
+
+	if r.Fields["name"] != "Ada" {
+		t.Fatalf("mutating the WithoutBody result changed the original: %v", r.Fields)
 	}
 }

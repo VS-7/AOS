@@ -37,11 +37,6 @@ linters:
       # no longer a quote.
       ignore-rules:
         - comando
-        # "anual" is Portuguese for "annual", not a misspelling of it: the
-        # collections tests use Portuguese sample data (this codebase's
-        # convention throughout its fixtures), and correcting it would just
-        # produce a Portuguese word that is itself wrong.
-        - anual
     revive:
       rules:
         - name: context-as-argument

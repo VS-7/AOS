@@ -281,6 +281,15 @@ func WithoutBody[T any](v *T) *T {
 		light := *rec
 		light.Content = ""
 		light.Key = rec.Key.Clone()
+		// Fields is a map: a shallow struct copy still shares the same
+		// backing map with the record the in-memory index holds. Without
+		// this clone, a caller mutating the WithoutBody result mutates the
+		// index too.
+		fields := make(map[string]any, len(rec.Fields))
+		for k, val := range rec.Fields {
+			fields[k] = val
+		}
+		light.Fields = fields
 		return any(&light).(*T)
 	}
 
@@ -324,17 +333,18 @@ func decodeRecord(rec *Record, data []byte, key Key, name string, format Format)
 // its only home, which is the same invariant Encode holds for a native's
 // collection:"path" fields.
 //
-// The Markdown branch mirrors Encode's front-matter framing byte for byte —
-// same delimiters, same blank-line rule before the body — because
-// splitFrontMatter has to read back whatever this writes. A Record that
-// round-tripped only through its own format would be a second file format
-// wearing the first one's extension.
+// The Markdown branch mirrors Encode byte for byte — same delimiters, same
+// blank-line rule before the body, same forced trailing newline on the body —
+// because splitFrontMatter has to read back whatever this writes. A Record
+// that round-tripped only through its own format would be a second file
+// format wearing the first one's extension.
 //
-// Unlike Encode, the body is written exactly as given rather than gaining a
-// forced trailing newline: a native's content is always a fresh file read
-// (which already ends in one), but a Record's Content also has to survive a
-// round trip for whatever an agent handed the engine in memory, byte for
-// byte.
+// The forced newline is not cosmetic here: ADR-0004 means these files are
+// meant to be versioned in git and edited by hand, and dynamic-collection
+// records are the ones an agent will create in the greatest number. A file
+// missing its final newline shows up as "\ No newline at end of file" in
+// every diff — a permanent, avoidable blemish on exactly the files users will
+// see most.
 func encodeRecord(rec *Record, name string, format Format) ([]byte, error) {
 	fields := rec.Fields
 	if fields == nil {
@@ -363,6 +373,9 @@ func encodeRecord(rec *Record, name string, format Format) ([]byte, error) {
 	if rec.Content != "" {
 		b.WriteString("\n")
 		b.WriteString(rec.Content)
+		if !strings.HasSuffix(rec.Content, "\n") {
+			b.WriteByte('\n')
+		}
 	}
 	return b.Bytes(), nil
 }
