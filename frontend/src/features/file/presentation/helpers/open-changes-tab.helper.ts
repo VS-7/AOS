@@ -1,4 +1,4 @@
-import type { FractalFileExplorerContext } from "@/features/file/interfaces/file.interfaces";
+import type { FileExplorerContext } from "@/features/file/interfaces/file.interfaces";
 import {
   formatExplorerContextLabel,
   parseExplorerContext,
@@ -8,13 +8,13 @@ import { aos } from "@/app/aos";
 
 function getTabExplorerContext(tab: {
   metadata?: Record<string, string | number | boolean>;
-}): FractalFileExplorerContext {
+}): FileExplorerContext {
   return parseExplorerContext(tab.metadata?.fileExplorerContext);
 }
 
 function contextsMatch(
-  left: FractalFileExplorerContext,
-  right: FractalFileExplorerContext,
+  left: FileExplorerContext,
+  right: FileExplorerContext,
 ): boolean {
   if (left.type !== right.type) return false;
   if (left.type === "task" && right.type === "task") {
@@ -31,7 +31,7 @@ function contextsMatch(
  * Dedupes by serialized context so the same context reuses one tab.
  */
 export function openChangesTab(
-  context?: FractalFileExplorerContext,
+  context?: FileExplorerContext,
 ): string {
   const explorerContext =
     context ??

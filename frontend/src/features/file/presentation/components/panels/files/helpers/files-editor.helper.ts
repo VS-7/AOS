@@ -1,7 +1,7 @@
-import type { FractalFile } from "@/features/file/interfaces/file.interfaces";
+import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces";
 import { resolveMonacoLanguageFromFileName } from "@/features/file/presentation/helpers/file-viewer.helper";
-import { FractalDefaultTheme } from "@/features/theme/presentation/const/default-theme";
-import type { FractalThemeSettings } from "@/features/theme/interfaces/theme.interfaces";
+import { DefaultTheme } from "@/features/theme/presentation/const/default-theme";
+import type { ThemeSettings } from "@/features/theme/interfaces/theme.interfaces";
 import type { editor as MonacoEditor } from "monaco-editor";
 
 interface ThemeState {
@@ -10,7 +10,7 @@ interface ThemeState {
   };
   mode: "light" | "dark" | "system";
   theme: {
-    settings: Partial<Record<"light" | "dark", FractalThemeSettings>>;
+    settings: Partial<Record<"light" | "dark", ThemeSettings>>;
   };
 }
 
@@ -18,7 +18,7 @@ interface ResolvedThemeState {
   activeMode: "light" | "dark";
   codeFont: string;
   codeFontSize: number;
-  settings: FractalThemeSettings;
+  settings: ThemeSettings;
 }
 
 interface MonacoThemePayload {
@@ -94,7 +94,7 @@ function resolveThemeState(state: ThemeState): ResolvedThemeState {
         : "light"
       : state.mode;
 
-  const fallbackSettings = FractalDefaultTheme.theme[activeMode];
+  const fallbackSettings = DefaultTheme.theme[activeMode];
   const settings = state.theme.settings[activeMode] ?? fallbackSettings;
 
   return {
@@ -125,7 +125,7 @@ export function buildMonacoTheme(state: ThemeState): MonacoThemePayload {
   const numberColor = activeMode === "dark" ? mixHex(accent, "#f59e0b", 0.55) : mixHex(accent, "#b45309", 0.55);
 
   return {
-    name: `fractal-files-${activeMode}`,
+    name: `aos-files-${activeMode}`,
     options: {
       fontFamily: `"${codeFont}", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`,
       fontSize: codeFontSize,
@@ -185,6 +185,6 @@ export function buildMonacoTheme(state: ThemeState): MonacoThemePayload {
   };
 }
 
-export function resolveMonacoLanguage(file: FractalFile) {
+export function resolveMonacoLanguage(file: WorkspaceFile) {
   return resolveMonacoLanguageFromFileName(file.name, file.extension);
 }

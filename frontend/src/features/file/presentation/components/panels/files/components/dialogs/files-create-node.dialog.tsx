@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { aos } from "@/app/aos";
-import type { FractalFileExplorerContext } from "@/features/file/interfaces/file.interfaces";
+import type { FileExplorerContext } from "@/features/file/interfaces/file.interfaces";
 import {
   formatCreateDestinationPath,
   joinWorkspacePath,
@@ -42,7 +42,7 @@ export interface FilesCreateNodeDialogProps {
   open: boolean;
   parentPath: string;
   defaultType?: "file" | "directory";
-  explorerContext: FractalFileExplorerContext;
+  explorerContext: FileExplorerContext;
   onOpenChange: (open: boolean) => void;
   onCreated?: (path: string) => void;
 }

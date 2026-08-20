@@ -1,14 +1,14 @@
 import React, { createContext, useContext, useMemo, useState } from "react";
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import type { FractalProject } from "@/features/project/interfaces/project.interfaces";
+import type { Project } from "@/features/project/interfaces/project.interfaces";
 
 interface ProjectsPageSearchSchema {
   query?: string;
 }
 
 interface ProjectsContextValue {
-  projects: FractalProject[];
-  filteredProjects: FractalProject[];
+  projects: Project[];
+  filteredProjects: Project[];
   search: ProjectsPageSearchSchema;
   searchDraft: string;
   setSearchDraft: (value: string) => void;
@@ -29,7 +29,7 @@ export function useProjectsContext() {
 
 interface ProjectsProviderProps {
   children: React.ReactNode;
-  projects: FractalProject[];
+  projects: Project[];
   search: ProjectsPageSearchSchema;
 }
 

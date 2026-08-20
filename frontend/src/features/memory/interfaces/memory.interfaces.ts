@@ -31,7 +31,7 @@ export const MemoryStatusSchema = z.enum([
 ]);
 
 /**
- * MemorySchema: Main schema defining a Fractal memory.
+ * MemorySchema: Main schema defining a AOS memory.
  * @description Represents a piece of persistent information created by an agent.
  * @example
  * ```typescript
@@ -448,7 +448,7 @@ export type MemoryGraph = z.infer<typeof MemoryGraphSchema>;
 
 /**
  * @interface IMemoryService
- * @description Defines the contract for the MemoryService managing agent memories in the Fractal ecosystem.
+ * @description Defines the contract for the MemoryService managing agent memories in the AOS ecosystem.
  * All methods return `ResponseWithCTA`-wrapped data to provide rich CLI call-to-action hints.
  */
 export interface IMemoryService {
@@ -482,16 +482,3 @@ export interface IMemoryService {
   forgot(params: ForgetMemoryInput): Promise<ResponseWithCTA<Memory>>;
 }
 
-/**
- * Alias for the freshly-copied `v401/web` presentation code, which
- * imports the `Fractal`-prefixed name — same reasoning as `skill.
- * interfaces.ts`'s `FractalSkill` alias.
- */
-export type FractalMemoryGraph = MemoryGraph;
-
-/**
- * More `Fractal`-prefixed aliases the freshly-copied presentation code
- * needs — same reasoning as this file's `FractalMemoryGraph` alias above.
- */
-export type FractalMemoryGraphNode = MemoryGraphNode;
-export type FractalMemoryGraphLink = MemoryGraphLink;

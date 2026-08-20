@@ -1,17 +1,17 @@
 import { AosStore } from "@/app/builders/store";
-import type { FractalFileExplorerContext } from "@/features/file/interfaces/file.interfaces";
+import type { FileExplorerContext } from "@/features/file/interfaces/file.interfaces";
 
 export type FilesClipboardMode = "cut" | "copy";
 
 export interface FilesClipboardState {
   mode: FilesClipboardMode;
   paths: string[];
-  context: FractalFileExplorerContext;
+  context: FileExplorerContext;
 }
 
 export const FilesStore = AosStore.create("files")
   .withState({
-    explorerContext: { type: "main" } as FractalFileExplorerContext,
+    explorerContext: { type: "main" } as FileExplorerContext,
     clipboard: null as FilesClipboardState | null,
     draftsByPath: {} as Record<string, string>,
   })
@@ -24,7 +24,7 @@ export const FilesStore = AosStore.create("files")
     storage: "localstorage",
     pick: (state) => ({ explorerContext: state.explorerContext }),
   })
-  .addAction("setExplorerContext", (ctx) => (explorerContext: FractalFileExplorerContext) => {
+  .addAction("setExplorerContext", (ctx) => (explorerContext: FileExplorerContext) => {
     ctx.state.set({ explorerContext, clipboard: null });
   })
   .addAction(

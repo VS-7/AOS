@@ -1,9 +1,9 @@
 import { PauseCircle, PlayCircle, StopCircle } from "lucide-react";
-import type { FractalRoutine } from "@/features/routine/interfaces/routine.interfaces";
-import type { FractalRoutineReservedAgent } from "@/features/routine/interfaces/routine.interfaces";
+import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
+import type { RoutineReservedAgent } from "@/features/routine/interfaces/routine.interfaces";
 
 export const ROUTINE_RESERVED_AGENT_CONFIG: Record<
-  FractalRoutineReservedAgent,
+  RoutineReservedAgent,
   { label: string; description: string }
 > = {
   orchestrator: {
@@ -16,14 +16,14 @@ export const ROUTINE_RESERVED_AGENT_CONFIG: Record<
   },
 };
 
-export const ROUTINE_STATUS_ORDER: FractalRoutine["status"][] = [
+export const ROUTINE_STATUS_ORDER: Routine["status"][] = [
   "enabled",
   "paused",
   "disabled",
 ];
 
 export const ROUTINE_STATUS_CONFIG: Record<
-  FractalRoutine["status"],
+  Routine["status"],
   {
     label: string;
     icon: typeof PlayCircle;
@@ -35,7 +35,7 @@ export const ROUTINE_STATUS_CONFIG: Record<
     icon: PlayCircle,
     color: "text-emerald-600",
   },
-  // Task 9 addition: `FractalRoutineStatusSchema` (routine.interfaces.ts)
+  // Task 9 addition: `RoutineStatusSchema` (routine.interfaces.ts)
   // already had "paused" — this consts file's `enabled`/`disabled` pair
   // predates that and was missing the third value.
   paused: {

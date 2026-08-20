@@ -28,15 +28,15 @@ import {
 import { SetPriorityDropdown } from "./set-priority.dropdown";
 import { SetAssigneeDropdown } from "./set-assignee.dropdown";
 import { SetTypeDropdown } from "./set-type.dropdown";
-import type { FractalTask, FractalTaskPriority } from "@/features/task/interfaces/task.interfaces";
+import type { Task, TaskPriority } from "@/features/task/interfaces/task.interfaces";
 import { TASK_STATUS_CONFIG, TASK_STATUS_ORDER } from "@/features/task/presentation/consts/task";
 
 interface TaskActionsDropdownProps {
-  task: FractalTask;
-  onPriorityChange: (priority: FractalTaskPriority) => void;
+  task: Task;
+  onPriorityChange: (priority: TaskPriority) => void;
   onAssigneeChange: (assignee: string | undefined) => void;
   onTypeChange?: (type: string) => void;
-  onStatusChange?: (status: FractalTask["status"]) => void;
+  onStatusChange?: (status: Task["status"]) => void;
   onDueDateChange?: (dueAt: string | undefined) => void;
   onDelete?: () => void;
   onCopyIdentifier?: () => void;

@@ -1,19 +1,19 @@
 import type { UIMessage } from "ai"
-import type { FractalAgent } from "@/features/agent/interfaces/agent.interfaces"
-import type { Chat, FractalChatMessageMetadata } from "@/features/chat/interfaces/chat.interfaces"
-import type { FractalWorkspaceDirectoryUser } from "@/features/workspace/interfaces/directory.interfaces"
+import type { Agent } from "@/features/agent/interfaces/agent.interfaces"
+import type { Chat, ChatMessageMetadata } from "@/features/chat/interfaces/chat.interfaces"
+import type { WorkspaceDirectoryUser } from "@/features/workspace/interfaces/directory.interfaces"
 import { MessageHelper } from "./message.helper"
 
 interface ResolveParticipantOptions {
-  agents: FractalAgent[]
+  agents: Agent[]
   chat: Chat
-  message: UIMessage<FractalChatMessageMetadata>
+  message: UIMessage<ChatMessageMetadata>
   /** Viewer display name — fallback when the speaker is the current user. */
   userName: string
   /** Viewer user id — marks self vs peer in multi-user threads. */
   selfUserId?: string
   /** Workspace directory users keyed by id (from `stores.workspace.directory`). */
-  usersById?: ReadonlyMap<string, FractalWorkspaceDirectoryUser>
+  usersById?: ReadonlyMap<string, WorkspaceDirectoryUser>
 }
 
 export interface ChatMessageParticipant {
@@ -24,15 +24,15 @@ export interface ChatMessageParticipant {
 }
 
 export class ChatThreadHelper {
-  public static getMessageTextParts(message: UIMessage<FractalChatMessageMetadata>) {
+  public static getMessageTextParts(message: UIMessage<ChatMessageMetadata>) {
     return MessageHelper.getMessageTextParts(message).map((text) => text.trim())
   }
 
-  public static getMessageText(message: UIMessage<FractalChatMessageMetadata>) {
+  public static getMessageText(message: UIMessage<ChatMessageMetadata>) {
     return MessageHelper.getMessageText(message).trim()
   }
 
-  public static getMessageTimestamp(message: UIMessage<FractalChatMessageMetadata>) {
+  public static getMessageTimestamp(message: UIMessage<ChatMessageMetadata>) {
     const metadata = message.metadata
     const createdAt = metadata?.createdAt
 
@@ -58,7 +58,7 @@ export class ChatThreadHelper {
     selfUserId,
     usersById,
   }: ResolveParticipantOptions): ChatMessageParticipant {
-    const metadata = message.metadata as FractalChatMessageMetadata | undefined
+    const metadata = message.metadata as ChatMessageMetadata | undefined
 
     if (metadata?.type === "agent") {
       const agent = agents.find((item) => item.id === metadata.data.id)
@@ -106,7 +106,7 @@ export class ChatThreadHelper {
     userId: string
     userName: string
     selfUserId?: string
-    usersById?: ReadonlyMap<string, FractalWorkspaceDirectoryUser>
+    usersById?: ReadonlyMap<string, WorkspaceDirectoryUser>
   }): ChatMessageParticipant {
     const profile = params.usersById?.get(params.userId)
     const isSelf =

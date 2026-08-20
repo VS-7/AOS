@@ -22,7 +22,7 @@ type TabsSubtleProps = {
 };
 
 /**
- * Fractal subtle tabs with animated selection pill.
+ * AOS subtle tabs with animated selection pill.
  * With `activeLabel` + icon: inactive tabs collapse to icon (+ count); active expands the label.
  */
 export function TabsSubtleComponent({

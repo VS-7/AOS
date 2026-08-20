@@ -4,7 +4,7 @@ import { OnboardingForm } from "./components/onboarding-form";
 
 export const OnboardingPage = aos.page("/onboarding")
   .withMetadata({
-    title: "Welcome to Fractal",
+    title: "Welcome to AOS",
     description: "Get started by creating your first workspace",
   })
   //.use(WorkspacePageMiddleware())

@@ -8,7 +8,7 @@ import type { ResponseWithCTA } from "@/core/interfaces/response.interfaces";
  * - **disabled** — Routine is inactive and will not respond to triggers.
  * - **paused** — Routine is temporarily suspended.
  */
-export const FractalRoutineStatusSchema = z.enum([
+export const RoutineStatusSchema = z.enum([
   "enabled",
   "disabled",
   "paused",
@@ -22,7 +22,7 @@ export const FractalRoutineStatusSchema = z.enum([
  * - **completed** — Run finished successfully.
  * - **error** — Run failed during execution.
  */
-export const FractalRunStatusSchema = z.enum([
+export const RunStatusSchema = z.enum([
   "pending",
   "running",
   "completed",
@@ -32,7 +32,7 @@ export const FractalRunStatusSchema = z.enum([
 /**
  * Schema for a webhook trigger configuration.
  */
-export const FractalRoutineWebhookTriggerSchema = z.object({
+export const RoutineWebhookTriggerSchema = z.object({
   type: z.literal("webhook"),
   config: z.object({
     token: z
@@ -44,7 +44,7 @@ export const FractalRoutineWebhookTriggerSchema = z.object({
 /**
  * Schema for a scheduled (cron) trigger configuration.
  */
-export const FractalRoutineScheduledTriggerSchema = z.object({
+export const RoutineScheduledTriggerSchema = z.object({
   type: z.literal("scheduled"),
   config: z.object({
     cron: z.string().describe("Cron expression defining the schedule."),
@@ -56,11 +56,11 @@ export const FractalRoutineScheduledTriggerSchema = z.object({
  * file's source alongside webhook/scheduled — reconstructed from
  * `presentation/consts/routine-triggers.ts`'s own `"activity"` variant of
  * `RoutineTriggerFormValue`, which this schema must match for
- * `RoutineTriggerTypeId` (`FractalRoutine["triggers"][number]["type"]`) to
+ * `RoutineTriggerTypeId` (`Routine["triggers"][number]["type"]`) to
  * include `"activity"` at all — see that file's `ROUTINE_TRIGGER_TYPE_ORDER`
  * and `presentation/components/triggers/activity-trigger-row.tsx`.
  */
-export const FractalRoutineActivityTriggerSchema = z.object({
+export const RoutineActivityTriggerSchema = z.object({
   type: z.literal("activity"),
   config: z.object({
     namespace: z.string().describe("Activity namespace to listen on."),
@@ -79,17 +79,17 @@ export const FractalRoutineActivityTriggerSchema = z.object({
  * Discriminated union for routine triggers.
  * Supports webhook, scheduled, and activity trigger types.
  */
-export const FractalRoutineTriggerSchema = z.discriminatedUnion("type", [
-  FractalRoutineWebhookTriggerSchema,
-  FractalRoutineScheduledTriggerSchema,
-  FractalRoutineActivityTriggerSchema,
+export const RoutineTriggerSchema = z.discriminatedUnion("type", [
+  RoutineWebhookTriggerSchema,
+  RoutineScheduledTriggerSchema,
+  RoutineActivityTriggerSchema,
 ]);
 
 /**
- * Primary schema for a Fractal Routine record.
+ * Primary schema for a AOS Routine record.
  * A Routine is a saved agent configuration (prompt + triggers) that runs automatically.
  */
-export const FractalRoutineSchema = z.object({
+export const RoutineSchema = z.object({
   id: z
     .string()
     .describe("Unique identifier (slug) auto-generated from the routine name."),
@@ -99,10 +99,10 @@ export const FractalRoutineSchema = z.object({
     .string()
     .describe("Markdown body content used as the system prompt for execution."),
   triggers: z
-    .array(FractalRoutineTriggerSchema)
+    .array(RoutineTriggerSchema)
     .default([])
     .describe("List of triggers that can activate this routine."),
-  status: FractalRoutineStatusSchema.describe(
+  status: RoutineStatusSchema.describe(
     "Current operational status of the routine.",
   ),
   createdAt: z.string().describe("ISO timestamp when the routine was created."),
@@ -112,10 +112,10 @@ export const FractalRoutineSchema = z.object({
 });
 
 /**
- * Primary schema for a Fractal Run record.
+ * Primary schema for a AOS Run record.
  * A Run represents a single execution of a routine.
  */
-export const FractalRunSchema = z.object({
+export const RunSchema = z.object({
   id: z.string().describe("Unique identifier for the run (UUID)."),
   routine: z.string().describe("Parent routine ID."),
   agent: z.string().describe("Agent slug that executed this run."),
@@ -123,7 +123,7 @@ export const FractalRunSchema = z.object({
   // `presentation/pages/($id)/components/routine-run-history.tsx`'s
   // `triggerLabel` switch, this field's only consumer.
   trigger: z.enum(["manual", "scheduled", "webhook", "activity"]).optional(),
-  status: FractalRunStatusSchema.describe(
+  status: RunStatusSchema.describe(
     "Current execution status of the run.",
   ),
   input: z
@@ -148,17 +148,17 @@ export const FractalRunSchema = z.object({
 /**
  * Schema for creating a new routine.
  */
-export const FractalRoutineCreateSchema = z.object({
+export const RoutineCreateSchema = z.object({
   name: z.string().describe("Human-readable name of the routine."),
   agent: z.string().describe("Agent slug (owner) that executes this routine."),
   prompt: z
     .string()
     .describe("Markdown body content used as the system prompt for execution."),
   triggers: z
-    .array(FractalRoutineTriggerSchema)
+    .array(RoutineTriggerSchema)
     .default([])
     .describe("List of triggers that can activate this routine."),
-  status: FractalRoutineStatusSchema.default("enabled").describe(
+  status: RoutineStatusSchema.default("enabled").describe(
     "Initial operational status.",
   ),
 });
@@ -167,18 +167,18 @@ export const FractalRoutineCreateSchema = z.object({
  * Schema for updating an existing routine.
  * All fields are optional — only provide the fields you want to change.
  */
-export const FractalRoutineUpdateSchema = z.object({
+export const RoutineUpdateSchema = z.object({
   name: z.string().optional(),
   agent: z.string().optional(),
   prompt: z.string().optional(),
-  triggers: z.array(FractalRoutineTriggerSchema).optional(),
-  status: FractalRoutineStatusSchema.optional(),
+  triggers: z.array(RoutineTriggerSchema).optional(),
+  status: RoutineStatusSchema.optional(),
 });
 
 /**
  * Schema for querying the routine list.
  */
-export const FractalRoutineListQuerySchema = z.object({
+export const RoutineListQuerySchema = z.object({
   agent: z.string().optional().describe("Filter routines by agent slug."),
   status: z
     .string()
@@ -205,7 +205,7 @@ export const FractalRoutineListQuerySchema = z.object({
 /**
  * Schema for firing a routine via webhook.
  */
-export const FractalRoutineWebhookFireSchema = z.object({
+export const RoutineWebhookFireSchema = z.object({
   type: z
     .literal("webhook")
     .describe(
@@ -221,7 +221,7 @@ export const FractalRoutineWebhookFireSchema = z.object({
 /**
  * Schema for firing a scheduled routine execution.
  */
-export const FractalRoutineScheduledFireSchema = z.object({
+export const RoutineScheduledFireSchema = z.object({
   type: z
     .literal("scheduled")
     .describe("Cron-triggered routine execution. Used by the scheduler path."),
@@ -236,18 +236,18 @@ export const FractalRoutineScheduledFireSchema = z.object({
 /**
  * Schema for firing a routine.
  */
-export const FractalRoutineFireSchema = z.discriminatedUnion("type", [
-  FractalRoutineWebhookFireSchema,
-  FractalRoutineScheduledFireSchema,
+export const RoutineFireSchema = z.discriminatedUnion("type", [
+  RoutineWebhookFireSchema,
+  RoutineScheduledFireSchema,
 ]);
 
 /**
  * Schema for creating a new run.
  */
-export const FractalRunCreateSchema = z.object({
+export const RunCreateSchema = z.object({
   routine: z.string().describe("Parent routine ID."),
   agent: z.string().describe("Agent slug that executes this run."),
-  status: FractalRunStatusSchema.default("pending"),
+  status: RunStatusSchema.default("pending"),
   input: z.string().default(""),
   chat: z.string().optional(),
   output: z.string().optional(),
@@ -258,32 +258,32 @@ export const FractalRunCreateSchema = z.object({
 /**
  * TypeScript type for a Routine record.
  */
-export type FractalRoutine = z.infer<typeof FractalRoutineSchema>;
+export type Routine = z.infer<typeof RoutineSchema>;
 
 /**
  * TypeScript type for a Run record.
  */
-export type FractalRun = z.infer<typeof FractalRunSchema>;
+export type Run = z.infer<typeof RunSchema>;
 
 /**
  * Input type for creating a routine.
  */
-export type FractalRoutineCreateInput = z.infer<
-  typeof FractalRoutineCreateSchema
+export type RoutineCreateInput = z.infer<
+  typeof RoutineCreateSchema
 >;
 
 /**
  * Input type for updating a routine.
  */
-export type FractalRoutineUpdateInput = z.infer<
-  typeof FractalRoutineUpdateSchema
+export type RoutineUpdateInput = z.infer<
+  typeof RoutineUpdateSchema
 >;
 
 /**
  * Input type for querying routines.
  */
-export type FractalRoutineListQueryInput = z.infer<
-  typeof FractalRoutineListQuerySchema
+export type RoutineListQueryInput = z.infer<
+  typeof RoutineListQuerySchema
 >;
 
 /**
@@ -291,9 +291,9 @@ export type FractalRoutineListQueryInput = z.infer<
  * Absent from this file's source; reconstructed from
  * `presentation/helpers/routine.helper.ts`'s own `RESERVED_AGENTS` const
  * (`["orchestrator", "all"] as const satisfies readonly
- * FractalRoutineReservedAgent[]`), its only consumer.
+ * RoutineReservedAgent[]`), its only consumer.
  */
-export type FractalRoutineReservedAgent = "orchestrator" | "all";
+export type RoutineReservedAgent = "orchestrator" | "all";
 
 /**
  * One filter clause on an `"activity"` routine trigger — narrows which
@@ -302,9 +302,9 @@ export type FractalRoutineReservedAgent = "orchestrator" | "all";
  * `presentation/components/triggers/activity-trigger-row.tsx`'s filter
  * editor (the `operator` union matches its `<Select>` options exactly) and
  * `presentation/consts/routine-triggers.ts`'s `filters?:
- * FractalRoutineActivityFilter[]` field.
+ * RoutineActivityFilter[]` field.
  */
-export interface FractalRoutineActivityFilter {
+export interface RoutineActivityFilter {
   path: string;
   operator: "eq" | "neq" | "contains";
   value: string;
@@ -313,25 +313,25 @@ export interface FractalRoutineActivityFilter {
 /**
  * Input type for firing a routine.
  */
-export type FractalRoutineFireInput = z.infer<typeof FractalRoutineFireSchema>;
+export type RoutineFireInput = z.infer<typeof RoutineFireSchema>;
 
 /**
  * Input type for creating a run.
  */
-export type FractalRunCreateInput = z.infer<typeof FractalRunCreateSchema>;
+export type RunCreateInput = z.infer<typeof RunCreateSchema>;
 
 /**
  * Routine record enriched with its runs.
  */
-export type FractalRoutineWithRuns = FractalRoutine & {
-  runs: FractalRun[];
+export type RoutineWithRuns = Routine & {
+  runs: Run[];
   fireUrl: string | null;
 };
 
 /**
  * Input parameters for stale running routine-run recovery.
  */
-export interface FractalRoutineRecoverStaleRunsInput {
+export interface RoutineRecoverStaleRunsInput {
   /** Workspace identifier used for explicit automation scoping. */
   workspace: string;
   /** Optional scheduler run id responsible for this pass. */
@@ -343,7 +343,7 @@ export interface FractalRoutineRecoverStaleRunsInput {
 /**
  * Input parameters for scheduled routine processing.
  */
-export interface FractalRoutineProcessScheduledInput {
+export interface RoutineProcessScheduledInput {
   /** Workspace identifier used for explicit automation scoping. */
   workspace: string;
   /** Optional scheduler run id responsible for this pass. */
@@ -355,7 +355,7 @@ export interface FractalRoutineProcessScheduledInput {
 /**
  * Normalized skipped routine entry.
  */
-export interface FractalRoutineAutomationSkippedEntry {
+export interface RoutineAutomationSkippedEntry {
   /** Routine or run identifier. */
   id: string;
   /** Human-readable skip reason. */
@@ -365,7 +365,7 @@ export interface FractalRoutineAutomationSkippedEntry {
 /**
  * Normalized failed routine entry.
  */
-export interface FractalRoutineAutomationFailedEntry {
+export interface RoutineAutomationFailedEntry {
   /** Routine or run identifier. */
   id: string;
   /** Human-readable failure reason. */
@@ -375,7 +375,7 @@ export interface FractalRoutineAutomationFailedEntry {
 /**
  * Normalized started routine entry.
  */
-export interface FractalRoutineAutomationStartedEntry {
+export interface RoutineAutomationStartedEntry {
   /** Routine identifier. */
   id: string;
   /** Run identifier started in this pass. */
@@ -387,7 +387,7 @@ export interface FractalRoutineAutomationStartedEntry {
 /**
  * Normalized recovered run entry.
  */
-export interface FractalRoutineAutomationRecoveredEntry {
+export interface RoutineAutomationRecoveredEntry {
   /** Run identifier. */
   id: string;
   /** Recovery action applied to this run. */
@@ -397,7 +397,7 @@ export interface FractalRoutineAutomationRecoveredEntry {
 /**
  * Result payload for stale run recovery.
  */
-export interface FractalRoutineRecoverStaleRunsResult {
+export interface RoutineRecoverStaleRunsResult {
   /** Effective workspace id processed. */
   workspace: string;
   /** Effective ISO timestamp used during evaluation. */
@@ -405,17 +405,17 @@ export interface FractalRoutineRecoverStaleRunsResult {
   /** Number of scanned running runs. */
   scanned: number;
   /** Runs recovered in this pass. */
-  recovered: FractalRoutineAutomationRecoveredEntry[];
+  recovered: RoutineAutomationRecoveredEntry[];
   /** Runs skipped and reasons. */
-  skipped: FractalRoutineAutomationSkippedEntry[];
+  skipped: RoutineAutomationSkippedEntry[];
   /** Runs failed and reasons. */
-  failed: FractalRoutineAutomationFailedEntry[];
+  failed: RoutineAutomationFailedEntry[];
 }
 
 /**
  * Result payload for scheduled routine processing.
  */
-export interface FractalRoutineProcessScheduledResult {
+export interface RoutineProcessScheduledResult {
   /** Effective workspace id processed. */
   workspace: string;
   /** Effective ISO timestamp used during evaluation. */
@@ -423,47 +423,47 @@ export interface FractalRoutineProcessScheduledResult {
   /** Number of scanned enabled routines. */
   scanned: number;
   /** Routines started in this pass (max one initially). */
-  started: FractalRoutineAutomationStartedEntry[];
+  started: RoutineAutomationStartedEntry[];
   /** Routines skipped and reasons. */
-  skipped: FractalRoutineAutomationSkippedEntry[];
+  skipped: RoutineAutomationSkippedEntry[];
   /** Routines failed and reasons. */
-  failed: FractalRoutineAutomationFailedEntry[];
+  failed: RoutineAutomationFailedEntry[];
 }
 
 /**
- * @interface IFractalRoutineService
- * @description Defines the contract for the RoutineService managing Fractal Routines and Runs.
+ * @interface IRoutineService
+ * @description Defines the contract for the RoutineService managing AOS Routines and Runs.
  * All methods return `ResponseWithCTA`-wrapped data to provide rich CLI call-to-action hints.
  */
-export interface IFractalRoutineService {
+export interface IRoutineService {
   /**
    * Retrieves a list of routines with optional filtering.
    */
   list(
-    params: FractalRoutineListQueryInput,
-  ): Promise<ResponseWithCTA<{ routines: FractalRoutine[] }>>;
+    params: RoutineListQueryInput,
+  ): Promise<ResponseWithCTA<{ routines: Routine[] }>>;
 
   /**
    * Retrieves a single routine by its ID, hydrated with runs.
    */
   getById(params: {
     id: string;
-  }): Promise<ResponseWithCTA<{ routine: FractalRoutineWithRuns | null }>>;
+  }): Promise<ResponseWithCTA<{ routine: RoutineWithRuns | null }>>;
 
   /**
    * Creates a new routine record.
    */
   create(
-    params: FractalRoutineCreateInput,
-  ): Promise<ResponseWithCTA<FractalRoutine>>;
+    params: RoutineCreateInput,
+  ): Promise<ResponseWithCTA<Routine>>;
 
   /**
    * Updates an existing routine with partial data.
    */
   update(params: {
     id: string;
-    data: FractalRoutineUpdateInput;
-  }): Promise<ResponseWithCTA<FractalRoutine>>;
+    data: RoutineUpdateInput;
+  }): Promise<ResponseWithCTA<Routine>>;
 
   /**
    * Permanently removes a routine and cleans up its runs.
@@ -475,20 +475,20 @@ export interface IFractalRoutineService {
    */
   fire(params: {
     id: string;
-    input: FractalRoutineFireInput;
-  }): Promise<ResponseWithCTA<{ run: FractalRun; chat?: { id: string } }>>;
+    input: RoutineFireInput;
+  }): Promise<ResponseWithCTA<{ run: Run; chat?: { id: string } }>>;
 
   /**
    * Recovers stale routine runs currently marked as running.
    */
   recoverStaleRuns(
-    params: FractalRoutineRecoverStaleRunsInput,
-  ): Promise<ResponseWithCTA<FractalRoutineRecoverStaleRunsResult>>;
+    params: RoutineRecoverStaleRunsInput,
+  ): Promise<ResponseWithCTA<RoutineRecoverStaleRunsResult>>;
 
   /**
    * Processes enabled scheduled routines and starts at most one due routine.
    */
   processScheduled(
-    params: FractalRoutineProcessScheduledInput,
-  ): Promise<ResponseWithCTA<FractalRoutineProcessScheduledResult>>;
+    params: RoutineProcessScheduledInput,
+  ): Promise<ResponseWithCTA<RoutineProcessScheduledResult>>;
 }

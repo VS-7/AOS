@@ -8,12 +8,12 @@ import { InstructionsSidebar } from "./components/sidebar";
 import { SelectedInstructionContent } from "./components/content";
 import { SelectedInstructionDetail } from "./components/details";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
-import type { FractalInstruction } from "@/features/instruction/interfaces/instruction.interfaces";
+import type { Instruction } from "@/features/instruction/interfaces/instruction.interfaces";
 
 export function WorkspaceInstructionsSection() {
   const instructionsQuery = aos.client.instruction.list.useQuery();
   const instructions = (instructionsQuery.data?.instructions ||
-    []) as FractalInstruction[];
+    []) as Instruction[];
 
   return (
     <InstructionsProvider

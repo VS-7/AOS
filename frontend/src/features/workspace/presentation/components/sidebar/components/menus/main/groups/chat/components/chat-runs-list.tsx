@@ -1,7 +1,7 @@
 import * as React from "react";
 import { SidebarMenu } from "@/components/ui/sidebar";
 import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
-import { FractalChatKindHelper } from "@/features/chat/services/chat/chat-kind.helper";
+import { ChatKindHelper } from "@/features/chat/services/chat/chat-kind.helper";
 import { ChatRow } from "./chat-row";
 
 interface ChatRunsListProps {
@@ -19,7 +19,7 @@ export function ChatRunsList({
   currentChatId,
 }: ChatRunsListProps) {
   const rows = React.useMemo(
-    () => FractalChatKindHelper.filterByKind(chats, "run", agentIds),
+    () => ChatKindHelper.filterByKind(chats, "run", agentIds),
     [agentIds, chats],
   );
 

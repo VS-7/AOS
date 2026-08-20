@@ -1,16 +1,16 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { FractalTask } from "@/features/task/interfaces/task.interfaces";
+import type { Task } from "@/features/task/interfaces/task.interfaces";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
 import { TaskKanbanCard } from "./task-kanban-card.component";
 
 import { useDroppable } from "@dnd-kit/core";
 
 interface TaskKanbanColumnProps {
-  status: FractalTask["status"];
-  tasks: FractalTask[];
-  draggedTaskId: FractalTask["id"] | null;
+  status: Task["status"];
+  tasks: Task[];
+  draggedTaskId: Task["id"] | null;
   isDragActive: boolean;
   isActiveDropTarget: boolean;
 }

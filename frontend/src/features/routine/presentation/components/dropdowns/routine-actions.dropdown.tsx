@@ -13,10 +13,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { FractalRoutine } from "@/features/routine/interfaces/routine.interfaces";
+import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
 
 interface RoutineActionsDropdownProps {
-  routine: FractalRoutine;
+  routine: Routine;
   onFire?: () => void;
   onCopyIdentifier?: () => void;
   onDelete?: () => void;

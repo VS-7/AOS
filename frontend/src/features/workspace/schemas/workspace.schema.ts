@@ -14,7 +14,7 @@ import { Schema } from "@/core/helpers/schema.helper";
  * "owner"
  * ```
  */
-export const FractalWorkspaceMemberRoleSchema = z
+export const WorkspaceMemberRoleSchema = z
   .enum(["owner", "member"])
   .describe(
     'Member role. owner manages members and settings; member has read access. Example: "owner".',
@@ -28,7 +28,7 @@ export const FractalWorkspaceMemberRoleSchema = z
  * "professional"
  * ```
  */
-export const FractalWorkspaceOrchestratorToneSchema = z
+export const WorkspaceOrchestratorToneSchema = z
   .enum(["efficient", "friendly", "professional", "candid"])
   .describe(
     'Orchestrator communication tone. Example: "professional".',
@@ -42,7 +42,7 @@ export const FractalWorkspaceOrchestratorToneSchema = z
  * "balanced"
  * ```
  */
-export const FractalWorkspaceOrchestratorStyleSchema = z
+export const WorkspaceOrchestratorStyleSchema = z
   .enum(["concise", "balanced", "detailed"])
   .describe(
     'Orchestrator response style. Example: "balanced".',
@@ -65,7 +65,7 @@ export const FractalWorkspaceOrchestratorStyleSchema = z
  * }
  * ```
  */
-export const FractalWorkspaceDomainSchema = Schema.object({
+export const WorkspaceDomainSchema = Schema.object({
   artifactId: z
     .string()
     .describe(
@@ -95,7 +95,7 @@ export const FractalWorkspaceDomainSchema = Schema.object({
  * }
  * ```
  */
-export const FractalWorkspaceTaskTypeSchema = Schema.object({
+export const WorkspaceTaskTypeSchema = Schema.object({
   id: z
     .string()
     .describe(
@@ -136,7 +136,7 @@ export const FractalWorkspaceTaskTypeSchema = Schema.object({
  * }
  * ```
  */
-export const FractalWorkspaceLabelSchema = Schema.object({
+export const WorkspaceLabelSchema = Schema.object({
   id: z
     .string()
     .describe('Unique identifier for the workspace label. Example: "ui-ux".'),
@@ -165,14 +165,14 @@ export const FractalWorkspaceLabelSchema = Schema.object({
  * }
  * ```
  */
-export const FractalWorkspaceMemberSchema = Schema.object({
+export const WorkspaceMemberSchema = Schema.object({
   userId: z
     .string()
     .uuid()
     .describe(
       'User UUID of the member. Example: "550e8400-e29b-41d4-a716-446655440000".',
     ),
-  role: FractalWorkspaceMemberRoleSchema,
+  role: WorkspaceMemberRoleSchema,
   addedAt: z
     .string()
     .describe(
@@ -192,7 +192,7 @@ export const FractalWorkspaceMemberSchema = Schema.object({
  * }
  * ```
  */
-export const FractalWorkspaceWorktreesSchema = Schema.object({
+export const WorkspaceWorktreesSchema = Schema.object({
   deleteOldWorktrees: z
     .boolean()
     .describe("Delete stale worktrees automatically. Example: true."),
@@ -215,19 +215,19 @@ export const FractalWorkspaceWorktreesSchema = Schema.object({
  * @example
  * ```typescript
  * {
- *   branchPrefix: "fractal",
+ *   branchPrefix: "aos",
  *   forcePush: false,
  *   commitInstructions: "Conventional commits",
  *   prInstructions: "Link the task id"
  * }
  * ```
  */
-export const FractalWorkspaceGitSchema = Schema.object({
+export const WorkspaceGitSchema = Schema.object({
   branchPrefix: z
     .string()
     .optional()
     .describe(
-      'Branch name prefix for generated branches. Example: "fractal".',
+      'Branch name prefix for generated branches. Example: "aos".',
     ),
   forcePush: z
     .boolean()
@@ -259,10 +259,10 @@ export const FractalWorkspaceGitSchema = Schema.object({
  * }
  * ```
  */
-export const FractalWorkspaceOrchestratorSchema = Schema.object({
+export const WorkspaceOrchestratorSchema = Schema.object({
   name: z.string().describe('Orchestrator display name. Example: "Atlas".'),
-  tone: FractalWorkspaceOrchestratorToneSchema,
-  style: FractalWorkspaceOrchestratorStyleSchema,
+  tone: WorkspaceOrchestratorToneSchema,
+  style: WorkspaceOrchestratorStyleSchema,
   autonomy: z
     .number()
     .min(0)
@@ -276,7 +276,7 @@ export const FractalWorkspaceOrchestratorSchema = Schema.object({
 // ============================================================================
 
 /**
- * Complete Fractal workspace — master shape for persistence and derived DTOs.
+ * Complete AOS workspace — master shape for persistence and derived DTOs.
  *
  * @example
  * ```typescript
@@ -290,7 +290,7 @@ export const FractalWorkspaceOrchestratorSchema = Schema.object({
  *   labels: [],
  *   members: [{ userId: "550e8400-e29b-41d4-a716-446655440000", role: "owner", addedAt: "2026-07-17T12:00:00.000Z" }],
  *   worktrees: { deleteOldWorktrees: true, worktreeLimit: 15 },
- *   git: { branchPrefix: "fractal", forcePush: false },
+ *   git: { branchPrefix: "aos", forcePush: false },
  *   archived: false,
  *   domains: {},
  *   createdAt: "2026-07-17T12:00:00.000Z",
@@ -298,7 +298,7 @@ export const FractalWorkspaceOrchestratorSchema = Schema.object({
  * }
  * ```
  */
-export const FractalWorkspaceSchema = Schema.object({
+export const WorkspaceSchema = Schema.object({
   id: z
     .string()
     .describe('The generated ID for the workspace. Example: "project-alpha".'),
@@ -321,32 +321,32 @@ export const FractalWorkspaceSchema = Schema.object({
     .optional()
     .describe('Optional color hex. Example: "#6366f1".'),
   tasks: z
-    .array(FractalWorkspaceTaskTypeSchema)
+    .array(WorkspaceTaskTypeSchema)
     .describe(
       'Task type definitions for this workspace. Example: [{ "id": "bug", "label": "Bug", "color": "#ef4444" }].',
     ),
   labels: z
-    .array(FractalWorkspaceLabelSchema)
+    .array(WorkspaceLabelSchema)
     .describe(
       'Custom label definitions for this workspace. Example: [{ "id": "ui-ux", "label": "UI/UX", "icon": "Palette", "color": "#ec4899" }].',
     ),
   members: z
-    .array(FractalWorkspaceMemberSchema)
+    .array(WorkspaceMemberSchema)
     .default([])
     .describe(
       'Workspace membership entries. Example: [{ "userId": "550e8400-e29b-41d4-a716-446655440000", "role": "owner", "addedAt": "2026-07-17T12:00:00.000Z" }].',
     ),
-  worktrees: FractalWorkspaceWorktreesSchema,
-  git: FractalWorkspaceGitSchema,
+  worktrees: WorkspaceWorktreesSchema,
+  git: WorkspaceGitSchema,
   archived: z
     .boolean()
     .default(false)
     .describe("Whether the workspace is archived. Example: false."),
   domains: z
-    .record(z.string(), FractalWorkspaceDomainSchema)
+    .record(z.string(), WorkspaceDomainSchema)
     .default({})
     .describe(
-      'Map of custom domain → artifact routing entries; key is the FQDN. Example: { "fractal.app": { "artifactId": "550e8400-e29b-41d4-a716-446655440000", "workspaceId": "project-alpha", "createdAt": "2026-07-17T12:00:00.000Z" } }.',
+      'Map of custom domain → artifact routing entries; key is the FQDN. Example: { "workspace.example.com": { "artifactId": "550e8400-e29b-41d4-a716-446655440000", "workspaceId": "project-alpha", "createdAt": "2026-07-17T12:00:00.000Z" } }.',
     ),
   createdAt: z
     .string()
@@ -375,7 +375,7 @@ export const FractalWorkspaceSchema = Schema.object({
  * }
  * ```
  */
-export const FractalWorkspaceCreateInputSchema = FractalWorkspaceSchema.omit({
+export const WorkspaceCreateInputSchema = WorkspaceSchema.omit({
   id: true,
   tasks: true,
   labels: true,
@@ -393,7 +393,7 @@ export const FractalWorkspaceCreateInputSchema = FractalWorkspaceSchema.omit({
     .describe(
       'The absolute path of the workspace; omit to skip scaffolding. Example: "/path/to/project".',
     ),
-  orchestrator: FractalWorkspaceOrchestratorSchema.optional().describe(
+  orchestrator: WorkspaceOrchestratorSchema.optional().describe(
     'Initial orchestrator agent configuration. Example: { "name": "Atlas", "tone": "professional", "style": "balanced", "autonomy": 0.8 }.',
   ),
 });
@@ -406,7 +406,7 @@ export const FractalWorkspaceCreateInputSchema = FractalWorkspaceSchema.omit({
 /**
  * Get-workspace input — workspace ID or slug to retrieve.
  *
- * When omitted, defaults to the current workspace from the `FRACTAL_WORKSPACE_ID`
+ * When omitted, defaults to the current workspace from the `AOS_WORKSPACE_ID`
  * environment variable.
  *
  * @example
@@ -416,12 +416,12 @@ export const FractalWorkspaceCreateInputSchema = FractalWorkspaceSchema.omit({
  * }
  * ```
  */
-export const FractalWorkspaceGetInputSchema = Schema.object({
+export const WorkspaceGetInputSchema = Schema.object({
   workspace: z
     .string()
     .optional()
     .describe(
-      'Workspace ID or slug to retrieve; when omitted, defaults to the current workspace from the FRACTAL_WORKSPACE_ID environment variable. Example: "project-alpha".',
+      'Workspace ID or slug to retrieve; when omitted, defaults to the current workspace from the AOS_WORKSPACE_ID environment variable. Example: "project-alpha".',
     ),
 });
 
@@ -441,7 +441,7 @@ export const FractalWorkspaceGetInputSchema = Schema.object({
  * }
  * ```
  */
-export const FractalWorkspaceUpdateInputSchema = FractalWorkspaceSchema.omit({
+export const WorkspaceUpdateInputSchema = WorkspaceSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -464,8 +464,8 @@ export const FractalWorkspaceUpdateInputSchema = FractalWorkspaceSchema.omit({
  * }
  * ```
  */
-export const FractalWorkspaceMemberAddInputSchema =
-  FractalWorkspaceMemberSchema.pick({
+export const WorkspaceMemberAddInputSchema =
+  WorkspaceMemberSchema.pick({
     userId: true,
     role: true,
   });
@@ -485,7 +485,7 @@ export const FractalWorkspaceMemberAddInputSchema =
  * }
  * ```
  */
-export const FractalWorkspaceMemberUpdateInputSchema =
-  FractalWorkspaceMemberSchema.pick({
+export const WorkspaceMemberUpdateInputSchema =
+  WorkspaceMemberSchema.pick({
     role: true,
   });

@@ -368,7 +368,7 @@ const STYLES = `
 
   .eb-root {
     font-family: "Geist Variable", system-ui, -apple-system, sans-serif;
-    color: hsl(var(--foreground, 210 40% 98%));
+    color: var(--foreground, hsl(210 40% 98%));
   }
 
   .eb-root--global {
@@ -377,7 +377,7 @@ const STYLES = `
     display: flex;
     align-items: center;
     justify-content: center;
-    background: hsl(var(--background, 220 13% 7%));
+    background: var(--background, hsl(220 13% 7%));
     z-index: 9999;
     overflow: hidden;
   }
@@ -390,8 +390,8 @@ const STYLES = `
     min-height: 280px;
     padding: 24px;
     border-radius: 12px;
-    background: hsl(var(--card, 220 13% 10%));
-    border: 1px solid hsl(var(--border, 215 20% 14%));
+    background: var(--card, hsl(220 13% 10%));
+    border: 1px solid var(--border, hsl(215 20% 14%));
     overflow: hidden;
   }
 
@@ -432,8 +432,8 @@ const STYLES = `
     gap: 6px;
     padding: 4px 10px 4px 8px;
     border-radius: 100px;
-    background: hsl(var(--destructive, 0 62% 30%) / 0.12);
-    border: 1px solid hsl(var(--destructive, 0 62% 40%) / 0.25);
+    background: color-mix(in oklab, var(--destructive) 12%, transparent);
+    border: 1px solid color-mix(in oklab, var(--destructive) 25%, transparent);
   }
 
   .eb-pulse {
@@ -442,7 +442,7 @@ const STYLES = `
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: hsl(var(--destructive, 0 72% 55%));
+    background: var(--destructive, hsl(0 72% 55%));
     flex-shrink: 0;
   }
 
@@ -451,7 +451,7 @@ const STYLES = `
     position: absolute;
     inset: -3px;
     border-radius: 50%;
-    background: hsl(var(--destructive, 0 72% 55%) / 0.35);
+    background: color-mix(in oklab, var(--destructive) 35%, transparent);
     animation: eb-pulse-ring 2s ease infinite;
   }
 
@@ -460,13 +460,13 @@ const STYLES = `
     font-weight: 500;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: hsl(var(--destructive, 0 72% 60%));
+    color: var(--destructive, hsl(0 72% 60%));
   }
 
   /* ── Logo ───────────────────────────────────────────────────── */
 
   .eb-logo {
-    color: hsl(var(--foreground, 210 40% 98%));
+    color: var(--foreground, hsl(210 40% 98%));
     opacity: 0.55;
     line-height: 0;
   }
@@ -484,7 +484,7 @@ const STYLES = `
     font-size: 1.125rem;
     font-weight: 600;
     letter-spacing: -0.025em;
-    color: hsl(var(--foreground, 210 40% 98%));
+    color: var(--foreground, hsl(210 40% 98%));
     line-height: 1.3;
   }
 
@@ -492,7 +492,7 @@ const STYLES = `
     margin: 0;
     font-size: 0.8125rem;
     line-height: 1.55;
-    color: hsl(var(--muted-foreground, 215 16% 47%));
+    color: var(--muted-foreground, hsl(215 16% 47%));
     max-width: 320px;
   }
 
@@ -504,8 +504,8 @@ const STYLES = `
     gap: 6px;
     padding: 6px 12px;
     border-radius: 8px;
-    background: hsl(var(--muted, 215 20% 12%));
-    border: 1px solid hsl(var(--border, 215 20% 16%));
+    background: var(--muted, hsl(215 20% 12%));
+    border: 1px solid var(--border, hsl(215 20% 16%));
     max-width: 100%;
     overflow: hidden;
   }
@@ -514,14 +514,14 @@ const STYLES = `
     font-size: 0.6875rem;
     font-weight: 600;
     letter-spacing: 0.02em;
-    color: hsl(var(--destructive, 0 72% 58%));
+    color: var(--destructive, hsl(0 72% 58%));
     white-space: nowrap;
     flex-shrink: 0;
     font-family: ui-monospace, "Cascadia Code", monospace;
   }
 
   .eb-error-sep {
-    color: hsl(var(--border, 215 20% 28%));
+    color: var(--border, hsl(215 20% 28%));
     font-size: 0.75rem;
     flex-shrink: 0;
   }
@@ -529,7 +529,7 @@ const STYLES = `
   .eb-error-msg {
     font-size: 0.6875rem;
     font-family: ui-monospace, "Cascadia Code", monospace;
-    color: hsl(var(--muted-foreground, 215 16% 47%));
+    color: var(--muted-foreground, hsl(215 16% 47%));
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -577,8 +577,8 @@ const STYLES = `
 
   .eb-btn--primary {
     width: 100%;
-    background: hsl(var(--foreground, 210 40% 98%));
-    color: hsl(var(--background, 220 13% 7%));
+    background: var(--foreground, hsl(210 40% 98%));
+    color: var(--background, hsl(220 13% 7%));
   }
 
   .eb-btn--primary:hover {
@@ -587,14 +587,14 @@ const STYLES = `
 
   .eb-btn--ghost {
     flex: 1;
-    background: hsl(var(--muted, 215 20% 12%));
-    color: hsl(var(--muted-foreground, 215 16% 47%));
-    border: 1px solid hsl(var(--border, 215 20% 16%));
+    background: var(--muted, hsl(215 20% 12%));
+    color: var(--muted-foreground, hsl(215 16% 47%));
+    border: 1px solid var(--border, hsl(215 20% 16%));
   }
 
   .eb-btn--ghost:hover {
-    background: hsl(var(--accent, 215 20% 16%));
-    color: hsl(var(--foreground, 210 40% 98%));
-    border-color: hsl(var(--border, 215 20% 22%));
+    background: var(--accent, hsl(215 20% 16%));
+    color: var(--foreground, hsl(210 40% 98%));
+    border-color: var(--border, hsl(215 20% 22%));
   }
 `;

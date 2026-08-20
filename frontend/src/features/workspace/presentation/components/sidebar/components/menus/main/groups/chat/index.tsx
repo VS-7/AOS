@@ -6,7 +6,7 @@ import {
   SidebarGroupLabel,
 } from "@/components/ui/sidebar";
 import { aos } from "@/app/aos";
-import { FractalChatKindHelper } from "@/features/chat/services/chat/chat-kind.helper";
+import { ChatKindHelper } from "@/features/chat/services/chat/chat-kind.helper";
 import { resolveActiveChatId } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
 import { CreateChannelDialog } from "../channels/components/create-channel-dialog";
 import { ChatChannelsList } from "./components/chat-channels-list";
@@ -63,7 +63,7 @@ export function WorkspaceSidebarChatGroupMenu() {
 
   const badges = React.useMemo(
     () => ({
-      channels: FractalChatKindHelper.countProcessingByKind(
+      channels: ChatKindHelper.countProcessingByKind(
         chats,
         "channel",
         occupancy,
@@ -72,13 +72,13 @@ export function WorkspaceSidebarChatGroupMenu() {
       team: agents.filter((agent) =>
         Object.values(occupancy).some((ids) => ids.includes(agent.id)),
       ).length,
-      tasks: FractalChatKindHelper.countProcessingByKind(
+      tasks: ChatKindHelper.countProcessingByKind(
         chats,
         "task",
         occupancy,
         agentIds,
       ),
-      runs: FractalChatKindHelper.countProcessingByKind(
+      runs: ChatKindHelper.countProcessingByKind(
         chats,
         "run",
         occupancy,

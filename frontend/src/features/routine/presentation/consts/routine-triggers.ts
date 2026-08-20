@@ -1,9 +1,9 @@
 import type { LucideIcon } from "lucide-react";
 import { ActivityIcon, ClockIcon, WebhookIcon } from "lucide-react";
-import type { FractalRoutine } from "@/features/routine/interfaces/routine.interfaces";
-import type { FractalRoutineActivityFilter } from "@/features/routine/interfaces/routine.interfaces";
+import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
+import type { RoutineActivityFilter } from "@/features/routine/interfaces/routine.interfaces";
 
-export type RoutineTriggerTypeId = FractalRoutine["triggers"][number]["type"];
+export type RoutineTriggerTypeId = Routine["triggers"][number]["type"];
 
 export type RoutineScheduledPresetId =
   | "hourly"
@@ -32,7 +32,7 @@ export type RoutineTriggerFormValue =
       config: {
         namespace: string;
         event: string;
-        filters?: FractalRoutineActivityFilter[];
+        filters?: RoutineActivityFilter[];
       };
     };
 

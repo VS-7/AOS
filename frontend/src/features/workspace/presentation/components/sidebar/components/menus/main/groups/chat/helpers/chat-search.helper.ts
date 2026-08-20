@@ -1,14 +1,14 @@
-import type { FractalAgent } from "@/features/agent/interfaces/agent.interfaces";
+import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
 import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
 import {
-  FractalChatKindHelper,
-  type FractalChatKind,
+  ChatKindHelper,
+  type ChatKind,
 } from "@/features/chat/services/chat/chat-kind.helper";
 
 export type ChatSearchHit = {
   chatId: string;
   title: string;
-  kind: FractalChatKind;
+  kind: ChatKind;
   updatedAt?: string | Date;
   subtitle?: string;
   score: number;
@@ -20,14 +20,14 @@ export type ChatSearchHit = {
  * Empty query → recent chats (by updatedAt). Non-empty → title/id/task/routine
  * match with recency boost.
  */
-export class FractalChatSearchHelper {
+export class ChatSearchHelper {
   /**
    * Builds ranked search hits across all chat kinds + agent DM stubs.
    */
   public static search(input: {
     query: string;
     chats: Chat[];
-    agents: FractalAgent[];
+    agents: Agent[];
     agentIds: ReadonlySet<string>;
     limit?: number;
   }): ChatSearchHit[] {
@@ -36,7 +36,7 @@ export class FractalChatSearchHelper {
     const hits: ChatSearchHit[] = [];
 
     for (const chat of input.chats) {
-      const kind = FractalChatKindHelper.classify(chat, input.agentIds);
+      const kind = ChatKindHelper.classify(chat, input.agentIds);
       const title = chat.title || chat.id;
       const haystack = [
         title,
@@ -49,8 +49,8 @@ export class FractalChatSearchHelper {
         .toLowerCase();
 
       const score = q
-        ? FractalChatSearchHelper._score(haystack, title.toLowerCase(), q)
-        : FractalChatSearchHelper._recency_score(chat.updatedAt);
+        ? ChatSearchHelper._score(haystack, title.toLowerCase(), q)
+        : ChatSearchHelper._recency_score(chat.updatedAt);
 
       if (q && score <= 0) {
         continue;
@@ -92,7 +92,7 @@ export class FractalChatSearchHelper {
 
         const title = agent.name || agent.id;
         const haystack = `${title} ${agent.id} dm agent`.toLowerCase();
-        const score = FractalChatSearchHelper._score(
+        const score = ChatSearchHelper._score(
           haystack,
           title.toLowerCase(),
           q,
@@ -119,8 +119,8 @@ export class FractalChatSearchHelper {
         }
 
         return (
-          FractalChatSearchHelper._to_time(right.updatedAt) -
-          FractalChatSearchHelper._to_time(left.updatedAt)
+          ChatSearchHelper._to_time(right.updatedAt) -
+          ChatSearchHelper._to_time(left.updatedAt)
         );
       })
       .slice(0, limit);
@@ -141,7 +141,7 @@ export class FractalChatSearchHelper {
   }
 
   private static _recency_score(updatedAt?: string | Date): number {
-    const ageMs = Date.now() - FractalChatSearchHelper._to_time(updatedAt);
+    const ageMs = Date.now() - ChatSearchHelper._to_time(updatedAt);
     return Math.max(1, 50 - Math.floor(ageMs / (1000 * 60 * 60 * 6)));
   }
 

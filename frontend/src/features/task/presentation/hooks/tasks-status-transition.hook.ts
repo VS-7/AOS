@@ -1,10 +1,10 @@
 import { useState } from "react";
-import type { FractalTask } from "@/features/task/interfaces/task.interfaces";
+import type { Task } from "@/features/task/interfaces/task.interfaces";
 
 interface TaskStatusTransitionState {
   open: boolean;
-  task: FractalTask | null;
-  status: FractalTask["status"] | null;
+  task: Task | null;
+  status: Task["status"] | null;
 }
 
 export function useTasksStatusTransition() {
@@ -14,7 +14,7 @@ export function useTasksStatusTransition() {
     status: null,
   });
 
-  function open(task: FractalTask, status: FractalTask["status"]) {
+  function open(task: Task, status: Task["status"]) {
     setState({
       open: true,
       task,

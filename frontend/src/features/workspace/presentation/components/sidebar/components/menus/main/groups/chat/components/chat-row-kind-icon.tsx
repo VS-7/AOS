@@ -5,9 +5,9 @@ import {
   RepeatIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
-import type { FractalChatKind } from "@/features/chat/services/chat/chat-kind.helper";
+import type { ChatKind } from "@/features/chat/services/chat/chat-kind.helper";
 
-const KIND_ICON: Record<Exclude<FractalChatKind, "external">, IconSvgElement> = {
+const KIND_ICON: Record<Exclude<ChatKind, "external">, IconSvgElement> = {
   channel: TextNumberSignIcon,
   dm: BotIcon,
   task: CheckListIcon,
@@ -15,7 +15,7 @@ const KIND_ICON: Record<Exclude<FractalChatKind, "external">, IconSvgElement> = 
 };
 
 interface ChatRowKindIconProps {
-  kind: FractalChatKind;
+  kind: ChatKind;
   className?: string;
 }
 

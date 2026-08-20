@@ -30,10 +30,10 @@ import {
 import { cn } from "@/lib/utils";
 import { springs } from "@/lib/springs";
 import { openChatTab } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
-import type { FractalRun } from "@/features/routine/interfaces/routine.interfaces";
+import type { Run } from "@/features/routine/interfaces/routine.interfaces";
 
-type RunTriggerFilter = NonNullable<FractalRun["trigger"]>;
-type RunStatusFilter = FractalRun["status"];
+type RunTriggerFilter = NonNullable<Run["trigger"]>;
+type RunStatusFilter = Run["status"];
 
 export interface RoutineRunHistoryFilters {
   searchOpen: boolean;
@@ -51,7 +51,7 @@ export interface RoutineRunHistoryFilters {
 }
 
 interface RoutineRunHistoryProps {
-  runs: FractalRun[];
+  runs: Run[];
   filters: RoutineRunHistoryFilters;
   routineName?: string;
   onRunNow?: () => void;
@@ -87,7 +87,7 @@ function formatTriggeredAt(iso: string) {
   });
 }
 
-function formatDuration(run: FractalRun) {
+function formatDuration(run: Run) {
   if (!run.finishedAt) return "—";
 
   const ms =
@@ -103,7 +103,7 @@ function formatDuration(run: FractalRun) {
   return rem === 0 ? `${hours}h` : `${hours}h ${rem}m`;
 }
 
-function triggerLabel(run: FractalRun) {
+function triggerLabel(run: Run) {
   switch (run.trigger) {
     case "manual":
       return "Manual";
@@ -119,8 +119,8 @@ function triggerLabel(run: FractalRun) {
 }
 
 function countRunsInWindow(
-  runs: FractalRun[],
-  status: FractalRun["status"],
+  runs: Run[],
+  status: Run["status"],
   windowMs: number,
 ) {
   const cutoff = Date.now() - windowMs;
@@ -131,7 +131,7 @@ function countRunsInWindow(
   ).length;
 }
 
-function RunStatusBadge({ status }: { status: FractalRun["status"] }) {
+function RunStatusBadge({ status }: { status: Run["status"] }) {
   if (status === "running" || status === "pending") {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -452,7 +452,7 @@ export function RoutineRunHistory({
     );
   });
 
-  function handleOpenRun(run: FractalRun) {
+  function handleOpenRun(run: Run) {
     openChatTab({
       chatId: run.id,
       title: routineName ? `${routineName} · run` : `Run ${run.id.slice(0, 8)}`,

@@ -1,7 +1,7 @@
-import type { FractalTaskAssignee } from "@/features/task/interfaces/task.interfaces";
+import type { TaskAssignee } from "@/features/task/interfaces/task.interfaces";
 import type {
-  FractalWorkspaceDirectoryAgent,
-  FractalWorkspaceDirectoryUser,
+  WorkspaceDirectoryAgent,
+  WorkspaceDirectoryUser,
 } from "@/features/workspace/interfaces/directory.interfaces";
 import type { AuthSelfProfile } from "@/features/auth/presentation/stores/auth.store";
 
@@ -22,8 +22,8 @@ export interface AssigneeIdentity {
 
 /** Local directory snapshot used to resolve assignee ids in the UI. */
 export interface AssigneeDirectoryInput {
-  users: FractalWorkspaceDirectoryUser[];
-  agents: FractalWorkspaceDirectoryAgent[];
+  users: WorkspaceDirectoryUser[];
+  agents: WorkspaceDirectoryAgent[];
   /** Current authenticated user — directory excludes the viewer, so self-assign needs it. */
   self?: AuthSelfProfile | null;
 }
@@ -120,7 +120,7 @@ export function resolveTaskAssignee(
   directory: AssigneeDirectoryInput,
   task: {
     assigned?: string;
-    assignee?: FractalTaskAssignee | null;
+    assignee?: TaskAssignee | null;
   },
 ): AssigneeIdentity | null {
   const projection = task.assignee;

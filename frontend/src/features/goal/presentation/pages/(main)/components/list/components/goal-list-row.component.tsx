@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { FractalGoal } from "@/features/goal/interfaces/goal.interfaces";
+import type { Goal } from "@/features/goal/interfaces/goal.interfaces";
 import { GoalHelper } from "@/features/goal/presentation/helpers/goal.helper";
 import {
   GOAL_STATUS_CONFIG,
@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { SetPriorityDropdown } from "@/features/task/presentation/components/dropdowns/set-priority.dropdown";
 
 interface GoalListRowProps {
-  goal: FractalGoal;
+  goal: Goal;
 }
 
 export function GoalListRow({ goal }: GoalListRowProps) {
@@ -34,7 +34,7 @@ export function GoalListRow({ goal }: GoalListRowProps) {
   const deadlineFormatted = GoalHelper.formatDeadline(goal.deadline);
   const isOverdue = GoalHelper.isOverdue(goal.deadline);
 
-  const handlePriorityChange = async (priority: FractalGoal["priority"]) => {
+  const handlePriorityChange = async (priority: Goal["priority"]) => {
     try {
       await aos.client.goal.update.mutate({
         params: { goal: goal.id },
@@ -49,7 +49,7 @@ export function GoalListRow({ goal }: GoalListRowProps) {
     }
   };
 
-  const handleStatusChange = async (status: FractalGoal["status"]) => {
+  const handleStatusChange = async (status: Goal["status"]) => {
     try {
       await aos.client.goal.update.mutate({
         params: { goal: goal.id },
@@ -121,7 +121,7 @@ export function GoalListRow({ goal }: GoalListRowProps) {
             return (
               <DropdownMenuItem
                 key={s}
-                onClick={() => handleStatusChange(s as FractalGoal["status"])}
+                onClick={() => handleStatusChange(s as Goal["status"])}
                 className="flex items-center gap-2"
               >
                 <Icon className={`size-4 ${cfg.color}`} />

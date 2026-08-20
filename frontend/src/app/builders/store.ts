@@ -417,7 +417,7 @@ export class AosStoreBuilt<TState, TActions> {
     try {
       this._channel.postMessage(stateToBroadcast);
     } catch (e) {
-      console.warn(`[AosStore: ${this.name}] Failed to broadcast state. Ensure it does not contain Map, Set, functions, or complex objects like FractalChat.`, e);
+      console.warn(`[AosStore: ${this.name}] Failed to broadcast state. Ensure it does not contain Map, Set, functions, or complex objects like Chat.`, e);
     }
   }
 

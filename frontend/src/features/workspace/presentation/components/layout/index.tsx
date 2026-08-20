@@ -39,12 +39,12 @@ export function WorkspaceLayout() {
   const { notify } = useNotification();
 
   // In-app route changes (Tasks, Goals, …) reveal the Outlet by focusing the
-  // fractal tab. Sidebar chat opens call openChatTab without changing
+  // "aos" tab. Sidebar chat opens call openChatTab without changing
   // pathname, so chat multi-tabs are not reset by this effect.
   useEffect(() => {
-    if (activeTabId === "fractal") return;
+    if (activeTabId === "aos") return;
 
-    stores.viewport.actions.setActiveTab("fractal");
+    stores.viewport.actions.setActiveTab("aos");
   }, [pathname]);
 
   useEffect(() => {

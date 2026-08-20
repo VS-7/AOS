@@ -11,20 +11,20 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import type {
-  FractalTask,
-  FractalTaskTransitionInput,
+  Task,
+  TaskTransitionInput,
 } from "@/features/task/interfaces/task.interfaces";
 import { CheckCircle2, GitBranch, GitMerge } from "lucide-react";
 
 interface TasksFinishWorkflowDialogProps {
   open: boolean;
-  task: FractalTask | null;
+  task: Task | null;
   onOpenChange: (open: boolean) => void;
-  onConfirm: (input: FractalTaskTransitionInput) => void | Promise<void>;
+  onConfirm: (input: TaskTransitionInput) => void | Promise<void>;
 }
 
 type FinishOperation = NonNullable<
-  FractalTaskTransitionInput["completion"]
+  TaskTransitionInput["completion"]
 >["operation"];
 
 const OPTIONS: Array<{
@@ -64,7 +64,7 @@ export function TasksFinishWorkflowDialog({
   }, [open]);
 
   async function handleConfirm() {
-    const input: FractalTaskTransitionInput = {
+    const input: TaskTransitionInput = {
       status: "finished",
       delegate: true,
       completion: {

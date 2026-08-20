@@ -5,11 +5,11 @@ import { TemplatesSidebar } from "./components/sidebar";
 import { SelectedTemplateContent } from "./components/content";
 import { SelectedTemplateDetail } from "./components/details";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
-import type { FractalTemplate } from "@/features/template/interfaces/template.interfaces";
+import type { Template } from "@/features/template/interfaces/template.interfaces";
 
 export function WorkspaceTemplatesSection() {
   const templatesQuery = aos.client.template.list.useQuery({ query: {} });
-  const templates = (templatesQuery.data?.templates || []) as FractalTemplate[];
+  const templates = (templatesQuery.data?.templates || []) as Template[];
 
   return (
     <TemplatesProvider

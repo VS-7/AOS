@@ -22,7 +22,7 @@ import {
   WorkspaceSortableTabItem,
 } from "./workspace-tab-item";
 
-const FRACTAL_TAB_ID = "fractal";
+const AOS_TAB_ID = "aos";
 
 interface WorkspaceTabStripProps {
   tabs: ViewportTabState[];
@@ -38,8 +38,8 @@ export function WorkspaceTabStrip({
   const [activeDragTab, setActiveDragTab] =
     React.useState<ViewportTabState | null>(null);
 
-  const anchorTab = tabs.find((tab) => tab.id === FRACTAL_TAB_ID);
-  const movableTabs = tabs.filter((tab) => tab.id !== FRACTAL_TAB_ID);
+  const anchorTab = tabs.find((tab) => tab.id === AOS_TAB_ID);
+  const movableTabs = tabs.filter((tab) => tab.id !== AOS_TAB_ID);
   const sortableIds = React.useMemo(
     () => movableTabs.map((tab) => tab.id),
     [movableTabs],

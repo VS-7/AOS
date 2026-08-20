@@ -7,7 +7,7 @@ import { AnimatedEmptyState } from "@/components/ui/animated-empty-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { SplitPageLayout } from "@/components/ui/split-page-layout"
-import type { FractalFile } from "@/features/file/interfaces/file.interfaces"
+import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces"
 import {
   isTextContentViewer,
   resolveFileViewer,
@@ -70,7 +70,7 @@ export function FilesContent({
   )
   const isReadOnly = Boolean(activeFileTabMetadata?.fileReadOnly)
 
-  const hintedViewer = activeFileTabMetadata?.fileViewer as FractalFile["viewer"] | undefined
+  const hintedViewer = activeFileTabMetadata?.fileViewer as WorkspaceFile["viewer"] | undefined
   const fileName = activeFilePath?.split("/").pop() ?? activeFilePath ?? ""
   const resolvedViewer =
     hintedViewer ?? (fileName ? resolveFileViewer(fileName) : undefined)
@@ -80,7 +80,7 @@ export function FilesContent({
 
   const readQuery = aos.client.file.read.useQuery({
     query: {
-      path: activeFilePath || "__fractal_sidebar_placeholder__",
+      path: activeFilePath || "__aos_sidebar_placeholder__",
       context: JSON.stringify(explorerContext),
     },
     enabled: Boolean(activeFilePath) && shouldReadTextContent,
@@ -186,11 +186,11 @@ export function FilesContent({
       size: 0,
       type: "file" as const,
       updatedAt: new Date(0).toISOString(),
-      viewer: (activeFileTabMetadata?.fileViewer as FractalFile["viewer"]) ?? "other",
-    } satisfies FractalFile
+      viewer: (activeFileTabMetadata?.fileViewer as WorkspaceFile["viewer"]) ?? "other",
+    } satisfies WorkspaceFile
   }, [activeFilePath, activeFileTabMetadata])
 
-  const file = (readQuery.data?.file as FractalFile | undefined) ?? fallbackFile
+  const file = (readQuery.data?.file as WorkspaceFile | undefined) ?? fallbackFile
   const isLoading = Boolean(activeFilePath) && shouldReadTextContent && readQuery.isLoading
 
   function handleSave() {

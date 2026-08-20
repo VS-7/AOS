@@ -11,7 +11,7 @@ import {
   FileTextIcon,
   WrenchIcon,
 } from "lucide-react"
-import type { Chat, FractalChatMessage } from "@/features/chat/interfaces/chat.interfaces"
+import type { Chat, ChatMessage } from "@/features/chat/interfaces/chat.interfaces"
 
 /**
  * A stored message is finished by the time chats_get returns it — the
@@ -19,8 +19,8 @@ import type { Chat, FractalChatMessage } from "@/features/chat/interfaces/chat.i
  * timeline shows what happened, not a live per-part status.
  *
  * Task 9 replaced `chat.interfaces.ts`'s `Message`/`Part` (which mirrored
- * AOS's Go entity directly) with the recovered Fractal `FractalChatMessage`
- * (`UIMessage<FractalChatMessageMetadata>` from the `ai` SDK — see
+ * AOS's Go entity directly) with the recovered AOS `ChatMessage`
+ * (`UIMessage<ChatMessageMetadata>` from the `ai` SDK — see
  * `features/chat/interfaces/chat.interfaces.ts`'s doc comment) so the bulk
  * of the freshly-copied chat/agent/workspace presentation code — which
  * imports that exact type — compiles. This file is the one hand-adapted
@@ -39,7 +39,7 @@ type TimelineEvent = {
   detail: string
 }
 
-function toExecutionEvents(messages: FractalChatMessage[]): TimelineEvent[] {
+function toExecutionEvents(messages: ChatMessage[]): TimelineEvent[] {
   const events: TimelineEvent[] = []
 
   for (const message of messages) {
@@ -95,7 +95,7 @@ function eventIcon(kind: TimelineEvent["kind"]) {
 
 export interface ChatTimelineProps {
   chatId?: string
-  messages?: FractalChatMessage[]
+  messages?: ChatMessage[]
   isLoading?: boolean
   title?: string
 }
@@ -157,7 +157,7 @@ function ChatTimelineView({
   title,
 }: {
   isLoading: boolean
-  messages: FractalChatMessage[]
+  messages: ChatMessage[]
   title: string
 }) {
   const events = toExecutionEvents(messages)

@@ -1,21 +1,21 @@
 import { getIconForExtension } from "@/lib/utils";
-import type { FractalFile } from "@/features/file/interfaces/file.interfaces";
+import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces";
 import type { LucideIcon } from "lucide-react";
 
 export interface FilesTreeNode {
   children: FilesTreeNode[];
-  entry?: FractalFile;
+  entry?: WorkspaceFile;
   id: string;
   name: string;
   path: string;
   type: "directory" | "file";
 }
 
-export function getFileIcon(entry: FractalFile): LucideIcon {
+export function getFileIcon(entry: WorkspaceFile): LucideIcon {
   return getIconForExtension(entry.browserUrl);
 }
 
-export function filterFiles(entries: FractalFile[], searchQuery: string) {
+export function filterFiles(entries: WorkspaceFile[], searchQuery: string) {
   const query = searchQuery.trim().toLowerCase();
 
   if (!query) return entries;
@@ -29,7 +29,7 @@ export function filterFiles(entries: FractalFile[], searchQuery: string) {
   });
 }
 
-export function buildFilesTree(entries: FractalFile[]): FilesTreeNode[] {
+export function buildFilesTree(entries: WorkspaceFile[]): FilesTreeNode[] {
   const root = new Map<string, MutableFilesTreeNode>();
 
   for (const entry of entries) {
@@ -73,7 +73,7 @@ export function formatFileSize(size: number) {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function getFileBadgeLabel(entry: FractalFile) {
+export function getFileBadgeLabel(entry: WorkspaceFile) {
   if (entry.type === "directory") return "Directory";
 
   switch (entry.viewer) {
@@ -106,13 +106,13 @@ export function getFileBadgeLabel(entry: FractalFile) {
   }
 }
 
-export function getFileTypeLabel(entry: FractalFile) {
+export function getFileTypeLabel(entry: WorkspaceFile) {
   if (entry.type === "directory") return "FOLDER";
   if (!entry.extension) return "Unknown";
   return entry.extension.toUpperCase();
 }
 
-export function getRootFolderLabel(entries: FractalFile[]) {
+export function getRootFolderLabel(entries: WorkspaceFile[]) {
   return entries[0]?.path.split("/")[0] ?? "Files";
 }
 

@@ -14,23 +14,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { aos } from "@/app/aos";
 import { toast } from "sonner";
-import type { FractalModelProvider, FractalModelProviderAuth } from "@/features/model/interfaces/model.interfaces";
+import type { ModelProvider, ModelProviderAuth } from "@/features/model/interfaces/model.interfaces";
 import { useProviderLogo } from "../hooks/use-provider-logo";
 
 interface ProviderUpsertDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  provider: FractalModelProvider;
+  provider: ModelProvider;
   /** When provided, indicates an edit flow (the key will be pre-filled if known). */
   mode?: "create" | "edit";
   onSuccess?: () => void;
 }
 
-function isOAuthLike(auth: FractalModelProviderAuth) {
+function isOAuthLike(auth: ModelProviderAuth) {
   return auth.mode !== "api-key";
 }
 
-function ProviderLogoBadge({ provider }: { provider: FractalModelProvider }) {
+function ProviderLogoBadge({ provider }: { provider: ModelProvider }) {
   const src = useProviderLogo(provider);
   if (!src) return null;
   return (

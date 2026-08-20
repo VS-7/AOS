@@ -17,16 +17,16 @@ import {
 import { aos } from "@/app/aos";
 import { cn, timeAgo } from "@/lib/utils";
 import { toast } from "sonner";
-import type { FractalRoutine } from "@/features/routine/interfaces/routine.interfaces";
+import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
 import {
   RoutineActionsDropdown,
   SetRoutineAgentDropdown,
   SetRoutineStatusDropdown,
 } from "@/features/routine/presentation/components/dropdowns";
-import { FractalRoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
+import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
 
 interface RoutineListRowProps {
-  routine: FractalRoutine;
+  routine: Routine;
 }
 
 export const RoutineListRow = React.memo(function RoutineListRow({
@@ -35,23 +35,23 @@ export const RoutineListRow = React.memo(function RoutineListRow({
   const router = useRouter();
   const agents = aos.stores.agent.useState((state) => state.items);
 
-  const status = FractalRoutineHelper.getStatus(routine.status);
+  const status = RoutineHelper.getStatus(routine.status);
   const StatusIcon = status.icon;
-  const agentLabel = FractalRoutineHelper.getAgentLabel(routine.agent, agents);
-  const triggersLabel = FractalRoutineHelper.getTriggersInlineLabel(
+  const agentLabel = RoutineHelper.getAgentLabel(routine.agent, agents);
+  const triggersLabel = RoutineHelper.getTriggersInlineLabel(
     routine.triggers,
   );
   const updatedLabel = timeAgo(routine.updatedAt);
 
   const handleStatusChange = useCallback(
-    async (nextStatus: FractalRoutine["status"]) => {
+    async (nextStatus: Routine["status"]) => {
       try {
         await aos.client.routine.update.mutate({
           params: { routine: routine.id },
           body: { status: nextStatus },
         });
         toast.success(
-          `Status updated to ${FractalRoutineHelper.getStatus(nextStatus).label}`,
+          `Status updated to ${RoutineHelper.getStatus(nextStatus).label}`,
         );
         router.invalidate();
       } catch {
@@ -69,7 +69,7 @@ export const RoutineListRow = React.memo(function RoutineListRow({
           body: { agent },
         });
         toast.success(
-          `Assigned to ${FractalRoutineHelper.getAgentLabel(agent, agents)}`,
+          `Assigned to ${RoutineHelper.getAgentLabel(agent, agents)}`,
         );
         router.invalidate();
       } catch {

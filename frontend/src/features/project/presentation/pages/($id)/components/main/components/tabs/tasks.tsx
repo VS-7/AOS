@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TabsSubtle, TabsSubtleItem } from "@/components/ui/tabs-subtle";
-import type { FractalTask } from "@/features/task/interfaces/task.interfaces";
+import type { Task } from "@/features/task/interfaces/task.interfaces";
 import {
   TASK_STATUS_CONFIG,
   TASK_STATUS_ORDER,
@@ -11,10 +11,10 @@ import { TaskListRow } from "@/features/task/presentation/pages/(main)/component
 import { aos } from "@/app/aos";
 import { Plus } from "lucide-react";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading.hook";
-import type { FractalProject } from "@/features/project/interfaces/project.interfaces";
+import type { Project } from "@/features/project/interfaces/project.interfaces";
 
 interface ProjectTasksTabProps {
-  project: FractalProject;
+  project: Project;
 }
 
 const TASK_TABS = TASK_STATUS_ORDER.map((status) => ({
@@ -69,14 +69,14 @@ function TasksSection({ title, subtitle, action, children }: SectionProps) {
 
 export function ProjectTasksTab({ project }: ProjectTasksTabProps) {
   const [selectedStatus, setSelectedStatus] =
-    useState<FractalTask["status"]>("todo");
+    useState<Task["status"]>("todo");
 
   const taskQuery = aos.client.task.list.useQuery({
     query: { project: [project.id], limit: "200" },
     staleTime: 5 * 60 * 1000,
   });
 
-  const tasks: FractalTask[] = taskQuery.data?.tasks ?? [];
+  const tasks: Task[] = taskQuery.data?.tasks ?? [];
   const isLoading = useDelayedLoading(taskQuery.isLoading);
 
   const filteredTasks = useMemo(

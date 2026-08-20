@@ -1,7 +1,7 @@
-// Fractal's original ran under an Electron-style shell that exposed
+// The original ran under an Electron-style shell that exposed
 // `window.fractal.instructions.openPath(...)` for opening a local file with
 // the OS's default app. AOS is a Wails app with no equivalent bridge, so
-// `window.fractal` is always `undefined` here — real Wails file-opening
+// `window.aos` is always `undefined` here — real Wails file-opening
 // would be a separate, later integration, not a stub to fake now.
 //
 // This only declares the shape so `attachments/components/item.component.tsx`
@@ -11,7 +11,7 @@ export {};
 
 declare global {
   interface Window {
-    fractal?: {
+    aos?: {
       instructions?: {
         openPath?: (path: string) => Promise<void>;
       };
@@ -20,7 +20,7 @@ declare global {
       // webview control) and `system.showItemInFolder` (OS file reveal)
       // are read by the freshly-copied workspace browser panel and file
       // tree context menu; AOS has no Wails bridge for either yet, so
-      // `window.fractal` stays `undefined` in practice and every access
+      // `window.aos` stays `undefined` in practice and every access
       // is already `?.`-guarded by the ported code.
       browser?: {
         reload: (params: { tabId: string }) => void;

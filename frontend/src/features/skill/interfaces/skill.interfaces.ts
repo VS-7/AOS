@@ -82,7 +82,7 @@ export const SkillMetadataSchema = z.object({
 });
 
 /**
- * SkillSchema: Main schema defining a complete Fractal skill.
+ * SkillSchema: Main schema defining a complete AOS skill.
  * @description Represents the complete structure of a skill including metadata and content.
  * @example
  * ```typescript
@@ -322,7 +322,7 @@ export type SkillServicePreviewResult = ResponseWithCTA<{
 
 /**
  * @interface ISkillService
- * @description Defines the contract for the SkillService managing skills within the Fractal ecosystem.
+ * @description Defines the contract for the SkillService managing skills within the AOS ecosystem.
  * All methods return `ResponseWithCTA`-wrapped data to provide rich CLI call-to-action hints.
  */
 export interface ISkillService {
@@ -345,7 +345,7 @@ export interface ISkillService {
   discovery(query: string): Promise<SkillServiceDiscoveryResult>;
 
   /**
-   * Installs a skill from the community registry into the local `.fractal` directory.
+   * Installs a skill from the community registry into the local `.aos` directory.
    * @param source Remote package source and optional skill name.
    */
   install(source: SkillRemoteSourceInput): Promise<SkillServiceInstallResult>;
@@ -376,11 +376,3 @@ export interface ISkillService {
   preview(source: SkillRemoteSourceInput): Promise<SkillServicePreviewResult>;
 }
 
-/**
- * Alias for the freshly-copied `v401/web` presentation code, which
- * imports the `Fractal`-prefixed name (same pattern as `agent.
- * interfaces.ts`'s `Agent`→`FractalAgent`) — added rather than renaming
- * `Skill` throughout this file, which earlier tasks (2-8) already wrote
- * and other code already consumes under the bare name.
- */
-export type FractalSkill = Skill;

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { aos } from "@/app/aos";
 import { useRealtime } from "@/hooks/use-realtime";
-import type { Chat, FractalChatMessage } from "@/features/chat/interfaces/chat.interfaces";
+import type { Chat, ChatMessage } from "@/features/chat/interfaces/chat.interfaces";
 
 interface UseChatParams {
   chatId: string;
@@ -10,21 +10,21 @@ interface UseChatParams {
 
 export interface UseChatResult {
   chat: Chat | null;
-  messages: FractalChatMessage[];
+  messages: ChatMessage[];
   persistedMessageIds: string[];
   isLoading: boolean;
   isRefreshing: boolean;
   refresh: () => void;
 }
 
-function getMessageUpdatedAt(message: FractalChatMessage): number {
+function getMessageUpdatedAt(message: ChatMessage): number {
   const updatedAt = message.metadata?.updatedAt ?? message.metadata?.createdAt;
   const timestamp = updatedAt ? new Date(updatedAt).getTime() : 0;
 
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
-function isCompletedAgentMessage(message: FractalChatMessage): boolean {
+function isCompletedAgentMessage(message: ChatMessage): boolean {
   return (
     message.metadata?.type === "agent" &&
     message.metadata.execution?.status === "completed"
@@ -32,8 +32,8 @@ function isCompletedAgentMessage(message: FractalChatMessage): boolean {
 }
 
 function shouldReplaceMessage(
-  current: FractalChatMessage,
-  incoming: FractalChatMessage,
+  current: ChatMessage,
+  incoming: ChatMessage,
 ): boolean {
   if (isCompletedAgentMessage(incoming)) {
     return true;
@@ -55,9 +55,9 @@ function shouldReplaceMessage(
 }
 
 function upsertMessage(
-  messages: FractalChatMessage[],
-  incoming: FractalChatMessage,
-): FractalChatMessage[] {
+  messages: ChatMessage[],
+  incoming: ChatMessage,
+): ChatMessage[] {
   const index = messages.findIndex((message) => message.id === incoming.id);
 
   if (index === -1) {
@@ -75,9 +75,9 @@ function upsertMessage(
 }
 
 function mergeMessages(
-  currentMessages: FractalChatMessage[],
-  incomingMessages: FractalChatMessage[],
-): FractalChatMessage[] {
+  currentMessages: ChatMessage[],
+  incomingMessages: ChatMessage[],
+): ChatMessage[] {
   return incomingMessages.reduce(upsertMessage, currentMessages);
 }
 
@@ -129,8 +129,8 @@ export function useChat({ chatId, enabled = true }: UseChatParams): UseChatResul
         return {
           ...nextChat,
           messages: mergeMessages(
-            (currentChat.messages ?? []) as FractalChatMessage[],
-            (nextChat.messages ?? []) as FractalChatMessage[],
+            (currentChat.messages ?? []) as ChatMessage[],
+            (nextChat.messages ?? []) as ChatMessage[],
           ),
         };
       });
@@ -138,7 +138,7 @@ export function useChat({ chatId, enabled = true }: UseChatParams): UseChatResul
   });
 
   const applyMessageSnapshot = React.useCallback(
-    (message: FractalChatMessage) => {
+    (message: ChatMessage) => {
       setChat((currentChat) => {
         if (!currentChat) {
           return currentChat;
@@ -147,7 +147,7 @@ export function useChat({ chatId, enabled = true }: UseChatParams): UseChatResul
         return {
           ...currentChat,
           messages: upsertMessage(
-            (currentChat.messages ?? []) as FractalChatMessage[],
+            (currentChat.messages ?? []) as ChatMessage[],
             message,
           ),
         };
@@ -179,12 +179,12 @@ export function useChat({ chatId, enabled = true }: UseChatParams): UseChatResul
   );
 
   const messages = React.useMemo(
-    () => (chat?.messages ?? []) as FractalChatMessage[],
+    () => (chat?.messages ?? []) as ChatMessage[],
     [chat?.messages],
   );
   const persistedMessageIds = React.useMemo(() => {
     const ids = new Set(
-      ((chatQuery.data?.chat?.messages ?? []) as FractalChatMessage[]).map(
+      ((chatQuery.data?.chat?.messages ?? []) as ChatMessage[]).map(
         (message) => message.id,
       ),
     );

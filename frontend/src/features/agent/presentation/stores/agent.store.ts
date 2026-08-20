@@ -1,5 +1,5 @@
 import { AosStore } from "@/app/builders/store";
-import { type FractalAgent } from "@/features/agent/interfaces/agent.interfaces";
+import { type Agent } from "@/features/agent/interfaces/agent.interfaces";
 import { api } from "@/lib/aos-facade";
 
 /**
@@ -16,7 +16,7 @@ import { api } from "@/lib/aos-facade";
  *
  * `occupancy` (chatId -> agentIds currently answering it) has no Go
  * source: `agents_list`'s `Agent` (`internal/domain/agent/entity.go`) has
- * no `processing` field the way Fractal's original combined directory
+ * no `processing` field the way the original combined directory
  * endpoint did, and the realtime signals that used to keep it fresh
  * (`chat:start-processing`/`chat:end-processing`) have no daemon
  * counterpart either — both are explicit `null`s in
@@ -26,7 +26,7 @@ import { api } from "@/lib/aos-facade";
  */
 export const AgentStore = AosStore.create("agents")
   .withState({
-    items: [] as FractalAgent[],
+    items: [] as Agent[],
     occupancy: {} as Record<string, string[]>, // chatId -> agentIds
   })
   .withPersistence({
@@ -71,7 +71,7 @@ export const AgentStore = AosStore.create("agents")
   })
   .build();
 
-async function fetchAgents(): Promise<FractalAgent[]> {
+async function fetchAgents(): Promise<Agent[]> {
   const response = await api.agent!.list!.query<{ agents?: Array<Record<string, unknown>> }>();
   if (response.error) {
     console.error("[AgentStore] agent.list failed", response.error);
@@ -87,6 +87,6 @@ async function fetchAgents(): Promise<FractalAgent[]> {
         role: agent["role"],
         description: agent["description"],
         orchestrator: Boolean(agent["orchestrator"]),
-      }) as FractalAgent,
+      }) as Agent,
   );
 }

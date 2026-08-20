@@ -22,8 +22,8 @@ import { DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import type { FileTree as PierreFileTree } from "@pierre/trees";
 import type {
-  FractalFileExplorerContext,
-  FractalFileExplorerSnapshot,
+  FileExplorerContext,
+  FileExplorerSnapshot,
 } from "@/features/file/interfaces/file.interfaces";
 import {
   explorerContextsEqual,
@@ -42,8 +42,8 @@ interface FilesTreeContextMenuProps {
   item?: ContextMenuItem;
   context: ContextMenuOpenContext;
   model: PierreFileTree;
-  snapshot: FractalFileExplorerSnapshot | undefined;
-  explorerContext: FractalFileExplorerContext;
+  snapshot: FileExplorerSnapshot | undefined;
+  explorerContext: FileExplorerContext;
   clipboard: FilesClipboardState | null;
   onCreateNode: (request: FilesCreateNodeRequest) => void;
   onClipboardChange: (clipboard: FilesClipboardState | null) => void;
@@ -121,7 +121,7 @@ export function FilesTreeContextMenu({
   const menuRef = React.useRef<HTMLDivElement>(null);
   const [menuSize, setMenuSize] = React.useState({ width: 208, height: 240 });
   const readOnly = snapshot?.readOnly ?? false;
-  const canReveal = Boolean(window.fractal?.system?.showItemInFolder);
+  const canReveal = Boolean(window.aos?.system?.showItemInFolder);
   const isEmptySpaceMenu = item == null;
   const parentPath = item
     ? item.kind === "directory"
@@ -255,7 +255,7 @@ export function FilesTreeContextMenu({
             <MenuButton
               onClick={() => {
                 context.close();
-                void window.fractal?.system?.showItemInFolder?.(absolutePath);
+                void window.aos?.system?.showItemInFolder?.(absolutePath);
               }}
             >
               <ExternalLink className="size-4" />

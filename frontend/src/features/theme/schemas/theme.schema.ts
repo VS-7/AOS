@@ -10,7 +10,7 @@ import { Schema } from "@/core/helpers/schema.helper";
  * Color and typography settings applied to one appearance mode (dark or light).
  *
  * Defines accent/surface/ink colors, contrast, window chrome, radius, fonts, and
- * semantic color tokens used by the Fractal UI shell.
+ * semantic color tokens used by the AOS UI shell.
  *
  * @example
  * ```typescript
@@ -26,7 +26,7 @@ import { Schema } from "@/core/helpers/schema.helper";
  * }
  * ```
  */
-export const FractalThemeSettingsSchema = Schema.object({
+export const ThemeSettingsSchema = Schema.object({
   accent: z
     .string()
     .describe('Primary accent color hex. Example: "#ffffff".'),
@@ -73,22 +73,22 @@ export const FractalThemeSettingsSchema = Schema.object({
  * @example
  * ```typescript
  * {
- *   name: "Fractal",
- *   description: "Fractal Team",
- *   url: "https://fractal.ai"
+ *   name: "AOS",
+ *   description: "AOS Team",
+ *   url: "https://example.com"
  * }
  * ```
  */
-export const FractalThemeAuthorSchema = Schema.object({
+export const ThemeAuthorSchema = Schema.object({
   name: z
     .string()
-    .describe('Author display name. Example: "Fractal".'),
+    .describe('Author display name. Example: "AOS".'),
   description: z
     .string()
-    .describe('Short author bio. Example: "Fractal Team".'),
+    .describe('Short author bio. Example: "AOS Team".'),
   url: z
     .string()
-    .describe('Author or project URL. Example: "https://fractal.ai".'),
+    .describe('Author or project URL. Example: "https://example.com".'),
 });
 
 // ============================================================================
@@ -99,17 +99,17 @@ export const FractalThemeAuthorSchema = Schema.object({
 /**
  * Complete UI theme entity — the master shape for built-in and user themes.
  *
- * Fields: `id` (slug), `name`, `description`, `author` ({@link FractalThemeAuthorSchema}),
- * and `theme.dark` / `theme.light` ({@link FractalThemeSettingsSchema}).
+ * Fields: `id` (slug), `name`, `description`, `author` ({@link ThemeAuthorSchema}),
+ * and `theme.dark` / `theme.light` ({@link ThemeSettingsSchema}).
  * Action DTOs MUST derive from this export when they overlap entity fields.
  *
  * @example
  * ```typescript
  * {
- *   id: "fractal",
- *   name: "Fractal",
- *   description: "The default Fractal OS theme",
- *   author: { name: "Fractal", description: "Fractal Team", url: "https://fractal.ai" },
+ *   id: "aos",
+ *   name: "AOS",
+ *   description: "The default AOS OS theme",
+ *   author: { name: "AOS", description: "AOS Team", url: "https://example.com" },
  *   theme: {
  *     dark: {
  *       accent: "#ffffff",
@@ -135,22 +135,22 @@ export const FractalThemeAuthorSchema = Schema.object({
  * }
  * ```
  */
-export const FractalThemeSchema = Schema.object({
+export const ThemeSchema = Schema.object({
   id: z
     .string()
-    .describe('Stable theme slug used in paths and presets. Example: "fractal".'),
+    .describe('Stable theme slug used in paths and presets. Example: "aos".'),
   name: z
     .string()
-    .describe('Human-readable theme name. Example: "Fractal".'),
+    .describe('Human-readable theme name. Example: "AOS".'),
   description: z
     .string()
     .describe(
-      'Short description of the theme look and feel. Example: "The default Fractal OS theme".',
+      'Short description of the theme look and feel. Example: "The default AOS OS theme".',
     ),
-  author: FractalThemeAuthorSchema,
+  author: ThemeAuthorSchema,
   theme: Schema.object({
-    dark: FractalThemeSettingsSchema,
-    light: FractalThemeSettingsSchema,
+    dark: ThemeSettingsSchema,
+    light: ThemeSettingsSchema,
   }),
 });
 
@@ -169,7 +169,7 @@ export const FractalThemeSchema = Schema.object({
  * {}
  * ```
  */
-export const FractalThemeListInputSchema = Schema.object({});
+export const ThemeListInputSchema = Schema.object({});
 
 // ============================================================================
 // Get
@@ -182,15 +182,15 @@ export const FractalThemeListInputSchema = Schema.object({});
  * @example
  * ```typescript
  * {
- *   theme: "fractal"
+ *   theme: "aos"
  * }
  * ```
  */
-export const FractalThemeGetInputSchema = Schema.object({
+export const ThemeGetInputSchema = Schema.object({
   theme: z
     .string()
     .min(1)
-    .describe('Theme slug from the route path. Example: "fractal".'),
+    .describe('Theme slug from the route path. Example: "aos".'),
 });
 
 // ============================================================================
@@ -201,7 +201,7 @@ export const FractalThemeGetInputSchema = Schema.object({
 /**
  * Install-theme input — local absolute path or HTTPS URL to a theme file.
  *
- * When HTTP body === this shape, bind `body: FractalThemeInstallInputSchema`.
+ * When HTTP body === this shape, bind `body: ThemeInstallInputSchema`.
  *
  * @example
  * ```typescript
@@ -210,7 +210,7 @@ export const FractalThemeGetInputSchema = Schema.object({
  * }
  * ```
  */
-export const FractalThemeInstallInputSchema = Schema.object({
+export const ThemeInstallInputSchema = Schema.object({
   pathOrUrl: z
     .string()
     .min(1)

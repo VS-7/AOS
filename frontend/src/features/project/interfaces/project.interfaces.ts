@@ -3,15 +3,15 @@ import type { ResponseWithCTA } from "@/core/interfaces/response.interfaces";
 import { Schema } from "@/core/helpers/schema.helper";
 
 /**
- * Zod schema for a Fractal Project.
+ * Zod schema for a AOS Project.
  *
  * Projects represent top-level workspaces that can be linked to external directories
- * via symlinks or materialized as internal directories under `.fractal/projects/{id}/`.
+ * via symlinks or materialized as internal directories under `.aos/projects/{id}/`.
  *
  * @description Defines the full data model for a project record persisted in the collection.
  * The `content` field (Markdown body) is handled natively by Igniter Collections and omitted from the schema.
  */
-export const FractalProjectSchema = z.object({
+export const ProjectSchema = z.object({
   /** Unique slug identifier for the project, auto-generated from name via Slug.generate. */
   id: z.string(),
   /** Human-readable name of the project. */
@@ -43,7 +43,7 @@ export const FractalProjectSchema = z.object({
  * @description Omits `id` (auto-generated from name via slug), `createdAt`, and `updatedAt` (auto-generated).
  * The `name` field is required.
  */
-export const FractalProjectCreateSchema = z.object({
+export const ProjectCreateSchema = z.object({
   /** Human-readable name of the project. Required. */
   name: z.string(),
   /** Lucide icon name string. Optional. */
@@ -61,7 +61,7 @@ export const FractalProjectCreateSchema = z.object({
  *
  * @description All fields are partial except `id`. Use `.partial()` to allow updating only changed fields.
  */
-export const FractalProjectUpdateSchema = z.object({
+export const ProjectUpdateSchema = z.object({
   /** Human-readable name of the project. Optional. */
   name: z.string().optional(),
   /** Lucide icon name string. Optional. */
@@ -79,7 +79,7 @@ export const FractalProjectUpdateSchema = z.object({
  *
  * @description Supports optional full-text search, limit, and offset parameters.
  */
-export const FractalProjectListQuerySchema = Schema.object({
+export const ProjectListQuerySchema = Schema.object({
   /** Full-text search query across project fields. */
   query: z.string().optional(),
   /** Maximum number of results to return. */
@@ -89,39 +89,39 @@ export const FractalProjectListQuerySchema = Schema.object({
 });
 
 /** Inferred TypeScript type for a full Project record. */
-export type FractalProject = z.infer<typeof FractalProjectSchema>;
+export type Project = z.infer<typeof ProjectSchema>;
 
 /** Inferred TypeScript type for creating a new Project. */
-export type FractalProjectCreateInput = z.infer<
-  typeof FractalProjectCreateSchema
+export type ProjectCreateInput = z.infer<
+  typeof ProjectCreateSchema
 >;
 
 /** Inferred TypeScript type for updating an existing Project. */
-export type FractalProjectUpdateInput = z.infer<
-  typeof FractalProjectUpdateSchema
+export type ProjectUpdateInput = z.infer<
+  typeof ProjectUpdateSchema
 >;
 
 /** Inferred TypeScript type for querying/listing Projects. */
-export type FractalProjectListQueryInput = z.infer<
-  typeof FractalProjectListQuerySchema
+export type ProjectListQueryInput = z.infer<
+  typeof ProjectListQuerySchema
 >;
 
 /** Parameters for retrieving a single Project by its ID. */
-export interface FractalProjectGetParams {
+export interface ProjectGetParams {
   /** The unique slug identifier of the project. */
   id: string;
 }
 
 /** Parameters for updating an existing Project. */
-export interface FractalProjectUpdateParams {
+export interface ProjectUpdateParams {
   /** The unique slug identifier of the project. */
   id: string;
   /** Partial data to update the project with. */
-  data: FractalProjectUpdateInput;
+  data: ProjectUpdateInput;
 }
 
 /** Parameters for deleting a Project. */
-export interface FractalProjectDeleteParams {
+export interface ProjectDeleteParams {
   /** The unique slug identifier of the project. */
   id: string;
 }
@@ -146,15 +146,15 @@ export interface IProjectService {
    * ```
    */
   list(
-    params?: FractalProjectListQueryInput,
-  ): Promise<ResponseWithCTA<{ projects: FractalProject[] }>>;
+    params?: ProjectListQueryInput,
+  ): Promise<ResponseWithCTA<{ projects: Project[] }>>;
 
   /**
    * Retrieves a single project by its unique slug identifier.
    *
    * @param params - Contains the `id` of the project to retrieve.
    * @returns A CTA-enriched response containing the project record.
-   * @throws {ProjectError} with code `FRACTAL_PROJECT_NOT_FOUND` if the project does not exist.
+   * @throws {ProjectError} with code `AOS_PROJECT_NOT_FOUND` if the project does not exist.
    *
    * @example
    * ```typescript
@@ -163,8 +163,8 @@ export interface IProjectService {
    * ```
    */
   getById(
-    params: FractalProjectGetParams,
-  ): Promise<ResponseWithCTA<{ project: FractalProject }>>;
+    params: ProjectGetParams,
+  ): Promise<ResponseWithCTA<{ project: Project }>>;
 
   /**
    * Creates a new project, generating its ID from the name via slugification.
@@ -172,8 +172,8 @@ export interface IProjectService {
    *
    * @param params - The creation payload (name is required, path/icon/description are optional).
    * @returns A CTA-enriched response containing the created project.
-   * @throws {ProjectError} with code `FRACTAL_PROJECT_PERSISTENCE_ERROR` on collection failure.
-   * @throws {ProjectError} with code `FRACTAL_PROJECT_SYMLINK_FAILED` on symlink failure.
+   * @throws {ProjectError} with code `AOS_PROJECT_PERSISTENCE_ERROR` on collection failure.
+   * @throws {ProjectError} with code `AOS_PROJECT_SYMLINK_FAILED` on symlink failure.
    *
    * @example
    * ```typescript
@@ -182,15 +182,15 @@ export interface IProjectService {
    * ```
    */
   create(
-    params: FractalProjectCreateInput,
-  ): Promise<ResponseWithCTA<{ project: FractalProject }>>;
+    params: ProjectCreateInput,
+  ): Promise<ResponseWithCTA<{ project: Project }>>;
 
   /**
    * Updates an existing project, handling symlink/directory transitions if `path` changes.
    *
    * @param params - Contains the `id` and partial `data` to update.
    * @returns A CTA-enriched response containing the updated project.
-   * @throws {ProjectError} with code `FRACTAL_PROJECT_NOT_FOUND` if the project does not exist.
+   * @throws {ProjectError} with code `AOS_PROJECT_NOT_FOUND` if the project does not exist.
    *
    * @example
    * ```typescript
@@ -198,20 +198,20 @@ export interface IProjectService {
    * ```
    */
   update(
-    params: FractalProjectUpdateParams,
-  ): Promise<ResponseWithCTA<{ project: FractalProject }>>;
+    params: ProjectUpdateParams,
+  ): Promise<ResponseWithCTA<{ project: Project }>>;
 
   /**
    * Permanently deletes a project, removing its symlink or directory and collection record.
    *
    * @param params - Contains the `id` of the project to delete.
    * @returns A CTA-enriched confirmation response.
-   * @throws {ProjectError} with code `FRACTAL_PROJECT_NOT_FOUND` if the project does not exist.
+   * @throws {ProjectError} with code `AOS_PROJECT_NOT_FOUND` if the project does not exist.
    *
    * @example
    * ```typescript
    * await projectService.delete({ id: "my-app" });
    * ```
    */
-  delete(params: FractalProjectDeleteParams): Promise<ResponseWithCTA>;
+  delete(params: ProjectDeleteParams): Promise<ResponseWithCTA>;
 }

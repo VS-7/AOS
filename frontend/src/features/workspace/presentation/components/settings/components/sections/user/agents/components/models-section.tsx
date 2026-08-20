@@ -8,7 +8,7 @@ import {
   type AgentModelSelectProvider,
   type AgentModelSelectValue,
 } from "@/components/ui/agent-model-select";
-import type { FractalModelProvider } from "@/features/model/interfaces/model.interfaces";
+import type { ModelProvider } from "@/features/model/interfaces/model.interfaces";
 import { useProviderLogo } from "../hooks/use-provider-logo";
 
 type SlotKey = "default" | "subconscious" | "realtime" | "voice" | "image" | "video";
@@ -50,13 +50,13 @@ const SLOT_META: Record<
 };
 
 interface ModelsSectionProps {
-  providers: FractalModelProvider[];
+  providers: ModelProvider[];
   value: Partial<Record<SlotKey, AgentModelSelectValue>>;
   onChange: (slot: SlotKey, next: AgentModelSelectValue) => void;
 }
 
 function supportsCapability(
-  provider: FractalModelProvider,
+  provider: ModelProvider,
   capability: "fast" | "reasoning" | "vision" | "realtime" | "voice" | "image" | "video",
 ) {
   if (capability === "vision") {
@@ -81,7 +81,7 @@ function supportsCapability(
 }
 
 function getFirstModel(
-  provider: FractalModelProvider,
+  provider: ModelProvider,
   capability: "fast" | "reasoning" | "vision" | "realtime" | "voice" | "image" | "video",
 ) {
   if (provider.models.length === 0) return undefined;
@@ -125,7 +125,7 @@ function getFirstModel(
 }
 
 function modelHasCapability(
-  model: FractalModelProvider["models"][number],
+  model: ModelProvider["models"][number],
   capability: "fast" | "reasoning" | "vision" | "realtime" | "voice" | "image" | "video",
 ): boolean {
   if (capability === "fast") return true;
@@ -139,7 +139,7 @@ function modelHasCapability(
 }
 
 function toSelectProviders(
-  providers: FractalModelProvider[],
+  providers: ModelProvider[],
   capability: "fast" | "reasoning" | "vision" | "realtime" | "voice" | "image" | "video",
 ): AgentModelSelectProvider[] {
   return providers
@@ -163,7 +163,7 @@ function toSelectProviders(
     .filter((p): p is NonNullable<typeof p> => p !== null);
 }
 
-function ProviderLogo({ provider }: { provider: FractalModelProvider }) {
+function ProviderLogo({ provider }: { provider: ModelProvider }) {
   const src = useProviderLogo(provider);
   if (!src) return null;
   return (
@@ -176,7 +176,7 @@ function ProviderLogo({ provider }: { provider: FractalModelProvider }) {
 }
 
 function resolveSlotValue(
-  providers: FractalModelProvider[],
+  providers: ModelProvider[],
   capability: "fast" | "reasoning" | "vision" | "realtime" | "voice" | "image" | "video",
   current: AgentModelSelectValue | undefined,
 ): AgentModelSelectValue {

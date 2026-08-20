@@ -43,7 +43,7 @@ import {
   FormSectionTitle,
 } from "@/components/ui/form-section";
 import { SettingsSectionShell } from "../../../section-shell";
-import type { FractalUserPublic } from "@/features/auth/interfaces/user.interfaces";
+import type { UserPublic } from "@/features/auth/interfaces/user.interfaces";
 
 export function UserUsersSection() {
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -55,7 +55,7 @@ export function UserUsersSection() {
 
   const usersQuery = api.user.list.useQuery({ query: {} });
 
-  const users = (usersQuery.data as FractalUserPublic[] | undefined) ?? [];
+  const users = (usersQuery.data as UserPublic[] | undefined) ?? [];
 
   const refreshUsers = React.useCallback(async () => {
     await usersQuery.refetch();
@@ -141,7 +141,7 @@ export function UserUsersSection() {
         <FormSectionHeader>
           <FormSectionTitle>Users</FormSectionTitle>
           <FormSectionDescription>
-            Manage accounts that can sign in to this Fractal installation.
+            Manage accounts that can sign in to this AOS installation.
           </FormSectionDescription>
         </FormSectionHeader>
 
@@ -234,7 +234,7 @@ export function UserUsersSection() {
           <DialogHeader>
             <DialogTitle>Add User</DialogTitle>
             <DialogDescription>
-              Create a new account for this Fractal instance.
+              Create a new account for this AOS instance.
             </DialogDescription>
           </DialogHeader>
 

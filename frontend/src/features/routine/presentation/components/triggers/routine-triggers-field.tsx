@@ -6,13 +6,13 @@ import {
 } from "@/components/ui/form";
 import type { Control, FieldValues } from "react-hook-form";
 
-import type { FractalActivityEventDefinition } from "@/features/activity/interfaces/activity.interfaces";
+import type { ActivityEventDefinition } from "@/features/activity/interfaces/activity.interfaces";
 import { RoutineTriggersPanel } from "./routine-triggers-panel";
 
 interface RoutineTriggersFieldProps<TFieldValues extends FieldValues> {
   control: Control<TFieldValues>;
   fireUrl?: string | null;
-  activityEvents: FractalActivityEventDefinition[];
+  activityEvents: ActivityEventDefinition[];
 }
 
 export function RoutineTriggersField<TFieldValues extends FieldValues>({

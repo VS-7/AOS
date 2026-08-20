@@ -1,11 +1,11 @@
 import React from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { GripVertical } from "lucide-react";
-import type { FractalTask } from "@/features/task/interfaces/task.interfaces";
+import type { Task } from "@/features/task/interfaces/task.interfaces";
 import { TaskListRow } from "./task-list-row.component";
 
 interface DraggableTaskListRowProps {
-  task: FractalTask;
+  task: Task;
 }
 
 export const DraggableTaskListRow = React.memo(function DraggableTaskListRow({

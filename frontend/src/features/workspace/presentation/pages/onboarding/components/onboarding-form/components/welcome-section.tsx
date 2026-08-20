@@ -55,7 +55,7 @@ const screenshots: CarouselImage[] = [
   },
   {
     src: PLACEHOLDER_IMAGE,
-    alt: "Open tasks with clarity, track plans, status, and next steps, and let Fractal help you orchestrate execution end to end.",
+    alt: "Open tasks with clarity, track plans, status, and next steps, and let AOS help you orchestrate execution end to end.",
     animation: {
       focalPoint: { x: 90, y: 0 },
       initialZoom: 1,
@@ -189,10 +189,10 @@ export function WelcomeSection() {
               className="flex max-w-[36rem] mx-auto flex-col items-center gap-2 text-center"
             >
               <h2 className="text-base font-semibold tracking-tight">
-                Welcome to Fractal
+                Welcome to AOS
               </h2>
               <p className="text-base text-muted-foreground">
-                A quick look at how Fractal keeps your context alive, adapts to
+                A quick look at how AOS keeps your context alive, adapts to
                 your work, and turns what you mean into what gets done.
               </p>
             </motion.div>

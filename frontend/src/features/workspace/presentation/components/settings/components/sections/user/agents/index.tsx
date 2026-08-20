@@ -13,8 +13,8 @@ import {
 } from "@/components/ui/form-section";
 import { aos } from "@/app/aos";
 import { toast } from "sonner";
-import type { FractalModelProvider } from "@/features/model/interfaces/model.interfaces";
-import type { FractalConfigAgentModels } from "@/features/config/interfaces/config.interfaces";
+import type { ModelProvider } from "@/features/model/interfaces/model.interfaces";
+import type { ConfigAgentModels } from "@/features/config/interfaces/config.interfaces";
 import {
   ModelsSection,
   emptyModelsValue,
@@ -24,7 +24,7 @@ import {
 import { ProvidersSection } from "./components/providers-section";
 import type { AgentModelSelectValue } from "@/components/ui/agent-model-select";
 
-const DEFAULT_AGENT_MODELS: FractalConfigAgentModels = {
+const DEFAULT_AGENT_MODELS: ConfigAgentModels = {
   default: { provider: "", model: "", reasoning: "medium" },
   subconscious: { provider: "", model: "", reasoning: "medium" },
   realtime: { provider: "", model: "", reasoning: "medium" },
@@ -36,7 +36,7 @@ const DEFAULT_AGENT_MODELS: FractalConfigAgentModels = {
 export function UserAgentsSection() {
   const router = useRouter();
   
-  // `aos.useContext()` is Fractal's global route context (`withContext(...)`),
+  // `aos.useContext()` is AOS's global route context (`withContext(...)`),
   // which this port's `app/aos.tsx` never wires -- `DefaultContext` (`app/
   // builders/types.ts`) is deliberately loose (`Record<string, any>`) for
   // exactly this unset case, so no per-call-site cast is needed here.
@@ -48,8 +48,8 @@ export function UserAgentsSection() {
       mode: "available"
     }
   });
-  const providers: FractalModelProvider[] =
-    (providersQuery.data as FractalModelProvider[] | undefined) ?? [];
+  const providers: ModelProvider[] =
+    (providersQuery.data as ModelProvider[] | undefined) ?? [];
 
   const [models, setModels] = React.useState<ModelsValue>(() => {
     const result: ModelsValue = {};
@@ -135,7 +135,7 @@ export function UserAgentsSection() {
         <FormSectionHeader>
           <FormSectionTitle>Providers</FormSectionTitle>
           <FormSectionDescription>
-            Connect the AI providers you want to use in Fractal.
+            Connect the AI providers you want to use in AOS.
           </FormSectionDescription>
         </FormSectionHeader>
         <FormSectionContent>
@@ -147,7 +147,7 @@ export function UserAgentsSection() {
         <FormSectionHeader>
           <FormSectionTitle>Models</FormSectionTitle>
           <FormSectionDescription>
-            Pick the model Fractal uses for each kind of work.
+            Pick the model AOS uses for each kind of work.
           </FormSectionDescription>
         </FormSectionHeader>
         <FormSectionContent>

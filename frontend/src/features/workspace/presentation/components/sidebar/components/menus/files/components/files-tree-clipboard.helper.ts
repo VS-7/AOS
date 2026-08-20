@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 import { api } from "@/lib/aos-facade";
-import type { FractalFileExplorerContext } from "@/features/file/interfaces/file.interfaces";
+import type { FileExplorerContext } from "@/features/file/interfaces/file.interfaces";
 import {
   basenameOf,
   joinWorkspacePath,
@@ -11,7 +11,7 @@ import type { FilesClipboardState } from "@/features/file/presentation/stores/fi
 async function copyFileNode(
   sourcePath: string,
   targetPath: string,
-  context: FractalFileExplorerContext,
+  context: FileExplorerContext,
 ): Promise<void> {
   const readResponse = await api.file.read.query({
     query: { path: sourcePath.replace(/\/+$/, ""), context },
@@ -44,7 +44,7 @@ async function copyFileNode(
 async function copyDirectoryRecursive(
   sourcePath: string,
   targetPath: string,
-  context: FractalFileExplorerContext,
+  context: FileExplorerContext,
 ): Promise<void> {
   const createDirResponse = await api.file.create.mutate({
     body: {
@@ -95,7 +95,7 @@ async function copyDirectoryRecursive(
 export async function pasteFilesClipboard(params: {
   clipboard: FilesClipboardState;
   targetParentPath: string;
-  explorerContext: FractalFileExplorerContext;
+  explorerContext: FileExplorerContext;
   pathIndex?: Record<string, { type: "file" | "directory" }>;
 }): Promise<void> {
   const { clipboard, targetParentPath, explorerContext, pathIndex } = params;

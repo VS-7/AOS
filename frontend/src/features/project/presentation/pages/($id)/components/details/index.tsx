@@ -1,9 +1,9 @@
-import type { FractalProject } from "@/features/project/interfaces/project.interfaces";
+import type { Project } from "@/features/project/interfaces/project.interfaces";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { Folder, CalendarDays } from "lucide-react";
 
 interface ProjectDetailsSidebarProps {
-  project: FractalProject;
+  project: Project;
 }
 
 export function ProjectDetailsSidebar({ project }: ProjectDetailsSidebarProps) {

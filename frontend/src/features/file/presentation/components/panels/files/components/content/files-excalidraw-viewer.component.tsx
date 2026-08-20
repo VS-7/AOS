@@ -3,18 +3,18 @@ import { LoaderCircle, Save } from "lucide-react"
 import { toast } from "sonner"
 import { aos } from "@/app/aos"
 import { Button } from "@/components/ui/button"
-import type { FractalFile } from "@/features/file/interfaces/file.interfaces"
+import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces"
 import { Excalidraw } from "@excalidraw/excalidraw";
 
 interface FilesExcalidrawViewerProps {
-  file: FractalFile
+  file: WorkspaceFile
   content?: string
 }
 
 const DEFAULT_SCENE = {
   type: "excalidraw",
   version: 2,
-  source: "fractal",
+  source: "aos",
   elements: [],
   appState: {
     collaborators: new Map(),
@@ -90,7 +90,7 @@ export function FilesExcalidrawViewer({ file, content }: FilesExcalidrawViewerPr
           {
             type: "excalidraw",
             version: 2,
-            source: "fractal",
+            source: "aos",
             elements: nextScene.elements ?? [],
             appState: normalizeAppStateForSave(nextScene.appState),
             files: nextScene.files ?? {},

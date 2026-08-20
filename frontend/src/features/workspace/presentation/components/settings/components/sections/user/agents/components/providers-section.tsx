@@ -24,15 +24,15 @@ import { Switch } from "@/components/ui/switch";
 import { aos } from "@/app/aos";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { FractalModelProvider } from "@/features/model/interfaces/model.interfaces";
+import type { ModelProvider } from "@/features/model/interfaces/model.interfaces";
 import { ProviderUpsertDialog } from "./provider-upsert-dialog";
 import { useProviderLogo } from "../hooks/use-provider-logo";
 
-function isSubscriptionAuth(provider: FractalModelProvider) {
+function isSubscriptionAuth(provider: ModelProvider) {
   return provider.auth.mode !== "api-key";
 }
 
-function ProviderLogo({ className, provider }: { className?: string, provider: FractalModelProvider }) {
+function ProviderLogo({ className, provider }: { className?: string, provider: ModelProvider }) {
   const src = useProviderLogo(provider);
   if (!src) return null;
   return (
@@ -45,14 +45,14 @@ function ProviderLogo({ className, provider }: { className?: string, provider: F
 }
 
 interface ProvidersSectionProps {
-  providers: FractalModelProvider[];
+  providers: ModelProvider[];
   onRefresh?: () => void;
 }
 
 export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps) {
   const router = useRouter();
   const [connectOpen, setConnectOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<FractalModelProvider | null>(null);
+  const [editing, setEditing] = React.useState<ModelProvider | null>(null);
 
   const connected = providers.filter((p) => p.configured);
   const available = providers.filter((p) => !p.configured);
@@ -60,7 +60,7 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
   const subscriptionAvailable = available.filter(isSubscriptionAuth);
   const apiKeyAvailable = available.filter((p) => !isSubscriptionAuth(p));
 
-  const handleDisconnect = async (provider: FractalModelProvider) => {
+  const handleDisconnect = async (provider: ModelProvider) => {
     try {
       const result = await aos.client.model.set.mutate({
         params: { provider: provider.id },

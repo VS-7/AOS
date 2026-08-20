@@ -112,7 +112,7 @@ export type ToolExecutionResult = z.infer<typeof ToolExecutionResultSchema>;
 export interface IToolsetAdapter {
   type: string;
   discover(toolset: Partial<Toolset>): Promise<Tool[]>;
-  call(tool: Tool, data: any, fractalContext: any): Promise<ToolExecutionResult>;
+  call(tool: Tool, data: any, aosContext: any): Promise<ToolExecutionResult>;
 }
 
 /**
@@ -157,7 +157,7 @@ export interface IToolsetService {
  * inventory-item-sheet.component.tsx`'s config tab, this type's sole
  * consumer (`req.lookupKey`, `req.isSet`).
  */
-export interface FractalToolsetConfigRequirement {
+export interface ToolsetConfigRequirement {
   lookupKey: string;
   isSet: boolean;
   [key: string]: unknown;

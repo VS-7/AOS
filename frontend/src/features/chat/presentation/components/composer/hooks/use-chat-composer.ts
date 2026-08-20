@@ -6,10 +6,10 @@ import {
   usePromptInputAttachments,
   usePromptInputController,
 } from "@/components/ui/prompt-input";
-import type { FractalFile } from "@/features/file/interfaces/file.interfaces";
-import type { FractalInstruction } from "@/features/instruction/interfaces/instruction.interfaces";
-import type { FractalSkill } from "@/features/skill/interfaces/skill.interfaces";
-import type { FractalChatMessage } from "@/features/chat/interfaces/chat.interfaces";
+import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces";
+import type { Instruction } from "@/features/instruction/interfaces/instruction.interfaces";
+import type { Skill } from "@/features/skill/interfaces/skill.interfaces";
+import type { ChatMessage } from "@/features/chat/interfaces/chat.interfaces";
 import { ComposerHelper } from "@/features/chat/presentation/helpers/composer.helper";
 import { ChatInlineMarkupHelper } from "@/features/chat/presentation/helpers/chat-inline-markup.helper";
 import type {
@@ -170,7 +170,7 @@ export function useChatComposer({
   }, [chat.id, isStoppingChat, stopChat]);
 
   const instructions = React.useMemo(
-    () => (instructionsQuery.data?.instructions ?? []) as FractalInstruction[],
+    () => (instructionsQuery.data?.instructions ?? []) as Instruction[],
     [instructionsQuery.data?.instructions],
   );
 
@@ -215,16 +215,16 @@ export function useChatComposer({
   }, [inlineSources, instructions, workspaceInstructionReferences]);
 
   const rootFiles = React.useMemo(
-    () => (rootFilesQuery.data?.files ?? []).slice(0, 12) as FractalFile[],
+    () => (rootFilesQuery.data?.files ?? []).slice(0, 12) as WorkspaceFile[],
     [rootFilesQuery.data?.files],
   );
 
   const selectableFiles = React.useMemo(() => {
     const references = (
       trimmedCommandQuery
-        ? ((filesSearchQuery.data?.files ?? []) as FractalFile[])
+        ? ((filesSearchQuery.data?.files ?? []) as WorkspaceFile[])
         : rootFiles
-    ).map((file) => ComposerHelper.toReferenceFromFile(file as FractalFile));
+    ).map((file) => ComposerHelper.toReferenceFromFile(file as WorkspaceFile));
 
     const selectedPaths = new Set(
       inlineSources
@@ -252,7 +252,7 @@ export function useChatComposer({
         .map((source) => source.name.toLowerCase()),
     );
 
-    return ((skillsQueryRequest.data?.skills ?? []) as FractalSkill[])
+    return ((skillsQueryRequest.data?.skills ?? []) as Skill[])
       .map(ComposerHelper.toReferenceFromSkill)
       .filter(
         (reference) =>
@@ -526,7 +526,7 @@ export function useChatComposer({
 
       const now = new Date();
 
-      const nextMessage: FractalChatMessage = {
+      const nextMessage: ChatMessage = {
         id: generateId(),
         role: "user",
         parts,

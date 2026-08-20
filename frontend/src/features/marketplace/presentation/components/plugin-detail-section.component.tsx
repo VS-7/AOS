@@ -17,8 +17,8 @@ import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { toast } from "sonner";
 
 import type {
-  FractalMarketplaceSkillComponentItem,
-  FractalMarketplaceSkillComponentKind,
+  MarketplaceSkillComponentItem,
+  MarketplaceSkillComponentKind,
 } from "@/features/marketplace/interfaces/marketplace.interfaces";
 import { ArtifactHelper } from "@/features/artifact/presentation/helpers/artifact.helper";
 import { openWorkspaceFileTab } from "@/features/file/presentation/helpers/open-file-tab.helper";
@@ -44,7 +44,7 @@ import { aos } from "@/app/aos";
 import { cn } from "@/lib/utils";
 
 export const PLUGIN_INVENTORY_SECTION_META: Record<
-  FractalMarketplaceSkillComponentKind,
+  MarketplaceSkillComponentKind,
   { label: string; icon: IconSvgElement }
 > = {
   toolsets: { label: "Toolsets", icon: ToolsIcon },
@@ -58,14 +58,14 @@ export const PLUGIN_INVENTORY_SECTION_META: Record<
 };
 
 /** Kinds that open a dedicated app page (or artifact browser tab). */
-const KINDS_WITH_PAGE = new Set<FractalMarketplaceSkillComponentKind>([
+const KINDS_WITH_PAGE = new Set<MarketplaceSkillComponentKind>([
   "views",
   "collections",
   "artifacts",
   "routines",
 ]);
 
-const KINDS_WITH_DELETE = new Set<FractalMarketplaceSkillComponentKind>([
+const KINDS_WITH_DELETE = new Set<MarketplaceSkillComponentKind>([
   "toolsets",
   "collections",
   "views",
@@ -76,12 +76,12 @@ const KINDS_WITH_DELETE = new Set<FractalMarketplaceSkillComponentKind>([
 ]);
 
 interface PluginDetailSectionProps {
-  kind: FractalMarketplaceSkillComponentKind;
-  items: FractalMarketplaceSkillComponentItem[];
+  kind: MarketplaceSkillComponentKind;
+  items: MarketplaceSkillComponentItem[];
   folderUrl?: string;
   interactive?: boolean;
   /** Only called for toolsets — opens the inventory sheet. */
-  onToolsetClick?: (item: FractalMarketplaceSkillComponentItem) => void;
+  onToolsetClick?: (item: MarketplaceSkillComponentItem) => void;
 }
 
 export function PluginDetailSection({
@@ -155,7 +155,7 @@ export function PluginDetailSection({
   const hasPage = KINDS_WITH_PAGE.has(kind);
   const canDelete = KINDS_WITH_DELETE.has(kind);
 
-  function handleDelete(item: FractalMarketplaceSkillComponentItem) {
+  function handleDelete(item: MarketplaceSkillComponentItem) {
     const entityId = item.id ?? item.name;
     switch (kind) {
       case "toolsets":
@@ -184,7 +184,7 @@ export function PluginDetailSection({
     }
   }
 
-  async function handleOpenPage(item: FractalMarketplaceSkillComponentItem) {
+  async function handleOpenPage(item: MarketplaceSkillComponentItem) {
     const entityId = item.id ?? item.name;
 
     if (kind === "views") {
@@ -222,7 +222,7 @@ export function PluginDetailSection({
     }
   }
 
-  function handleRowClick(item: FractalMarketplaceSkillComponentItem) {
+  function handleRowClick(item: MarketplaceSkillComponentItem) {
     if (kind === "toolsets") {
       onToolsetClick?.(item);
       return;

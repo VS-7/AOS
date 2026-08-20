@@ -13,15 +13,15 @@ import { Schema } from "@/core/helpers/schema.helper";
  *
  * @example
  * ```typescript
- * { email: "felipe@tryfractal.co", password: "my-secret-password" }
+ * { email: "user@example.com", password: "my-secret-password" }
  * ```
  */
-export const FractalAuthLoginSchema = Schema.object({
+export const AuthLoginSchema = Schema.object({
   email: z
     .string()
     .email("Enter a valid email")
     .describe(
-      'Email of the account to authenticate. Example: "felipe@tryfractal.co".',
+      'Email of the account to authenticate. Example: "user@example.com".',
     ),
   password: z
     .string()
@@ -36,10 +36,10 @@ export const FractalAuthLoginSchema = Schema.object({
  *
  * @example
  * ```typescript
- * { email: "felipe@tryfractal.co", password: "my-secret-password" }
+ * { email: "user@example.com", password: "my-secret-password" }
  * ```
  */
-export const FractalAuthLoginInputSchema = FractalAuthLoginSchema;
+export const AuthLoginInputSchema = AuthLoginSchema;
 
 // ============================================================================
 // Status
@@ -59,7 +59,7 @@ export const FractalAuthLoginInputSchema = FractalAuthLoginSchema;
  * }
  * ```
  */
-export const FractalAuthStatusSchema = Schema.object({
+export const AuthStatusSchema = Schema.object({
   enabled: z
     .boolean()
     .describe("Whether authentication is required. Example: true."),
@@ -98,7 +98,7 @@ export const FractalAuthStatusSchema = Schema.object({
  * }
  * ```
  */
-export const FractalAuthChangePasswordSchema = Schema.object({
+export const AuthChangePasswordSchema = Schema.object({
   currentPassword: z
     .string()
     .min(1, "Current password is required")
@@ -130,7 +130,7 @@ export const FractalAuthChangePasswordSchema = Schema.object({
  * }
  * ```
  */
-export const FractalAuthChangePasswordInputSchema = FractalAuthChangePasswordSchema;
+export const AuthChangePasswordInputSchema = AuthChangePasswordSchema;
 
 // ============================================================================
 // Onboarding
@@ -140,7 +140,7 @@ export const FractalAuthChangePasswordInputSchema = FractalAuthChangePasswordSch
 /**
  * Nested user identity collected during onboarding.
  */
-const FractalAuthOnboardingUserSchema = Schema.object({
+const AuthOnboardingUserSchema = Schema.object({
   name: z
     .string()
     .min(1, "Name is required")
@@ -148,13 +148,13 @@ const FractalAuthOnboardingUserSchema = Schema.object({
   email: z
     .string()
     .email("Enter a valid email")
-    .describe('Login email. Example: "felipe@tryfractal.co".'),
+    .describe('Login email. Example: "user@example.com".'),
 });
 
 /**
  * Security block collected during onboarding.
  */
-const FractalAuthOnboardingSecuritySchema = Schema.object({
+const AuthOnboardingSecuritySchema = Schema.object({
   password: z
     .string()
     .min(6, "Password must be at least 6 characters")
@@ -164,7 +164,7 @@ const FractalAuthOnboardingSecuritySchema = Schema.object({
 /**
  * Region preferences collected during onboarding.
  */
-const FractalAuthOnboardingRegionSchema = Schema.object({
+const AuthOnboardingRegionSchema = Schema.object({
   language: z
     .string()
     .min(1, "Language is required")
@@ -186,7 +186,7 @@ const FractalAuthOnboardingRegionSchema = Schema.object({
 /**
  * Orchestrator personality collected during onboarding.
  */
-const FractalAuthOnboardingOrchestratorSchema = Schema.object({
+const AuthOnboardingOrchestratorSchema = Schema.object({
   name: z
     .string()
     .min(1, "Give your copilot a name")
@@ -212,18 +212,18 @@ const FractalAuthOnboardingOrchestratorSchema = Schema.object({
  * @example
  * ```typescript
  * {
- *   user: { name: "Felipe", email: "felipe@tryfractal.co" },
+ *   user: { name: "Felipe", email: "user@example.com" },
  *   security: { password: "s3cure-pass" },
  *   region: { language: "pt-BR" },
  *   orchestrator: { name: "Atlas", tone: "friendly", style: "balanced", autonomy: 0.5 }
  * }
  * ```
  */
-export const FractalAuthOnboardingSchema = Schema.object({
-  user: FractalAuthOnboardingUserSchema,
-  security: FractalAuthOnboardingSecuritySchema,
-  region: FractalAuthOnboardingRegionSchema,
-  orchestrator: FractalAuthOnboardingOrchestratorSchema,
+export const AuthOnboardingSchema = Schema.object({
+  user: AuthOnboardingUserSchema,
+  security: AuthOnboardingSecuritySchema,
+  region: AuthOnboardingRegionSchema,
+  orchestrator: AuthOnboardingOrchestratorSchema,
 });
 
 /**
@@ -232,43 +232,12 @@ export const FractalAuthOnboardingSchema = Schema.object({
  * @example
  * ```typescript
  * {
- *   user: { name: "Felipe", email: "felipe@tryfractal.co" },
+ *   user: { name: "Felipe", email: "user@example.com" },
  *   security: { password: "s3cure-pass" },
  *   region: { language: "pt-BR" },
  *   orchestrator: { name: "Atlas", tone: "friendly", style: "balanced", autonomy: 0.5 }
  * }
  * ```
  */
-export const FractalAuthOnboardingInputSchema = FractalAuthOnboardingSchema;
-
-// ============================================================================
-// Waitlist Verification
-// Input for verifying email waitlist approval status
-// ============================================================================
-
-/**
- * JSON body for checking waitlist approval status of an email.
- *
- * Proxied by the app backend to the site waitlist API so the frontend can poll
- * a single trusted origin.
- *
- * @example
- * ```typescript
- * { email: "felipe@tryfractal.co" }
- * ```
- */
-export const FractalAuthVerifyWaitlistSchema = Schema.object({
-  email: z
-    .string()
-    .email("Enter a valid email")
-    .describe(
-      "Email address to check on the waitlist. Example: \"felipe@tryfractal.co\".",
-    ),
-  name: z
-    .string()
-    .optional()
-    .describe(
-      "Display name of the user registering the installation, used to create or enrich the waitlist contact.",
-    ),
-});
+export const AuthOnboardingInputSchema = AuthOnboardingSchema;
 

@@ -34,7 +34,7 @@ import { aos } from "@/app/aos";
 import { isDormant } from "@/lib/command-map";
 import { DormantGate } from "@/components/DormantDomain";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
-import type { FractalProject } from "@/features/project/interfaces/project.interfaces";
+import type { Project } from "@/features/project/interfaces/project.interfaces";
 import { ProjectIconPicker } from "@/features/project/presentation/components/project-icon-picker";
 import { ProjectDetailsSidebar } from "./components/details";
 import { ProjectOverviewTab } from "./components/main/components/tabs/overview";
@@ -102,7 +102,7 @@ function getErrorMessage(error: unknown) {
   return "Unable to save this project.";
 }
 
-function buildFormValues(project: FractalProject | null): ProjectFormValues {
+function buildFormValues(project: Project | null): ProjectFormValues {
   if (!project) {
     return {
       name: "",
@@ -221,7 +221,7 @@ export const ProjectDetailsPage = aos
     if (isDormant("project") || isCreate) {
       return {
         mode: "create" as const,
-        project: null as FractalProject | null,
+        project: null as Project | null,
       };
     }
 
@@ -313,7 +313,7 @@ export const ProjectDetailsPage = aos
       });
 
     const watchedValues = form.watch();
-    const liveProject = React.useMemo<FractalProject | null>(() => {
+    const liveProject = React.useMemo<Project | null>(() => {
       if (!project) return null;
 
       return {

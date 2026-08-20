@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { aos } from '@/app/aos';
 import { hexToOklch } from '@/lib/utils';
-import type { FractalThemeSettings } from '@/features/theme/interfaces/theme.interfaces';
+import type { ThemeSettings } from '@/features/theme/interfaces/theme.interfaces';
 import type { ThemeRadius } from '@/components/ui/radius-selector';
 
 const radiusMap: Record<ThemeRadius, string> = {
@@ -11,12 +11,12 @@ const radiusMap: Record<ThemeRadius, string> = {
   lg: '1rem',
 };
 
-function isFractalNative(): boolean {
-  return typeof window !== 'undefined' && !!window.fractal;
+function isNative(): boolean {
+  return typeof window !== 'undefined' && !!window.aos;
 }
 
-function resolveWindowsMode(windows: FractalThemeSettings['windows'] | undefined): 'solid' | 'blur' {
-  if (!isFractalNative()) return 'solid';
+function resolveWindowsMode(windows: ThemeSettings['windows'] | undefined): 'solid' | 'blur' {
+  if (!isNative()) return 'solid';
   return windows ?? 'blur';
 }
 
@@ -75,7 +75,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return state.mode;
   }, [state.mode]);
 
-  const settings: FractalThemeSettings | undefined = state.theme.settings[activeMode];
+  const settings: ThemeSettings | undefined = state.theme.settings[activeMode];
 
   /** Toggle .dark / .light on <html> and sync native Electron appearance. */
   useEffect(() => {
@@ -86,8 +86,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const windowsMode = resolveWindowsMode(settings?.windows);
     root.dataset.windows = windowsMode;
 
-    if (window.fractal?.theme?.setAppearance) {
-      window.fractal.theme.setAppearance({
+    if (window.aos?.theme?.setAppearance) {
+      window.aos.theme.setAppearance({
         mode: state.mode,
         windows: windowsMode,
         surface: settings?.surface,

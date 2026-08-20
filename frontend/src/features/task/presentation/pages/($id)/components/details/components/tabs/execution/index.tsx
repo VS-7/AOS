@@ -1,12 +1,12 @@
 import type { UseChatResult } from "@/features/chat/presentation/hooks/use-chat"
-import { FractalTask } from "@/features/task/interfaces/task.interfaces"
+import { Task } from "@/features/task/interfaces/task.interfaces"
 import { ChatTimeline } from "@/components/ui/chat-timeline"
 
 export function TaskExecutionTab({
   task,
   liveChat,
 }: {
-  task: FractalTask
+  task: Task
   liveChat?: UseChatResult | null
 }) {
   if (!task.chat) return null

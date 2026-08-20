@@ -5,19 +5,19 @@ import { AnimatedEmptyState } from "@/components/ui/animated-empty-state";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { aos } from "@/app/aos";
-import type { FractalAgent } from "@/features/agent/interfaces/agent.interfaces";
-import type { FractalRoutine } from "@/features/routine/interfaces/routine.interfaces";
+import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
+import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
 import { ROUTINE_STATUS_ORDER } from "@/features/routine/presentation/consts/routine";
-import { FractalRoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
+import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
 import { RoutineListSection } from "@/features/routine/presentation/pages/(main)/components/list/components/routine-list-section.component";
 
 interface AgentRoutinesTabProps {
-  agent: FractalAgent;
+  agent: Agent;
 }
 
 export function AgentRoutinesTab({ agent }: AgentRoutinesTabProps) {
   const navigate = useNavigate();
-  const [routines, setRoutines] = useState<FractalRoutine[]>([]);
+  const [routines, setRoutines] = useState<Routine[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -40,7 +40,7 @@ export function AgentRoutinesTab({ agent }: AgentRoutinesTabProps) {
     };
   }, [agent.id]);
 
-  const grouped = useMemo(() => FractalRoutineHelper.groupByStatus(routines), [routines]);
+  const grouped = useMemo(() => RoutineHelper.groupByStatus(routines), [routines]);
 
   return (
     <div className="container max-w-6xl mx-auto px-6 py-6 pb-10 space-y-4">

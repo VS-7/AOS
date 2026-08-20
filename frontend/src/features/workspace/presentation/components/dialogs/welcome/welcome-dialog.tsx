@@ -54,7 +54,7 @@ export function WelcomeDialog() {
           <h1 className="font-bold text-xl">Welcome to your workspace</h1>
           <p>
             Your workspace is ready. From here, you can organize your projects,
-            manage agents, and start shipping with Fractal.
+            manage agents, and start shipping with AOS.
           </p>
         </div>
 

@@ -1,22 +1,22 @@
 import type { RealtimeEvent } from "./realtime";
 
 /**
- * One Fractal realtime subscription, resolved onto the daemon's real
+ * One AOS realtime subscription, resolved onto the daemon's real
  * channel — the same shape `command-map.ts` uses for calls, one layer up.
  *
- * Fractal's own frontend (and the copied `app/lib/realtime.ts` this
+ * The original's own frontend (and the copied `app/lib/realtime.ts` this
  * replaces) named its events `chat:refresh`, `files:changed`, and so on.
  * The daemon's actual channel (`internal/transport/realtime/hub.go`) speaks
  * a different vocabulary — `chat.delta`, `chat.done`, `activity`, `task.
  * changed`, `approval.request`, `collection.changed` — with different
- * payload shapes. Every `useRealtime("fractal:name", cb)` call site in the
+ * payload shapes. Every `useRealtime("original:name", cb)` call site in the
  * ported tree stays untouched; this is the one place that translates.
  *
  * - `string` — subscribe to the named daemon event, payload passed through
  *   unchanged.
  * - `RealtimeEventDescriptor` — subscribe to the named daemon event, and
  *   reshape its `data` into the payload shape the ported callback expects.
- * - `null` — the daemon has no event for this Fractal name. Declared, not
+ * - `null` — the daemon has no event for this original name. Declared, not
  *   omitted, for the same reason `command-map.ts`'s dormant entries are: a
  *   missing key here reads as "forgot to translate this one", not "checked,
  *   and there's genuinely nothing on the other end".

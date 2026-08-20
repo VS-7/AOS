@@ -1,8 +1,8 @@
 import * as React from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
-import type { FractalMarketplaceSkillListing } from "@/features/marketplace/interfaces/marketplace.interfaces";
-import type { FractalSkill } from "@/features/skill/interfaces/skill.interfaces";
+import type { MarketplaceSkillListing } from "@/features/marketplace/interfaces/marketplace.interfaces";
+import type { Skill } from "@/features/skill/interfaces/skill.interfaces";
 import {
   MarketplaceSidebar,
   type MarketplaceSidebarView,
@@ -25,8 +25,8 @@ import {
 } from "@/features/marketplace/presentation/helpers/marketplace.helper";
 
 interface MarketplacePageInnerProps {
-  marketplacePlugins: FractalMarketplaceSkillListing[];
-  installedPlugins: FractalSkill[];
+  marketplacePlugins: MarketplaceSkillListing[];
+  installedPlugins: Skill[];
   search: {
     category?: string;
     query?: string;

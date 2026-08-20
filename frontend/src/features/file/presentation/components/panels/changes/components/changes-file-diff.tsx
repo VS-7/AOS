@@ -4,12 +4,12 @@ import { MultiFileDiff } from "@pierre/diffs/react";
 import type { FileContents } from "@pierre/diffs/react";
 import { aos } from "@/app/aos";
 import { serializeExplorerContext } from "@/features/file/presentation/helpers/files-explorer.helper";
-import type { FractalFileExplorerContext } from "@/features/file/interfaces/file.interfaces";
+import type { FileExplorerContext } from "@/features/file/interfaces/file.interfaces";
 import type { ChangesPanelPreferences } from "@/features/file/presentation/helpers/changes.helper";
 
 interface ChangesFileDiffProps {
   path: string;
-  explorerContext: FractalFileExplorerContext;
+  explorerContext: FileExplorerContext;
   preferences: ChangesPanelPreferences;
   themeType: "light" | "dark";
 }

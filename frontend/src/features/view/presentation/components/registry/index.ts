@@ -41,9 +41,9 @@ import {
 } from "./components/actions.components";
 
 /**
- * Fractal View component registry — custom @app implementations layered over shadcn fallbacks.
+ * AOS View component registry — custom @app implementations layered over shadcn fallbacks.
  */
-export const fractalViewComponents = {
+export const viewComponents = {
   ...shadcnComponents,
 
   // Layout

@@ -1,8 +1,8 @@
 import { AosStore } from "@/app/builders/store";
-import type { FractalThemeSettings } from "@/features/theme/interfaces/theme.interfaces";
-import { FractalThemeSettingsSchema } from "@/features/theme/schemas/theme.schema";
-import { FractalDefaultTheme } from "@/features/theme/presentation/const/default-theme";
-import { FractalConfigAppearance } from "@/features/config/interfaces/config.interfaces";
+import type { ThemeSettings } from "@/features/theme/interfaces/theme.interfaces";
+import { ThemeSettingsSchema } from "@/features/theme/schemas/theme.schema";
+import { DefaultTheme } from "@/features/theme/presentation/const/default-theme";
+import { ConfigAppearance } from "@/features/config/interfaces/config.interfaces";
 import type { ThemeRadius } from "@/components/ui/radius-selector";
 import { DeepMergeHelper } from "@/core/helpers/deep-merge.helper";
 import { api } from "@/lib/aos-facade";
@@ -16,7 +16,7 @@ export type ThemeMode = "light" | "dark" | "system";
 /**
  * Converts one palette out of `themes_get`'s response
  * (`internal/domain/theme/entity.go`'s `Palette`, nested under
- * `theme.variants.{light,dark}`) into the shape `FractalThemeSettings`
+ * `theme.variants.{light,dark}`) into the shape `ThemeSettings`
  * expects, for `setPreset`/`update` below.
  *
  * task-12 round 3: two differences from a plain pass-through, ruled on
@@ -42,13 +42,13 @@ export type ThemeMode = "light" | "dark" | "system";
  */
 function paletteFromApi(
   palette: (Record<string, unknown> & { semantic?: Record<string, string> }) | undefined,
-): Partial<FractalThemeSettings> {
+): Partial<ThemeSettings> {
   if (!palette) return {};
   const { semantic, ...rest } = palette;
   return {
     ...rest,
     semanticColors: semantic ?? {},
-  } as Partial<FractalThemeSettings>;
+  } as Partial<ThemeSettings>;
 }
 
 export type ThemeIconSet = "minimal" | "standard" | "complete" | "none";
@@ -58,7 +58,7 @@ export type ThemeIconsConfig = {
   colored: boolean;
 };
 
-type FractalConfigAppearanceWithRadius = FractalConfigAppearance & {
+type ConfigAppearanceWithRadius = ConfigAppearance & {
   radius?: ThemeRadius
   icons?: ThemeIconsConfig
 }
@@ -85,12 +85,12 @@ const DEFAULT_ICONS: ThemeIconsConfig = {
 };
 
 export const ThemeStore = AosStore.create("theme")
-  .withState<FractalConfigAppearanceWithRadius>({
+  .withState<ConfigAppearanceWithRadius>({
     mode: "system",
     radius: undefined,
     theme: {
-      preset: "fractal",
-      settings: FractalDefaultTheme.theme,
+      preset: "aos",
+      settings: DefaultTheme.theme,
     },
     fontSizes: {
       ui: 13,
@@ -120,7 +120,7 @@ export const ThemeStore = AosStore.create("theme")
       });
     }
   })
-  .addAction('setSettings', (ctx) => (settings: Record<string, FractalThemeSettings>) => ctx.state.set({ theme: { settings } }))
+  .addAction('setSettings', (ctx) => (settings: Record<string, ThemeSettings>) => ctx.state.set({ theme: { settings } }))
   .addAction('setFontSizes', (ctx) => (fontSizes: { ui: number; code: number }) => ctx.state.set({ fontSizes }))
   .addAction('setIcons', (ctx) => (icons: Partial<ThemeIconsConfig>) => {
     const current = ctx.state.get().icons ?? DEFAULT_ICONS;
@@ -170,7 +170,7 @@ export const ThemeStore = AosStore.create("theme")
       const { data } = await api.theme.get.query({ params: { theme: newPreset } });
       // task-12 round 3: same `.theme.variants` fix as `setPreset` above —
       // `paletteFromApi` is what keeps `themeBaseSettings.light`/`.dark`
-      // shaped the way `FractalThemeSettingsSchema` (and the merge below)
+      // shaped the way `ThemeSettingsSchema` (and the merge below)
       // expects, `fonts` included-but-absent rather than silently missing.
       const variants = (data as { theme?: { variants?: Record<string, Record<string, unknown>> } } | undefined)?.theme?.variants;
       if (variants) {
@@ -204,18 +204,18 @@ export const ThemeStore = AosStore.create("theme")
     // 4. DeepMerge: último argumento tem maior prioridade (DeepMergeHelper).
     // - Preset mudou: default → salvo → user (form) → settings do tema (API) — API sobrescreve o que o user mandou.
     // - Mesmo preset: default → salvo → API (só se houve fetch p/ modo) → user — user vence.
-    const defaultMode = FractalDefaultTheme.theme[activeMode as 'light' | 'dark'] || {};
+    const defaultMode = DefaultTheme.theme[activeMode as 'light' | 'dark'] || {};
     const savedMode = !isPresetChanged ? (s.theme.settings[activeMode] || {}) : {};
     const apiMode = themeBaseSettings[activeMode] || {};
 
     const mergedActiveModeSettings = isPresetChanged
       ? DeepMergeHelper.merge(
-        FractalThemeSettingsSchema,
+        ThemeSettingsSchema,
         defaultMode,
         apiMode
       )
       : DeepMergeHelper.merge(
-        FractalThemeSettingsSchema,
+        ThemeSettingsSchema,
         defaultMode,
         savedMode,
         apiMode,

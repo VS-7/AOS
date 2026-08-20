@@ -1,6 +1,6 @@
 /**
  * There is no AOS Go backend for this domain yet, but real, checkable
- * declarations exist in the old Fractal server:
+ * declarations exist in the old AOS server:
  * `v401/server/src/features/marketplace/schemas/marketplace.schema.ts`'s
  * Zod schemas — the type-only `interfaces/marketplace.interfaces.ts` that
  * would normally declare these was itself erased by the bundler, same as
@@ -9,13 +9,13 @@
  * was reconstructed from frontend usage alone (`v401/web/src/features/
  * marketplace/presentation/**`); several fields below are required or
  * present that no usage site in the ported frontend ever touched, and one
- * (`FractalMarketplaceSkill`) was missing over half its real fields
+ * (`MarketplaceSkill`) was missing over half its real fields
  * entirely. When AOS grows a Go backend for this, re-verify against that
  * instead.
  */
 
-/** The 8 marketplace inventory sections (`FractalMarketplaceSkillComponentKindSchema`). */
-export type FractalMarketplaceSkillComponentKind =
+/** The 8 marketplace inventory sections (`MarketplaceSkillComponentKindSchema`). */
+export type MarketplaceSkillComponentKind =
   | "toolsets"
   | "collections"
   | "views"
@@ -25,18 +25,18 @@ export type FractalMarketplaceSkillComponentKind =
   | "artifacts"
   | "routines";
 
-/** Toolset connection kind, only meaningful when `kind === "toolsets"` (`FractalMarketplaceToolsetConnectionTypeSchema`). */
-export type FractalMarketplaceToolsetConnectionType =
+/** Toolset connection kind, only meaningful when `kind === "toolsets"` (`MarketplaceToolsetConnectionTypeSchema`). */
+export type MarketplaceToolsetConnectionType =
   | "custom"
   | "mcp-server::stdio"
   | "mcp-server::http"
   | "rest-api"
   | "cli";
 
-/** One installed-plugin inventory row (a toolset, view, artifact, etc.) — `FractalMarketplaceSkillComponentItemSchema`. */
-export interface FractalMarketplaceSkillComponentItem {
+/** One installed-plugin inventory row (a toolset, view, artifact, etc.) — `MarketplaceSkillComponentItemSchema`. */
+export interface MarketplaceSkillComponentItem {
   name: string;
-  kind: FractalMarketplaceSkillComponentKind;
+  kind: MarketplaceSkillComponentKind;
   label: string;
   description: string;
   /** Present for registry (not-yet-installed) items — links to source on GitHub. */
@@ -45,15 +45,15 @@ export interface FractalMarketplaceSkillComponentItem {
   id?: string;
   /** Workspace-relative file path — present for file-backed items (edit/open-in-tab). */
   path?: string;
-  connectionType?: FractalMarketplaceToolsetConnectionType;
+  connectionType?: MarketplaceToolsetConnectionType;
   /** Lifecycle status when applicable, e.g. a routine's enabled/disabled state. */
   status?: string;
   active?: boolean;
   instructionType?: string;
 }
 
-/** A marketplace search-result / card entry (`FractalMarketplaceSkillListingSchema`). */
-export interface FractalMarketplaceSkillListing {
+/** A marketplace search-result / card entry (`MarketplaceSkillListingSchema`). */
+export interface MarketplaceSkillListing {
   name: string;
   displayName: string;
   shortDescription: string;
@@ -67,15 +67,15 @@ export interface FractalMarketplaceSkillListing {
   brandColor: string | null;
 }
 
-/** Author block on a plugin manifest (`FractalMarketplaceSkillAuthorSchema`). */
-export interface FractalMarketplaceSkillAuthor {
+/** Author block on a plugin manifest (`MarketplaceSkillAuthorSchema`). */
+export interface MarketplaceSkillAuthor {
   name: string;
   email?: string;
   url?: string;
 }
 
-/** UI/marketing block on a plugin manifest (`FractalMarketplaceSkillInterfaceSchema`). */
-export interface FractalMarketplaceSkillInterface {
+/** UI/marketing block on a plugin manifest (`MarketplaceSkillInterfaceSchema`). */
+export interface MarketplaceSkillInterface {
   displayName: string;
   shortDescription: string;
   longDescription?: string;
@@ -92,34 +92,34 @@ export interface FractalMarketplaceSkillInterface {
   screenshots?: string[];
 }
 
-/** Full plugin manifest, as returned by `marketplace.getByName` (`FractalMarketplaceSkillSchema`). */
-export interface FractalMarketplaceSkill {
+/** Full plugin manifest, as returned by `marketplace.getByName` (`MarketplaceSkillSchema`). */
+export interface MarketplaceSkill {
   name: string;
   version: string;
   description: string;
-  author: FractalMarketplaceSkillAuthor;
+  author: MarketplaceSkillAuthor;
   homepage: string;
   repository: string;
   path: string;
   license: string;
   keywords?: string[];
-  interface: FractalMarketplaceSkillInterface;
+  interface: MarketplaceSkillInterface;
 }
 
-/** Inventory items grouped by kind, returned alongside a plugin's manifest — every bucket is always present, empty when there is nothing installed of that kind (`FractalMarketplaceSkillInventorySchema`). */
-export interface FractalMarketplaceSkillInventory {
-  toolsets: FractalMarketplaceSkillComponentItem[];
-  collections: FractalMarketplaceSkillComponentItem[];
-  views: FractalMarketplaceSkillComponentItem[];
-  hooks: FractalMarketplaceSkillComponentItem[];
-  instructions: FractalMarketplaceSkillComponentItem[];
-  templates: FractalMarketplaceSkillComponentItem[];
-  artifacts: FractalMarketplaceSkillComponentItem[];
-  routines: FractalMarketplaceSkillComponentItem[];
+/** Inventory items grouped by kind, returned alongside a plugin's manifest — every bucket is always present, empty when there is nothing installed of that kind (`MarketplaceSkillInventorySchema`). */
+export interface MarketplaceSkillInventory {
+  toolsets: MarketplaceSkillComponentItem[];
+  collections: MarketplaceSkillComponentItem[];
+  views: MarketplaceSkillComponentItem[];
+  hooks: MarketplaceSkillComponentItem[];
+  instructions: MarketplaceSkillComponentItem[];
+  templates: MarketplaceSkillComponentItem[];
+  artifacts: MarketplaceSkillComponentItem[];
+  routines: MarketplaceSkillComponentItem[];
 }
 
-/** The locally-installed record for a plugin, merged into marketplace detail responses (`FractalMarketplaceInstalledSkillSchema`). */
-export interface FractalMarketplaceInstalledSkill {
+/** The locally-installed record for a plugin, merged into marketplace detail responses (`MarketplaceInstalledSkillSchema`). */
+export interface MarketplaceInstalledSkill {
   id: string;
   name: string;
   active: boolean;

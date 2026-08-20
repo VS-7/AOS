@@ -1,14 +1,14 @@
 import { api } from "@/lib/aos-facade";
-import type { FractalWorkspaceDirectory } from "@/features/workspace/interfaces/directory.interfaces";
+import type { WorkspaceDirectory } from "@/features/workspace/interfaces/directory.interfaces";
 
 type DirectoryCacheEntry = {
   workspaceId: string;
-  directory: FractalWorkspaceDirectory;
+  directory: WorkspaceDirectory;
   fetchedAt: number;
 };
 
 let cache: DirectoryCacheEntry | null = null;
-let inflight: Promise<FractalWorkspaceDirectory> | null = null;
+let inflight: Promise<WorkspaceDirectory> | null = null;
 
 const CACHE_TTL_MS = 5_000;
 
@@ -28,7 +28,7 @@ const CACHE_TTL_MS = 5_000;
 export async function loadWorkspaceDirectory(
   workspaceId: string,
   options?: { force?: boolean },
-): Promise<FractalWorkspaceDirectory> {
+): Promise<WorkspaceDirectory> {
   const id = workspaceId.trim() || "current";
   const now = Date.now();
 
@@ -72,8 +72,8 @@ export function invalidateWorkspaceDirectoryCache(): void {
 
 async function fetchWorkspaceDirectory(
   workspaceId: string,
-): Promise<FractalWorkspaceDirectory> {
-  const empty: FractalWorkspaceDirectory = { users: [], agents: [] };
+): Promise<WorkspaceDirectory> {
+  const empty: WorkspaceDirectory = { users: [], agents: [] };
 
   try {
     const directoryClient = (
@@ -105,7 +105,7 @@ async function fetchWorkspaceDirectory(
 
 function unwrapDirectoryPayload(
   payload: unknown,
-): FractalWorkspaceDirectory | undefined {
+): WorkspaceDirectory | undefined {
   if (!payload || typeof payload !== "object") {
     return undefined;
   }
@@ -115,11 +115,11 @@ function unwrapDirectoryPayload(
     payload.directory &&
     typeof payload.directory === "object"
   ) {
-    return payload.directory as FractalWorkspaceDirectory;
+    return payload.directory as WorkspaceDirectory;
   }
 
   if ("users" in payload && "agents" in payload) {
-    return payload as FractalWorkspaceDirectory;
+    return payload as WorkspaceDirectory;
   }
 
   return undefined;

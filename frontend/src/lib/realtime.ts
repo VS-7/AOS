@@ -17,7 +17,7 @@ export type ConnectionState = "connecting" | "open" | "reconnecting" | "closed";
  *
  * `useRealtime(queryClient)` owns the one WebSocket the app opens — every
  * other piece of the app that wants a live event (`hooks/use-realtime.ts`,
- * the ported code's translation point for Fractal's event names) listens
+ * the ported code's translation point for AOS's event names) listens
  * here instead of opening a socket of its own. Two sockets was the B1
  * defect this exists to prevent: one spoke the daemon's real event names
  * and carried the workspace-scoping fix, the other didn't and lacked it.

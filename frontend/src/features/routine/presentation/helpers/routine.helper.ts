@@ -1,8 +1,8 @@
 import { ROUTINE_STATUS_CONFIG, ROUTINE_STATUS_ORDER, ROUTINE_RESERVED_AGENT_CONFIG } from "@/features/routine/presentation/consts/routine";
 import { RoutineTriggersHelper } from "@/features/routine/presentation/helpers/routine-triggers.helper";
 import type {
-  FractalRoutine,
-  FractalRoutineReservedAgent,
+  Routine,
+  RoutineReservedAgent,
 } from "@/features/routine/interfaces/routine.interfaces";
 
 /**
@@ -11,7 +11,7 @@ import type {
  * Owns status display grouping and reserved-agent guards that must not live in
  * `interfaces/` (types-only). Side-effect free — no context or persistence.
  */
-export class FractalRoutineHelper {
+export class RoutineHelper {
   /**
    * Reserved routine agent targets stored on routine records.
    *
@@ -21,7 +21,7 @@ export class FractalRoutineHelper {
   public static readonly RESERVED_AGENTS = [
     "orchestrator",
     "all",
-  ] as const satisfies readonly FractalRoutineReservedAgent[];
+  ] as const satisfies readonly RoutineReservedAgent[];
 
   /**
    * Returns UI status config for a routine status value.
@@ -29,7 +29,7 @@ export class FractalRoutineHelper {
    * @param status - Persisted routine status.
    * @returns Label / color config from {@link ROUTINE_STATUS_CONFIG}.
    */
-  public static getStatus(status: FractalRoutine["status"]) {
+  public static getStatus(status: Routine["status"]) {
     return ROUTINE_STATUS_CONFIG[status];
   }
 
@@ -41,14 +41,14 @@ export class FractalRoutineHelper {
    * @param routines - Routines to group.
    * @returns Map of status → routines (only non-empty buckets).
    */
-  public static groupByStatus(routines: FractalRoutine[]) {
+  public static groupByStatus(routines: Routine[]) {
     return ROUTINE_STATUS_ORDER.reduce(
       (acc, status) => {
         const items = routines.filter((routine) => routine.status === status);
         if (items.length > 0) acc[status] = items;
         return acc;
       },
-      {} as Record<FractalRoutine["status"], FractalRoutine[]>,
+      {} as Record<Routine["status"], Routine[]>,
     );
   }
 
@@ -56,13 +56,13 @@ export class FractalRoutineHelper {
    * Returns whether a routine agent field uses a reserved workspace target.
    *
    * @param agent - Agent slug from a routine record.
-   * @returns `true` when `agent` is {@link FractalRoutineReservedAgent}.
+   * @returns `true` when `agent` is {@link RoutineReservedAgent}.
    */
   public static isReservedAgent(
     agent: string,
-  ): agent is FractalRoutineReservedAgent {
+  ): agent is RoutineReservedAgent {
     // [Condition]: Narrow to the reserved-agent union.
-    return (FractalRoutineHelper.RESERVED_AGENTS as readonly string[]).includes(
+    return (RoutineHelper.RESERVED_AGENTS as readonly string[]).includes(
       agent,
     );
   }
@@ -78,7 +78,7 @@ export class FractalRoutineHelper {
     agentId: string,
     agents: Array<{ id: string; name: string }>,
   ): string {
-    if (FractalRoutineHelper.isReservedAgent(agentId)) {
+    if (RoutineHelper.isReservedAgent(agentId)) {
       return ROUTINE_RESERVED_AGENT_CONFIG[agentId].label;
     }
 
@@ -93,7 +93,7 @@ export class FractalRoutineHelper {
    * @returns Human-readable summary joined with middle dots.
    */
   public static getTriggersInlineLabel(
-    triggers: FractalRoutine["triggers"],
+    triggers: Routine["triggers"],
     maxVisible = 2,
   ): string {
     if (triggers.length === 0) {

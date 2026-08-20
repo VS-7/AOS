@@ -15,11 +15,11 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { aos } from "@/app/aos";
-import type { FractalAgent } from "@/features/agent/interfaces/agent.interfaces";
+import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
 import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
 import { openAgentDmTab, openChatTab } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
 import {
-  FractalChatSearchHelper,
+  ChatSearchHelper,
   type ChatSearchHit,
 } from "../helpers/chat-search.helper";
 import { ChatActivityStamp } from "./chat-activity-stamp";
@@ -29,7 +29,7 @@ interface ChatSearchProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   chats: Chat[];
-  agents: FractalAgent[];
+  agents: Agent[];
   agentIds: ReadonlySet<string>;
   currentChatId?: string;
 }
@@ -51,7 +51,7 @@ export function ChatSearch({
 
   const hits = React.useMemo(
     () =>
-      FractalChatSearchHelper.search({
+      ChatSearchHelper.search({
         query,
         chats,
         agents,
@@ -243,7 +243,7 @@ function ChatSearchHitIcon({
         <AvatarAgentFallback name={chatId} />
         <span
           className={cn(
-            "absolute -right-0.5 -top-0.5 z-10 size-2.5 rounded-full border border-sidebar shadow-[0_0_0_1px_hsl(var(--sidebar-background))]",
+            "absolute -right-0.5 -top-0.5 z-10 size-2.5 rounded-full border border-sidebar shadow-[0_0_0_1px_var(--sidebar)]",
             isProcessing ? "animate-pulse bg-amber-500" : "bg-emerald-500",
           )}
         />

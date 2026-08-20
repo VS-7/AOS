@@ -1,7 +1,7 @@
 import { z } from "zod";
-import type { FractalActivityEventDefinition } from "@/features/activity/interfaces/activity.interfaces";
-import { FractalActivityEventHelper } from "@/features/activity/presentation/helpers/activity-event.helper";
-import type { FractalRoutine } from "@/features/routine/interfaces/routine.interfaces";
+import type { ActivityEventDefinition } from "@/features/activity/interfaces/activity.interfaces";
+import { ActivityEventHelper } from "@/features/activity/presentation/helpers/activity-event.helper";
+import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
 import {
   ROUTINE_SCHEDULED_PRESET_OPTIONS,
   type RoutineScheduledPresetId,
@@ -64,7 +64,7 @@ export const ROUTINE_WEEKDAY_OPTIONS = [
 
 export class RoutineTriggersHelper {
   public static buildFormTriggers(
-    routine: FractalRoutine | null,
+    routine: Routine | null,
   ): RoutineTriggerFormValue[] {
     if (!routine) return [];
 
@@ -102,8 +102,8 @@ export class RoutineTriggersHelper {
 
   public static toApiTriggers(
     triggers: RoutineTriggerFormValue[],
-    existingRoutine: FractalRoutine | null,
-  ): FractalRoutine["triggers"] {
+    existingRoutine: Routine | null,
+  ): Routine["triggers"] {
     return triggers.map((trigger) => {
       if (trigger.type === "webhook") {
         const existingToken = existingRoutine?.triggers.find(
@@ -328,7 +328,7 @@ export class RoutineTriggersHelper {
     for (const trigger of triggers) {
       if (trigger.type === "activity" && trigger.config.namespace && trigger.config.event) {
         keys.add(
-          FractalActivityEventHelper.getEventKey(
+          ActivityEventHelper.getEventKey(
             trigger.config.namespace,
             trigger.config.event,
           ),
@@ -341,9 +341,9 @@ export class RoutineTriggersHelper {
 
   public static getAvailableActivityEvents(
     triggers: RoutineTriggerFormValue[],
-    eventDefinitions: FractalActivityEventDefinition[],
-  ): FractalActivityEventDefinition[] {
-    return FractalActivityEventHelper.getAvailableDefinitions(
+    eventDefinitions: ActivityEventDefinition[],
+  ): ActivityEventDefinition[] {
+    return ActivityEventHelper.getAvailableDefinitions(
       eventDefinitions,
       this.getUsedActivityEventKeys(triggers),
     );
@@ -351,7 +351,7 @@ export class RoutineTriggersHelper {
 
   public static getAvailableTriggerTypes(
     triggers: RoutineTriggerFormValue[],
-    eventDefinitions: FractalActivityEventDefinition[],
+    eventDefinitions: ActivityEventDefinition[],
   ): RoutineTriggerTypeId[] {
     const activeTypes = new Set(
       triggers
@@ -378,7 +378,7 @@ export class RoutineTriggersHelper {
 
   public static canAddTriggers(
     triggers: RoutineTriggerFormValue[],
-    eventDefinitions: FractalActivityEventDefinition[],
+    eventDefinitions: ActivityEventDefinition[],
   ): boolean {
     return this.getAvailableTriggerTypes(triggers, eventDefinitions).length > 0;
   }

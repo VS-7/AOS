@@ -25,8 +25,8 @@ import { cn } from "@/lib/utils";
 import { AddSkillDropdown } from "./add-skill-dropdown";
 
 const MCP_HTTP_URL = "http://localhost:5326/mcp";
-const TOKEN_PLACEHOLDER = "fractal_<your-api-token>";
-const TOKEN_PLACEHOLDER_MASKED = "fractal_...xxxx";
+const TOKEN_PLACEHOLDER = "aos_<your-api-token>";
+const TOKEN_PLACEHOLDER_MASKED = "aos_...xxxx";
 
 type McpTransport = "stdio" | "http";
 
@@ -38,7 +38,7 @@ interface DevelopersSkillMcpSectionProps {
 }
 
 /**
- * Builds the STDIO mcp.json config for `fractal --mcp`.
+ * Builds the STDIO mcp.json config for `aos --mcp`.
  *
  * @param token - API token (full or masked preview).
  * @returns Pretty-printed JSON string.
@@ -47,11 +47,11 @@ function buildStdioConfig(token: string): string {
   return JSON.stringify(
     {
       mcpServers: {
-        fractal: {
-          command: "fractal",
+        aos: {
+          command: "aos",
           args: ["--mcp"],
           env: {
-            FRACTAL_TOKEN: token,
+            AOS_TOKEN: token,
           },
         },
       },
@@ -71,7 +71,7 @@ function buildHttpConfig(token: string): string {
   return JSON.stringify(
     {
       mcpServers: {
-        fractal: {
+        aos: {
           type: "http",
           url: MCP_HTTP_URL,
           headers: {
@@ -98,7 +98,7 @@ export function DevelopersSkillMcpSection({
   const [copied, setCopied] = React.useState(false);
 
   const previewToken =
-    maskedToken ?? (apiToken ? `fractal_...${apiToken.slice(-4)}` : TOKEN_PLACEHOLDER_MASKED);
+    maskedToken ?? (apiToken ? `aos_...${apiToken.slice(-4)}` : TOKEN_PLACEHOLDER_MASKED);
   const exportToken = apiToken ?? TOKEN_PLACEHOLDER;
 
   const exportJson =
@@ -137,7 +137,7 @@ export function DevelopersSkillMcpSection({
       <FormSectionHeader>
         <FormSectionTitle>Skill and MCP</FormSectionTitle>
         <FormSectionDescription>
-          Connect agents through Fractal skills and the MCP server.
+          Connect agents through AOS skills and the MCP server.
         </FormSectionDescription>
       </FormSectionHeader>
 
@@ -152,10 +152,10 @@ export function DevelopersSkillMcpSection({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">
-                Fractal Skills
+                AOS Skills
               </p>
               <p className="text-sm text-muted-foreground">
-                Allow agents to interact with Fractal through CLI and skills.
+                Allow agents to interact with AOS through CLI and skills.
               </p>
             </div>
           </div>
@@ -172,7 +172,7 @@ export function DevelopersSkillMcpSection({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">
-                Fractal MCP server
+                AOS MCP server
               </p>
               <p className="text-sm text-muted-foreground">
                 Add this to agents that support{" "}
@@ -186,7 +186,7 @@ export function DevelopersSkillMcpSection({
           <Switch
             checked={mcpEnabled}
             onCheckedChange={setMcpEnabled}
-            aria-label="Toggle Fractal MCP server config"
+            aria-label="Toggle AOS MCP server config"
           />
         </FormSectionItem>
 

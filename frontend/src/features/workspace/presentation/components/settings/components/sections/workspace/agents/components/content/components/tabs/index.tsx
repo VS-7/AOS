@@ -23,14 +23,14 @@ import {
   TabsSubtleItem,
   TabsSubtlePanel,
 } from "@/components/ui/tabs-subtle";
-import type { FractalAgent } from "@/features/agent/interfaces/agent.interfaces";
+import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
 import { AgentMemoriesTab } from "./memories";
 import { AgentTasksTab } from "./tasks";
 import { AgentChannelsTab } from "./channels";
 import { AgentRoutinesTab } from "./routines";
 
 interface AgentContentTabsProps {
-  agent?: FractalAgent;
+  agent?: Agent;
   form: any;
   isCreateMode: boolean;
   isLoadingInstructions: boolean;

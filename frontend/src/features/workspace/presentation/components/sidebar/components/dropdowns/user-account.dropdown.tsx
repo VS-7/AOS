@@ -1,13 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  BookOpen01Icon,
-  DiscordIcon,
-  GithubIcon,
-  Home01Icon,
-  Logout01Icon,
-  Settings02Icon,
-} from "@hugeicons/core-free-icons";
+import { Logout01Icon, Settings02Icon } from "@hugeicons/core-free-icons";
 
 import {
   Avatar,
@@ -18,7 +11,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -29,11 +21,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { aos } from "@/app/aos";
 import { cn } from "@/lib/utils";
-
-const COMMUNITY_URL = "https://dub.sh/fractal-community";
-const DOCS_URL = "https://docs.tryfractal.co";
-const HOMEPAGE_URL = "https://tryfractal.co";
-const FEEDBACK_URL = "https://github.com/tryfractal/fractal/issues/new";
 
 /**
  * Sidebar footer account chip: avatar + name/email, settings gear, and
@@ -98,56 +85,6 @@ export function AppSidebarUserAccountDropdown({
               side="top"
               sideOffset={8}
             >
-              <DropdownMenuItem asChild>
-                <a
-                  href={COMMUNITY_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="cursor-default gap-2"
-                >
-                  <HugeiconsIcon icon={DiscordIcon} className="size-3.5" />
-                  Discord Community
-                </a>
-              </DropdownMenuItem>
-
-              <DropdownMenuItem asChild>
-                <a
-                  href={DOCS_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="cursor-default gap-2"
-                >
-                  <HugeiconsIcon icon={BookOpen01Icon} className="size-3.5" />
-                  Docs
-                </a>
-              </DropdownMenuItem>
-
-              <DropdownMenuItem asChild>
-                <a
-                  href={HOMEPAGE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="cursor-default gap-2"
-                >
-                  <HugeiconsIcon icon={Home01Icon} className="size-3.5" />
-                  Homepage
-                </a>
-              </DropdownMenuItem>
-
-              <DropdownMenuItem asChild>
-                <a
-                  href={FEEDBACK_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="cursor-default gap-2"
-                >
-                  <HugeiconsIcon icon={GithubIcon} className="size-3.5" />
-                  Send Feedback
-                </a>
-              </DropdownMenuItem>
-
-              <DropdownMenuSeparator />
-
               <DropdownMenuItem
                 className="cursor-default gap-2 text-destructive focus:text-destructive"
                 onClick={() => {

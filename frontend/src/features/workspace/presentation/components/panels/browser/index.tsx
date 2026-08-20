@@ -23,7 +23,7 @@ export const BrowserPanel = () => {
 
   const addressBarRef = React.useRef<HTMLInputElement | null>(null);
   const webviewsRef = React.useRef<Record<string, BrowserWebViewElement | null>>({});
-  const isNative = typeof window !== "undefined" && !!window.fractal?.browser;
+  const isNative = typeof window !== "undefined" && !!window.aos?.browser;
 
   const navigateWebview = React.useCallback((tabId: string, url: string) => {
     const webview = webviewsRef.current[tabId];
@@ -79,8 +79,8 @@ export const BrowserPanel = () => {
   }, [shouldFocusAddressBar]);
 
   React.useEffect(() => {
-    if (!window.fractal?.browser) return;
-    const browser = window.fractal.browser;
+    if (!window.aos?.browser) return;
+    const browser = window.aos.browser;
 
     const unsubscribers = [
       browser.on("navigate", (payload?: BrowserCommandPayload) => {

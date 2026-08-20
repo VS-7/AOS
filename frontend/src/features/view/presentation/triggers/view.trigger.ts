@@ -1,11 +1,11 @@
 import { AosTriggerGroup } from "@/app/builders/trigger";
-import type { FractalViewSummary } from "../../interfaces/view.interfaces";
+import type { ViewSummary } from "../../interfaces/view.interfaces";
 import { String } from "@/core/helpers/string";
 
 export const viewGroup = AosTriggerGroup.create("Views")
   .withOrder(5)
   .withLoader(({ query, stores }) => {
-    const views: FractalViewSummary[] = stores.views.state.items;
+    const views: ViewSummary[] = stores.views.state.items;
 
     const items = !query
       ? views

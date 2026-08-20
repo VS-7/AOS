@@ -2,19 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { ListChecks } from "lucide-react";
 import { AnimatedEmptyState } from "@/components/ui/animated-empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { FractalAgent } from "@/features/agent/interfaces/agent.interfaces";
-import type { FractalTask } from "@/features/task/interfaces/task.interfaces";
+import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
+import type { Task } from "@/features/task/interfaces/task.interfaces";
 import { TASK_STATUS_ORDER } from "@/features/task/presentation/consts/task";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
 import { aos } from "@/app/aos";
 import { AgentTaskStatusSection } from "./components/task-status-section";
 
 interface AgentTasksTabProps {
-  agent: FractalAgent;
+  agent: Agent;
 }
 
 export function AgentTasksTab({ agent }: AgentTasksTabProps) {
-  const [tasks, setTasks] = useState<FractalTask[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export function AgentTasksTab({ agent }: AgentTasksTabProps) {
       .query({ query: { limit: "200" } })
       .then((response) => {
         if (!isMounted) return;
-        const allTasks: FractalTask[] = response.data?.tasks ?? [];
+        const allTasks: Task[] = response.data?.tasks ?? [];
         const selectedAgentId = agent.id.toLowerCase();
         const filtered = allTasks.filter((task) => (task.assigned ?? "").toLowerCase() === selectedAgentId);
         setTasks(filtered);

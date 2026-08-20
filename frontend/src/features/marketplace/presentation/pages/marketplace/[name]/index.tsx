@@ -1,5 +1,5 @@
 import { aos } from "@/app/aos";
-import type { FractalSkill } from "@/features/skill/interfaces/skill.interfaces";
+import type { Skill } from "@/features/skill/interfaces/skill.interfaces";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
 import { getRelatedListings } from "@/features/marketplace/presentation/helpers/marketplace.helper";
 import { isDormant } from "@/lib/command-map";
@@ -66,7 +66,7 @@ export const MarketplaceDetailsPage = aos
     try {
       const installedRes = await client.skill.list.query({ query: {} });
       resolvedInstalledNames = (installedRes.data?.skills || []).map(
-        (item: FractalSkill) => item.name,
+        (item: Skill) => item.name,
       );
     } catch {
       // keep fallback

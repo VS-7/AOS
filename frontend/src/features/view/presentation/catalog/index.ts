@@ -1,5 +1,5 @@
 export {
-  fractalViewCatalog,
-  FRACTAL_VIEW_COMPONENT_NAMES,
-} from "./fractal-view.catalog";
-export { fractalViewRegistry } from "./fractal-view.registry";
+  viewCatalog,
+  AOS_VIEW_COMPONENT_NAMES,
+} from "./view.catalog";
+export { viewRegistry } from "./view.registry";

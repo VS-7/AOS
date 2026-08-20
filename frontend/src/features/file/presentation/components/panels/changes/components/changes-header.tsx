@@ -32,10 +32,10 @@ import {
   formatChangesContextScope,
   formatChangesCountLabel,
 } from "@/features/file/presentation/helpers/changes.helper";
-import type { FractalFileExplorerContext } from "@/features/file/interfaces/file.interfaces";
+import type { FileExplorerContext } from "@/features/file/interfaces/file.interfaces";
 
 interface ChangesHeaderProps {
-  explorerContext: FractalFileExplorerContext;
+  explorerContext: FileExplorerContext;
   fileCount: number;
   additions: number;
   deletions: number;

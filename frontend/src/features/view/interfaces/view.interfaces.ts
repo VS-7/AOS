@@ -42,16 +42,16 @@ export type ViewComponentMetadata = {
 /**
  * Scope of the view - workspace level or skill-level
  */
-export const FractalViewScopeSchema = z.enum(["workspace", "skill"]);
-export type FractalViewScope = z.infer<typeof FractalViewScopeSchema>;
+export const ViewScopeSchema = z.enum(["workspace", "skill"]);
+export type ViewScope = z.infer<typeof ViewScopeSchema>;
 
-export const FractalViewTemplateSchema = z.enum(["basic", "table", "dashboard"]);
-export type FractalViewTemplate = z.infer<typeof FractalViewTemplateSchema>;
+export const ViewTemplateSchema = z.enum(["basic", "table", "dashboard"]);
+export type ViewTemplate = z.infer<typeof ViewTemplateSchema>;
 
 /**
  * Schema for creating a view
  */
-export const FractalViewCreateSchema = Schema.object({
+export const ViewCreateSchema = Schema.object({
   name: z
     .string()
     .regex(/^[a-z0-9][a-z0-9-_]*$/)
@@ -67,10 +67,10 @@ export const FractalViewCreateSchema = Schema.object({
     .string()
     .optional()
     .describe("Optional collection identifier this view should read from by default."),
-  template: FractalViewTemplateSchema.default("basic").describe(
+  template: ViewTemplateSchema.default("basic").describe(
     "Scaffold template to generate for the view.",
   ),
-  scope: FractalViewScopeSchema.default("workspace").describe(
+  scope: ViewScopeSchema.default("workspace").describe(
     "Whether the view belongs to the workspace or a skill.",
   ),
   skill: z
@@ -91,13 +91,13 @@ export const FractalViewCreateSchema = Schema.object({
     .describe("View actions with handlers and params."),
 });
 
-export type FractalViewCreateInput = z.input<typeof FractalViewCreateSchema>;
+export type ViewCreateInput = z.input<typeof ViewCreateSchema>;
 
 /**
  * Schema for querying views
  */
-export const FractalViewQuerySchema = Schema.object({
-  scope: FractalViewScopeSchema.optional().describe("Filter views by scope."),
+export const ViewQuerySchema = Schema.object({
+  scope: ViewScopeSchema.optional().describe("Filter views by scope."),
   skill: z
     .string()
     .optional()
@@ -105,12 +105,12 @@ export const FractalViewQuerySchema = Schema.object({
   query: z.string().optional().describe("Text search across view metadata."),
 });
 
-export type FractalViewQueryInput = z.infer<typeof FractalViewQuerySchema>;
+export type ViewQueryInput = z.infer<typeof ViewQuerySchema>;
 
 /**
  * Schema for rendering a view with optional query overrides
  */
-export const FractalViewRenderSchema = Schema.object({
+export const ViewRenderSchema = Schema.object({
   where: z
     .any()
     .optional()
@@ -129,30 +129,30 @@ export const FractalViewRenderSchema = Schema.object({
     .describe("Number of items to skip when rendering the view."),
 });
 
-export type FractalViewRenderInput = z.infer<typeof FractalViewRenderSchema>;
+export type ViewRenderInput = z.infer<typeof ViewRenderSchema>;
 
 /**
  * Schema for executing a view action
  */
-export const FractalViewActionSchema = Schema.object({
+export const ViewActionSchema = Schema.object({
   params: z
     .any()
     .optional()
     .describe("Parameters forwarded to the action handler."),
 });
 
-export type FractalViewActionInput = z.infer<typeof FractalViewActionSchema>;
+export type ViewActionInput = z.infer<typeof ViewActionSchema>;
 
 /**
  * View summary (lightweight representation for listing)
  */
-export type FractalViewSummary = {
+export type ViewSummary = {
   id: string;
   name: string;
   title: string;
   description?: string;
   collection?: string;
-  scope: FractalViewScope;
+  scope: ViewScope;
   source?: "built-in" | "discovered" | undefined;
   skill?: string;
   metadata?: Record<string, any> | undefined
@@ -161,7 +161,7 @@ export type FractalViewSummary = {
 /**
  * View location paths
  */
-export type FractalViewLocation = {
+export type ViewLocation = {
   root: string;
   definition: string;
   hooks: string;
@@ -170,7 +170,7 @@ export type FractalViewLocation = {
 /**
  * Full view definition with paths
  */
-export type FractalView = FractalViewSummary & {
+export type View = ViewSummary & {
   getData?: string;
   tree: IgniterCollectionViewDefinition["tree"];
   actions?: IgniterCollectionViewDefinition["actions"];
@@ -180,34 +180,34 @@ export type FractalView = FractalViewSummary & {
 /**
  * Interface for the view service
  */
-export interface IFractalViewService {
+export interface IViewService {
   list(
-    query?: FractalViewQueryInput,
-  ): Promise<ResponseWithCTA<{ views: FractalViewSummary[] }>>;
+    query?: ViewQueryInput,
+  ): Promise<ResponseWithCTA<{ views: ViewSummary[] }>>;
   get(
     id: string,
   ): Promise<
     ResponseWithCTA<{
       view: IgniterCollectionViewDefinition | null;
-      definition: FractalView | null;
+      definition: View | null;
     }>
   >;
   create(
-    data: FractalViewCreateInput,
-  ): Promise<ResponseWithCTA<{ view: FractalView | null }>>;
+    data: ViewCreateInput,
+  ): Promise<ResponseWithCTA<{ view: View | null }>>;
   listComponents(): Promise<ResponseWithCTA<{
     components: ViewComponentMetadata[];
     groups: Record<ViewComponentCategory, ViewComponentMetadata[]>;
   }>>;
-  delete(id: string): Promise<ResponseWithCTA<{ view: FractalView }>>;
+  delete(id: string): Promise<ResponseWithCTA<{ view: View }>>;
   render(
     id: string,
-    query?: FractalViewRenderInput,
+    query?: ViewRenderInput,
   ): Promise<ResponseWithCTA<{ result: unknown }>>;
   listActions(id: string): Promise<ResponseWithCTA<{ actions: string[] }>>;
   executeAction(
     id: string,
     actionId: string,
-    input?: FractalViewActionInput,
+    input?: ViewActionInput,
   ): Promise<ResponseWithCTA<{ result: unknown }>>;
 }

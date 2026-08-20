@@ -13,7 +13,6 @@ export const MARKETPLACE_ALLOWED_CATEGORIES = [
 export const MARKETPLACE_CATEGORY_PREVIEW_LIMIT = 6;
 
 export const MARKETPLACE_FEATURED_PLUGIN_SLUGS = [
-  "fractal",
   "github",
   "slack",
   "linear",

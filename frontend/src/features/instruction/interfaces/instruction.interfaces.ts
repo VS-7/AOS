@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * InstructionSchema: Main schema defining a complete Fractal Instruction.
+ * InstructionSchema: Main schema defining a complete AOS Instruction.
  * Simplified to align with modern IDE context patterns (Copilot/Claude).
  * @description Represents the complete structure of an instruction including identity, content, and scope.
  */
@@ -79,41 +79,35 @@ export type UpdateInstructionInput = z.infer<typeof UpdateInstructionSchema>;
 
 import type { ResponseWithCTA } from "@/core/interfaces/response.interfaces";
 
-export interface FractalInstructionListParams { }
-export interface FractalInstructionListResult {
+export interface InstructionListParams { }
+export interface InstructionListResult {
   instructions: Instruction[];
 }
 
-export interface FractalInstructionGetParams {
+export interface InstructionGetParams {
   id: string;
 }
-export interface FractalInstructionGetResult {
+export interface InstructionGetResult {
   instruction: Instruction;
 }
 
-export interface FractalInstructionCreateParams extends CreateInstructionInput { }
-export type FractalInstructionCreateResult = ResponseWithCTA<{
+export interface InstructionCreateParams extends CreateInstructionInput { }
+export type InstructionCreateResult = ResponseWithCTA<{
   instruction: Instruction;
 }>;
 
-export interface FractalInstructionUpdateParams {
+export interface InstructionUpdateParams {
   id: string;
   data: UpdateInstructionInput;
 }
-export type FractalInstructionUpdateResult = ResponseWithCTA<{
+export type InstructionUpdateResult = ResponseWithCTA<{
   instruction: Instruction;
 }>;
 
-export interface FractalInstructionDeleteParams {
+export interface InstructionDeleteParams {
   id: string;
 }
-export type FractalInstructionDeleteResult = ResponseWithCTA<{
+export type InstructionDeleteResult = ResponseWithCTA<{
   id: string;
 }>;
 
-/**
- * Alias for the freshly-copied `v401/web` presentation code, which
- * imports the `Fractal`-prefixed name — same reasoning as `skill.
- * interfaces.ts`'s `FractalSkill` alias.
- */
-export type FractalInstruction = Instruction;

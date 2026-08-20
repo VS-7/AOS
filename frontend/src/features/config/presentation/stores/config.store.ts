@@ -1,21 +1,21 @@
 import { AosStore } from "@/app/builders/store";
 import {
-  FractalConfig,
-  FRACTAL_DEFAULT_CONFIG,
-  FractalConfigUpdateInput,
+  Config,
+  AOS_DEFAULT_CONFIG,
+  ConfigUpdateInput,
 } from "@/features/config/interfaces/config.interfaces";
 import { api } from "@/lib/aos-facade";
 
-function unwrapConfig(data: unknown): FractalConfig | null {
+function unwrapConfig(data: unknown): Config | null {
   if (!data || typeof data !== "object") return null;
   if ("config" in data && data.config && typeof data.config === "object") {
-    return data.config as FractalConfig;
+    return data.config as Config;
   }
-  return data as FractalConfig;
+  return data as Config;
 }
 
 export const ConfigStore = AosStore.create("config")
-  .withState<FractalConfig>(FRACTAL_DEFAULT_CONFIG)
+  .withState<Config>(AOS_DEFAULT_CONFIG)
   .withPreload(async (ctx) => {
     const response = await api.config.get.query();
     const data = unwrapConfig(response.data);
@@ -31,7 +31,7 @@ export const ConfigStore = AosStore.create("config")
     }
     return ctx.state.get();
   })
-  .addAction("update", (ctx) => async (params: FractalConfigUpdateInput) => {
+  .addAction("update", (ctx) => async (params: ConfigUpdateInput) => {
     const response = await api.config.update.mutate({ body: params });
     const data = unwrapConfig(response.data);
     if (data) {

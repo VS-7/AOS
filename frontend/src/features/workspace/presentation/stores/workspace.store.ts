@@ -1,13 +1,13 @@
 import { AosStore } from "@/app/builders/store";
 import {
-  FractalWorkspace,
-  FractalWorkspaceCreate,
+  Workspace,
+  WorkspaceCreate,
 } from "@/features/workspace/interfaces/workspace.interfaces";
 import type {
-  FractalWorkspaceDirectoryAgent,
-  FractalWorkspaceDirectoryUser,
+  WorkspaceDirectoryAgent,
+  WorkspaceDirectoryUser,
 } from "@/features/workspace/interfaces/directory.interfaces";
-import { FractalWorkspaceError } from "@/features/workspace/errors/workspace.errors";
+import { WorkspaceError } from "@/features/workspace/errors/workspace.errors";
 import { api } from "@/lib/aos-facade";
 import {
   invalidateWorkspaceDirectoryCache,
@@ -24,15 +24,15 @@ const setWorkspaceCookie = (id: string | undefined) => {
   }
 };
 
-export type WorkspaceContext = FractalWorkspace & { active: boolean };
+export type WorkspaceContext = Workspace & { active: boolean };
 
 export interface WorkspaceDirectoryState {
-  users: FractalWorkspaceDirectoryUser[];
-  agents: FractalWorkspaceDirectoryAgent[];
+  users: WorkspaceDirectoryUser[];
+  agents: WorkspaceDirectoryAgent[];
 }
 
 export interface WorkspaceState {
-  current: FractalWorkspace | undefined;
+  current: Workspace | undefined;
   options: WorkspaceContext[];
   /** Member profiles + lean agents with processing chats (not a separate store). */
   directory: WorkspaceDirectoryState;
@@ -76,7 +76,7 @@ export const WorkspaceStore = AosStore.create("workspace")
     // path. Same shape as `activity.list` above: no `wrapOut` fixes an
     // already-named `Output` struct's field, only a call-site read does.
     const response = await api.workspace.list.query();
-    const workspacesList: FractalWorkspace[] = (response.data as { workspaces?: FractalWorkspace[] } | undefined)?.workspaces || [];
+    const workspacesList: Workspace[] = (response.data as { workspaces?: Workspace[] } | undefined)?.workspaces || [];
 
     let currentWorkspace = ctx.state.get().current;
 
@@ -116,7 +116,7 @@ export const WorkspaceStore = AosStore.create("workspace")
   .addAction("refresh", (ctx) => async () => {
     // Same shape fix as `withPreload` above.
     const response = await api.workspace.list.query();
-    const workspacesList: FractalWorkspace[] = (response.data as { workspaces?: FractalWorkspace[] } | undefined)?.workspaces || [];
+    const workspacesList: Workspace[] = (response.data as { workspaces?: Workspace[] } | undefined)?.workspaces || [];
 
     const state = ctx.state.get();
     let currentWorkspace = state.current;
@@ -179,8 +179,8 @@ export const WorkspaceStore = AosStore.create("workspace")
       if (!workspace) {
         return {
           data: null,
-          error: new FractalWorkspaceError({
-            code: "FRACTAL_WORKSPACE_NOT_FOUND",
+          error: new WorkspaceError({
+            code: "AOS_WORKSPACE_NOT_FOUND",
           }),
         };
       }
@@ -214,7 +214,7 @@ export const WorkspaceStore = AosStore.create("workspace")
       };
     }
   })
-  .addAction("create", (ctx) => async (params: FractalWorkspaceCreate) => {
+  .addAction("create", (ctx) => async (params: WorkspaceCreate) => {
     const response = await api.workspace.create.mutate({ body: params });
     // task-12 disclosed divergence: `workspace_create` answers
     // `CreateOutput { workspace, orchestrator, scaffold, adopted }`
@@ -224,7 +224,7 @@ export const WorkspaceStore = AosStore.create("workspace")
     // always `undefined`; the id is at `response.data.workspace.id`. That
     // left `ctx.actions.switch(undefined)` silently failing to select the
     // workspace that was just created.
-    const data = (response.data as { workspace?: FractalWorkspace } | undefined)?.workspace;
+    const data = (response.data as { workspace?: Workspace } | undefined)?.workspace;
 
     if (data) {
       // switch now handles refresh internally and returns { data, error }
@@ -240,8 +240,8 @@ export const WorkspaceStore = AosStore.create("workspace")
     if (!workspaceId) {
       return {
         data: null,
-        error: new FractalWorkspaceError({
-          code: "FRACTAL_WORKSPACE_NOT_FOUND",
+        error: new WorkspaceError({
+          code: "AOS_WORKSPACE_NOT_FOUND",
         }),
       };
     }
@@ -252,10 +252,10 @@ export const WorkspaceStore = AosStore.create("workspace")
       // Refresh the list — the deleted workspace is now gone
       // Same shape fix as `withPreload` above.
       const response = await api.workspace.list.query();
-      const workspacesList: FractalWorkspace[] = (response.data as { workspaces?: FractalWorkspace[] } | undefined)?.workspaces || [];
+      const workspacesList: Workspace[] = (response.data as { workspaces?: Workspace[] } | undefined)?.workspaces || [];
 
       // Determine the next current workspace
-      let nextCurrent: FractalWorkspace | undefined;
+      let nextCurrent: Workspace | undefined;
 
       if (state.current?.id !== workspaceId) {
         // The deleted workspace was not the active one; keep current

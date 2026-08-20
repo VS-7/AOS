@@ -32,7 +32,7 @@ const WORKSPACE_SETTINGS_SECTIONS = SETTINGS_SECTIONS.filter(
 export function AppSidebarWorkspaceHeaderDropdown() {
   const currentWorkspace = aos.stores.workspace.useState((s) => s.current);
   const canRevealInFinder = Boolean(
-    typeof window !== "undefined" && window.fractal?.system?.showItemInFolder,
+    typeof window !== "undefined" && window.aos?.system?.showItemInFolder,
   );
 
   async function handleCopyId() {
@@ -49,7 +49,7 @@ export function AppSidebarWorkspaceHeaderDropdown() {
   async function handleOpenInFinder() {
     if (!currentWorkspace?.path) return;
 
-    const revealed = await window.fractal?.system?.showItemInFolder?.(
+    const revealed = await window.aos?.system?.showItemInFolder?.(
       currentWorkspace.path,
     );
 

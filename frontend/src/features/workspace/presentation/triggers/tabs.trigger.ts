@@ -27,7 +27,7 @@ export const tabsGroup = AosTriggerGroup.create("Tabs")
     icon: "X",
     handler: ({ stores }) => {
       const activeId = stores.viewport.state.tabs.current;
-      if (activeId === 'fractal') return;
+      if (activeId === 'aos') return;
       stores.viewport.actions.closeTab(activeId);
     },
   })
@@ -49,7 +49,7 @@ export const tabsGroup = AosTriggerGroup.create("Tabs")
       const activeId = stores.viewport.state.tabs.current;
       const tab = stores.viewport.state.tabs.items.find((t: ViewportTabState) => t.id === activeId);
       if (tab?.type === 'browser') {
-        window.fractal?.browser?.reload({ tabId: activeId });
+        window.aos?.browser?.reload({ tabId: activeId });
       } else {
         window.location.reload();
       }
@@ -64,7 +64,7 @@ export const tabsGroup = AosTriggerGroup.create("Tabs")
       const activeId = stores.viewport.state.tabs.current;
       const tab = stores.viewport.state.tabs.items.find((t: ViewportTabState) => t.id === activeId);
       if (tab?.type === 'browser') {
-        window.fractal?.browser?.goBack({ tabId: activeId });
+        window.aos?.browser?.goBack({ tabId: activeId });
       } else {
         // Could implement app navigation back if needed
         window.history.back();
@@ -80,7 +80,7 @@ export const tabsGroup = AosTriggerGroup.create("Tabs")
       const activeId = stores.viewport.state.tabs.current;
       const tab = stores.viewport.state.tabs.items.find((t: ViewportTabState) => t.id === activeId);
       if (tab?.type === 'browser') {
-        window.fractal?.browser?.goForward({ tabId: activeId });
+        window.aos?.browser?.goForward({ tabId: activeId });
       } else {
         // Could implement app navigation forward if needed
         window.history.forward();
@@ -116,7 +116,7 @@ export const tabsGroup = AosTriggerGroup.create("Tabs")
         // the builder's generics — same kind of gap as `aos.useForm`'s.
         const url = normalizeBrowserUrl((input as { url: string }).url);
         stores.viewport.actions.updateTab(activeId, { url, isLoading: true });
-        window.fractal?.browser?.navigate({ tabId: activeId, url });
+        window.aos?.browser?.navigate({ tabId: activeId, url });
       }
     },
   })

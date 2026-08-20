@@ -3,9 +3,9 @@ import { ActivityIcon, PlusIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { FractalActivityEventDefinition } from "@/features/activity/interfaces/activity.interfaces";
-import { FractalActivityEventHelper } from "@/features/activity/presentation/helpers/activity-event.helper";
-import type { FractalRoutineActivityFilter } from "@/features/routine/interfaces/routine.interfaces";
+import type { ActivityEventDefinition } from "@/features/activity/interfaces/activity.interfaces";
+import { ActivityEventHelper } from "@/features/activity/presentation/helpers/activity-event.helper";
+import type { RoutineActivityFilter } from "@/features/routine/interfaces/routine.interfaces";
 import type { RoutineTriggerFormValue } from "@/features/routine/presentation/consts/routine-triggers";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -14,7 +14,7 @@ import { Trash2Icon } from "lucide-react";
 
 interface ActivityTriggerRowProps {
   value: Extract<RoutineTriggerFormValue, { type: "activity" }>;
-  activityEvents: FractalActivityEventDefinition[];
+  activityEvents: ActivityEventDefinition[];
   onChange: (
     next: Extract<RoutineTriggerFormValue, { type: "activity" }>,
   ) => void;
@@ -27,7 +27,7 @@ export function ActivityTriggerRow({
   onChange,
   onRemove,
 }: ActivityTriggerRowProps) {
-  const eventDefinition = FractalActivityEventHelper.findDefinition(
+  const eventDefinition = ActivityEventHelper.findDefinition(
     activityEvents,
     value.config.namespace,
     value.config.event,
@@ -36,7 +36,7 @@ export function ActivityTriggerRow({
 
   const filters = value.config.filters ?? [];
   const filterableFields =
-    FractalActivityEventHelper.getFilterableFields(eventDefinition);
+    ActivityEventHelper.getFilterableFields(eventDefinition);
 
   const handleAddFilter = () => {
     onChange({
@@ -50,11 +50,11 @@ export function ActivityTriggerRow({
 
   const handleUpdateFilter = (
     index: number,
-    patch: Partial<FractalRoutineActivityFilter>,
+    patch: Partial<RoutineActivityFilter>,
   ) => {
     const current = filters[index];
     if (!current) return;
-    const filter: FractalRoutineActivityFilter = { ...current, ...patch };
+    const filter: RoutineActivityFilter = { ...current, ...patch };
     onChange({
       type: "activity",
       config: {
@@ -85,7 +85,7 @@ export function ActivityTriggerRow({
           <span>When</span>
           <p className="text-xs text-muted-foreground">
             {eventDefinition
-              ? FractalActivityEventHelper.getDisplayLabel(eventDefinition)
+              ? ActivityEventHelper.getDisplayLabel(eventDefinition)
               : "On activity"}
           </p>
         </div>
@@ -138,7 +138,7 @@ export function ActivityTriggerRow({
                 value={filter.operator}
                 onValueChange={(operator) =>
                   handleUpdateFilter(index, {
-                    operator: operator as FractalRoutineActivityFilter["operator"],
+                    operator: operator as RoutineActivityFilter["operator"],
                   })
                 }
               >

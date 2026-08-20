@@ -6,14 +6,14 @@ import {
   CollapsibleTitle,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import type { FractalTask } from "@/features/task/interfaces/task.interfaces";
+import type { Task } from "@/features/task/interfaces/task.interfaces";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
 import { TaskListRow } from "@/features/task/presentation/pages/(main)/components/list/components/task-list-row.component";
 import { useEffect, useState } from "react";
 
 interface AgentTaskStatusSectionProps {
-  status: FractalTask["status"];
-  tasks: FractalTask[];
+  status: Task["status"];
+  tasks: Task[];
 }
 
 const itemVariants = {

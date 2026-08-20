@@ -15,7 +15,7 @@ import type { IconComponentProps } from "@/lib/icon-map";
 
 export type ChatSidebarTab = "channels" | "team" | "tasks" | "runs";
 
-const TAB_STORAGE_KEY = "fractal.sidebar.chatTab";
+const TAB_STORAGE_KEY = "aos.sidebar.chatTab";
 
 const TABS: Array<{
   id: ChatSidebarTab;

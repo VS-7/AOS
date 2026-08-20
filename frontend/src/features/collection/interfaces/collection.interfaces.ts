@@ -22,18 +22,18 @@ export interface IIgniterCollectionModel<TFields = Record<string, unknown>> {
  * async ({ value }) => value
  *
  * // With transformation
- * async ({ value, fractal }) => {
- *   const workspace = fractal.workspaces.resolve();
+ * async ({ value, aos }) => {
+ *   const workspace = aos.workspaces.resolve();
  *   await workspace.customCollections.create({ ... });
  *   return value;
  * }
  * ```
  */
-export type FractalCollectionHookCallback = (
+export type CollectionHookCallback = (
   ctx: {
     value: Record<string, unknown>;
     previousValue?: Record<string, unknown>;
-    fractal: unknown;
+    aos: unknown;
     workspace: unknown;
   }
 ) => Promise<Record<string, unknown> | boolean>;
@@ -56,38 +56,38 @@ export type FractalCollectionHookCallback = (
  * };
  * ```
  */
-export type FractalCollectionHooks = {
+export type CollectionHooks = {
   /** Called after a record is created. Return the value to proceed or throw to reject. */
-  onCreated?: FractalCollectionHookCallback;
+  onCreated?: CollectionHookCallback;
   /** Called after a record is updated. Receives both new and previous value. */
-  onUpdated?: FractalCollectionHookCallback;
+  onUpdated?: CollectionHookCallback;
   /** Called after a record is deleted. Return true to proceed or throw to reject. */
-  onDeleted?: FractalCollectionHookCallback;
+  onDeleted?: CollectionHookCallback;
   /** Called when listing records. Can filter or transform the result set. */
-  onList?: (ctx: { value: Record<string, unknown>[]; query?: Record<string, unknown>; fractal: unknown; workspace: unknown }) => Promise<Record<string, unknown>[]>;
+  onList?: (ctx: { value: Record<string, unknown>[]; query?: Record<string, unknown>; aos: unknown; workspace: unknown }) => Promise<Record<string, unknown>[]>;
   /** Called when reading a single record. Can transform or enrich the record. */
-  onRead?: FractalCollectionHookCallback;
+  onRead?: CollectionHookCallback;
 };
 
-export const FractalCustomCollectionScopeSchema = z.enum([
+export const CustomCollectionScopeSchema = z.enum([
   "workspace",
   "skill",
 ]);
 
-export const FractalCustomCollectionFormatSchema = z.enum(["json", "md"]);
+export const CustomCollectionFormatSchema = z.enum(["json", "md"]);
 
-export const FractalCustomCollectionSchema = z.object({
+export const CustomCollectionSchema = z.object({
   name: z
     .string()
     .describe("Collection name."),
-  scope: FractalCustomCollectionScopeSchema.describe(
+  scope: CustomCollectionScopeSchema.describe(
     "Whether the collection belongs to the workspace or a skill.",
   ),
   skill: z
     .string()
     .optional()
     .describe("Skill identifier when the collection is owned by a skill."),
-  format: FractalCustomCollectionFormatSchema.describe(
+  format: CustomCollectionFormatSchema.describe(
     "Primary storage format for records.",
   ),
   path: z
@@ -97,7 +97,7 @@ export const FractalCustomCollectionSchema = z.object({
   patterns: z.array(z.string()).describe('')
 });
 
-export const FractalCustomCollectionCreateSchema = Schema.object({
+export const CustomCollectionCreateSchema = Schema.object({
   name: z
     .string()
     .regex(/^[a-z0-9][a-z0-9-_]*$/)
@@ -106,7 +106,7 @@ export const FractalCustomCollectionCreateSchema = Schema.object({
     ),
   skill: z.string().optional().describe("Determine if collection is part of a skill."),
   schema: z.any().describe("Valid JSON Schema defining the record structure."),
-  format: FractalCustomCollectionFormatSchema.default("json").describe("Primary storage format for records data."),
+  format: CustomCollectionFormatSchema.default("json").describe("Primary storage format for records data."),
   hooks: z
     .object({
       onCreated: z
@@ -134,8 +134,8 @@ export const FractalCustomCollectionCreateSchema = Schema.object({
     .describe("Optional lifecycle hooks for the collection."),
 });
 
-export const FractalCustomCollectionQuerySchema = Schema.object({
-  scope: FractalCustomCollectionScopeSchema.optional().describe(
+export const CustomCollectionQuerySchema = Schema.object({
+  scope: CustomCollectionScopeSchema.optional().describe(
     "Filter collections by scope.",
   ),
   skill: z
@@ -148,7 +148,7 @@ export const FractalCustomCollectionQuerySchema = Schema.object({
     .describe("Text search across collection metadata."),
 });
 
-export const FractalCollectionRecordListQuerySchema = Schema.object({
+export const CollectionRecordListQuerySchema = Schema.object({
   where: z
     .any()
     .optional()
@@ -161,7 +161,7 @@ export const FractalCollectionRecordListQuerySchema = Schema.object({
   skip: z.number().optional().describe("Number of records to skip."),
 });
 
-export const FractalCollectionRecordCreateSchema = Schema.object({
+export const CollectionRecordCreateSchema = Schema.object({
   id: z.string().optional().describe("Optional custom record identifier."),
   data: z
     .any()
@@ -173,7 +173,7 @@ export const FractalCollectionRecordCreateSchema = Schema.object({
     .describe("Optional markdown body content for .md collections."),
 });
 
-export const FractalCollectionRecordUpdateSchema = Schema.object({
+export const CollectionRecordUpdateSchema = Schema.object({
   data: z
     .any()
     .optional()
@@ -184,15 +184,15 @@ export const FractalCollectionRecordUpdateSchema = Schema.object({
     .describe("Optional markdown body content for .md collections."),
 });
 
-export type FractalCustomCollectionSchemaFile = {
+export type CustomCollectionSchemaFile = {
   collectionName: string;
   patterns: string[];
   template?: string;
   schema?: Record<string, unknown>;
-  hooks?: FractalCollectionHooks;
+  hooks?: CollectionHooks;
 };
 
-export type FractalCollectionPath = {
+export type CollectionPath = {
   relative: string;
   absolute: string;
 };
@@ -203,41 +203,41 @@ export type IgniterCollectionDefinition = {
   schema?: Record<string, unknown>;
 };
 
-export type FractalCustomCollection = z.infer<
-  typeof FractalCustomCollectionSchema
+export type CustomCollection = z.infer<
+  typeof CustomCollectionSchema
 >;
-export type FractalCustomCollectionCreateInput = z.infer<
-  typeof FractalCustomCollectionCreateSchema
+export type CustomCollectionCreateInput = z.infer<
+  typeof CustomCollectionCreateSchema
 >;
-export type FractalCustomCollectionQueryInput = z.infer<
-  typeof FractalCustomCollectionQuerySchema
+export type CustomCollectionQueryInput = z.infer<
+  typeof CustomCollectionQuerySchema
 >;
-export type FractalCollectionRecordListQueryInput = z.infer<
-  typeof FractalCollectionRecordListQuerySchema
+export type CollectionRecordListQueryInput = z.infer<
+  typeof CollectionRecordListQuerySchema
 >;
-export type FractalCollectionRecordCreateInput = z.infer<
-  typeof FractalCollectionRecordCreateSchema
+export type CollectionRecordCreateInput = z.infer<
+  typeof CollectionRecordCreateSchema
 >;
-export type FractalCollectionRecordUpdateInput = z.infer<
-  typeof FractalCollectionRecordUpdateSchema
+export type CollectionRecordUpdateInput = z.infer<
+  typeof CollectionRecordUpdateSchema
 >;
 
-export interface IFractalCollectionService {
+export interface ICollectionService {
   list(
-    query?: FractalCustomCollectionQueryInput,
-  ): Promise<ResponseWithCTA<{ collections: FractalCustomCollection[] }>>;
+    query?: CustomCollectionQueryInput,
+  ): Promise<ResponseWithCTA<{ collections: CustomCollection[] }>>;
   get(
     id: string,
   ): Promise<
     ResponseWithCTA<{
       collection: IIgniterCollectionModel<Record<string, any>>;
-      definition: FractalCustomCollection | null;
+      definition: CustomCollection | null;
     }>
   >;
   create(
-    data: FractalCustomCollectionCreateInput,
-  ): Promise<ResponseWithCTA<{ collection: FractalCustomCollection | null }>>;
+    data: CustomCollectionCreateInput,
+  ): Promise<ResponseWithCTA<{ collection: CustomCollection | null }>>;
   delete(
     id: string,
-  ): Promise<ResponseWithCTA<{ collection: FractalCustomCollection }>>;
+  ): Promise<ResponseWithCTA<{ collection: CustomCollection }>>;
 }

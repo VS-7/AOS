@@ -13,7 +13,7 @@ import {
   GOAL_PRIORITY_ORDER,
   GOAL_STATUS_ORDER,
 } from "@/features/goal/presentation/consts/goal";
-import type { FractalGoalPriority } from "@/features/goal/interfaces/goal.interfaces";
+import type { GoalPriority } from "@/features/goal/interfaces/goal.interfaces";
 import { GoalHelper } from "@/features/goal/presentation/helpers/goal.helper";
 import { useGoalsContext } from "@/features/goal/presentation/pages/(main)/context";
 import { aos } from "@/app/aos";

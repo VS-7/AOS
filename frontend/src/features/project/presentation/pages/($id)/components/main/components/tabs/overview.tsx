@@ -15,12 +15,12 @@ import {
 import { FolderInput } from "@/components/ui/folder-input";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading.hook";
 import { aos } from "@/app/aos";
-import type { FractalProject } from "@/features/project/interfaces/project.interfaces";
-import type { FractalTask } from "@/features/task/interfaces/task.interfaces";
+import type { Project } from "@/features/project/interfaces/project.interfaces";
+import type { Task } from "@/features/task/interfaces/task.interfaces";
 
 interface ProjectOverviewTabProps {
   form: any;
-  project?: FractalProject | null;
+  project?: Project | null;
 }
 
 // ─── Apple-accent palette (macOS 26) ─────────────────────────────────────
@@ -106,7 +106,7 @@ function ProjectKpiCards({ projectId }: ProjectKpiCardsProps) {
     staleTime: 5 * 60 * 1000,
   });
 
-  const tasks: FractalTask[] = taskQuery.data?.tasks ?? [];
+  const tasks: Task[] = taskQuery.data?.tasks ?? [];
   const isLoading = useDelayedLoading(taskQuery.isLoading);
 
   const metrics = React.useMemo(() => {
@@ -170,7 +170,7 @@ export function ProjectOverviewTab({ form, project }: ProjectOverviewTabProps) {
             <FormLabel className="opacity-60">Name</FormLabel>
             <FormControl>
               <Input
-                placeholder="Fractal OS"
+                placeholder="AOS OS"
                 className="h-auto rounded-none border-0 bg-transparent px-0 py-0 text-2xl font-semibold shadow-none focus-visible:ring-0"
                 {...field}
               />

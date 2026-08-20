@@ -27,7 +27,7 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FractalTunnelUrlHelper } from "@/features/tunnel/presentation/helpers/tunnel-url.helper";
+import { TunnelUrlHelper } from "@/features/tunnel/presentation/helpers/tunnel-url.helper";
 
 const tunnelEnableFormSchema = z.object({
   enabled: z.boolean(),
@@ -41,7 +41,7 @@ const tunnelCredentialsFormSchema = z.object({
 export function WorkspaceTunnelSection() {
   const router = useRouter();
   
-  // `aos.useContext()` is Fractal's global route context (`withContext(...)`),
+  // `aos.useContext()` is AOS's global route context (`withContext(...)`),
   // which this port's `app/aos.tsx` never wires -- `DefaultContext` (`app/
   // builders/types.ts`) is deliberately loose (`Record<string, any>`) for
   // exactly this unset case, so no per-call-site cast is needed here.
@@ -140,7 +140,7 @@ export function WorkspaceTunnelSection() {
   const isTunnelEnabled = activationForm.watch("enabled");
   const tunnelHostname = credentialsForm.watch("hostname") ?? "";
   const tunnelToken = credentialsForm.watch("token") ?? "";
-  const tunnelPublicUrl = FractalTunnelUrlHelper.buildPublicUrl(tunnelHostname);
+  const tunnelPublicUrl = TunnelUrlHelper.buildPublicUrl(tunnelHostname);
   const isTunnelConfigured = !!tunnelHostname.trim() && !!tunnelToken.trim();
   const isTunnelOnline = tunnelStatus?.online ?? false;
   const isBusy = activationForm.isLoading || credentialsForm.isLoading || tunnelStatusQuery.isFetching;
@@ -172,7 +172,7 @@ export function WorkspaceTunnelSection() {
             <FormSectionHeader>
               <FormSectionTitle>Tunnel</FormSectionTitle>
               <FormSectionDescription>
-                Expose your local Fractal instance through a Cloudflare Tunnel.
+                Expose your local AOS instance through a Cloudflare Tunnel.
               </FormSectionDescription>
             </FormSectionHeader>
             <FormSectionContent className="divide-y divide-border">
@@ -256,13 +256,13 @@ export function WorkspaceTunnelSection() {
                     <div className="space-y-0.5">
                       <FormLabel>Hostname</FormLabel>
                       <FormDescription>
-                        The public URL for this tunnel, like `workspace.tryfractal.co`.
+                        The public URL for this tunnel, like `workspace.example.com`.
                       </FormDescription>
                     </div>
                     <FormControl>
                       <div className="w-1/2">
                         <Input
-                          placeholder="workspace.tryfractal.co"
+                          placeholder="workspace.example.com"
                           {...field}
                         />
                       </div>
@@ -335,7 +335,7 @@ export function WorkspaceTunnelSection() {
                   </div>
                 )}
                 <FormDescription>
-                  Share this URL to allow remote access to your Fractal instance.
+                  Share this URL to allow remote access to your AOS instance.
                 </FormDescription>
               </div>
 

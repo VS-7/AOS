@@ -1,8 +1,8 @@
 import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { FractalWorkspaceTaskType } from "@/features/workspace/interfaces/workspace.interfaces";
-import { FractalWorkspaceTaskTypeSchema } from "@/features/workspace/schemas/workspace.schema";
+import { WorkspaceTaskType } from "@/features/workspace/interfaces/workspace.interfaces";
+import { WorkspaceTaskTypeSchema } from "@/features/workspace/schemas/workspace.schema";
 import { Slug } from "@/core/helpers/slug.helper";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,9 +21,9 @@ import { aos } from "@/app/aos";
 interface UpsertTaskTypeViewProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  taskType?: FractalWorkspaceTaskType;
+  taskType?: WorkspaceTaskType;
   index?: number;
-  onSave: (data: FractalWorkspaceTaskType, index?: number) => void;
+  onSave: (data: WorkspaceTaskType, index?: number) => void;
 }
 
 export function UpsertTaskTypeView({
@@ -34,7 +34,7 @@ export function UpsertTaskTypeView({
   onSave,
 }: UpsertTaskTypeViewProps) {
   const form = aos.useForm({
-    schema: FractalWorkspaceTaskTypeSchema,
+    schema: WorkspaceTaskTypeSchema,
     values: {
       id: "",
       label: "",

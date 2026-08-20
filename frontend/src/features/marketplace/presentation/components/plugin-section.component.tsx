@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import type { FractalMarketplaceSkillListing } from "@/features/marketplace/interfaces/marketplace.interfaces";
+import type { MarketplaceSkillListing } from "@/features/marketplace/interfaces/marketplace.interfaces";
 import { MARKETPLACE_CATEGORY_PREVIEW_LIMIT } from "@/features/marketplace/presentation/consts/marketplace";
 import { PluginCard } from "@/features/marketplace/presentation/components/plugin-card.component";
 import { cn } from "@/lib/utils";
@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 interface PluginSectionProps {
   id: string;
   title: string;
-  listings: FractalMarketplaceSkillListing[];
+  listings: MarketplaceSkillListing[];
   installedNames?: ReadonlySet<string>;
   previewLimit?: number;
   className?: string;

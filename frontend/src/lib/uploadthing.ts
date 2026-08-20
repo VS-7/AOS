@@ -1,6 +1,6 @@
 /**
  * `hooks/use-upload-file.ts` imports `OurFileRouter` from here — the
- * Fractal original's uploadthing file-router definition, generated
+ * the original's uploadthing file-router definition, generated
  * server-side and re-exported to the frontend for type inference
  * (`UploadFilesOptions<OurFileRouter["editorUploader"]>`). AOS has no
  * uploadthing integration (it's a Wails desktop app with a local Go

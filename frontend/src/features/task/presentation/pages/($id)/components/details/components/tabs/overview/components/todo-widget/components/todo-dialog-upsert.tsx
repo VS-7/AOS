@@ -21,7 +21,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { aos } from "@/app/aos"
-import type { FractalTodo } from "@/features/task/interfaces/todo.interfaces"
+import type { Todo } from "@/features/task/interfaces/todo.interfaces"
 
 const formSchema = z.object({
   description: z.string().min(1, "Description is required"),
@@ -31,7 +31,7 @@ const formSchema = z.object({
 
 interface TodoDialogUpsertProps {
   taskId: string
-  todo?: FractalTodo
+  todo?: Todo
   onCreated?: () => void
   children?: React.ReactNode
 }
@@ -42,7 +42,7 @@ export function TodoDialogUpsert({ taskId, todo, onCreated, children }: TodoDial
   const isEdit = !!todo
 
   // Reads `todo.title`/`todo.content` — Go's real `Todo` field names (see
-  // `interfaces/task.interfaces.ts`'s `FractalTaskTodoSchema` doc comment)
+  // `interfaces/task.interfaces.ts`'s `TaskTodoSchema` doc comment)
   // — while keeping this form's own field names (`description`/
   // `instructions`) unchanged; the outgoing rename back to `title`/
   // `content` happens in `command-map.ts`'s `todo.create`/`todo.update`

@@ -61,7 +61,7 @@ const SKILL_TARGETS = [
 ] as const;
 
 /**
- * Stub dropdown for installing Fractal skills into external agent skill directories.
+ * Stub dropdown for installing AOS skills into external agent skill directories.
  * Agent logos resolve from SVGL based on the active theme mode.
  */
 export function AddSkillDropdown() {

@@ -8,8 +8,8 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { toast } from "sonner";
 
-import type { FractalMarketplaceSkillComponentItem } from "@/features/marketplace/interfaces/marketplace.interfaces";
-import type { FractalToolsetConfigRequirement } from "@/features/toolset/interfaces/toolset.interfaces";
+import type { MarketplaceSkillComponentItem } from "@/features/marketplace/interfaces/marketplace.interfaces";
+import type { ToolsetConfigRequirement } from "@/features/toolset/interfaces/toolset.interfaces";
 import { PLUGIN_INVENTORY_SECTION_META } from "@/features/marketplace/presentation/components/plugin-detail-section.component";
 import { openWorkspaceFileTab } from "@/features/file/presentation/helpers/open-file-tab.helper";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,7 @@ import { aos } from "@/app/aos";
 import { cn } from "@/lib/utils";
 
 interface PluginInventoryItemSheetProps {
-  item: FractalMarketplaceSkillComponentItem | null;
+  item: MarketplaceSkillComponentItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -97,7 +97,7 @@ function ToolsetInventoryBody({
   item,
   onClose,
 }: {
-  item: FractalMarketplaceSkillComponentItem;
+  item: MarketplaceSkillComponentItem;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -242,7 +242,7 @@ function ToolsetInventoryBody({
 
         {hasConfig ? (
           <TabsContent value="config" className="mt-3 space-y-3">
-            {requirements.map((req: FractalToolsetConfigRequirement) => (
+            {requirements.map((req: ToolsetConfigRequirement) => (
               <div key={req.lookupKey} className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <Label

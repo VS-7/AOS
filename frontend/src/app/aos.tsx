@@ -38,7 +38,7 @@ import { NotFoundComponent } from "@/features/workspace/presentation/pages/not-f
  *   copied feature's own trigger group, not just `task`'s `tasksGroup`
  *   reached into directly. `aos.triggers.dispatch(...)` now resolves for
  *   any ported feature's triggers, not only tasks'.
- * - `.withLayout(WorkspaceLayout)` — the pristine Fractal shell
+ * - `.withLayout(WorkspaceLayout)` — the pristine AOS shell
  *   (`features/workspace/presentation/components/layout`): full sidebar
  *   navigation, command palette, panels (browser/file/changes/chat), task
  *   dialog. Supersedes `RootLayout` (`app/root-layout.tsx`, now unused),

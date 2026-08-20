@@ -5,8 +5,8 @@ import {
 } from "@json-render/react";
 import type { Spec } from "@json-render/core";
 import {
-  fractalViewCatalog,
-  fractalViewRegistry,
+  viewCatalog,
+  viewRegistry,
 } from "../../catalog";
 
 const JsonRenderDevtools = React.lazy(async () => {
@@ -21,14 +21,14 @@ export type ViewActionHandler = (
 export type ViewRendererProps = {
   /** Complete json-render spec (structure + merged state from Igniter render). */
   spec: Spec | null;
-  /** Action handlers bridged to the Fractal view action API. */
+  /** Action handlers bridged to the AOS view action API. */
   handlers?: Record<string, ViewActionHandler>;
   /** Optional loading flag while the spec is refreshing. */
   loading?: boolean;
 };
 
 /**
- * Renders a Fractal view via `@json-render/react` with the shadcn catalog.
+ * Renders a AOS view via `@json-render/react` with the shadcn catalog.
  *
  * Uses `JSONUIProvider` (State + Visibility + Action + Validation) per the
  * json-render React docs. State is seeded from `spec.state` (merged server-side).
@@ -70,14 +70,14 @@ export function ViewRenderer({
 
   return (
     <JSONUIProvider
-      registry={fractalViewRegistry}
+      registry={viewRegistry}
       initialState={initialState}
       handlers={handlers}
     >
       <div className="flex min-h-0 flex-1 flex-col">
         <Renderer
           spec={spec}
-          registry={fractalViewRegistry}
+          registry={viewRegistry}
           loading={loading}
         />
       </div>
@@ -89,7 +89,7 @@ export function ViewRenderer({
           <JsonRenderDevtools
             {...({
               spec,
-              catalog: fractalViewCatalog,
+              catalog: viewCatalog,
               hotkey: "mod+shift+j",
             } as any)}
           />

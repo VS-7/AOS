@@ -7,7 +7,7 @@
  * reconstruction from usage evidence, not a new design.
  */
 
-import type { FractalAgent } from "@/features/agent/interfaces/agent.interfaces";
+import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
 import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
 
 /**
@@ -22,10 +22,10 @@ import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
  * wired to anything that calls it yet.
  */
 export interface ChatComposerProps {
-  agents: FractalAgent[];
+  agents: Agent[];
   chat: Chat;
   isDirectMessage?: boolean;
-  onSent?: (message: import("@/features/chat/interfaces/chat.interfaces").FractalChatMessage) => void;
+  onSent?: (message: import("@/features/chat/interfaces/chat.interfaces").ChatMessage) => void;
   onFailed?: (messageId?: string) => void;
   userId?: string;
 }

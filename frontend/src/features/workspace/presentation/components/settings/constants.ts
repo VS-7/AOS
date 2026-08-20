@@ -83,7 +83,7 @@ export const SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
   {
     id: "user.users",
     title: "Users",
-    description: "Manage accounts that can sign in to this Fractal instance.",
+    description: "Manage accounts that can sign in to this AOS instance.",
     group: "user",
     icon: UserMultiple02Icon,
   },

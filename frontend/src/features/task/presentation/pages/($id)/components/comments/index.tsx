@@ -20,7 +20,7 @@ import * as z from "zod";
 import { toast } from "sonner";
 import { Form, FormControl, FormField } from "@/components/ui/form";
 import { cn } from "@/lib/utils";
-import type { FractalComment } from "@/features/task/interfaces/comment.interfaces";
+import type { TaskComment } from "@/features/task/interfaces/comment.interfaces";
 import {
   CommentItem,
   type CommentThreadNode,
@@ -44,7 +44,7 @@ function ensureMentionPrefix(body: string, author: string) {
   return `${mention} ${body}`;
 }
 
-function sortCommentsByCreatedAt(comments: FractalComment[]) {
+function sortCommentsByCreatedAt(comments: TaskComment[]) {
   return [...comments].sort((left, right) => {
     return (
       new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
@@ -52,9 +52,9 @@ function sortCommentsByCreatedAt(comments: FractalComment[]) {
   });
 }
 
-function buildCommentThread(comments: FractalComment[]) {
+function buildCommentThread(comments: TaskComment[]) {
   const sortedComments = sortCommentsByCreatedAt(comments);
-  const childrenByParentId = new Map<string, FractalComment[]>();
+  const childrenByParentId = new Map<string, TaskComment[]>();
   const commentsById = new Map(
     sortedComments.map((comment) => [comment.id, comment]),
   );
@@ -70,7 +70,7 @@ function buildCommentThread(comments: FractalComment[]) {
   }
 
   function createNode(
-    comment: FractalComment,
+    comment: TaskComment,
     depth: number,
     mentionedAuthor?: string,
   ): CommentThreadNode {
@@ -123,12 +123,12 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
 
   // `useQuery`'s unwrapped payload is `unknown` too (see the facade's own
   // comment on why) — same cast pattern as the loaders.
-  const comments = (commentsData as { comments: FractalComment[] } | null | undefined)?.comments || [];
+  const comments = (commentsData as { comments: TaskComment[] } | null | undefined)?.comments || [];
   const thread = buildCommentThread(comments);
 
   // `aos.useQueryClient()` is TanStack's real `useQueryClient()` (see
   // `app/builders/app.tsx`), which has no `.invalidate()` shorthand — the
-  // source assumed a Fractal-only convenience this port doesn't have.
+  // source assumed a AOS-only convenience this port doesn't have.
   // `invalidateQueries` with the facade's actual query key
   // (`[feature, action, flattenArgs(opts)]`, see `lib/aos-facade.ts`) is
   // the direct equivalent.

@@ -11,7 +11,7 @@ import { Bot, CircleDot, ChevronDown, Zap, X } from "lucide-react";
 import {
   ROUTINE_STATUS_ORDER,
 } from "@/features/routine/presentation/consts/routine";
-import { FractalRoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
+import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
 import { useRoutinesContext } from "@/features/routine/presentation/pages/(main)/context";
 import { aos } from "@/app/aos";
 
@@ -39,7 +39,7 @@ export function RoutinesFilter() {
   const getStatusButtonLabel = () => {
     if (selectedStatuses.length === 0) return "Status";
     if (selectedStatuses.length === 1) {
-      return `Status: ${FractalRoutineHelper.getStatus(selectedStatuses[0]).label}`;
+      return `Status: ${RoutineHelper.getStatus(selectedStatuses[0]).label}`;
     }
     return `Status (${selectedStatuses.length})`;
   };
@@ -47,7 +47,7 @@ export function RoutinesFilter() {
   const getAgentButtonLabel = () => {
     if (selectedAgents.length === 0) return "Agent";
     if (selectedAgents.length === 1) {
-      return `Agent: ${FractalRoutineHelper.getAgentLabel(selectedAgents[0], agents)}`;
+      return `Agent: ${RoutineHelper.getAgentLabel(selectedAgents[0], agents)}`;
     }
     return `Agent (${selectedAgents.length})`;
   };
@@ -84,7 +84,7 @@ export function RoutinesFilter() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-48">
           {ROUTINE_STATUS_ORDER.map((status) => {
-            const config = FractalRoutineHelper.getStatus(status);
+            const config = RoutineHelper.getStatus(status);
             const Icon = config.icon;
             return (
               <DropdownMenuCheckboxItem
@@ -128,7 +128,7 @@ export function RoutinesFilter() {
               onCheckedChange={() => handleToggleAgent(agentId)}
             >
               <Bot className="mr-2 size-4 text-muted-foreground" />
-              {FractalRoutineHelper.getAgentLabel(agentId, agents)}
+              {RoutineHelper.getAgentLabel(agentId, agents)}
             </DropdownMenuCheckboxItem>
           ))}
         </DropdownMenuContent>

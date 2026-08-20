@@ -6,7 +6,7 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import { useFormContext } from "react-hook-form";
 import { aos } from "@/app/aos";
 import { toast } from "sonner";
-import type { FractalAuthOnboarding } from "@/features/auth/interfaces/auth.interfaces";
+import type { AuthOnboarding } from "@/features/auth/interfaces/auth.interfaces";
 
 interface InitStage {
   id: string;
@@ -17,8 +17,8 @@ interface InitStage {
 
 const STAGES: InitStage[] = [
   {
-    id: "fractal",
-    label: "Booting Fractal",
+    id: "aos",
+    label: "Booting AOS",
     message: "Warming up the runtime...",
     duration: 3500,
   },
@@ -49,16 +49,6 @@ const STAGES: InitStage[] = [
 ];
 
 const TOTAL_DURATION = STAGES.reduce((acc, s) => acc + s.duration, 0); // ~20.5s
-
-function isWaitlistError(err: any): boolean {
-  const envelope = err?.error && typeof err.error === "object" ? err.error : err;
-  const domainCode = envelope?.data?.code ?? envelope?.code ?? err?.data?.code;
-  const errMsg = String(envelope?.message ?? err?.message ?? "");
-  return (
-    domainCode === "FRACTAL_AUTH_WAITLIST_NOT_APPROVED" ||
-    errMsg.toLowerCase().includes("waitlist")
-  );
-}
 
 type InitState = {
   currentStage: number;
@@ -94,7 +84,6 @@ function stepReducer(state: InitState, action: InitAction): InitState {
 
 export interface OnboardingFormInitStepProps {
   onError?: () => void;
-  onWaitlistRequired?: (savedState: any) => void;
 }
 
 // -----------------------------------------------------------------------
@@ -103,9 +92,8 @@ export interface OnboardingFormInitStepProps {
 
 export function OnboardingFormInitStep({
   onError,
-  onWaitlistRequired,
 }: OnboardingFormInitStepProps) {
-  const form = useFormContext<FractalAuthOnboarding>();
+  const form = useFormContext<AuthOnboarding>();
   const [state, dispatch] = useReducer(stepReducer, {
     currentStage: 0,
     completed: false,
@@ -162,21 +150,6 @@ export function OnboardingFormInitStep({
       });
 
       if (result.error || !result.data?.workspaceId) {
-        if (isWaitlistError(result.error)) {
-          const waitlistPayload = {
-            email: data.user.email,
-            formData: data,
-            status: "waiting" as const,
-            savedAt: new Date().toISOString(),
-          };
-          localStorage.setItem(
-            "FRACTAL_ONBOARDING_WAITLIST_STATE",
-            JSON.stringify(waitlistPayload),
-          );
-          onWaitlistRequired?.(waitlistPayload);
-          return;
-        }
-
         dispatch({ type: "ERROR" });
         toast.error("An error occurred while creating your workspace", {
           description: "Please check the data and try again.",
@@ -191,28 +164,9 @@ export function OnboardingFormInitStep({
         password: data.security.password,
       });
 
-      // [Cleanup]: Remove waitlist cache once completed
-      localStorage.removeItem("FRACTAL_ONBOARDING_WAITLIST_STATE");
-
       toast.success("Your workspace has been created successfully!");
       await aos.stores.workspace.actions.switch(result.data.workspaceId);
-    } catch (err: any) {
-      if (isWaitlistError(err)) {
-        const data = form.getValues();
-        const waitlistPayload = {
-          email: data.user.email,
-          formData: data,
-          status: "waiting" as const,
-          savedAt: new Date().toISOString(),
-        };
-        localStorage.setItem(
-          "FRACTAL_ONBOARDING_WAITLIST_STATE",
-          JSON.stringify(waitlistPayload),
-        );
-        onWaitlistRequired?.(waitlistPayload);
-        return;
-      }
-
+    } catch {
       dispatch({ type: "ERROR" });
       toast.error("An error occurred while creating your workspace", {
         description: "Please check the data and try again.",
@@ -220,7 +174,7 @@ export function OnboardingFormInitStep({
       onError?.();
       return;
     }
-  }, [form, onError, onWaitlistRequired]);
+  }, [form, onError]);
 
   // Start init on mount (parent sets isSubmitted to trigger this)
   useEffect(() => {
@@ -292,7 +246,7 @@ export function OnboardingFormInitStep({
           <p className="text-muted-foreground text-sm">
             {state.completed
               ? "Your workspace is live. Let's find out what it can do."
-              : "Just a moment while Fractal prepares your workspace..."}
+              : "Just a moment while AOS prepares your workspace..."}
           </p>
         </div>
 

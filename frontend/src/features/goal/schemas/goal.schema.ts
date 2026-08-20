@@ -14,7 +14,7 @@ import { Schema } from "@/core/helpers/schema.helper";
  * "active"
  * ```
  */
-export const FractalGoalStatusSchema = z
+export const GoalStatusSchema = z
   .enum(["active", "achieved", "abandoned"])
   .describe(
     "Goal lifecycle status. Use active for in-progress goals, achieved when done, abandoned when cancelled. Example: \"active\".",
@@ -28,7 +28,7 @@ export const FractalGoalStatusSchema = z
  * "high"
  * ```
  */
-export const FractalGoalPrioritySchema = z
+export const GoalPrioritySchema = z
   .enum(["no_priority", "urgent", "high", "medium", "low"])
   .describe(
     "Goal priority. Use urgent for blockers, high for soon, medium default, low deferrable, no_priority unset. Example: \"high\".",
@@ -40,9 +40,9 @@ export const FractalGoalPrioritySchema = z
 // ============================================================================
 
 /**
- * Complete Fractal goal record — master shape for persistence and DTOs.
+ * Complete AOS goal record — master shape for persistence and DTOs.
  *
- * Maps to `.fractal/goals/{id}/GOAL.md` (and skill-bound goal files).
+ * Maps to `.aos/goals/{id}/GOAL.md` (and skill-bound goal files).
  *
  * @example
  * ```typescript
@@ -50,10 +50,10 @@ export const FractalGoalPrioritySchema = z
  *   id: "GOAL-001",
  *   slug: "launch-v1",
  *   title: "Launch V1",
- *   description: "Ship the first stable release of Fractal.",
+ *   description: "Ship the first stable release of AOS.",
  *   content: "# Launch V1",
  *   priority: "high",
- *   project: "fractal-os",
+ *   project: "website-redesign",
  *   deadline: "2026-01-01T00:00:00.000Z",
  *   status: "active",
  *   createdAt: "2025-06-14T12:00:00.000Z",
@@ -61,7 +61,7 @@ export const FractalGoalPrioritySchema = z
  * }
  * ```
  */
-export const FractalGoalSchema = Schema.object({
+export const GoalSchema = Schema.object({
   id: z
     .string()
     .describe(
@@ -87,7 +87,7 @@ export const FractalGoalSchema = Schema.object({
     .describe(
       "Markdown body stored below YAML frontmatter. Example: \"# Launch V1\\n\\nDetails...\".",
     ),
-  priority: FractalGoalPrioritySchema.optional()
+  priority: GoalPrioritySchema.optional()
     .default("no_priority")
     .describe(
       "Priority level of the goal. Defaults to no_priority. Example: \"high\".",
@@ -96,7 +96,7 @@ export const FractalGoalSchema = Schema.object({
     .string()
     .optional()
     .describe(
-      "Optional project ID this goal belongs to. Example: \"fractal-os\".",
+      "Optional project ID this goal belongs to. Example: \"website-redesign\".",
     ),
   deadline: z
     .string()
@@ -104,7 +104,7 @@ export const FractalGoalSchema = Schema.object({
     .describe(
       "ISO-8601 deadline timestamp as a string. Example: \"2026-01-01T00:00:00.000Z\".",
     ),
-  status: FractalGoalStatusSchema.describe(
+  status: GoalStatusSchema.describe(
     "Current lifecycle status of the goal. Example: \"active\".",
   ),
   createdAt: z
@@ -136,7 +136,7 @@ export const FractalGoalSchema = Schema.object({
  * }
  * ```
  */
-export const FractalGoalWithContextSchema = FractalGoalSchema.extend({
+export const GoalWithContextSchema = GoalSchema.extend({
   tasks: z
     .array(z.string())
     .default([])
@@ -151,7 +151,7 @@ export const FractalGoalWithContextSchema = FractalGoalSchema.extend({
 // ============================================================================
 
 /**
- * Create-goal input — derived from {@link FractalGoalSchema}.
+ * Create-goal input — derived from {@link GoalSchema}.
  *
  * Omits server-owned `id` / `slug` / timestamps. Domain SSOT for
  * procedure/service/CLI/tool/forms.
@@ -166,16 +166,16 @@ export const FractalGoalWithContextSchema = FractalGoalSchema.extend({
  * }
  * ```
  */
-export const FractalGoalCreateInputSchema = FractalGoalSchema.omit({
+export const GoalCreateInputSchema = GoalSchema.omit({
   id: true,
   slug: true,
   createdAt: true,
   updatedAt: true,
 }).extend({
-  priority: FractalGoalPrioritySchema.default("no_priority").describe(
+  priority: GoalPrioritySchema.default("no_priority").describe(
     "Priority level. Defaults to no_priority. Example: \"high\".",
   ),
-  status: FractalGoalStatusSchema.default("active").describe(
+  status: GoalStatusSchema.default("active").describe(
     "Initial lifecycle status. Defaults to active. Example: \"active\".",
   ),
 });
@@ -193,12 +193,12 @@ export const FractalGoalCreateInputSchema = FractalGoalSchema.omit({
  * {
  *   query: "launch",
  *   status: ["active"],
- *   project: "fractal-os",
+ *   project: "website-redesign",
  *   limit: "10"
  * }
  * ```
  */
-export const FractalGoalListInputSchema = Schema.object({
+export const GoalListInputSchema = Schema.object({
   query: z
     .string()
     .optional()
@@ -206,7 +206,7 @@ export const FractalGoalListInputSchema = Schema.object({
       "Full-text search across goal id and title. Example: \"launch\".",
     ),
   status: z
-    .array(FractalGoalStatusSchema)
+    .array(GoalStatusSchema)
     .optional()
     .describe(
       "Filter by one or more statuses. Example: [\"active\"] or [\"active\",\"achieved\"].",
@@ -215,7 +215,7 @@ export const FractalGoalListInputSchema = Schema.object({
     .string()
     .optional()
     .describe(
-      "Filter goals by project ID. Example: \"fractal-os\".",
+      "Filter goals by project ID. Example: \"website-redesign\".",
     ),
   limit: z
     .string()
@@ -242,7 +242,7 @@ export const FractalGoalListInputSchema = Schema.object({
  * }
  * ```
  */
-export const FractalGoalGetInputSchema = Schema.object({
+export const GoalGetInputSchema = Schema.object({
   goal: z
     .string()
     .describe(
@@ -256,7 +256,7 @@ export const FractalGoalGetInputSchema = Schema.object({
 // ============================================================================
 
 /**
- * Update-goal input — derived from {@link FractalGoalSchema} (partial).
+ * Update-goal input — derived from {@link GoalSchema} (partial).
  *
  * @example
  * ```typescript
@@ -266,7 +266,7 @@ export const FractalGoalGetInputSchema = Schema.object({
  * }
  * ```
  */
-export const FractalGoalUpdateInputSchema = FractalGoalSchema.omit({
+export const GoalUpdateInputSchema = GoalSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -278,7 +278,7 @@ export const FractalGoalUpdateInputSchema = FractalGoalSchema.omit({
 // ============================================================================
 
 /**
- * Delete-goal input — same shape as {@link FractalGoalGetInputSchema}.
+ * Delete-goal input — same shape as {@link GoalGetInputSchema}.
  *
  * @example
  * ```typescript
@@ -287,4 +287,4 @@ export const FractalGoalUpdateInputSchema = FractalGoalSchema.omit({
  * }
  * ```
  */
-export const FractalGoalDeleteInputSchema = FractalGoalGetInputSchema;
+export const GoalDeleteInputSchema = GoalGetInputSchema;

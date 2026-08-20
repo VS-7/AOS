@@ -1,12 +1,12 @@
 import { AosTriggerGroup } from "@/app/builders/trigger";
-import type { FractalArtifactListItem } from "@/features/artifact/interfaces/artifact.interfaces";
+import type { ArtifactListItem } from "@/features/artifact/interfaces/artifact.interfaces";
 import { ArtifactHelper } from "@/features/artifact/presentation/helpers/artifact.helper";
 import { String } from "@/core/helpers/string";
 
 export const artifactGroup = AosTriggerGroup.create("Artifacts")
   .withOrder(6)
   .withLoader(({ query, stores }) => {
-    const artifacts: FractalArtifactListItem[] = stores.artifacts.state.items;
+    const artifacts: ArtifactListItem[] = stores.artifacts.state.items;
 
     const items = !query
       ? artifacts

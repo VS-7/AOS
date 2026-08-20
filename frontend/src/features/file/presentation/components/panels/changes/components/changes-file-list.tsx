@@ -1,11 +1,11 @@
-import type { FractalFileChangeEntry } from "@/features/file/interfaces/file.interfaces";
-import type { FractalFileExplorerContext } from "@/features/file/interfaces/file.interfaces";
+import type { FileChangeEntry } from "@/features/file/interfaces/file.interfaces";
+import type { FileExplorerContext } from "@/features/file/interfaces/file.interfaces";
 import type { ChangesPanelPreferences } from "@/features/file/presentation/helpers/changes.helper";
 import { ChangesFileItem } from "./changes-file-item";
 
 interface ChangesFileListProps {
-  files: FractalFileChangeEntry[];
-  explorerContext: FractalFileExplorerContext;
+  files: FileChangeEntry[];
+  explorerContext: FileExplorerContext;
   preferences: ChangesPanelPreferences;
   themeType: "light" | "dark";
   expandedPath: string | null;

@@ -1,11 +1,11 @@
 import { Check, ChevronRight } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
-import type { FractalMarketplaceSkillListing } from "@/features/marketplace/interfaces/marketplace.interfaces";
+import type { MarketplaceSkillListing } from "@/features/marketplace/interfaces/marketplace.interfaces";
 import { cn } from "@/lib/utils";
 
 interface PluginCardProps {
-  listing: FractalMarketplaceSkillListing;
+  listing: MarketplaceSkillListing;
   isInstalled?: boolean;
   className?: string;
 }
@@ -54,7 +54,7 @@ export function PluginLogo({
   size = 36,
 }: {
   listing: Pick<
-    FractalMarketplaceSkillListing,
+    MarketplaceSkillListing,
     "displayName" | "logo" | "brandColor" | "name"
   >;
   size?: number;

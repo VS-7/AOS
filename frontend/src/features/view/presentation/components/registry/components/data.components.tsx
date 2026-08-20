@@ -55,7 +55,7 @@ type BadgeProps = {
 };
 
 /**
- * Fractal badge with extended color palette.
+ * AOS badge with extended color palette.
  */
 export function BadgeComponent({ props }: BaseComponentProps<BadgeProps>) {
   return (

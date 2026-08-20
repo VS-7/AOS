@@ -45,7 +45,7 @@ import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG } from "@/features/task/presen
 import { assigneeInitials, resolveAssignee } from "@/features/task/presentation/helpers/assignee.helper"
 import { aos } from "@/app/aos"
 import { cn } from "@/lib/utils"
-import type { FractalTaskPriority, FractalTaskStatus } from "@/features/task/interfaces/task.interfaces"
+import type { TaskPriority, TaskStatus } from "@/features/task/interfaces/task.interfaces"
 
 const worktreeSchema = z.object({
   enabled: z.boolean().default(false),
@@ -142,7 +142,7 @@ export function TaskDialog() {
   }
 
   const worktreeValues = form.watch("worktree")
-  const selectedPriority = form.watch("priority") as FractalTaskPriority
+  const selectedPriority = form.watch("priority") as TaskPriority
   const selectedType = form.watch("type")
   const selectedAssignee = form.watch("assigned")
   const priorityCfg = TASK_PRIORITY_CONFIG[selectedPriority]
@@ -164,7 +164,7 @@ export function TaskDialog() {
                 control={form.control}
                 name="status"
                 render={({ field }) => {
-                  const statusCfg = TASK_STATUS_CONFIG[field.value as FractalTaskStatus]
+                  const statusCfg = TASK_STATUS_CONFIG[field.value as TaskStatus]
                   const StatusIcon = statusCfg.icon
 
                   return (
@@ -187,7 +187,7 @@ export function TaskDialog() {
                           <DropdownMenuContent align="start">
                             <SetStatusDropdown
                               currentStatus={field.value}
-                              onStatusChange={(status) => field.onChange(status as FractalTaskStatus)}
+                              onStatusChange={(status) => field.onChange(status as TaskStatus)}
                             />
                           </DropdownMenuContent>
                         </DropdownMenu>

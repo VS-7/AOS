@@ -1,10 +1,10 @@
 import { AosStore } from "@/app/builders/store";
-import type { FractalArtifactListItem } from "@/features/artifact/interfaces/artifact.interfaces";
+import type { ArtifactListItem } from "@/features/artifact/interfaces/artifact.interfaces";
 import { api } from "@/lib/aos-facade";
 
 export const ArtifactStore = AosStore.create("artifacts")
   .withState({
-    items: [] as FractalArtifactListItem[],
+    items: [] as ArtifactListItem[],
   })
   .withPersistence({
     enabled: false,

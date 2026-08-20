@@ -5,11 +5,11 @@
  *
  * Verified field-by-field against `internal/domain/activity/entity.go:21`
  * (Activity struct) and `internal/domain/activity/schema.go:27` (ListOutput,
- * for FractalActivityList).
+ * for ActivityList).
  */
-export type FractalActivityActorType = "agent" | "user" | "system";
+export type ActivityActorType = "agent" | "user" | "system";
 
-export interface FractalActivity {
+export interface Activity {
   id: string;
   namespace: string;
   event: string;
@@ -19,12 +19,12 @@ export interface FractalActivity {
   /** Shaped by the namespace: a task event carries the task. */
   data?: Record<string, unknown>;
   actor: string;
-  actorType: FractalActivityActorType;
+  actorType: ActivityActorType;
   createdAt: string;
 }
 
-export interface FractalActivityList {
-  activities: FractalActivity[];
+export interface ActivityList {
+  activities: Activity[];
   total: number;
   unread: number;
   actor: string;
@@ -40,10 +40,10 @@ export interface FractalActivityList {
  * Not in any extraction (activity's own `entity.go`/`schema.go` mirror
  * above has no notion of a *catalog* of event types, only individual
  * `Activity` records) — reconstructed from
- * `presentation/helpers/activity-event.helper.ts`'s `FractalActivityEventHelper`,
+ * `presentation/helpers/activity-event.helper.ts`'s `ActivityEventHelper`,
  * this type's sole consumer.
  */
-export interface FractalActivityEventDefinition {
+export interface ActivityEventDefinition {
   namespace: string;
   event: string;
   title?: string;

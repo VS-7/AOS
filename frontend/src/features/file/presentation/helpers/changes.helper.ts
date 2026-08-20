@@ -1,5 +1,5 @@
-import type { FractalFileChangeEntry } from "@/features/file/interfaces/file.interfaces";
-import type { FractalFileExplorerContext } from "@/features/file/interfaces/file.interfaces";
+import type { FileChangeEntry } from "@/features/file/interfaces/file.interfaces";
+import type { FileExplorerContext } from "@/features/file/interfaces/file.interfaces";
 import {
   formatExplorerContextLabel,
   parseExplorerContext,
@@ -21,19 +21,19 @@ export const DEFAULT_CHANGES_PREFERENCES: ChangesPanelPreferences = {
 
 export function getChangesTabContext(
   metadata?: Record<string, string | number | boolean>,
-): FractalFileExplorerContext {
+): FileExplorerContext {
   return parseExplorerContext(metadata?.fileExplorerContext);
 }
 
 export function formatChangesContextScope(
-  context: FractalFileExplorerContext,
+  context: FileExplorerContext,
 ): string {
   if (context.type === "task") return "Task";
   return "Local";
 }
 
 export function formatChangesContextRef(
-  context: FractalFileExplorerContext,
+  context: FileExplorerContext,
 ): string {
   if (context.type === "main") return "main";
   if (context.type === "branch") return context.branch;
@@ -50,7 +50,7 @@ export function formatChangesCountLabel(params: {
 }
 
 export function formatChangeStatusLabel(
-  status: FractalFileChangeEntry["status"],
+  status: FileChangeEntry["status"],
 ): string {
   switch (status) {
     case "added":
@@ -69,7 +69,7 @@ export function formatChangeStatusLabel(
 }
 
 export function changeStatusClassName(
-  status: FractalFileChangeEntry["status"],
+  status: FileChangeEntry["status"],
 ): string {
   switch (status) {
     case "added":

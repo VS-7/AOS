@@ -3,7 +3,7 @@ import * as fileApi from "./file";
 import * as authApi from "./auth";
 
 /**
- * One Fractal frontend call, resolved.
+ * One AOS frontend call, resolved.
  *
  * - `CommandKey` — goes through the command registry (`client.invoke`).
  * - `CommandDescriptor` — same, plus the adaptations a Go command
@@ -21,7 +21,7 @@ export type HttpHandler = (payload: Record<string, unknown>) => Promise<unknown>
  *
  * This exists because a plain string couldn't say what command-map.ts
  * needed to say, discovered only once real ported pages exercised real Go
- * commands: many Fractal inputs use a field name Go's command doesn't
+ * commands: many AOS inputs use a field name Go's command doesn't
  * (`task` where Go wants `id`), many send a value of the wrong *type*
  * (an array where Go wants one scalar, a quoted number, an object where
  * Go wants a bare `bool`), and many Go commands answer with a bare entity
@@ -35,7 +35,7 @@ export interface CommandDescriptor {
   /** The registry key `client.invoke` actually calls. */
   key: CommandKey;
   /**
-   * Payload keys to rename before the call reaches Go — `{ fractalName:
+   * Payload keys to rename before the call reaches Go — `{ jsName:
    * goName }`. Applied to the flattened `{...params, ...query, ...body}`
    * object, so it doesn't matter which of the three a field started in.
    * Runs *after* `coerceIn` (M1 of the final review: this comment said
@@ -113,7 +113,7 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "activity.markAsRead": { key: "activity_read", renameIn: { activity: "id" } },
   // `agent.create`/`agent.update` answer with a bare `*Agent`
   // (`internal/domain/agent/commands.go`), not `{agent: ...}` — confirmed
-  // against the Fractal source's own consumer (`agents.context.tsx` reads
+  // against the original source's own consumer (`agents.context.tsx` reads
   // `response.data?.agent`), not guessed; nothing in this app calls these
   // through the facade yet (no `agent` feature ported), so this was a
   // latent instance of the same bug `todo.getById` was, caught by the
@@ -155,7 +155,7 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "chat.getById": { key: "chats_get", wrapOut: "chat" },
   "chat.list": "chats_list",
   // task-12 (round 2): `use-chat-composer.ts`'s `sendMessage` calls this
-  // with `body: { id: chat.id, message: <FractalChatMessage: {id, role,
+  // with `body: { id: chat.id, message: <ChatMessage: {id, role,
   // parts, metadata}> }` — a rich AI-SDK `UIMessage`, never a plain string.
   // Go's `SendInput` (`internal/domain/chat/schema.go`) has exactly three
   // fields — `chat`, `text` (required), `agent` — and no representation
@@ -267,7 +267,7 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // NOT `wrapOut: "run"`, on purpose. Go's `routines_fire` returns a
   // single bare `*Run` (`internal/domain/routine/commands.go`), but the
   // live consumer (`onSuccess` in `pages/($id)/index.tsx`, matching
-  // Fractal's original `routine-list-row.component.tsx`) reads
+  // the original's `routine-list-row.component.tsx`) reads
   // `result.data?.executions?.length` — a *list* of executions, not one
   // run under any single key. `wrapOut` can only rename/nest a value, not
   // turn one entity into an array, so this can't be fixed here — that
@@ -343,7 +343,7 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // is a call-site fix (`theme.store.ts`'s own `paletteFromApi` and its
   // two callers), ruled on explicitly (task-12 round 2's side-by-side
   // comparison) rather than guessed: five of six `Palette` fields already
-  // match `FractalThemeSettings` by name, `semantic`/`semanticColors` is a
+  // match `ThemeSettings` by name, `semantic`/`semanticColors` is a
   // plain rename, and `fonts` is a genuine gap — Go's `Palette` has no such
   // field at all, made visible with a comment at the read site rather than
   // silently defaulted.
@@ -395,7 +395,7 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // Go's `UpdateInput` (`internal/domain/workspace/schema.go`) takes
   // `workspace` (id) plus one dotted-path `set: map[string]any` — the same
   // pattern `config.update` already uses. `renameIn` covers `params: { id
-  // }` -> `workspace`, the field name Fractal's original UI still uses.
+  // }` -> `workspace`, the field name the original UI still uses.
   // Three of the four forms already submit one grouped object per top-level
   // key that lines up with a nested `Workspace` field (`git` ->
   // `GitOptions`, `worktrees` -> `WorktreeOptions`, `tasks` -> the `Tasks
@@ -459,7 +459,7 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // `workspace.directory` (`workspace-directory.fetch.ts`, called by both
   // `AgentStore` and `WorkspaceStore` preload) has no Go counterpart at all
   // — there is no `workspace_directory`/`workspace_inventory`-shaped command
-  // that returns agents+users combined the way Fractal's original did.
+  // that returns agents+users combined the way the original did.
   // Before this entry existed, the call fell through `call()`'s loud "not
   // mapped" throw — caught locally by that one file's own try/catch (see its
   // "Falls back to raw fetch when the typed client schema is stale" comment)

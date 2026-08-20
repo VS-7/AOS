@@ -10,7 +10,7 @@ import { toast } from "sonner";
  *
  * @example
  * ```typescript
- * await switchWorkspace("fractal");
+ * await switchWorkspace("my-workspace");
  * ```
  */
 export async function switchWorkspace(id: string): Promise<boolean> {

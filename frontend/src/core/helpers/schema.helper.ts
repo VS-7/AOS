@@ -37,9 +37,9 @@ type StringifiedShape<T extends z.ZodRawShape> = {
 };
 
 /**
- * Zod schema factory with Fractal-specific input normalization for HTTP, CLI, and MCP.
+ * Zod schema factory with AOS-specific input normalization for HTTP, CLI, and MCP.
  *
- * Fractal receives untyped external input from multiple surfaces. Query strings and CLI
+ * AOS receives untyped external input from multiple surfaces. Query strings and CLI
  * flags always arrive as strings; MCP and HTTP bodies may send native JSON types. The
  * {@link Schema} helper wraps Zod `parse` / `safeParse` so callers get consistent,
  * sanitized payloads without duplicating coercion logic in every controller or command.
@@ -68,7 +68,7 @@ type StringifiedShape<T extends z.ZodRawShape> = {
  *
  * @example HTTP / controller body
  * ```typescript
- * export const FractalTaskListQuerySchema = Schema.object({
+ * export const TaskListQuerySchema = Schema.object({
  *   limit: z.number().optional(),
  *   status: z.string().optional(),
  * });
@@ -85,7 +85,7 @@ type StringifiedShape<T extends z.ZodRawShape> = {
  */
 export class Schema {
   /**
-   * Creates a proxied `z.object()` schema with Fractal input normalization.
+   * Creates a proxied `z.object()` schema with AOS input normalization.
    *
    * Intercepts `parse` and `safeParse` to run {@link Schema._cleanInputValues} before
    * Zod validation and {@link Schema._stripUndefined} afterward. Also intercepts
@@ -98,7 +98,7 @@ export class Schema {
    * @returns Proxied `ZodObject` with identical `z.infer` / `z.output` typing.
    *
    * @remarks
-   * Prefer this over raw `z.object()` for any schema that crosses a Fractal boundary
+   * Prefer this over raw `z.object()` for any schema that crosses a AOS boundary
    * (HTTP query/body, CLI flags, MCP tool arguments).
    *
    * @example
@@ -229,7 +229,7 @@ export class Schema {
    *
    * @example Reuse a feature schema shape without redeclaring fields as strings
    * ```typescript
-   * options: Schema.stringify(FractalTemplateCreateParamsSchema.shape)
+   * options: Schema.stringify(TemplateCreateParamsSchema.shape)
    * ```
    */
   static stringify<T extends z.ZodRawShape>(

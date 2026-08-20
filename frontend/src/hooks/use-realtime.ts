@@ -3,17 +3,17 @@ import { onRealtimeEvent, type RealtimeEvent } from "@/lib/realtime";
 import { REALTIME_EVENT_MAP } from "@/lib/realtime-event-map";
 
 /**
- * Escuta um evento do canal realtime, traduzido do vocabulário Fractal para
+ * Escuta um evento do canal realtime, traduzido do vocabulário original para
  * o do daemon.
  *
  * Antes desta correção (B1 da revisão final), este hook assinava um
- * `RealtimeClient` próprio copiado do Fractal (`app/lib/realtime.ts`) — um
+ * `RealtimeClient` próprio copiado do original (`app/lib/realtime.ts`) — um
  * segundo WebSocket, sem o escopo por workspace, falando nomes de evento
  * (`chat:refresh`, `files:changed`, ...) que o daemon nunca emite. Todo
  * `useRealtime(...)` do código portado era inalcançável. Agora este hook
  * assina o único socket real (`lib/realtime.ts`, montado em
  * `root-layout.tsx`) através de `onRealtimeEvent`, e resolve o nome
- * Fractal para o nome real do daemon via `REALTIME_EVENT_MAP`
+ * original para o nome real do daemon via `REALTIME_EVENT_MAP`
  * (`lib/realtime-event-map.ts`) — o mesmo ponto único de tradução que
  * `command-map.ts` já é para chamadas, uma camada acima.
  *
@@ -57,7 +57,7 @@ export function useRealtime(
 
     if (entry === null) {
       // Declared, not silent: the daemon has no counterpart for this
-      // Fractal event today. See this event's own comment in
+      // AOS event today. See this event's own comment in
       // `realtime-event-map.ts` for why.
       return;
     }

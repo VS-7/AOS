@@ -1,10 +1,10 @@
 import { AosStore } from "@/app/builders/store";
-import { type FractalCustomCollection } from "@/features/collection/interfaces/collection.interfaces";
+import { type CustomCollection } from "@/features/collection/interfaces/collection.interfaces";
 import { api } from "@/lib/aos-facade";
 
 export const CollectionStore = AosStore.create("collections")
   .withState({
-    items: [] as FractalCustomCollection[],
+    items: [] as CustomCollection[],
   })
   .withPersistence({
     enabled: false,

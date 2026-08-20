@@ -38,7 +38,7 @@ export function MarketplaceInstallButton({
 
     installPlugin({
       body: {
-        source: "tryfractal/registry",
+        source: "aos/registry",
         skill: pluginName,
       },
     });

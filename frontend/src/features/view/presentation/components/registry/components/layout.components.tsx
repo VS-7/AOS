@@ -18,7 +18,7 @@ type StackProps = {
 };
 
 /**
- * Flex stack layout — Fractal registry implementation.
+ * Flex stack layout — AOS registry implementation.
  */
 export function StackComponent({
   props,
@@ -53,7 +53,7 @@ type GridProps = {
 };
 
 /**
- * CSS grid layout — Fractal registry implementation.
+ * CSS grid layout — AOS registry implementation.
  */
 export function GridComponent({
   props,

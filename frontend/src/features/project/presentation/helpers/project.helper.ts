@@ -1,4 +1,4 @@
-import type { FractalProject } from "@/features/project/interfaces/project.interfaces";
+import type { Project } from "@/features/project/interfaces/project.interfaces";
 
 /**
  * @class ProjectHelper

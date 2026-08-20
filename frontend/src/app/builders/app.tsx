@@ -273,7 +273,7 @@ export class AosApp<
                 // `clientController[action]`, and `.mutate` are never falsy
                 // no matter how `mutation` is misspelled. Left in rather than
                 // removed: it is exactly the guard a non-Proxy client (a
-                // generated, finite object, the way Fractal's original was)
+                // generated, finite object, the way the original was)
                 // would need, and it costs nothing dead. `call()`'s own
                 // "not mapped" envelope (`aos-facade.ts`) is what actually
                 // catches an invalid path today.

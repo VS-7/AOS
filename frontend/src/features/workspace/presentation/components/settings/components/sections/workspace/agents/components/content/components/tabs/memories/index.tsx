@@ -4,16 +4,16 @@ import ForceGraph3D from "react-force-graph-3d";
 import { AnimatedEmptyState } from "@/components/ui/animated-empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { aos } from "@/app/aos";
-import type { FractalAgent } from "@/features/agent/interfaces/agent.interfaces";
-import type { FractalMemoryGraph } from "@/features/memory/interfaces/memory.interfaces";
+import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
+import type { MemoryGraph } from "@/features/memory/interfaces/memory.interfaces";
 import { MemoryGraphHelper } from "./helpers/memory-graph.helper";
 
 interface AgentMemoriesTabProps {
-  agent: FractalAgent;
+  agent: Agent;
 }
 
 export function AgentMemoriesTab({ agent }: AgentMemoriesTabProps) {
-  const [graph, setGraph] = useState<FractalMemoryGraph>({ nodes: [], links: [] });
+  const [graph, setGraph] = useState<MemoryGraph>({ nodes: [], links: [] });
   const [isLoading, setIsLoading] = useState(false);
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);

@@ -32,7 +32,7 @@
  * reads `n.namespace`, `n.event` with no optional-chaining anywhere in
  * `fs.adapter.ts`, and `data: resolvedData` is a non-optional
  * `Record<string, unknown>` at construction), and `body` is never
- * optional (`FractalTemplate.resolve` — `helpers/template.ts` — always
+ * optional (`Template.resolve` — `helpers/template.ts` — always
  * returns `string`, never `undefined`).
  */
 export interface NotificationAction {
@@ -48,7 +48,7 @@ export interface NotificationReadReceipt {
 
 /**
  * Resolved per-event delivery settings, snapshotted onto the payload at
- * creation (`FractalNotificationDefinitionHelper.resolve_settings`).
+ * creation (`NotificationDefinitionHelper.resolve_settings`).
  * Optional on read: `manager.builder.ts`'s `_resolve_payload_settings`
  * guards it with `!== undefined`, implying older persisted records can
  * lack it even though every notification created today always has one.

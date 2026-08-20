@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { FractalProject } from "@/features/project/interfaces/project.interfaces";
+import type { Project } from "@/features/project/interfaces/project.interfaces";
 import { ProjectHelper } from "@/features/project/presentation/helpers/project.helper";
 import { Icon } from "@/components/ui/icon";
 import { aos } from "@/app/aos";
@@ -17,7 +17,7 @@ import { MoreHorizontal, Trash2, Copy, Folder } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface ProjectListRowProps {
-  project: FractalProject;
+  project: Project;
 }
 
 export function ProjectListRow({ project }: ProjectListRowProps) {

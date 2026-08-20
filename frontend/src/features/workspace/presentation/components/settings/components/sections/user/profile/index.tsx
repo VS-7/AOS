@@ -23,7 +23,7 @@ import { ImageUpload } from "@/components/ui/image-upload";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { FractalAppError } from "@/core/errors/fractal.error";
+import { AppError } from "@/core/errors/aos.error";
 import { api } from "@/lib/aos-facade";
 
 const profileFormSchema = z.object({
@@ -80,7 +80,7 @@ const passwordFormSchema = z
 export function UserProfileSection() {
   const router = useRouter();
   
-  // `aos.useContext()` is Fractal's global route context (`withContext(...)`),
+  // `aos.useContext()` is AOS's global route context (`withContext(...)`),
   // which this port's `app/aos.tsx` never wires -- `DefaultContext` (`app/
   // builders/types.ts`) is deliberately loose (`Record<string, any>`) for
   // exactly this unset case, so no per-call-site cast is needed here.
@@ -132,7 +132,7 @@ export function UserProfileSection() {
     },
     onResponse: ({ error }) => {
       if (error) {
-        if (error instanceof FractalAppError) {
+        if (error instanceof AppError) {
           toast.error(error.message);
           return;
         }
@@ -186,7 +186,7 @@ export function UserProfileSection() {
     },
     onResponse: ({ error }) => {
       if (error) {
-        if (error instanceof FractalAppError) {
+        if (error instanceof AppError) {
           toast.error(error.message);
           return;
         }
@@ -212,7 +212,7 @@ export function UserProfileSection() {
             <FormSectionHeader>
               <FormSectionTitle>Basic Info</FormSectionTitle>
               <FormSectionDescription>
-                Your name and how you appear in Fractal.
+                Your name and how you appear in AOS.
               </FormSectionDescription>
             </FormSectionHeader>
             <FormSectionContent className="divide-y divide-border">

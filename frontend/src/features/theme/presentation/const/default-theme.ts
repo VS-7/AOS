@@ -1,4 +1,4 @@
-import { FractalTheme } from "@/features/theme/interfaces/theme.interfaces";
-import { fractalTheme } from "@/features/theme/services/theme/data/themes/fractal.theme";
+import { Theme } from "@/features/theme/interfaces/theme.interfaces";
+import { aosTheme } from "@/features/theme/services/theme/data/themes/aos.theme";
 
-export const FractalDefaultTheme: FractalTheme = fractalTheme
+export const DefaultTheme: Theme = aosTheme

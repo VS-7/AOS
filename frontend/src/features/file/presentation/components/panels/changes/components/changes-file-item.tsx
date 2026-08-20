@@ -1,8 +1,8 @@
 import * as React from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { FractalFileChangeEntry } from "@/features/file/interfaces/file.interfaces";
-import type { FractalFileExplorerContext } from "@/features/file/interfaces/file.interfaces";
+import type { FileChangeEntry } from "@/features/file/interfaces/file.interfaces";
+import type { FileExplorerContext } from "@/features/file/interfaces/file.interfaces";
 import {
   changeStatusClassName,
   formatChangeStatusLabel,
@@ -11,8 +11,8 @@ import {
 import { ChangesFileDiff } from "./changes-file-diff";
 
 interface ChangesFileItemProps {
-  file: FractalFileChangeEntry;
-  explorerContext: FractalFileExplorerContext;
+  file: FileChangeEntry;
+  explorerContext: FileExplorerContext;
   preferences: ChangesPanelPreferences;
   themeType: "light" | "dark";
   expanded: boolean;

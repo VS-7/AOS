@@ -22,7 +22,7 @@ export type InstalModelInput = z.infer<typeof InstallModelSchema>
  * `presentation/components/settings/.../models-section.tsx`'s
  * `supportsCapability`/`getFirstModel` helpers, its only consumer.
  */
-export interface FractalModelProviderOptionCapabilities {
+export interface ModelProviderOptionCapabilities {
   fast?: boolean;
   reasoning?: boolean;
   vision?: boolean;
@@ -32,14 +32,14 @@ export interface FractalModelProviderOptionCapabilities {
   video?: boolean;
 }
 
-export interface FractalModelProviderOption {
+export interface ModelProviderOption {
   id: string;
   name: string;
   enabled: boolean;
-  capabilities?: FractalModelProviderOptionCapabilities;
+  capabilities?: ModelProviderOptionCapabilities;
 }
 
-export interface FractalModelProvider {
+export interface ModelProvider {
   id: string;
   name: string;
   description: string;
@@ -49,11 +49,11 @@ export interface FractalModelProvider {
   logo: { light: string; dark: string };
   configured: boolean;
   default: boolean;
-  auth: FractalModelProviderAuth;
-  models: FractalModelProviderOption[]
+  auth: ModelProviderAuth;
+  models: ModelProviderOption[]
 }
 
-export interface FractalModelProviderAuth {
+export interface ModelProviderAuth {
   mode: "api-key" | "oauth-file" | "cache-dir";
   connectionType: "external" | "local";
   label: string;
@@ -63,12 +63,12 @@ export interface FractalModelProviderAuth {
   masked?: boolean;
 }
 
-export interface IFractalModelProviderAdapter {
+export interface IModelProviderAdapter {
   id: string;
   name: string;
   description: string;
   logo: string;
-  auth: FractalModelProviderAuth;
+  auth: ModelProviderAuth;
 
   /**
    * Validate the provided API key.
@@ -78,7 +78,7 @@ export interface IFractalModelProviderAdapter {
   /**
    * List available models for this provider.
    */
-  models(key?: string): Promise<Omit<FractalModelProviderOption, 'enabled'>[]>;
+  models(key?: string): Promise<Omit<ModelProviderOption, 'enabled'>[]>;
 
   /**
    * Initialize a LanguageModel instance.
@@ -86,8 +86,8 @@ export interface IFractalModelProviderAdapter {
   init(modelId: string, key?: string): Promise<LanguageModel>;
 }
 
-export interface IFractalModelProviderService {
-  list(params?: ListModelsInput): Promise<FractalModelProvider[]>;
-  get(id: string): Promise<IFractalModelProviderAdapter | null>
+export interface IModelProviderService {
+  list(params?: ListModelsInput): Promise<ModelProvider[]>;
+  get(id: string): Promise<IModelProviderAdapter | null>
   set(params: InstalModelInput): Promise<ResponseWithCTA>;
 }

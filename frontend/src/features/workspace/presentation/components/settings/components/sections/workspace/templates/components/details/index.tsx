@@ -64,7 +64,7 @@ export function SelectedTemplateDetail() {
                     </span>
                     <FormControl>
                       <Input
-                        placeholder=".fractal/artifacts/{{name}}.md"
+                        placeholder=".aos/artifacts/{{name}}.md"
                         className="h-7 border-0 bg-transparent px-0 py-0 text-xs shadow-none focus-visible:ring-0"
                         {...field}
                         value={field.value ?? ""}

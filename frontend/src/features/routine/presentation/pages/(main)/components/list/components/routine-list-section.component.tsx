@@ -7,8 +7,8 @@ import {
   CollapsibleTitle,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { FractalRoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
-import type { FractalRoutine } from "@/features/routine/interfaces/routine.interfaces";
+import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
+import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
 import { RoutineListRow } from "./routine-list-row.component";
 
 const itemVariants = {
@@ -32,12 +32,12 @@ const sectionVariants = {
 };
 
 interface RoutineListSectionProps {
-  status: FractalRoutine["status"];
-  routines: FractalRoutine[];
+  status: Routine["status"];
+  routines: Routine[];
 }
 
 export function RoutineListSection({ status, routines }: RoutineListSectionProps) {
-  const config = FractalRoutineHelper.getStatus(status);
+  const config = RoutineHelper.getStatus(status);
   const Icon = config.icon;
   const isEmpty = routines.length === 0;
   const [isOpen, setIsOpen] = React.useState(!isEmpty);

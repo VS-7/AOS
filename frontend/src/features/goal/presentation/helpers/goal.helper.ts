@@ -1,5 +1,5 @@
 import { GOAL_STATUS_CONFIG, GOAL_STATUS_ORDER } from "@/features/goal/presentation/consts/goal";
-import type { FractalGoal } from "@/features/goal/interfaces/goal.interfaces";
+import type { Goal } from "@/features/goal/interfaces/goal.interfaces";
 
 /**
  * @class GoalHelper
@@ -9,27 +9,27 @@ export class GoalHelper {
   /**
    * @method getStatus
    * @description Retrieves the configuration object for a specific goal status.
-   * @param {FractalGoal["status"]} status - The goal status.
+   * @param {Goal["status"]} status - The goal status.
    * @returns {Object} The status configuration.
    */
-  public static getStatus(status: FractalGoal["status"]) {
+  public static getStatus(status: Goal["status"]) {
     return GOAL_STATUS_CONFIG[status];
   }
 
   /**
    * @method groupByStatus
    * @description Groups an array of goals by their status, following the predefined status order.
-   * @param {FractalGoal[]} goals - The array of goals to group.
-   * @returns {Record<FractalGoal["status"], FractalGoal[]>} A record containing grouped goals.
+   * @param {Goal[]} goals - The array of goals to group.
+   * @returns {Record<Goal["status"], Goal[]>} A record containing grouped goals.
    */
-  public static groupByStatus(goals: FractalGoal[]) {
+  public static groupByStatus(goals: Goal[]) {
     return GOAL_STATUS_ORDER.reduce(
       (acc, status) => {
         const items = goals.filter((g) => g.status === status);
         if (items.length > 0) acc[status] = items;
         return acc;
       },
-      {} as Record<FractalGoal["status"], FractalGoal[]>,
+      {} as Record<Goal["status"], Goal[]>,
     );
   }
 

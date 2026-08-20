@@ -7,8 +7,8 @@ import React, {
   useState,
 } from "react";
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import type { FractalRoutine } from "@/features/routine/interfaces/routine.interfaces";
-import { FractalRoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
+import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
+import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
 
 interface RoutinesPageSearchSchema {
   query?: string;
@@ -18,19 +18,19 @@ interface RoutinesPageSearchSchema {
 }
 
 interface RoutinesContextValue {
-  routines: FractalRoutine[];
-  filteredRoutines: FractalRoutine[];
-  displayedGroupedRoutines: Record<FractalRoutine["status"], FractalRoutine[]>;
+  routines: Routine[];
+  filteredRoutines: Routine[];
+  displayedGroupedRoutines: Record<Routine["status"], Routine[]>;
   search: RoutinesPageSearchSchema;
   searchDraft: string;
-  selectedStatuses: FractalRoutine["status"][];
+  selectedStatuses: Routine["status"][];
   selectedAgents: string[];
   selectedTypes: string[];
   agentOptions: string[];
   activeFilterCount: number;
   updateSearch: (next: Partial<RoutinesPageSearchSchema>) => void;
   handleSearchChange: (value: string) => void;
-  handleToggleStatus: (status: FractalRoutine["status"]) => void;
+  handleToggleStatus: (status: Routine["status"]) => void;
   handleToggleAgent: (agent: string) => void;
   handleToggleType: (type: string) => void;
   clearFilters: () => void;
@@ -70,7 +70,7 @@ function toggleFilterValue(values: string[], value: string): string[] {
 
 interface RoutinesProviderProps {
   children: React.ReactNode;
-  routines: FractalRoutine[];
+  routines: Routine[];
   search: RoutinesPageSearchSchema;
 }
 
@@ -88,7 +88,7 @@ export function RoutinesProvider({
   }, [search.query]);
 
   const selectedStatuses = useMemo(
-    () => parseMultiValue(search.status) as FractalRoutine["status"][],
+    () => parseMultiValue(search.status) as Routine["status"][],
     [search.status],
   );
 
@@ -153,7 +153,7 @@ export function RoutinesProvider({
   ]);
 
   const displayedGroupedRoutines = useMemo(
-    () => FractalRoutineHelper.groupByStatus(filteredRoutines),
+    () => RoutineHelper.groupByStatus(filteredRoutines),
     [filteredRoutines],
   );
 
@@ -183,7 +183,7 @@ export function RoutinesProvider({
   );
 
   const handleToggleStatus = useCallback(
-    (status: FractalRoutine["status"]) => {
+    (status: Routine["status"]) => {
       updateSearch({
         status: serializeMultiValue(
           toggleFilterValue(selectedStatuses, status),

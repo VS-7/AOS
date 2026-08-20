@@ -2,14 +2,14 @@ import * as React from "react";
 import { aos } from "@/app/aos";
 import { toast } from "sonner";
 import { isTextUIPart, isToolUIPart } from "ai";
-import type { FractalAgent } from "@/features/agent/interfaces/agent.interfaces";
+import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
 import { AgentToolThinkingHelper } from "@/features/agent/presentation/helpers/agent-tool-thinking.helper";
 import type {
   Chat,
-  FractalChatMessage,
-  FractalChatMessageReaction,
+  ChatMessage,
+  ChatReaction,
 } from "@/features/chat/interfaces/chat.interfaces";
-import type { FractalWorkspaceDirectoryUser } from "@/features/workspace/interfaces/directory.interfaces";
+import type { WorkspaceDirectoryUser } from "@/features/workspace/interfaces/directory.interfaces";
 import { ChatThreadHelper } from "@/features/chat/presentation/helpers/chat-thread.helper";
 import {
   ChatMessageItem,
@@ -21,29 +21,29 @@ import {
 } from "@/components/ui/conversation";
 
 interface ChatMessageListProps {
-  agents: FractalAgent[];
+  agents: Agent[];
   chat: Chat;
   isRefreshing?: boolean;
   onReactionToggled?: () => void;
   persistedMessageIds?: string[];
   selfUserId?: string;
   userName: string;
-  usersById?: ReadonlyMap<string, FractalWorkspaceDirectoryUser>;
+  usersById?: ReadonlyMap<string, WorkspaceDirectoryUser>;
 }
 
 interface ChatMessageRowProps {
-  agents: FractalAgent[];
+  agents: Agent[];
   chat: Chat;
   currentActor: string;
   isTogglingReaction: boolean;
-  message: FractalChatMessage;
-  nextMessage?: FractalChatMessage;
+  message: ChatMessage;
+  nextMessage?: ChatMessage;
   onToggleReaction: (messageId: string, emoji: string) => void;
   persisted: boolean;
-  previousMessage?: FractalChatMessage;
+  previousMessage?: ChatMessage;
   selfUserId?: string;
   userName: string;
-  usersById?: ReadonlyMap<string, FractalWorkspaceDirectoryUser>;
+  usersById?: ReadonlyMap<string, WorkspaceDirectoryUser>;
 }
 
 function areChatsEquivalent(left: Chat, right: Chat) {
@@ -71,7 +71,7 @@ function areRowsEqual(
 }
 
 function groupMessageReactions(
-  reactions: FractalChatMessageReaction[] | undefined,
+  reactions: ChatReaction[] | undefined,
   actor: string,
 ): ChatMessageReaction[] {
   const groupedReactions = new Map<string, ChatMessageReaction>();
@@ -97,7 +97,7 @@ function groupMessageReactions(
   return [...groupedReactions.values()];
 }
 
-function canRenderMessage(message: FractalChatMessage) {
+function canRenderMessage(message: ChatMessage) {
   const parts = message.parts ?? [];
   const textParts = parts
     .filter(isTextUIPart)
@@ -191,7 +191,7 @@ export function ChatMessageList({
 }: ChatMessageListProps) {
   const messages = React.useMemo(
     () =>
-      ((chat.messages ?? []) as FractalChatMessage[]).filter(canRenderMessage),
+      ((chat.messages ?? []) as ChatMessage[]).filter(canRenderMessage),
     [chat.messages],
   );
   const persistedMessageIdSet = React.useMemo(

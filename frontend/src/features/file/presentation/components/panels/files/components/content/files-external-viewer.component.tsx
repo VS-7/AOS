@@ -18,10 +18,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-import type { FractalFile } from "@/features/file/interfaces/file.interfaces";
+import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces";
 
 interface FilesExternalViewerProps {
-  file: FractalFile;
+  file: WorkspaceFile;
   onOpenExternal: () => void;
 }
 
@@ -81,7 +81,7 @@ export function FilesExternalViewer({ file, onOpenExternal }: FilesExternalViewe
   );
 }
 
-function getViewerIcon(viewer: FractalFile["viewer"]) {
+function getViewerIcon(viewer: WorkspaceFile["viewer"]) {
   switch (viewer) {
     case "image":
       return ImageIcon;

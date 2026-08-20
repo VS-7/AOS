@@ -78,7 +78,7 @@ export type AuthApiToken = z.infer<typeof AuthApiTokenSchema>;
 
 /**
  * Schema for onboarding request validation.
- * Contains all data needed to bootstrap a workspace and configure Fractal.
+ * Contains all data needed to bootstrap a workspace and configure AOS.
  */
 export const AuthOnboardingSchema = z.object({
   user: z.object({
@@ -104,10 +104,3 @@ export const AuthOnboardingSchema = z.object({
 
 export type AuthOnboarding = z.infer<typeof AuthOnboardingSchema>;
 
-/**
- * Aliases for the freshly-copied `v401/web` presentation code, which
- * imports the `Fractal`-prefixed names — same reasoning as `agent.
- * interfaces.ts`'s `FractalAgent`.
- */
-export type FractalAuthChangePassword = AuthChangePassword;
-export type FractalAuthOnboarding = AuthOnboarding;

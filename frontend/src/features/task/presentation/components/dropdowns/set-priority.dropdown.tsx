@@ -7,15 +7,15 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
-import type { FractalTaskPriority } from "@/features/task/interfaces/task.interfaces";
+import type { TaskPriority } from "@/features/task/interfaces/task.interfaces";
 import { TASK_PRIORITY_CONFIG, TASK_PRIORITY_ORDER } from "@/features/task/presentation/consts/task";
 
 interface SetPriorityDropdownProps {
-  currentPriority: FractalTaskPriority;
-  onPriorityChange: (priority: FractalTaskPriority) => void;
+  currentPriority: TaskPriority;
+  onPriorityChange: (priority: TaskPriority) => void;
 }
 
-const PRIORITY_ICONS: Record<FractalTaskPriority, React.ElementType> = {
+const PRIORITY_ICONS: Record<TaskPriority, React.ElementType> = {
   no_priority: SignalZero,
   low: SignalLow,
   medium: SignalMedium,
@@ -27,7 +27,7 @@ export function SetPriorityDropdown({ currentPriority, onPriorityChange }: SetPr
   return (
     <DropdownMenuRadioGroup
       value={currentPriority}
-      onValueChange={(value) => onPriorityChange(value as FractalTaskPriority)}
+      onValueChange={(value) => onPriorityChange(value as TaskPriority)}
     >
       {TASK_PRIORITY_ORDER.map((priority) => {
         const config = TASK_PRIORITY_CONFIG[priority];

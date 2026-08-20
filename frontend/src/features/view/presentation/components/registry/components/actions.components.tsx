@@ -46,7 +46,7 @@ function mapButtonVariant(
 }
 
 /**
- * Fractal button with full shadcn variant support.
+ * AOS button with full shadcn variant support.
  */
 export function ButtonComponent({
   props,

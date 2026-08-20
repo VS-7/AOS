@@ -6,7 +6,7 @@ import {
   CollapsibleTitle,
   CollapsibleIcon,
 } from "@/components/ui/collapsible";
-import type { FractalTask } from "@/features/task/interfaces/task.interfaces";
+import type { Task } from "@/features/task/interfaces/task.interfaces";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
 import { DraggableTaskListRow } from "./draggable-task-list-row.component";
 import { useDroppable } from "@dnd-kit/core";
@@ -14,8 +14,8 @@ import { useDragContext } from "../../../context";
 import { cn } from "@/lib/utils";
 
 interface TasksListSectionProps {
-  status: FractalTask["status"];
-  tasks: FractalTask[];
+  status: Task["status"];
+  tasks: Task[];
 }
 
 export const TasksListSection = React.memo(function TasksListSection({

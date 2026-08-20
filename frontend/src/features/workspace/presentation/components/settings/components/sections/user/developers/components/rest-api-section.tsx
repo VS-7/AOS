@@ -86,7 +86,7 @@ export function DevelopersRestApiSection({
         return;
       }
 
-      const masked = `fractal_...${result.token.slice(-4)}`;
+      const masked = `aos_...${result.token.slice(-4)}`;
       onTokenRevealed(result.token, masked);
       toast.success("API token regenerated successfully!");
     } catch (error) {
@@ -98,14 +98,14 @@ export function DevelopersRestApiSection({
     }
   };
 
-  const displayToken = maskedToken ?? (hasToken ? "fractal_..." : "No token configured");
+  const displayToken = maskedToken ?? (hasToken ? "aos_..." : "No token configured");
 
   return (
     <FormSection>
       <FormSectionHeader>
         <FormSectionTitle>REST API</FormSectionTitle>
         <FormSectionDescription>
-          Manage tokens for programmatic access to the Fractal API.
+          Manage tokens for programmatic access to the AOS API.
         </FormSectionDescription>
       </FormSectionHeader>
 
@@ -221,7 +221,7 @@ export function DevelopersRestApiSection({
                 API Documentation
               </p>
               <p className="text-sm text-muted-foreground">
-                Open the interactive OpenAPI docs for this Fractal instance.
+                Open the interactive OpenAPI docs for this AOS instance.
               </p>
             </div>
           </div>

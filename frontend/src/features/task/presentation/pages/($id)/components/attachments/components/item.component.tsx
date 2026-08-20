@@ -1,6 +1,6 @@
 import { ExternalLink, FileCog, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { FractalAttachment } from "@/features/task/interfaces/comment.interfaces";
+import type { TaskAttachment } from "@/features/task/interfaces/comment.interfaces";
 import { Badge } from "@/components/ui/badge";
 import { aos } from "@/app/aos";
 import { cn, getDisplayName, getIconForExtension } from "@/lib/utils";
@@ -74,7 +74,7 @@ function getAttachmentExtension(uri: string) {
   }
 }
 
-export function AttachmentItem({ attachment }: { attachment: FractalAttachment }) {
+export function AttachmentItem({ attachment }: { attachment: TaskAttachment }) {
   const displayName = getDisplayName(attachment.uri, attachment.observation);
   const IconComponent = getIconForExtension(attachment.uri);
   const extension = getAttachmentExtension(attachment.uri);
@@ -85,8 +85,8 @@ export function AttachmentItem({ attachment }: { attachment: FractalAttachment }
   const opensInBrowser = attachment.uri.startsWith("uri://") || BROWSER_FILE_EXTENSIONS.has(extension);
 
   async function handleOpen() {
-    if (isTextFile && localPath && window.fractal?.instructions?.openPath) {
-      await window.fractal.instructions.openPath(localPath);
+    if (isTextFile && localPath && window.aos?.instructions?.openPath) {
+      await window.aos.instructions.openPath(localPath);
       return;
     }
 

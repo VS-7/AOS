@@ -20,12 +20,12 @@ import {
   GOAL_STATUS_CONFIG,
   GOAL_STATUS_ORDER,
 } from "@/features/goal/presentation/consts/goal";
-import type { FractalTask } from "@/features/task/interfaces/task.interfaces";
-import type { FractalGoal } from "@/features/goal/interfaces/goal.interfaces";
+import type { Task } from "@/features/task/interfaces/task.interfaces";
+import type { Goal } from "@/features/goal/interfaces/goal.interfaces";
 import { ViewStore } from "@/features/view/presentation/stores/view.store";
 import { ArtifactStore } from "@/features/artifact/presentation/stores/artifact.store";
 import { ArtifactHelper } from "@/features/artifact/presentation/helpers/artifact.helper";
-import type { FractalArtifactListItem } from "@/features/artifact/interfaces/artifact.interfaces";
+import type { ArtifactListItem } from "@/features/artifact/interfaces/artifact.interfaces";
 import { useNavigate, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import {
@@ -58,7 +58,7 @@ export const HomePage = aos
   .page("/")
   .use(WorkspacePageMiddleware())
   .withLoader(async ({ client, context }) => {
-    // Route context (Fractal's global `withContext(...)`) is unwired in
+    // Route context (AOS's global `withContext(...)`) is unwired in
     // this port — same gap as `aos.useContext()` elsewhere. `DefaultContext`
     // (`app/builders/types.ts`) is deliberately loose (`Record<string,
     // any>`) for exactly this unset case, so no per-call-site cast is
@@ -75,8 +75,8 @@ export const HomePage = aos
       }),
     ]);
 
-    const tasks: FractalTask[] = tasksResult.data?.tasks || [];
-    const goals: FractalGoal[] = goalsResult.data?.goals || [];
+    const tasks: Task[] = tasksResult.data?.tasks || [];
+    const goals: Goal[] = goalsResult.data?.goals || [];
     const projects = projectsResult.data?.projects || [];
     const views = ViewStore.state.items;
     const artifacts = ArtifactStore.state.items;
@@ -95,9 +95,9 @@ export const HomePage = aos
     const { tasks, goals, projects, views, artifacts, user } = route.useLoaderData();
     const navigate = useNavigate();
     const [selectedStatus, setSelectedStatus] =
-      useState<FractalTask["status"]>("suggestion");
+      useState<Task["status"]>("suggestion");
     const [selectedGoalStatus, setSelectedGoalStatus] =
-      useState<FractalGoal["status"]>("active");
+      useState<Goal["status"]>("active");
     const [createOpen, setCreateOpen] = useState(false);
 
     const filteredTasks = useMemo(() => {
@@ -116,7 +116,7 @@ export const HomePage = aos
       void navigate({ to: "/views/$id", params: { id: viewId } });
     };
 
-    const openArtifact = (artifact: FractalArtifactListItem) => {
+    const openArtifact = (artifact: ArtifactListItem) => {
       ArtifactHelper.openInBrowserTab(artifact);
     };
 

@@ -13,8 +13,8 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } fr
 import { Input } from "@/components/ui/input";
 import { TelegramIcon, WhatsAppIcon } from "@/components/icons/chat-providers";
 import { DiscordIcon } from "@/components/icons/discord-icon";
-import { FractalAppError } from "@/core/errors/fractal.error";
-import type { FractalAgent } from "@/features/agent/interfaces/agent.interfaces";
+import { AppError } from "@/core/errors/aos.error";
+import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
 
 const CHANNEL_PROVIDERS = ["telegram", "discord", "slack", "whatsapp"] as const;
 type ChannelProvider = (typeof CHANNEL_PROVIDERS)[number];
@@ -86,7 +86,7 @@ const CHANNELS = [
 }>;
 
 interface AgentChannelsTabProps {
-  agent: FractalAgent;
+  agent: Agent;
 }
 
 function normalizeAllowedIds(value: unknown): AllowedIdEntry[] {
@@ -115,7 +115,7 @@ function normalizeAllowedIds(value: unknown): AllowedIdEntry[] {
     .filter((entry) => entry.value.trim().length > 0);
 }
 
-function getTelegramConfig(agent: FractalAgent) {
+function getTelegramConfig(agent: Agent) {
   const telegram = agent.channels?.find((channel) => channel.provider === "telegram");
   const data = telegram?.data ?? {};
 
@@ -125,7 +125,7 @@ function getTelegramConfig(agent: FractalAgent) {
   };
 }
 
-function buildChannelsPayload(agent: FractalAgent, token: string, allowedIds: AllowedIdEntry[]) {
+function buildChannelsPayload(agent: Agent, token: string, allowedIds: AllowedIdEntry[]) {
   const telegramChannel = {
     provider: "telegram",
     data: {
@@ -160,7 +160,7 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
         return;
       }
 
-      if (error instanceof FractalAppError) {
+      if (error instanceof AppError) {
         toast.error(error.message);
         return;
       }

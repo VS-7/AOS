@@ -27,8 +27,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type {
-  FractalTaskWithContext,
-  FractalTaskPriority,
+  TaskWithContext,
+  TaskPriority,
 } from "@/features/task/interfaces/task.interfaces";
 import { toast } from "sonner";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
@@ -43,7 +43,7 @@ import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import type { UseChatResult } from "@/features/chat/presentation/hooks/use-chat";
 
 interface TaskDetailsMainProps {
-  task: FractalTaskWithContext;
+  task: TaskWithContext;
   client: typeof aos.client;
   refresh: () => void;
   liveChat?: UseChatResult | null;
@@ -138,7 +138,7 @@ export function TaskDetailsMain({
   const showApproveButton = task.status === "in_review" && allTodosCompleted;
   // Task 9 replaced `chat.interfaces.ts`'s `Message` (this file's original
   // target, mirroring AOS's Go entity directly) with the recovered
-  // Fractal `FractalChatMessage` — `runs` now lives at `message.metadata.
+  // AOS `ChatMessage` — `runs` now lives at `message.metadata.
   // runs`, matching the source shape this comment used to say AOS didn't
   // have. See `chat.interfaces.ts`'s own doc comment for the full story.
   const isLiveChatRunning = Boolean(
@@ -202,7 +202,7 @@ export function TaskDetailsMain({
     router.invalidate();
   }
 
-  async function handleStatusSelect(status: FractalTaskWithContext["status"]) {
+  async function handleStatusSelect(status: TaskWithContext["status"]) {
     if (status === task.status) {
       return;
     }
@@ -250,7 +250,7 @@ export function TaskDetailsMain({
   }
 
   async function handlePriorityChange(
-    priority: FractalTaskWithContext["priority"],
+    priority: TaskWithContext["priority"],
   ) {
     try {
       await client.task.update.mutate({

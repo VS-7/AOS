@@ -13,8 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading.hook";
 import { aos } from "@/app/aos";
-import type { FractalFile } from "@/features/file/interfaces/file.interfaces";
-import type { FractalProject } from "@/features/project/interfaces/project.interfaces";
+import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces";
+import type { Project } from "@/features/project/interfaces/project.interfaces";
 import type { ViewportTabState } from "@/features/workspace/presentation/stores/viewport.store";
 import {
   filterFiles,
@@ -24,13 +24,13 @@ import {
 } from "@/features/file/presentation/components/panels/files/helpers/files.helper";
 
 interface ProjectFilesTabProps {
-  project: FractalProject;
+  project: Project;
 }
 
 /**
  * Converts an absolute host `source` into a workspace-relative path for `file.list`.
  *
- * The file API rejects absolute paths (`FRACTAL_FILE_INVALID_PATH`). Project
+ * The file API rejects absolute paths (`AOS_FILE_INVALID_PATH`). Project
  * sources are stored absolute, so the Files tab must strip the workspace root.
  */
 function toWorkspaceRelativePath(
@@ -88,7 +88,7 @@ export function ProjectFilesTab({ project }: ProjectFilesTabProps) {
   });
 
   const entries = React.useMemo(() => {
-    const all = [...((fileQuery.data?.files ?? []) as FractalFile[])].sort(
+    const all = [...((fileQuery.data?.files ?? []) as WorkspaceFile[])].sort(
       (left, right) => {
         if (left.type !== right.type) return left.type === "directory" ? -1 : 1;
         return left.name.localeCompare(right.name);
@@ -108,7 +108,7 @@ export function ProjectFilesTab({ project }: ProjectFilesTabProps) {
       : undefined;
   }
 
-  function openFileTab(file: FractalFile) {
+  function openFileTab(file: WorkspaceFile) {
     const existingTab = viewportTabs.items.find(
       (tab) => tab.type === "file" && getTabFilePath(tab) === file.path,
     );
@@ -171,7 +171,7 @@ export function ProjectFilesTab({ project }: ProjectFilesTabProps) {
       .filter(Boolean);
   }
 
-  function navigateToFolder(entry: FractalFile) {
+  function navigateToFolder(entry: WorkspaceFile) {
     const base = currentPath.replace(/\/+$/, "");
     setCurrentPath(base ? `${base}/${entry.name}` : entry.name);
     setSearchQuery("");

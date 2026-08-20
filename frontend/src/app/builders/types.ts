@@ -22,7 +22,7 @@ import type { AosResponse } from "./response";
 /**
  * Review round 2 fix: widened from `Record<string, unknown>` to
  * `Record<string, any>`. This app's real instance (`app/aos.tsx`'s `aos`)
- * never calls `.withContext(...)` — Fractal's global route context is
+ * never calls `.withContext(...)` — AOS's global route context is
  * unwired here (`task`'s own `set-type.dropdown.tsx` already documented
  * this before this fix) — so `TContext` stays at this default everywhere
  * `aos.useContext()` or a page loader's `context` param is read.

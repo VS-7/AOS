@@ -409,7 +409,7 @@ function SidebarItemCard({ children, isActive, onClick, className }: SidebarItem
       className={cn(
         "flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-[13px] transition-colors",
         isActive &&
-          "bg-accent/55 text-accent-foreground shadow-[inset_2px_0_0_0_hsl(var(--foreground))]",
+          "bg-accent/55 text-accent-foreground shadow-[inset_2px_0_0_0_var(--foreground)]",
         !isActive && "hover:bg-muted/40",
         className,
       )}

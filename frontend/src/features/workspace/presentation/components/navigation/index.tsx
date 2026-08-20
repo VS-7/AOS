@@ -31,7 +31,7 @@ export function WorkspaceNavigation() {
   );
 
   const { open: isMainSidebarOpen } = useSidebar();
-  const isNative = typeof window !== "undefined" && !!window.fractal;
+  const isNative = typeof window !== "undefined" && !!window.aos;
   const { isRouteActive } = useSidebarActiveRoute();
   const unreadCount = aos.stores.activity.useState((s) => s.unreadCount);
 

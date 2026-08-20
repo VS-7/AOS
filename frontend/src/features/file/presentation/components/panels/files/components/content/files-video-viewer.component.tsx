@@ -1,10 +1,10 @@
 import React from "react"
 import { Maximize, Pause, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import type { FractalFile } from "@/features/file/interfaces/file.interfaces"
+import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces"
 
 interface FilesVideoViewerProps {
-  file: FractalFile
+  file: WorkspaceFile
 }
 
 export function FilesVideoViewer({ file }: FilesVideoViewerProps) {

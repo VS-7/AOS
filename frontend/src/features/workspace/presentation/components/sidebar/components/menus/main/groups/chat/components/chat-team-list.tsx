@@ -25,10 +25,10 @@ import { ArrowRightIcon } from "@hugeicons/core-free-icons";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { aos } from "@/app/aos";
-import type { FractalAgent } from "@/features/agent/interfaces/agent.interfaces";
-import type { FractalWorkspaceMember } from "@/features/workspace/interfaces/workspace.interfaces";
-import type { FractalWorkspaceDirectoryAgentProcessing } from "@/features/workspace/interfaces/directory.interfaces";
-import { FractalChatKindHelper } from "@/features/chat/services/chat/chat-kind.helper";
+import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
+import type { WorkspaceMember } from "@/features/workspace/interfaces/workspace.interfaces";
+import type { WorkspaceDirectoryAgentProcessing } from "@/features/workspace/interfaces/directory.interfaces";
+import { ChatKindHelper } from "@/features/chat/services/chat/chat-kind.helper";
 import {
   findAgentDmChatId,
   findUserDmChatId,
@@ -39,15 +39,15 @@ import {
 import { ChatActivityStamp } from "./chat-activity-stamp";
 
 interface ChatTeamListProps {
-  agents: FractalAgent[];
+  agents: Agent[];
   currentChatId?: string;
 }
 
 interface AgentRowProps {
-  agent: FractalAgent;
+  agent: Agent;
   isActive: boolean;
   onClick: () => void;
-  processing: FractalWorkspaceDirectoryAgentProcessing[];
+  processing: WorkspaceDirectoryAgentProcessing[];
   updatedAt?: string | Date;
 }
 
@@ -102,7 +102,7 @@ function AgentRow({
               <AvatarAgentFallback name={agent.id} />
               <span
                 className={cn(
-                  "absolute -right-0.5 -top-0.5 z-10 size-2.5 rounded-full border border-sidebar shadow-[0_0_0_1px_hsl(var(--sidebar-background))]",
+                  "absolute -right-0.5 -top-0.5 z-10 size-2.5 rounded-full border border-sidebar shadow-[0_0_0_1px_var(--sidebar)]",
                   isProcessing
                     ? "bg-amber-500 animate-pulse"
                     : "bg-emerald-500",
@@ -127,7 +127,7 @@ function AgentRow({
               <AvatarAgentFallback name={agent.id} size={36} />
               <span
                 className={cn(
-                  "absolute -right-0.5 -top-0.5 z-10 size-2.5 rounded-full border border-popover shadow-[0_0_0_1px_hsl(var(--popover))]",
+                  "absolute -right-0.5 -top-0.5 z-10 size-2.5 rounded-full border border-popover shadow-[0_0_0_1px_var(--popover)]",
                   isProcessing
                     ? "bg-amber-500 animate-pulse"
                     : "bg-emerald-500",
@@ -208,7 +208,7 @@ interface UserRowProps {
   userId: string;
   name: string;
   image?: string;
-  role?: FractalWorkspaceMember["role"];
+  role?: WorkspaceMember["role"];
   isActive: boolean;
   onClick: () => void;
   updatedAt?: string | Date;
@@ -296,7 +296,7 @@ export function ChatTeamList({ agents, currentChatId }: ChatTeamListProps) {
           role: agent.role,
           description: agent.description,
           orchestrator: agent.orchestrator,
-        }) as FractalAgent,
+        }) as Agent,
     );
   }, [agents, directory.agents]);
   const roleByUserId = React.useMemo(
@@ -348,8 +348,8 @@ export function ChatTeamList({ agents, currentChatId }: ChatTeamListProps) {
   );
 
   const resolveProcessing = React.useCallback(
-    (agentId: string): FractalWorkspaceDirectoryAgentProcessing[] => {
-      const live = FractalChatKindHelper.list_processing_for_agent(
+    (agentId: string): WorkspaceDirectoryAgentProcessing[] => {
+      const live = ChatKindHelper.list_processing_for_agent(
         agentId,
         occupancy,
         chats,

@@ -10,12 +10,12 @@ import {
   FlagIcon,
 } from "lucide-react";
 import type {
-  FractalGoal,
-  FractalGoalPriority,
+  Goal,
+  GoalPriority,
 } from "@/features/goal/interfaces/goal.interfaces";
 
 export const GOAL_STATUS_CONFIG: Record<
-  FractalGoal["status"],
+  Goal["status"],
   { label: string; icon: any; color: string; badgeClass: string }
 > = {
   active: {
@@ -38,14 +38,14 @@ export const GOAL_STATUS_CONFIG: Record<
   },
 };
 
-export const GOAL_STATUS_ORDER: FractalGoal["status"][] = [
+export const GOAL_STATUS_ORDER: Goal["status"][] = [
   "active",
   "achieved",
   "abandoned",
 ];
 
 export const GOAL_PRIORITY_CONFIG: Record<
-  FractalGoalPriority,
+  GoalPriority,
   { label: string; icon: any; colorClass: string }
 > = {
   no_priority: {
@@ -67,7 +67,7 @@ export const GOAL_PRIORITY_CONFIG: Record<
   urgent: { label: "Urgent", icon: FlagIcon, colorClass: "text-red-500" },
 };
 
-export const GOAL_PRIORITY_ORDER: FractalGoalPriority[] = [
+export const GOAL_PRIORITY_ORDER: GoalPriority[] = [
   "no_priority",
   "urgent",
   "high",

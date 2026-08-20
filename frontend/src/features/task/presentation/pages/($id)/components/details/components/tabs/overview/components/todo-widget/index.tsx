@@ -4,7 +4,7 @@ import { aos } from "@/app/aos";
 import { TodoItem } from "./components/todo-item";
 import { Button } from "@/components/ui/button";
 import { TodoDialogUpsert } from "./components/todo-dialog-upsert";
-import type { FractalTodo } from "@/features/task/interfaces/todo.interfaces";
+import type { Todo } from "@/features/task/interfaces/todo.interfaces";
 
 interface TodoWidgetProps {
   taskId: string;
@@ -18,8 +18,8 @@ export function TodoWidget({ taskId }: TodoWidgetProps) {
     },
   });
 
-  const todos: FractalTodo[] =
-    (todosData as { todos: FractalTodo[] } | null | undefined)?.todos || [];
+  const todos: Todo[] =
+    (todosData as { todos: Todo[] } | null | undefined)?.todos || [];
   const finishedCount = todos.filter((todo) => todo.status === "finished").length;
   const progressPct = todos.length > 0 ? Math.round((finishedCount / todos.length) * 100) : 0;
 

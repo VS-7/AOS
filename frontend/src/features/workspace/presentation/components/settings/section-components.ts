@@ -29,7 +29,7 @@ import { WorkspaceWorktreesSection } from "./components/sections/workspace/workt
  */
 function dormant(feature: string, Section: React.ComponentType): React.ComponentType {
   // `React.createElement`, not JSX: this file is `.ts` (matching the
-  // pristine original, which has no reason for JSX — Fractal's own
+  // pristine original, which has no reason for JSX — AOS's own
   // backend has no dormant domains), and `.ts` files cannot contain JSX
   // syntax regardless of the `jsx` compiler option.
   return function DormantSection() {

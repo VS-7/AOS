@@ -63,17 +63,17 @@ import {
 } from "@/features/routine/presentation/components/dropdowns";
 import { RoutineTriggersField } from "@/features/routine/presentation/components/triggers";
 import { ROUTINE_STATUS_CONFIG } from "@/features/routine/presentation/consts/routine";
-import { FractalRoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
+import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
 import {
   RoutineTriggerFormSchema,
   RoutineTriggersHelper,
 } from "@/features/routine/presentation/helpers/routine-triggers.helper";
 import type {
-  FractalActivityEventDefinition,
+  ActivityEventDefinition,
 } from "@/features/activity/interfaces/activity.interfaces";
 import type {
-  FractalRoutine,
-  FractalRoutineWithRuns,
+  Routine,
+  RoutineWithRuns,
 } from "@/features/routine/interfaces/routine.interfaces";
 import {
   RoutineRunHistory,
@@ -85,7 +85,7 @@ const routineFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
   prompt: z.string().min(1, "Prompt is required"),
   agent: z.string().min(1, "Agent is required"),
-  // Task 9 addition: `FractalRoutineStatusSchema` (routine.interfaces.ts)
+  // Task 9 addition: `RoutineStatusSchema` (routine.interfaces.ts)
   // already had "paused" as a third value — this form schema predates
   // that and only had two.
   status: z.enum(["enabled", "paused", "disabled"]),
@@ -99,7 +99,7 @@ function getErrorMessage(error: unknown) {
   return "Unable to save this routine.";
 }
 
-function buildFormValues(routine: FractalRoutine | null): RoutineFormValues {
+function buildFormValues(routine: Routine | null): RoutineFormValues {
   if (!routine) {
     return {
       name: "",
@@ -137,7 +137,7 @@ export const RoutineUpsertPage = aos
     if (isCreate) {
       return {
         mode: "create" as const,
-        routine: null as FractalRoutineWithRuns | null,
+        routine: null as RoutineWithRuns | null,
         activityEvents,
       };
     }
@@ -217,7 +217,7 @@ export const RoutineUpsertPage = aos
     });
 
     const currentAgentId = form.watch("agent");
-    const agentLabel = FractalRoutineHelper.getAgentLabel(currentAgentId, agents);
+    const agentLabel = RoutineHelper.getAgentLabel(currentAgentId, agents);
 
     const { mutate: deleteRoutine, loading: isDeleting } =
       aos.client.routine.delete.useMutation({
@@ -299,7 +299,7 @@ export const RoutineUpsertPage = aos
 
     async function handleAgentChange(agent: string) {
       form.setValue("agent", agent, { shouldDirty: true });
-      const label = FractalRoutineHelper.getAgentLabel(agent, agents);
+      const label = RoutineHelper.getAgentLabel(agent, agents);
       await persistField({ agent }, `Assigned to ${label}`);
     }
 

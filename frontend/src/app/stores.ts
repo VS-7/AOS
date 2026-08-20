@@ -2,13 +2,13 @@ import { AosStore } from "./builders/store";
 import { client } from "@/lib/client";
 import { session, status, login, logout } from "@/lib/auth";
 import type {
-  FractalWorkspaceDirectoryAgent,
-  FractalWorkspaceDirectoryUser,
+  WorkspaceDirectoryAgent,
+  WorkspaceDirectoryUser,
 } from "@/features/workspace/interfaces/directory.interfaces";
 import type { AuthSelfProfile } from "@/features/auth/presentation/stores/auth.store";
-import type { FractalProject } from "@/features/project/interfaces/project.interfaces";
-import type { FractalGoal } from "@/features/goal/interfaces/goal.interfaces";
-import type { FractalWorkspaceMember } from "@/features/workspace/interfaces/workspace.interfaces";
+import type { Project } from "@/features/project/interfaces/project.interfaces";
+import type { Goal } from "@/features/goal/interfaces/goal.interfaces";
+import type { WorkspaceMember } from "@/features/workspace/interfaces/workspace.interfaces";
 
 /**
  * Task 9 additions: the 25 newly-copied features read many more store
@@ -60,7 +60,7 @@ interface WorkspaceTaskType {
  * (`git`/`worktrees` sections) but were never set by this store's own
  * `.withPreload` — `workspace_get` doesn't return them yet, so they stay
  * `undefined` in practice, same honest-empty-state policy as `directory`/
- * `projects`/`goals` below. Typed here (not imported from `FractalWorkspace`)
+ * `projects`/`goals` below. Typed here (not imported from `Workspace`)
  * to keep this state object's own literal shape — the thing `.withPreload`
  * actually constructs — the source of truth, rather than casting to a
  * richer imported type the preload doesn't populate.
@@ -88,7 +88,7 @@ interface CurrentWorkspaceState {
    * is dormant (see `command-map.ts`) — always `undefined` here, same
    * honest-empty-state policy as `directory`/`projects`/`goals`.
    */
-  members?: FractalWorkspaceMember[];
+  members?: WorkspaceMember[];
   /**
    * Read by the workspace-select dropdown to mark the active entry in
    * `options` (always empty — see that field's own doc comment) — `true`
@@ -116,7 +116,7 @@ interface CurrentWorkspaceState {
  *   this router ever mounts.
  * - `workspace.current` — the real, already-registered `workspace_get`
  *   command, called directly (not through the facade — this store isn't
- *   part of the ported Fractal frontend, so it has no Fractal call-name to
+ *   part of the ported AOS frontend, so it has no AOS call-name to
  *   translate) exactly the way `app/root-layout.tsx`'s own workspace query
  *   already does.
  *
@@ -130,8 +130,8 @@ interface CurrentWorkspaceState {
 const workspaceStore = AosStore.create("workspace")
   .withState({
     directory: {
-      users: [] as FractalWorkspaceDirectoryUser[],
-      agents: [] as FractalWorkspaceDirectoryAgent[],
+      users: [] as WorkspaceDirectoryUser[],
+      agents: [] as WorkspaceDirectoryAgent[],
     },
     current: null as CurrentWorkspaceState | null,
     /**
@@ -228,7 +228,7 @@ const authStore = AosStore.create("auth")
     // redirects — the same two facts `<AuthGate>` already checks via
     // `lib/auth.ts`'s own `status()` before this router mounts. Populated
     // from that same real source below, not the facade's `session.get`
-    // (a different, Fractal-shaped call this store deliberately doesn't
+    // (a different, AOS-shaped call this store deliberately doesn't
     // use — see this file's top doc comment on why `auth`/`workspace`
     // stay on AOS's own integration).
     isAuthenticated: false,
@@ -334,7 +334,7 @@ const authStore = AosStore.create("auth")
 
 const projectsStore = AosStore.create("projects")
   .withState({
-    items: [] as FractalProject[],
+    items: [] as Project[],
   })
   .addAction(
     "refresh",
@@ -352,7 +352,7 @@ const projectsStore = AosStore.create("projects")
 
 const goalsStore = AosStore.create("goals")
   .withState({
-    items: [] as FractalGoal[],
+    items: [] as Goal[],
   })
   .addAction(
     "refresh",
@@ -404,7 +404,7 @@ const goalsStore = AosStore.create("goals")
  * which one.
  */
 export const stores = AosStore.router({
-  prefix: "fractal",
+  prefix: "aos",
   stores: {
     workspace: workspaceStore,
     auth: authStore,

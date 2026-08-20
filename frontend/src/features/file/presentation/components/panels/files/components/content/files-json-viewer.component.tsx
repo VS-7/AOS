@@ -9,11 +9,11 @@ import { AlertTriangle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { FilesTextViewer } from "./files-text-viewer.component";
-import type { FractalFile } from "@/features/file/interfaces/file.interfaces";
+import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces";
 
 interface FilesJsonViewerProps {
   content: string;
-  file: FractalFile;
+  file: WorkspaceFile;
   readOnly?: boolean;
   onChange: (value: string) => void;
 }

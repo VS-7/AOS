@@ -188,7 +188,7 @@ export function WorkspaceSortableTabItem({
     isDragging,
   } = useSortable({
     id: tab.id,
-    disabled: tab.id === "fractal",
+    disabled: tab.id === "aos",
   });
 
   const style: React.CSSProperties = {

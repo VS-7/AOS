@@ -5,8 +5,8 @@ import { Schema } from "@/core/helpers/schema.helper";
 
 /**
  * @const TemplateSchema
- * @description Zod schema for a Fractal Template record.
- * Maps to the .fractal/templates/*.template.md structure.
+ * @description Zod schema for a AOS Template record.
+ * Maps to the .aos/templates/*.template.md structure.
  */
 export const TemplateSchema = z.object({
   /**
@@ -20,7 +20,7 @@ export const TemplateSchema = z.object({
   /**
    * @description Optional skill ID if this template is a skill template.
    */
-  skill: z.string().optional().describe("Optional skill ID if this template is a skill template. eg. 'agent'. If not set, the template is a global template on .fractal/templates/."),
+  skill: z.string().optional().describe("Optional skill ID if this template is a skill template. eg. 'agent'. If not set, the template is a global template on .aos/templates/."),
   /**
    * @description Detailed description of the template's purpose.
    */
@@ -28,7 +28,7 @@ export const TemplateSchema = z.object({
   /**
    * @description Optional default output path or pattern.
    */
-  output: z.string().optional().describe("Default output relative path when rendering without passing a path explicitly. You can use Liquid syntax here. eg. '.fractal/artifacts/plans/{{name}}.plan.md'"),
+  output: z.string().optional().describe("Default output relative path when rendering without passing a path explicitly. You can use Liquid syntax here. eg. '.aos/artifacts/plans/{{name}}.plan.md'"),
   /**
    * @description Optional JSON Schema for the template variables.
    */
@@ -170,9 +170,3 @@ export interface ITemplateService {
   delete(id: string): Promise<ResponseWithCTA>;
 }
 
-/**
- * Alias for the freshly-copied `v401/web` presentation code, which
- * imports the `Fractal`-prefixed name — same reasoning as `skill.
- * interfaces.ts`'s `FractalSkill` alias.
- */
-export type FractalTemplate = Template;

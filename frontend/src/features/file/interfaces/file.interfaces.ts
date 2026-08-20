@@ -21,19 +21,19 @@ function queryBoolean(defaultValue = false) {
  * Defines the supported node kinds in the workspace file explorer.
  * @example
  * ```typescript
- * const kind = FractalFileKindSchema.parse("file");
+ * const kind = FileKindSchema.parse("file");
  * ```
  */
-export const FractalFileKindSchema = z.enum(["file", "directory"]);
+export const FileKindSchema = z.enum(["file", "directory"]);
 
 /**
  * Defines the supported in-app viewers for a workspace file.
  * @example
  * ```typescript
- * const viewer = FractalFileViewerSchema.parse("text");
+ * const viewer = FileViewerSchema.parse("text");
  * ```
  */
-export const FractalFileViewerSchema = z.enum([
+export const FileViewerSchema = z.enum([
   "text",
   "image",
   "pdf",
@@ -60,7 +60,7 @@ export const FractalFileViewerSchema = z.enum([
  * Describes a file-system node exposed by the Files feature.
  * @example
  * ```typescript
- * const file = FractalFileSchema.parse({
+ * const file = FileSchema.parse({
  *   absolutePath: "/workspace/src/index.ts",
  *   browserUrl: "file:///workspace/src/index.ts",
  *   extension: "ts",
@@ -76,7 +76,7 @@ export const FractalFileViewerSchema = z.enum([
  * });
  * ```
  */
-export const FractalFileSchema = z.object({
+export const FileSchema = z.object({
   absolutePath: z.string().describe("Absolute path on disk."),
   browserUrl: z.string().describe("File URL used by external viewers."),
   childCount: z.number().int().nonnegative().optional().describe("Optional direct visible children count for directories."),
@@ -89,25 +89,25 @@ export const FractalFileSchema = z.object({
   path: z.string().describe("Workspace-relative path using POSIX separators."),
   parentPath: z.string().optional().describe("Workspace-relative parent directory path."),
   size: z.number().int().nonnegative().describe("Filesystem size in bytes."),
-  type: FractalFileKindSchema.describe("Whether the node is a file or directory."),
+  type: FileKindSchema.describe("Whether the node is a file or directory."),
   updatedAt: z.string().describe("ISO timestamp derived from filesystem metadata."),
-  viewer: FractalFileViewerSchema.describe("Suggested viewer strategy for the UI."),
+  viewer: FileViewerSchema.describe("Suggested viewer strategy for the UI."),
 });
 
 /**
  * Represents a file-system node available inside the current workspace.
- * Inferred from {@link FractalFileSchema}.
+ * Inferred from {@link FileSchema}.
  */
-export type FractalFile = z.infer<typeof FractalFileSchema>;
+export type WorkspaceFile = z.infer<typeof FileSchema>;
 
 /**
  * Defines the list query accepted by the Files controller.
  * @example
  * ```typescript
- * const query = FractalFileListQuerySchema.parse({ recursive: true, includeIgnored: false });
+ * const query = FileListQuerySchema.parse({ recursive: true, includeIgnored: false });
  * ```
  */
-export const FractalFileListQuerySchema = Schema.object({
+export const FileListQuerySchema = Schema.object({
   path: z.string().optional().describe("Optional workspace-relative directory to list from."),
   recursive: queryBoolean(false).describe("Whether nested descendants should be traversed."),
   includeIgnored: queryBoolean(false).describe("Whether heavy and internal folders should be included."),
@@ -115,18 +115,18 @@ export const FractalFileListQuerySchema = Schema.object({
 
 /**
  * Input parameters for listing workspace files.
- * Inferred from {@link FractalFileListQuerySchema}.
+ * Inferred from {@link FileListQuerySchema}.
  */
-export type FractalFileListQueryInput = z.infer<typeof FractalFileListQuerySchema>;
+export type FileListQueryInput = z.infer<typeof FileListQuerySchema>;
 
 /**
  * Defines the search query accepted by the Files controller.
  * @example
  * ```typescript
- * const query = FractalFileSearchQuerySchema.parse({ query: "task", limit: 50 });
+ * const query = FileSearchQuerySchema.parse({ query: "task", limit: 50 });
  * ```
  */
-export const FractalFileSearchQuerySchema = Schema.object({
+export const FileSearchQuerySchema = Schema.object({
   path: z.string().optional().describe("Optional workspace-relative directory used as the search root."),
   query: z.string().min(1).describe("Fuzzy query applied to file and folder names."),
   includeIgnored: queryBoolean(false).describe("Whether heavy and internal folders should be included."),
@@ -135,68 +135,68 @@ export const FractalFileSearchQuerySchema = Schema.object({
 
 /**
  * Input parameters for searching workspace files.
- * Inferred from {@link FractalFileSearchQuerySchema}.
+ * Inferred from {@link FileSearchQuerySchema}.
  */
-export type FractalFileSearchQueryInput = z.infer<typeof FractalFileSearchQuerySchema>;
+export type FileSearchQueryInput = z.infer<typeof FileSearchQuerySchema>;
 
 /**
  * Defines the read query accepted by the Files controller.
  * @example
  * ```typescript
- * const query = FractalFileReadSchema.parse({ path: "src/index.ts" });
+ * const query = FileReadSchema.parse({ path: "src/index.ts" });
  * ```
  */
-export const FractalFileReadSchema = z.object({
+export const FileReadSchema = z.object({
   path: z.string().min(1).describe("Workspace-relative file path to read."),
 });
 
 /**
  * Input parameters for reading a file.
- * Inferred from {@link FractalFileReadSchema}.
+ * Inferred from {@link FileReadSchema}.
  */
-export type FractalFileReadInput = z.infer<typeof FractalFileReadSchema>;
+export type FileReadInput = z.infer<typeof FileReadSchema>;
 
 /**
  * Defines the write payload accepted by the Files controller.
  * @example
  * ```typescript
- * const payload = FractalFileWriteSchema.parse({ path: "README.md", content: "# Updated" });
+ * const payload = FileWriteSchema.parse({ path: "README.md", content: "# Updated" });
  * ```
  */
-export const FractalFileWriteSchema = z.object({
+export const FileWriteSchema = z.object({
   content: z.string().describe("UTF-8 text content to persist on disk."),
   path: z.string().min(1).describe("Workspace-relative file path to write."),
 });
 
 /**
  * Input parameters for writing a file.
- * Inferred from {@link FractalFileWriteSchema}.
+ * Inferred from {@link FileWriteSchema}.
  */
-export type FractalFileWriteInput = z.infer<typeof FractalFileWriteSchema>;
+export type FileWriteInput = z.infer<typeof FileWriteSchema>;
 
 /**
  * Defines the create payload accepted by the Files controller.
  * @example
  * ```typescript
- * const payload = FractalFileCreateSchema.parse({
+ * const payload = FileCreateSchema.parse({
  *   path: "src/features/file/index.ts",
  *   type: "file",
  *   content: "export {}",
  * });
  * ```
  */
-export const FractalFileCreateSchema = z.object({
+export const FileCreateSchema = z.object({
   content: z.string().optional().describe("Optional initial UTF-8 content for new text files."),
   overwrite: z.boolean().default(false).describe("Whether an existing file may be replaced."),
   path: z.string().min(1).describe("Workspace-relative target path for the new node."),
-  type: FractalFileKindSchema.describe("Whether to create a file or a directory."),
+  type: FileKindSchema.describe("Whether to create a file or a directory."),
 });
 
 /**
  * Input parameters for creating a new file-system node.
- * Inferred from {@link FractalFileCreateSchema}.
+ * Inferred from {@link FileCreateSchema}.
  */
-export type FractalFileCreateInput = z.infer<typeof FractalFileCreateSchema>;
+export type FileCreateInput = z.infer<typeof FileCreateSchema>;
 
 /**
  * Contract for the workspace-scoped Files service.
@@ -205,7 +205,7 @@ export interface IFileService {
   /**
    * Lists files and directories from the current workspace.
    *
-   * @param params - Listing options validated by {@link FractalFileListQuerySchema}.
+   * @param params - Listing options validated by {@link FileListQuerySchema}.
    * @returns A response containing flat file-system nodes for tree building in the UI.
    *
    * @example
@@ -213,12 +213,12 @@ export interface IFileService {
    * const result = await fileService.list({ path: "src", recursive: true });
    * ```
   */
-  list(params?: FractalFileListQueryInput): Promise<ResponseWithCTA<{ files: FractalFile[] }>>;
+  list(params?: FileListQueryInput): Promise<ResponseWithCTA<{ files: WorkspaceFile[] }>>;
 
   /**
    * Searches files and folders from the current workspace.
    *
-   * @param params - Search options validated by {@link FractalFileSearchQuerySchema}.
+   * @param params - Search options validated by {@link FileSearchQuerySchema}.
    * @returns Matching file-system nodes plus ancestor folders for tree rendering in the UI.
    *
    * @example
@@ -226,12 +226,12 @@ export interface IFileService {
    * const result = await fileService.search({ query: "task", limit: 50 });
    * ```
    */
-  search(params: FractalFileSearchQueryInput): Promise<ResponseWithCTA<{ files: FractalFile[] }>>;
+  search(params: FileSearchQueryInput): Promise<ResponseWithCTA<{ files: WorkspaceFile[] }>>;
 
   /**
    * Reads UTF-8 content from a workspace file.
    *
-   * @param params - Read options validated by {@link FractalFileReadSchema}.
+   * @param params - Read options validated by {@link FileReadSchema}.
    * @returns The requested file metadata plus its current content.
    *
    * @example
@@ -239,20 +239,20 @@ export interface IFileService {
    * const result = await fileService.read({ path: "README.md" });
    * ```
    */
-  read(params: FractalFileReadInput): Promise<ResponseWithCTA<{ file: FractalFile; content: string }>>;
+  read(params: FileReadInput): Promise<ResponseWithCTA<{ file: WorkspaceFile; content: string }>>;
 
   /**
    * Resolves a workspace file for HTTP content serving.
    *
-   * @param params - Read options validated by {@link FractalFileReadSchema}.
+   * @param params - Read options validated by {@link FileReadSchema}.
    * @returns File metadata plus the absolute path used by the transport layer.
    */
-  content(params: FractalFileReadInput): Promise<ResponseWithCTA<{ file: FractalFile; absolutePath: string }>>;
+  content(params: FileReadInput): Promise<ResponseWithCTA<{ file: WorkspaceFile; absolutePath: string }>>;
 
   /**
    * Persists UTF-8 content into an existing workspace file.
    *
-   * @param params - Write options validated by {@link FractalFileWriteSchema}.
+   * @param params - Write options validated by {@link FileWriteSchema}.
    * @returns The refreshed file metadata plus the saved content.
    *
    * @example
@@ -260,12 +260,12 @@ export interface IFileService {
    * const result = await fileService.write({ path: "README.md", content: "# Hello" });
    * ```
    */
-  write(params: FractalFileWriteInput): Promise<ResponseWithCTA<{ file: FractalFile; content: string }>>;
+  write(params: FileWriteInput): Promise<ResponseWithCTA<{ file: WorkspaceFile; content: string }>>;
 
   /**
    * Creates a new file or directory inside the workspace.
    *
-   * @param params - Creation options validated by {@link FractalFileCreateSchema}.
+   * @param params - Creation options validated by {@link FileCreateSchema}.
    * @returns The created file-system node.
    *
    * @example
@@ -273,16 +273,16 @@ export interface IFileService {
    * const result = await fileService.create({ path: "src/features/file", type: "directory" });
    * ```
    */
-  create(params: FractalFileCreateInput): Promise<ResponseWithCTA<{ file: FractalFile }>>;
+  create(params: FileCreateInput): Promise<ResponseWithCTA<{ file: WorkspaceFile }>>;
 }
 
 /**
- * Inferred type alias for {@link FractalFileViewerSchema} — the source
+ * Inferred type alias for {@link FileViewerSchema} — the source
  * file had the schema but no bare exported type for it (same situation
- * `task.interfaces.ts`'s doc comment describes for `FractalTaskStatus`).
+ * `task.interfaces.ts`'s doc comment describes for `TaskStatus`).
  * `presentation/helpers/file-viewer.helper.ts` reads this as a return type.
  */
-export type FractalFileViewer = z.infer<typeof FractalFileViewerSchema>;
+export type FileViewer = z.infer<typeof FileViewerSchema>;
 
 /**
  * The file explorer's UI-only "scope" — which changes/tree the panel shows:
@@ -295,19 +295,19 @@ export type FractalFileViewer = z.infer<typeof FractalFileViewerSchema>;
  * compare it — not recovered from any extraction (no source file defines
  * it either).
  */
-export type FractalFileExplorerContext =
+export type FileExplorerContext =
   | { type: "main" }
   | { type: "task"; taskId: string }
   | { type: "branch"; branch: string };
 
 /**
  * One entry in the changes/diff panel's file list. Same "no Go command
- * returns this yet" situation as {@link FractalFileExplorerContext} —
+ * returns this yet" situation as {@link FileExplorerContext} —
  * reconstructed from `presentation/helpers/changes.helper.ts`'s
  * `formatChangeStatusLabel`/`changeStatusClassName` switches (the
  * `status` union) and `changes-content.tsx`'s `file.path` read.
  */
-export interface FractalFileChangeEntry {
+export interface FileChangeEntry {
   path: string;
   status: "added" | "modified" | "deleted" | "renamed" | "untracked";
   /** Previous path for a renamed entry. */
@@ -322,15 +322,15 @@ export interface FractalFileChangeEntry {
  * list plus an index for O(1) directory/file lookups, the task list used
  * to label a `{ type: "task" }` context, and the changed-files list the
  * Changes panel renders. Same reconstructed-from-usage situation as
- * {@link FractalFileExplorerContext}; see `files-explorer-group.tsx`
+ * {@link FileExplorerContext}; see `files-explorer-group.tsx`
  * (`.paths`, `.pathIndex`), `files-explorer.helper.ts` (`.tasks`), and
  * `changes-content.tsx` (`.files`).
  */
-export interface FractalFileExplorerSnapshot {
+export interface FileExplorerSnapshot {
   paths: string[];
   pathIndex: Record<string, { type: "file" | "directory"; [key: string]: unknown }>;
   tasks?: Array<{ id: string; title: string }>;
-  files?: FractalFileChangeEntry[];
+  files?: FileChangeEntry[];
   /** True for a read-only context (e.g. a non-checked-out branch). */
   readOnly?: boolean;
   /**
@@ -343,7 +343,7 @@ export interface FractalFileExplorerSnapshot {
    * `unknown[]` stub predates that and was masking a real type mismatch at
    * the `setGitStatus` call site.
    */
-  gitStatus?: FractalFileGitStatusEntry[];
+  gitStatus?: FileGitStatusEntry[];
   /** Branch names offered by the explorer's context switcher. */
   branches?: string[];
 }
@@ -355,7 +355,7 @@ export interface FractalFileExplorerSnapshot {
  * `@pierre/trees`, and interfaces files elsewhere in this port don't
  * depend on vendor UI packages either).
  */
-export type FractalFileGitStatus =
+export type FileGitStatus =
   | "added"
   | "deleted"
   | "ignored"
@@ -363,7 +363,7 @@ export type FractalFileGitStatus =
   | "renamed"
   | "untracked";
 
-export interface FractalFileGitStatusEntry {
+export interface FileGitStatusEntry {
   path: string;
-  status: FractalFileGitStatus;
+  status: FileGitStatus;
 }

@@ -12,7 +12,7 @@ import {
   AvatarAgentFallback,
   AvatarImage,
 } from "@/components/ui/avatar";
-import type { FractalTask } from "@/features/task/interfaces/task.interfaces";
+import type { Task } from "@/features/task/interfaces/task.interfaces";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
 import { assigneeInitials, resolveAssignee } from "@/features/task/presentation/helpers/assignee.helper";
 import { TASK_PRIORITY_CONFIG } from "@/features/task/presentation/consts/task";
@@ -30,7 +30,7 @@ import { ProjectSelectorDropdown } from "@/components/ui/project-selector-dropdo
 import { ProjectHelper } from "@/features/project/presentation/helpers/project.helper";
 
 interface TaskKanbanCardProps {
-  task: FractalTask;
+  task: Task;
   isDragging: boolean;
   isDragOverlay?: boolean;
 }
@@ -68,7 +68,7 @@ export const TaskKanbanCard = React.memo(function TaskKanbanCard({
   const isAgent = assigneeView?.type === "agent";
 
   const handlePriorityChange = useCallback(
-    async (priority: FractalTask["priority"]) => {
+    async (priority: Task["priority"]) => {
       try {
         await aos.client.task.update.mutate({
           params: { task: task.id },
@@ -110,7 +110,7 @@ export const TaskKanbanCard = React.memo(function TaskKanbanCard({
   );
 
   const handleStatusChange = useCallback(
-    async (status: FractalTask["status"]) => {
+    async (status: Task["status"]) => {
       try {
         await aos.client.task.update.mutate({
           params: { task: task.id },

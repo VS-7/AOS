@@ -1,10 +1,10 @@
 import { z } from "zod";
 
 /**
- * FractalThemeSettingsSchema: Schema for the actual color/font settings of a theme.
- * @description Defines the structured styling variables (dark/light) applied to the Fractal UI.
+ * ThemeSettingsSchema: Schema for the actual color/font settings of a theme.
+ * @description Defines the structured styling variables (dark/light) applied to the AOS UI.
  */
-export const FractalThemeSettingsSchema = z.object({
+export const ThemeSettingsSchema = z.object({
   accent: z.string(),
   contrast: z.number(),
   ink: z.string(),
@@ -19,10 +19,10 @@ export const FractalThemeSettingsSchema = z.object({
 });
 
 /**
- * FractalThemeSchema: Primary schema for a theme file (*.theme.json).
- * @description Represents a Fractal UI Theme.
+ * ThemeSchema: Primary schema for a theme file (*.theme.json).
+ * @description Represents a AOS UI Theme.
  */
-export const FractalThemeSchema = z.object({
+export const ThemeSchema = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string(),
@@ -32,43 +32,43 @@ export const FractalThemeSchema = z.object({
     url: z.string()
   }),
   theme: z.object({
-    dark: FractalThemeSettingsSchema,
-    light: FractalThemeSettingsSchema
+    dark: ThemeSettingsSchema,
+    light: ThemeSettingsSchema
   })
 });
 
 /**
- * FractalTheme: TypeScript type inferred from FractalThemeSchema.
+ * Theme: TypeScript type inferred from ThemeSchema.
  */
-export type FractalTheme = z.infer<typeof FractalThemeSchema>;
+export type Theme = z.infer<typeof ThemeSchema>;
 
 /**
- * FractalThemeSettings: TypeScript type inferred from FractalThemeSettingsSchema.
+ * ThemeSettings: TypeScript type inferred from ThemeSettingsSchema.
  */
-export type FractalThemeSettings = z.infer<typeof FractalThemeSettingsSchema>;
+export type ThemeSettings = z.infer<typeof ThemeSettingsSchema>;
 
 /**
- * @interface IFractalThemeService
- * @description Defines the contract for the FractalThemeService managing the workspace themes.
+ * @interface IThemeService
+ * @description Defines the contract for the ThemeService managing the workspace themes.
  */
-export interface IFractalThemeService {
+export interface IThemeService {
   /**
-   * List all available themes from the built-in registry and the user's ~/.fractal/themes directory.
+   * List all available themes from the built-in registry and the user's ~/.aos/themes directory.
    * @returns An array of themes.
    */
-  list(): Promise<FractalTheme[]>;
+  list(): Promise<Theme[]>;
 
   /**
    * Retrieve a theme by its id.
    * @param id - The id of the theme to retrieve.
    * @returns The theme object or null if not found.
    */
-  get(id: string): Promise<FractalTheme | null>;
+  get(id: string): Promise<Theme | null>;
 
   /**
-   * Install a new theme by copying it to ~/.fractal/themes and setting it as the active preset.
+   * Install a new theme by copying it to ~/.aos/themes and setting it as the active preset.
    * @param pathOrUrl - A local absolute file path or a URL to the *.theme.json file.
    * @returns The installed theme object.
    */
-  install(pathOrUrl: string): Promise<FractalTheme>;
+  install(pathOrUrl: string): Promise<Theme>;
 }

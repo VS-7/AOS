@@ -13,7 +13,7 @@ import {
   AvatarAgentFallback,
   AvatarImage,
 } from "@/components/ui/avatar";
-import type { FractalTask } from "@/features/task/interfaces/task.interfaces";
+import type { Task } from "@/features/task/interfaces/task.interfaces";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
 import { assigneeInitials, resolveAssignee } from "@/features/task/presentation/helpers/assignee.helper";
 import {
@@ -34,7 +34,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 interface TaskListRowProps {
-  task: FractalTask;
+  task: Task;
   isDragOverlay?: boolean;
   isDragging?: boolean;
   dragHandle?: React.ReactNode;
@@ -73,7 +73,7 @@ export const TaskListRow = React.memo(function TaskListRow({
   const project = projects.find((p) => p.id === task.project);
 
   const handlePriorityChange = useCallback(
-    async (priority: FractalTask["priority"]) => {
+    async (priority: Task["priority"]) => {
       try {
         await aos.client.task.update.mutate({
           params: { task: task.id },
@@ -115,7 +115,7 @@ export const TaskListRow = React.memo(function TaskListRow({
   );
 
   const handleStatusChange = useCallback(
-    async (status: FractalTask["status"]) => {
+    async (status: Task["status"]) => {
       try {
         await aos.client.task.update.mutate({
           params: { task: task.id },

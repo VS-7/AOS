@@ -6,12 +6,12 @@ import {
   CollapsibleTrigger,
   CollapsibleContent,
 } from "@/components/ui/collapsible";
-import type { FractalAttachment } from "@/features/task/interfaces/comment.interfaces";
+import type { TaskAttachment } from "@/features/task/interfaces/comment.interfaces";
 import { AttachmentItem } from "./components/item.component";
 import { Badge } from "@/components/ui/badge";
 
 interface TaskAttachmentsProps {
-  attachments: FractalAttachment[];
+  attachments: TaskAttachment[];
 }
 
 export function TaskAttachments({ attachments }: TaskAttachmentsProps) {

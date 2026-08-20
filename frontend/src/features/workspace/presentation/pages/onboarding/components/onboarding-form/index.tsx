@@ -1,17 +1,16 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { ArrowLeft, HelpCircleIcon } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { FormProvider } from "react-hook-form";
 import { useRouter } from "@tanstack/react-router";
-import { toast } from "sonner";
 
 import { aos } from "@/app/aos";
 import { Logo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
 
-import { FractalAuthOnboardingSchema } from "@/features/auth/schemas/auth.schema";
+import { AuthOnboardingSchema } from "@/features/auth/schemas/auth.schema";
 
 import { PLACEHOLDER_IMAGE } from "@/assets/placeholder";
 import { OnboardingFormWelcomeStep } from "./steps/onboarding-form-welcome-step";
@@ -23,10 +22,6 @@ import {
   type OnboardingFormOrchestratorStepProps,
 } from "./steps/onboarding-form-orchestrator-step";
 import { OnboardingFormInitStep } from "./steps/onboarding-form-init-step";
-import {
-  OnboardingFormWaitlistStep,
-  type SavedOnboardingWaitlistState,
-} from "./steps/onboarding-form-waitlist-step";
 
 // ---------------------------------------------------------------------------
 // Step definitions — fields to validate before advancing
@@ -54,16 +49,6 @@ function detectRegionDefaults() {
   } catch {
     return { language: "en", timezone: "" };
   }
-}
-
-function isWaitlistError(err: any): boolean {
-  const envelope = err?.error && typeof err.error === "object" ? err.error : err;
-  const domainCode = envelope?.data?.code ?? envelope?.code ?? err?.data?.code;
-  const errMsg = String(envelope?.message ?? err?.message ?? "");
-  return (
-    domainCode === "FRACTAL_AUTH_WAITLIST_NOT_APPROVED" ||
-    errMsg.toLowerCase().includes("waitlist")
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -112,8 +97,6 @@ export function OnboardingForm() {
 
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
-  const [waitlistState, setWaitlistState] =
-    useState<SavedOnboardingWaitlistState | null>(null);
 
   const regionDefaults = useMemo(detectRegionDefaults, []);
   const initialValues = useMemo(
@@ -137,127 +120,12 @@ export function OnboardingForm() {
   );
 
   const form = aos.useForm({
-    schema: FractalAuthOnboardingSchema,
+    schema: AuthOnboardingSchema,
     values: initialValues,
     onSubmit: async (_values) => {
       // Workspace creation is handled by OnboardingFormInitStep.
     },
   });
-
-  // Restore cached waitlist state on mount if present
-  useEffect(() => {
-    try {
-      const cached = localStorage.getItem("FRACTAL_ONBOARDING_WAITLIST_STATE");
-      if (cached) {
-        const parsed = JSON.parse(cached) as SavedOnboardingWaitlistState;
-        if (parsed?.email && parsed?.formData) {
-          form.reset(parsed.formData);
-          setWaitlistState(parsed);
-        }
-      }
-    } catch {
-      // Ignore parse errors
-    }
-  }, [form]);
-
-  const handleWaitlistRequired = useCallback(
-    (saved: SavedOnboardingWaitlistState) => {
-      setWaitlistState(saved);
-    },
-    [],
-  );
-
-  const handleResetWaitlist = useCallback(() => {
-    localStorage.removeItem("FRACTAL_ONBOARDING_WAITLIST_STATE");
-    setWaitlistState(null);
-    form.reset(initialValues);
-    setStep(1);
-  }, [form, initialValues]);
-
-  const handleApprovedSubmit = useCallback(async () => {
-    const data = form.getValues();
-    let result: any;
-
-    try {
-      result = await aos.client.auth.onboarding.mutate({
-        body: {
-          user: {
-            name: data.user.name,
-            email: data.user.email,
-          },
-          security: {
-            password: data.security.password,
-          },
-          region: {
-            language: data.region.language,
-            city: data.region.city,
-            country: data.region.country,
-            timezone: data.region.timezone,
-          },
-          orchestrator: {
-            name: data.orchestrator.name,
-            tone: data.orchestrator.tone,
-            style: data.orchestrator.style,
-            autonomy: data.orchestrator.autonomy,
-          },
-        },
-      });
-    } catch (err: any) {
-      if (isWaitlistError(err)) {
-        const waitlistPayload: SavedOnboardingWaitlistState = {
-          email: data.user.email,
-          formData: data,
-          status: "waiting",
-          savedAt: new Date().toISOString(),
-        };
-        localStorage.setItem(
-          "FRACTAL_ONBOARDING_WAITLIST_STATE",
-          JSON.stringify(waitlistPayload),
-        );
-        setWaitlistState(waitlistPayload);
-        toast.error("Your email hasn't been approved on the waitlist yet.");
-        return;
-      }
-
-      throw err;
-    }
-
-    if (result.error || !result.data?.workspaceId) {
-      if (isWaitlistError(result.error)) {
-        const waitlistPayload: SavedOnboardingWaitlistState = {
-          email: data.user.email,
-          formData: data,
-          status: "waiting",
-          savedAt: new Date().toISOString(),
-        };
-        localStorage.setItem(
-          "FRACTAL_ONBOARDING_WAITLIST_STATE",
-          JSON.stringify(waitlistPayload),
-        );
-        setWaitlistState(waitlistPayload);
-        toast.error("Your email hasn't been approved on the waitlist yet.");
-        return;
-      }
-
-      throw new Error(
-        String((result.error as any)?.message || "Failure creating workspace."),
-      );
-    }
-
-    // Auto-login
-    await aos.stores.auth.actions.login({
-      email: data.user.email,
-      password: data.security.password,
-    });
-
-    // Cleanup waitlist cache
-    localStorage.removeItem("FRACTAL_ONBOARDING_WAITLIST_STATE");
-
-    toast.success("Your workspace is ready.");
-    await aos.stores.workspace.actions.switch(result.data.workspaceId);
-
-    window.location.replace("/?welcome=true");
-  }, [form]);
 
   const goNext = useCallback(async () => {
     // Welcome step — just advance, no validation
@@ -293,7 +161,7 @@ export function OnboardingForm() {
 
   // Global Keyboard Navigation
   useEffect(() => {
-    if (waitlistState || step === TOTAL_STEPS - 1) return;
+    if (step === TOTAL_STEPS - 1) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       const isInput =
@@ -310,7 +178,7 @@ export function OnboardingForm() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [goNext, goBack, step, waitlistState]);
+  }, [goNext, goBack, step]);
 
   const handleInitError = useCallback(() => {
     // Go back to the orchestrator step so the user can try again
@@ -351,34 +219,6 @@ export function OnboardingForm() {
         <div className="flex items-center gap-2">
           <Logo className="h-5" />
         </div>
-
-        <div className="flex items-center space-x-2 lg:space-x-4">
-          <Button
-            variant="ghost"
-            title="Get Support"
-            aria-label="Get Support"
-            className="hidden lg:inline-flex"
-            asChild
-          >
-            <a target="_blank" href="https://tryfractal.co/help">
-              <span className="text-sm">Get Support</span>
-              <HelpCircleIcon className="w-4 h-4" />
-            </a>
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            title="Get Support"
-            aria-label="Get Support"
-            className="lg:hidden"
-            asChild
-          >
-            <a target="_blank" href="https://tryfractal.co/help">
-              <HelpCircleIcon className="w-4 h-4" />
-            </a>
-          </Button>
-        </div>
       </div>
 
       {/* Main card */}
@@ -386,7 +226,7 @@ export function OnboardingForm() {
         <FormProvider {...form}>
           <div className="bg-card/95 relative flex flex-col rounded-2xl border border-border/60 shadow-2xl shadow-black/10 dark:shadow-black/50 w-full h-full max-h-[720px] z-10 backdrop-blur-xl overflow-hidden">
             {/* Top progress line */}
-            {!isInitStep && !waitlistState && (
+            {!isInitStep && (
               <div className="absolute top-0 inset-x-0 h-0.5 bg-muted/40 z-20 overflow-hidden">
                 <motion.div
                   className="h-full bg-primary"
@@ -397,9 +237,9 @@ export function OnboardingForm() {
               </div>
             )}
 
-            {/* Back button — hidden on welcome, init, and waitlist step */}
+            {/* Back button — hidden on welcome and init step */}
             <AnimatePresence>
-              {!isFirstStep && !isInitStep && !waitlistState && (
+              {!isFirstStep && !isInitStep && (
                 <motion.header
                   className="p-4 absolute left-0 top-0 z-10"
                   initial={{ opacity: 0, x: -8 }}
@@ -421,46 +261,35 @@ export function OnboardingForm() {
 
             {/* Step content */}
             <main className="overflow-hidden flex-1 min-h-0">
-              {waitlistState ? (
-                <OnboardingFormWaitlistStep
-                  savedState={waitlistState}
-                  onApprovedSubmitted={handleApprovedSubmit}
-                  onReset={handleResetWaitlist}
-                />
-              ) : (
-                <AnimatePresence mode="wait" custom={direction}>
-                  <motion.div
-                    key={step}
-                    custom={direction}
-                    variants={slideVariants}
-                    initial="enter"
-                    animate="center"
-                    exit="exit"
-                    transition={slideTransition}
-                    className="h-full"
-                  >
-                    {step === 0 && <OnboardingFormWelcomeStep />}
-                    {step === 1 && <OnboardingFormUserStep form={form} />}
-                    {step === 2 && <OnboardingFormSecurityStep form={form} />}
-                    {step === 3 && <OnboardingFormRegionStep form={form} />}
-                    {step === 4 && (
-                      <OnboardingFormOrchestratorStep
-                        {...orchestratorFormProps}
-                      />
-                    )}
-                    {step === 5 && (
-                      <OnboardingFormInitStep
-                        onError={handleInitError}
-                        onWaitlistRequired={handleWaitlistRequired}
-                      />
-                    )}
-                  </motion.div>
-                </AnimatePresence>
-              )}
+              <AnimatePresence mode="wait" custom={direction}>
+                <motion.div
+                  key={step}
+                  custom={direction}
+                  variants={slideVariants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={slideTransition}
+                  className="h-full"
+                >
+                  {step === 0 && <OnboardingFormWelcomeStep />}
+                  {step === 1 && <OnboardingFormUserStep form={form} />}
+                  {step === 2 && <OnboardingFormSecurityStep form={form} />}
+                  {step === 3 && <OnboardingFormRegionStep form={form} />}
+                  {step === 4 && (
+                    <OnboardingFormOrchestratorStep
+                      {...orchestratorFormProps}
+                    />
+                  )}
+                  {step === 5 && (
+                    <OnboardingFormInitStep onError={handleInitError} />
+                  )}
+                </motion.div>
+              </AnimatePresence>
             </main>
 
-            {/* Footer — hidden on init and waitlist step */}
-            {!isInitStep && !waitlistState && (
+            {/* Footer — hidden on init step */}
+            {!isInitStep && (
               <footer className="flex items-center justify-between px-6 py-4 border-t border-border/40 bg-muted/10">
                 {/* Step dots & title */}
                 <div className="flex items-center gap-3">

@@ -1,4 +1,4 @@
-import type { FractalFileExplorerContext } from "@/features/file/interfaces/file.interfaces";
+import type { FileExplorerContext } from "@/features/file/interfaces/file.interfaces";
 import {
   buildFileTabMetadata,
   synthesizeFileFromPath,
@@ -18,7 +18,7 @@ function getTabFilePath(tab: {
 export function openWorkspaceFileTab(
   relativePath: string,
   options?: {
-    explorerContext?: FractalFileExplorerContext;
+    explorerContext?: FileExplorerContext;
     readOnly?: boolean;
     title?: string;
   },

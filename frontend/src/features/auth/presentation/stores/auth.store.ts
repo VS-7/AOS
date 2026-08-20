@@ -1,10 +1,10 @@
 import { AosStore } from "@/app/builders/store";
 import { api } from "@/lib/aos-facade";
 import type {
-  FractalUserPublic,
-  FractalUserUpdateMeInput,
+  UserPublic,
+  UserUpdateMeInput,
 } from "@/features/auth/interfaces/user.interfaces";
-import type { FractalAuthChangePassword } from "@/features/auth/interfaces/auth.interfaces";
+import type { AuthChangePassword } from "@/features/auth/interfaces/auth.interfaces";
 
 const setAuthCookie = (token: string | undefined) => {
   if (typeof window !== "undefined") {
@@ -16,7 +16,7 @@ const setAuthCookie = (token: string | undefined) => {
   }
 };
 
-export type AuthSelfProfile = FractalUserPublic & {
+export type AuthSelfProfile = UserPublic & {
   hasToken: boolean;
   tokenMasked: string | null;
 };
@@ -155,7 +155,7 @@ export const AuthStore = AosStore.create("auth")
       user: null,
     });
   })
-  .addAction("updateProfile", (ctx) => async (params: FractalUserUpdateMeInput) => {
+  .addAction("updateProfile", (ctx) => async (params: UserUpdateMeInput) => {
     try {
       const response = await api.session.updateProfile.mutate({ body: params as Record<string, unknown> });
 
@@ -176,7 +176,7 @@ export const AuthStore = AosStore.create("auth")
       };
     }
   })
-  .addAction("updatePassword", () => async (params: FractalAuthChangePassword) => {
+  .addAction("updatePassword", () => async (params: AuthChangePassword) => {
     try {
       await api.password.change.mutate({ body: params });
       return { success: true, error: null };

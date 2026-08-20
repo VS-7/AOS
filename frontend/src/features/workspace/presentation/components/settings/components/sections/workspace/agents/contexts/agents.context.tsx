@@ -8,7 +8,7 @@ import React, {
 import { z } from "zod";
 import { toast } from "sonner";
 import { aos } from "@/app/aos";
-import type { FractalAgent } from "@/features/agent/interfaces/agent.interfaces";
+import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
 
 const NEW_AGENT_ID = "__new_agent__";
 
@@ -27,10 +27,10 @@ const agentFormSchema = z.object({
 type AgentFormValues = z.infer<typeof agentFormSchema>;
 
 interface AgentsContextType {
-  agents: FractalAgent[];
-  filteredAgents: FractalAgent[];
+  agents: Agent[];
+  filteredAgents: Agent[];
   selectedAgentId: string | null;
-  selectedAgent: FractalAgent | undefined;
+  selectedAgent: Agent | undefined;
   isCreateMode: boolean;
   isLoadingContent: boolean;
   isDeleting: boolean;
@@ -46,10 +46,10 @@ const AgentsContext = createContext<AgentsContextType | null>(null);
 
 interface AgentsProviderProps {
   children: React.ReactNode;
-  agents: FractalAgent[];
+  agents: Agent[];
 }
 
-function buildAgentFormValues(agent?: FractalAgent | null): AgentFormValues {
+function buildAgentFormValues(agent?: Agent | null): AgentFormValues {
   return {
     name: agent?.name ?? "",
     image: agent?.image ?? "",
@@ -85,7 +85,7 @@ function getAgentErrorMessage(error: unknown) {
 
 export function AgentsProvider({ children, agents }: AgentsProviderProps) {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [selectedAgentFull, setSelectedAgentFull] = useState<FractalAgent | undefined>(
+  const [selectedAgentFull, setSelectedAgentFull] = useState<Agent | undefined>(
     undefined,
   );
   const [isLoadingContent, setIsLoadingContent] = useState(false);
@@ -111,9 +111,9 @@ export function AgentsProvider({ children, agents }: AgentsProviderProps) {
 
         toast.success("Agent created.");
         await aos.stores.agent.actions.refresh();
-        setSelectedAgentFull(createdAgent as FractalAgent);
+        setSelectedAgentFull(createdAgent as Agent);
         setSelectedAgentId(createdAgent.id);
-        form.reset(buildAgentFormValues(createdAgent as FractalAgent));
+        form.reset(buildAgentFormValues(createdAgent as Agent));
         return;
       }
 
@@ -133,8 +133,8 @@ export function AgentsProvider({ children, agents }: AgentsProviderProps) {
 
       toast.success("Agent updated.");
       await aos.stores.agent.actions.refresh();
-      setSelectedAgentFull(updatedAgent as FractalAgent);
-      form.reset(buildAgentFormValues(updatedAgent as FractalAgent));
+      setSelectedAgentFull(updatedAgent as Agent);
+      form.reset(buildAgentFormValues(updatedAgent as Agent));
     },
   });
 

@@ -62,13 +62,13 @@ import {
 import { ProjectSelectorDropdown } from "@/components/ui/project-selector-dropdown";
 import { cn } from "@/lib/utils";
 import {
-  type FractalGoalPriority,
-  type FractalGoalStatus,
-  type FractalGoalWithContext,
+  type GoalPriority,
+  type GoalStatus,
+  type GoalWithContext,
 } from "@/features/goal/interfaces/goal.interfaces";
 import {
-  FractalGoalPrioritySchema,
-  FractalGoalStatusSchema,
+  GoalPrioritySchema,
+  GoalStatusSchema,
 } from "@/features/goal/schemas/goal.schema";
 import {
   GOAL_PRIORITY_CONFIG,
@@ -82,16 +82,16 @@ import {
   TASK_STATUS_CONFIG,
   TASK_STATUS_ORDER,
 } from "@/features/task/presentation/consts/task";
-import type { FractalTask } from "@/features/task/interfaces/task.interfaces";
+import type { Task } from "@/features/task/interfaces/task.interfaces";
 
 const goalFormSchema = z.object({
   title: z.string().trim().min(1, "Title is required"),
   description: z.string().optional(),
   content: z.string().optional(),
-  priority: FractalGoalPrioritySchema.default("no_priority"),
+  priority: GoalPrioritySchema.default("no_priority"),
   project: z.string().optional(),
   deadline: z.string().optional(),
-  status: FractalGoalStatusSchema.default("active"),
+  status: GoalStatusSchema.default("active"),
 });
 
 type GoalFormValues = z.infer<typeof goalFormSchema>;
@@ -115,7 +115,7 @@ function toDeadlineValue(value?: string) {
   return new Date(`${trimmedValue}T00:00:00.000Z`).toISOString();
 }
 
-function buildFormValues(goal: FractalGoalWithContext | null): GoalFormValues {
+function buildFormValues(goal: GoalWithContext | null): GoalFormValues {
   if (!goal) {
     return {
       title: "",
@@ -195,8 +195,8 @@ export const GoalDetailsPage = aos
     if (isDormant("goal") || isCreate) {
       return {
         mode: "create" as const,
-        goal: null as FractalGoalWithContext | null,
-        goalTasks: [] as FractalTask[],
+        goal: null as GoalWithContext | null,
+        goalTasks: [] as Task[],
       };
     }
 
@@ -211,7 +211,7 @@ export const GoalDetailsPage = aos
       }),
     ]);
     const goal = goalResult.data?.goal;
-    const goalTasks = (tasksResult.data?.tasks ?? []) as FractalTask[];
+    const goalTasks = (tasksResult.data?.tasks ?? []) as Task[];
 
     if (!goal) {
       return response.notFound();
@@ -232,7 +232,7 @@ export const GoalDetailsPage = aos
     const projects = aos.stores.projects.useState((state) => state.items);
 
     const [selectedTaskStatus, setSelectedTaskStatus] =
-      React.useState<FractalTask["status"]>("todo");
+      React.useState<Task["status"]>("todo");
 
     const filteredTasks = React.useMemo(() => {
       return goalTasks
@@ -599,7 +599,7 @@ export const GoalDetailsPage = aos
                                                 key={value}
                                                 onClick={() =>
                                                   field.onChange(
-                                                    value as FractalGoalStatus,
+                                                    value as GoalStatus,
                                                   )
                                                 }
                                                 className="flex items-center gap-2"
@@ -660,7 +660,7 @@ export const GoalDetailsPage = aos
                                               key={value}
                                               onClick={() =>
                                                 field.onChange(
-                                                  value as FractalGoalPriority,
+                                                  value as GoalPriority,
                                                 )
                                               }
                                               className="flex items-center gap-2"

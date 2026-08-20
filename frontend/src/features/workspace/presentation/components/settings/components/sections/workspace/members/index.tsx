@@ -42,8 +42,8 @@ import {
   FormSectionTitle,
 } from "@/components/ui/form-section";
 import { SettingsSectionShell } from "../../../section-shell";
-import type { FractalUserPublic } from "@/features/auth/interfaces/user.interfaces";
-import type { FractalWorkspaceMember } from "@/features/workspace/interfaces/workspace.interfaces";
+import type { UserPublic } from "@/features/auth/interfaces/user.interfaces";
+import type { WorkspaceMember } from "@/features/workspace/interfaces/workspace.interfaces";
 
 export function WorkspaceMembersSection() {
   const workspaceId = aos.stores.workspace.useState((state) => state.current?.id);
@@ -62,8 +62,8 @@ export function WorkspaceMembersSection() {
     enabled: Boolean(workspaceId),
   });
 
-  const members = (membersQuery.data as FractalWorkspaceMember[] | undefined) ?? [];
-  const users = (usersQuery.data as FractalUserPublic[] | undefined) ?? [];
+  const members = (membersQuery.data as WorkspaceMember[] | undefined) ?? [];
+  const users = (usersQuery.data as UserPublic[] | undefined) ?? [];
 
   const usersById = React.useMemo(
     () => new Map(users.map((user) => [user.id, user])),

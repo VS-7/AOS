@@ -6,10 +6,10 @@ import type { UIMessage } from "ai";
  * Recovered from `_extracted/index/src/features/chat/chat.interfaces.ts`
  * (Task 9, replacing the earlier task's hand-written placeholder per
  * controller ruling R16). Kept close to the source: this file already used
- * `Chat`/`FractalChatMessage` — the exact names the freshly-copied
+ * `Chat`/`ChatMessage` — the exact names the freshly-copied
  * `v401/web` presentation code (`use-chat.ts`, `chat-thread.helper.ts`,
  * `chat-message-item.component.tsx`, …) imports — so no renaming was
- * needed here, unlike `agent.interfaces.ts`'s `Agent`→`FractalAgent`.
+ * needed here, unlike `agent.interfaces.ts`'s `Agent`→`Agent`.
  *
  * The message-metadata section below (`execution`/`runs`/dispatch) is
  * grounded in `_extracted/v401/server/src/features/chat/schemas/chat.
@@ -33,13 +33,13 @@ import type { UIMessage } from "ai";
  * commit so it keeps compiling and rendering against the real backend's
  * simpler payload; see that file's own comment.
  */
-export const FractalChatMessageExecutionStatusSchema = z
+export const ChatMessageExecutionStatusSchema = z
   .enum(["pending", "running", "completed", "error", "interrupted"])
   .describe(
     "Execution lifecycle status. pending waits in the queue, running streams the response, completed and error are terminal, interrupted was stopped cooperatively.",
   );
 
-export const FractalChatMessageReactionSchema = z.object({
+export const ChatMessageReactionSchema = z.object({
   actor: z
     .string()
     .describe("Temporary username string that identifies who reacted"),
@@ -47,20 +47,20 @@ export const FractalChatMessageReactionSchema = z.object({
   timestamp: z.string().datetime().describe("Timestamp when the reaction was added"),
 });
 
-export const FractalChatMessageRunTokensUsageSchema = z.object({
+export const ChatMessageRunTokensUsageSchema = z.object({
   inputTokens: z.number().describe("Tokens consumed by the prompt."),
   outputTokens: z.number().describe("Tokens produced by the completion."),
   totalTokens: z.number().describe("Total tokens consumed by the run."),
 });
 
-export const FractalChatMessageExecutionErrorSchema = z.object({
+export const ChatMessageExecutionErrorSchema = z.object({
   code: z.string().describe("Stable machine-readable error code."),
   message: z.string().describe("Human-readable error message."),
   details: z.record(z.string(), z.unknown()).optional(),
 });
 
 /** One outbound agent dispatch recorded on the source message's metadata. */
-export const FractalChatMessageDispatchSchema = z.object({
+export const ChatMessageDispatchSchema = z.object({
   agentId: z.string().describe("Agent targeted by this dispatch."),
   jobId: z.string().describe("Queue job identifier associated with the dispatch."),
   sourceMessageId: z.string().describe("Message that triggered the dispatch."),
@@ -68,29 +68,29 @@ export const FractalChatMessageDispatchSchema = z.object({
     .string()
     .optional()
     .describe("Agent response message created for this dispatch."),
-  status: FractalChatMessageExecutionStatusSchema,
+  status: ChatMessageExecutionStatusSchema,
   startedAt: z.string().datetime(),
   completedAt: z.string().datetime().optional(),
-  usage: FractalChatMessageRunTokensUsageSchema.optional(),
-  error: FractalChatMessageExecutionErrorSchema.optional(),
+  usage: ChatMessageRunTokensUsageSchema.optional(),
+  error: ChatMessageExecutionErrorSchema.optional(),
 });
 
 /** Execution record persisted inside the agent-authored message's own metadata. */
-export const FractalChatMessageExecutionSchema = z.object({
+export const ChatMessageExecutionSchema = z.object({
   agentId: z.string().describe("Agent that generated the message."),
   jobId: z.string().describe("Queue job identifier associated with the execution."),
   sourceMessageId: z.string().describe("Message that triggered the execution."),
-  status: FractalChatMessageExecutionStatusSchema,
+  status: ChatMessageExecutionStatusSchema,
   startedAt: z.string().datetime(),
   completedAt: z.string().datetime().optional(),
-  usage: FractalChatMessageRunTokensUsageSchema.optional(),
-  error: FractalChatMessageExecutionErrorSchema.optional(),
+  usage: ChatMessageRunTokensUsageSchema.optional(),
+  error: ChatMessageExecutionErrorSchema.optional(),
 });
 
-const FractalChatMessageBaseMetadataSchema = z.object({
-  reactions: z.array(FractalChatMessageReactionSchema).optional(),
+const ChatMessageBaseMetadataSchema = z.object({
+  reactions: z.array(ChatMessageReactionSchema).optional(),
   runs: z
-    .array(FractalChatMessageDispatchSchema)
+    .array(ChatMessageDispatchSchema)
     .optional()
     .describe("Dispatch attempts created from this source message."),
   status: z
@@ -136,21 +136,21 @@ const FractalChatMessageBaseMetadataSchema = z.object({
     .describe("Timestamp when the chat was last updated"),
 });
 
-export const FractalChatMessageUserMetadataSchema =
-  FractalChatMessageBaseMetadataSchema.extend({
+export const ChatMessageUserMetadataSchema =
+  ChatMessageBaseMetadataSchema.extend({
     type: z.literal("user"),
     data: z.object({
       id: z.string(),
     }),
   });
 
-export const FractalChatMessageAgentMetadataSchema =
-  FractalChatMessageBaseMetadataSchema.extend({
+export const ChatMessageAgentMetadataSchema =
+  ChatMessageBaseMetadataSchema.extend({
     type: z.literal("agent"),
     data: z.object({
       id: z.string(),
     }),
-    execution: FractalChatMessageExecutionSchema.optional().describe(
+    execution: ChatMessageExecutionSchema.optional().describe(
       "Execution record for the authored message.",
     ),
     usage: z
@@ -163,15 +163,15 @@ export const FractalChatMessageAgentMetadataSchema =
       .describe("Token usage from the AI SDK step that produced this message"),
   });
 
-export const FractalChatMessageSystemMetadataSchema =
-  FractalChatMessageBaseMetadataSchema.extend({
+export const ChatMessageSystemMetadataSchema =
+  ChatMessageBaseMetadataSchema.extend({
     type: z.literal("system"),
   });
 
-export const FractalChatMessageSchema = z.discriminatedUnion("type", [
-  FractalChatMessageUserMetadataSchema,
-  FractalChatMessageAgentMetadataSchema,
-  FractalChatMessageSystemMetadataSchema,
+export const ChatMessageSchema = z.discriminatedUnion("type", [
+  ChatMessageUserMetadataSchema,
+  ChatMessageAgentMetadataSchema,
+  ChatMessageSystemMetadataSchema,
 ]);
 
 export const ChatChannelMetadataSchema = z.object({
@@ -233,7 +233,7 @@ export const ChatParticipantSchema = z.object({
 
 /**
  * ChatSchema
- * Primary schema for a Fractal Chat session.
+ * Primary schema for a AOS Chat session.
  */
 export const ChatSchema = z.object({
   id: z.string().describe("Unique identifier for the chat session"),
@@ -252,7 +252,7 @@ export const ChatSchema = z.object({
   ),
   title: z.string().describe("Chat title"),
   messages: z
-    .array(z.custom<FractalChatMessage>())
+    .array(z.custom<ChatMessage>())
     .describe("List of UIMessage objects representing the conversation"),
   createdAt: z.string().datetime().describe("Timestamp when the chat was created"),
   updatedAt: z.string().datetime()
@@ -313,7 +313,7 @@ export const SendMessageSchema = z.object({
     .optional()
     .describe("Optional task context forwarded to the downstream agent run"),
   message: z
-    .custom<FractalChatMessage>()
+    .custom<ChatMessage>()
     .describe(
       'Message appended to the chat before routing. In shared chats, `<mention id="agent-id">` tags trigger tagged agents; direct-message chats infer the target agent from the chat ID',
     ),
@@ -351,27 +351,27 @@ export const AgentProcessMessage = z.object({
     .describe("Message identifier that triggered the processing run"),
 });
 
-export type FractalChatMessageUserMetadata = z.infer<
-  typeof FractalChatMessageUserMetadataSchema
+export type ChatMessageUserMetadata = z.infer<
+  typeof ChatMessageUserMetadataSchema
 >;
 
-export type FractalChatMessageAgentMetadata = z.infer<
-  typeof FractalChatMessageAgentMetadataSchema
+export type ChatMessageAgentMetadata = z.infer<
+  typeof ChatMessageAgentMetadataSchema
 >;
 
-export type FractalChatMessageReaction = z.infer<
-  typeof FractalChatMessageReactionSchema
+export type ChatReaction = z.infer<
+  typeof ChatMessageReactionSchema
 >;
 
-export type FractalChatMessageTypeMetadata = z.infer<
-  typeof FractalChatMessageSchema
+export type ChatMessageTypeMetadata = z.infer<
+  typeof ChatMessageSchema
 >;
 
-export type FractalChatMessageMetadata = z.infer<
-  typeof FractalChatMessageSchema
+export type ChatMessageMetadata = z.infer<
+  typeof ChatMessageSchema
 >;
 
-export type FractalChatMessage = UIMessage<FractalChatMessageMetadata>;
+export type ChatMessage = UIMessage<ChatMessageMetadata>;
 
 /** Type definition for a Chat record. */
 export type Chat = z.infer<typeof ChatSchema>;
@@ -386,7 +386,7 @@ export type CreateChatInput = z.infer<typeof CreateChatSchema> & {
 
 /** Type definition for the input used to update a Chat. */
 export type UpdateChatInput = z.infer<typeof UpdateChatSchema> & {
-  messages?: FractalChatMessage[];
+  messages?: ChatMessage[];
 };
 
 /** Type definition for the input used to delete a Chat. */
@@ -456,16 +456,10 @@ export interface IChatService {
     provider: string;
     channelId: string;
     userId?: string;
-    message: FractalChatMessage;
+    message: ChatMessage;
     task?: string;
   }): Promise<any>;
   toggleReaction(params: ToggleReactionInput): Promise<ChatServiceUpdateResult>;
   process(params: ChatProcessInput): Promise<ChatProcessResult>;
 }
 
-/**
- * Alias for the freshly-copied `v401/web` presentation code
- * (`services/chat/chat-kind.helper.ts`), which imports the `Fractal`-
- * prefixed name — same reasoning as `agent.interfaces.ts`'s `FractalAgent`.
- */
-export type FractalChatKind = ChatKind;

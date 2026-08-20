@@ -25,9 +25,9 @@ import { api } from "@/lib/aos-facade";
 import { aos } from "@/app/aos";
 import { useRealtime } from "@/hooks/use-realtime";
 import type {
-  FractalFile,
-  FractalFileExplorerContext,
-  FractalFileExplorerSnapshot,
+  WorkspaceFile,
+  FileExplorerContext,
+  FileExplorerSnapshot,
 } from "@/features/file/interfaces/file.interfaces";
 import { FilesCreateNodeDialog } from "@/features/file/presentation/components/panels/files/components/dialogs/files-create-node.dialog";
 import {
@@ -73,7 +73,7 @@ function toTreeIcons(set: string, colored: boolean) {
 
 function normalizeExplorerSnapshot(
   data: unknown,
-): FractalFileExplorerSnapshot | undefined {
+): FileExplorerSnapshot | undefined {
   if (!data || typeof data !== "object") {
     return undefined;
   }
@@ -92,7 +92,7 @@ function normalizeExplorerSnapshot(
     return undefined;
   }
 
-  return candidate as FractalFileExplorerSnapshot;
+  return candidate as FileExplorerSnapshot;
 }
 
 export function FilesExplorerGroup() {
@@ -158,7 +158,7 @@ function FilesExplorerGroupInner() {
   const readOnlyRef = React.useRef(snapshot?.readOnly ?? false);
   readOnlyRef.current = snapshot?.readOnly ?? false;
 
-  const openFileTabRef = React.useRef<(file: FractalFile) => void>(() => {});
+  const openFileTabRef = React.useRef<(file: WorkspaceFile) => void>(() => {});
 
   const { model } = useFileTree({
     paths: [],
@@ -220,14 +220,14 @@ function FilesExplorerGroupInner() {
       if (!file || file.type !== "file") return;
 
       // `indexed` (from `pathIndex`, loosely typed by design — see
-      // `file.interfaces.ts`'s `FractalFileExplorerSnapshot` doc comment)
-      // doesn't structurally match `FractalFile` even after the `type`
+      // `file.interfaces.ts`'s `FileExplorerSnapshot` doc comment)
+      // doesn't structurally match `WorkspaceFile` even after the `type`
       // narrowing above.
       openFileTabRef.current(file as any);
     },
   });
 
-  function openFileTab(file: FractalFile) {
+  function openFileTab(file: WorkspaceFile) {
     const readOnly = snapshotRef.current?.readOnly ?? false;
     const metadata = buildFileTabMetadata(file, explorerContextRef.current, {
       fileReadOnly: readOnly,
@@ -633,7 +633,7 @@ function FilesExplorerGroupInner() {
 async function handleTreeMove(
   fromPath: string,
   toPath: string,
-  explorerContext: FractalFileExplorerContext,
+  explorerContext: FileExplorerContext,
   resync: () => void,
 ) {
   if (!fromPath || !toPath || fromPath === toPath) return;

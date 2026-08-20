@@ -16,10 +16,10 @@ const tabItemSchema = z.object({
 });
 
 /**
- * Fractal-specific and extended json-render catalog definitions.
+ * AOS-specific and extended json-render catalog definitions.
  * Spreads the shadcn baseline, overrides key primitives, and adds SplitPageLayout family.
  */
-export const fractalCatalogDefinitions = {
+export const catalogDefinitions = {
   ...shadcnComponentDefinitions,
 
   Separator: {
@@ -104,7 +104,7 @@ export const fractalCatalogDefinitions = {
       lines: z.number().nullable(),
       className: zClassName,
     }),
-    description: "Paragraph text with Fractal typography tokens.",
+    description: "Paragraph text with AOS typography tokens.",
     example: { text: "Hello, world!" },
   },
 
@@ -127,7 +127,7 @@ export const fractalCatalogDefinitions = {
       className: zClassName,
     }),
     description:
-      "Renders markdown with Fractal MarkdownContent (tasks/chat parity). Bind content via $state, e.g. { $state: '/items/0/body' }.",
+      "Renders markdown with AOS MarkdownContent (tasks/chat parity). Bind content via $state, e.g. { $state: '/items/0/body' }.",
     example: {
       content: "## Overview\n\nMarkdown from GitHub or any source.",
       isUserMessage: false,
@@ -164,7 +164,7 @@ export const fractalCatalogDefinitions = {
         .nullable(),
       className: zClassName,
     }),
-    description: "Status badge with Fractal color palette.",
+    description: "Status badge with AOS color palette.",
     example: { text: "Open", variant: "secondary" },
   },
 
@@ -226,7 +226,7 @@ export const fractalCatalogDefinitions = {
     }),
     events: ["change"],
     description:
-      "Fractal subtle tabs (animated pill). Use { $bindState } on value for active tab.",
+      "AOS subtle tabs (animated pill). Use { $bindState } on value for active tab.",
   },
 
   Button: {
@@ -252,7 +252,7 @@ export const fractalCatalogDefinitions = {
     }),
     events: ["press"],
     description:
-      "Fractal button (shadcn variants). primary→default, danger→destructive.",
+      "AOS button (shadcn variants). primary→default, danger→destructive.",
     example: { label: "Submit", variant: "default" },
   },
 
@@ -280,7 +280,7 @@ export const fractalCatalogDefinitions = {
       className: zClassName,
     }),
     events: ["submit", "focus", "blur"],
-    description: "Text input with Fractal styling.",
+    description: "Text input with AOS styling.",
   },
 
   SplitPageLayout: {
@@ -403,8 +403,8 @@ export const fractalCatalogDefinitions = {
   },
 } ;
 
-export type FractalCatalogComponentName = keyof typeof fractalCatalogDefinitions;
+export type CatalogComponentName = keyof typeof catalogDefinitions;
 
-export const FRACTAL_REGISTRY_COMPONENT_NAMES = Object.keys(
-  fractalCatalogDefinitions,
-) as FractalCatalogComponentName[];
+export const AOS_REGISTRY_COMPONENT_NAMES = Object.keys(
+  catalogDefinitions,
+) as CatalogComponentName[];

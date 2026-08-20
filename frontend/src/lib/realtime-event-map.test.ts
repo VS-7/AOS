@@ -15,7 +15,7 @@ function fakeQueryClient() {
 }
 
 /** The subscribe/resolve/adapt sequence `hooks/use-realtime.ts` runs. */
-function subscribeFractalEvent(name: string, callback: (payload: unknown) => void): () => void {
+function subscribeEvent(name: string, callback: (payload: unknown) => void): () => void {
   const entry = REALTIME_EVENT_MAP[name];
   if (!entry) return () => {};
   const descriptor = typeof entry === "string" ? { type: entry } : entry;
@@ -28,7 +28,7 @@ function subscribeFractalEvent(name: string, callback: (payload: unknown) => voi
 describe("REALTIME_EVENT_MAP, exercised through the real delivery pipeline", () => {
   it("chat:refresh fires on the daemon's chat.done, with chatId lifted from event.data.chat", () => {
     const payloads: any[] = [];
-    const unsubscribe = subscribeFractalEvent("chat:refresh", (p) => payloads.push(p));
+    const unsubscribe = subscribeEvent("chat:refresh", (p) => payloads.push(p));
 
     const daemonEvent: RealtimeEvent = { type: "chat.done", data: { chat: "c-42", usage: { tokens: 10 } } };
     deliver(fakeQueryClient() as any, daemonEvent);
@@ -39,7 +39,7 @@ describe("REALTIME_EVENT_MAP, exercised through the real delivery pipeline", () 
 
   it("chat:refresh does not fire on a chat.delta (the daemon has no per-message signal, only end-of-turn)", () => {
     const payloads: any[] = [];
-    const unsubscribe = subscribeFractalEvent("chat:refresh", (p) => payloads.push(p));
+    const unsubscribe = subscribeEvent("chat:refresh", (p) => payloads.push(p));
 
     deliver(fakeQueryClient() as any, { type: "chat.delta", data: { chat: "c-42", text: "hi" } });
 
@@ -49,7 +49,7 @@ describe("REALTIME_EVENT_MAP, exercised through the real delivery pipeline", () 
 
   it("activity:created fires on the daemon's activity, reshaped into NotificationPayload", () => {
     const payloads: any[] = [];
-    const unsubscribe = subscribeFractalEvent("activity:created", (p) => payloads.push(p));
+    const unsubscribe = subscribeEvent("activity:created", (p) => payloads.push(p));
 
     const daemonEvent: RealtimeEvent = {
       type: "activity",
@@ -89,7 +89,7 @@ describe("REALTIME_EVENT_MAP, exercised through the real delivery pipeline", () 
     // Subscribing to a null entry must not throw and must simply never call
     // back — verified, not assumed.
     const payloads: any[] = [];
-    const unsubscribe = subscribeFractalEvent("chat:start-processing", (p) => payloads.push(p));
+    const unsubscribe = subscribeEvent("chat:start-processing", (p) => payloads.push(p));
     deliver(fakeQueryClient() as any, { type: "chat.delta", data: { chat: "c-1" } });
     expect(payloads).toEqual([]);
     unsubscribe();
@@ -97,7 +97,7 @@ describe("REALTIME_EVENT_MAP, exercised through the real delivery pipeline", () 
 
   it("files:changed fires on collection.changed and produces a changes array with the path", () => {
     const payloads: any[] = [];
-    const unsubscribe = subscribeFractalEvent("files:changed", (p) => payloads.push(p));
+    const unsubscribe = subscribeEvent("files:changed", (p) => payloads.push(p));
 
     deliver(fakeQueryClient() as any, { type: "collection.changed", data: { path: "notes/todo.md", op: "update" } });
 

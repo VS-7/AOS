@@ -10,11 +10,11 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { toast } from "sonner";
 
 import type {
-  FractalMarketplaceInstalledSkill,
-  FractalMarketplaceSkill,
-  FractalMarketplaceSkillComponentItem,
-  FractalMarketplaceSkillInventory,
-  FractalMarketplaceSkillListing,
+  MarketplaceInstalledSkill,
+  MarketplaceSkill,
+  MarketplaceSkillComponentItem,
+  MarketplaceSkillInventory,
+  MarketplaceSkillListing,
 } from "@/features/marketplace/interfaces/marketplace.interfaces";
 import { MarketplaceInstallButton } from "@/features/marketplace/presentation/components/marketplace-install-button.component";
 import {
@@ -51,12 +51,12 @@ import { Label } from "@/components/ui/label";
 import { aos } from "@/app/aos";
 
 interface MarketplaceDetailsPageInnerProps {
-  plugin: FractalMarketplaceSkill;
-  inventory: FractalMarketplaceSkillInventory;
+  plugin: MarketplaceSkill;
+  inventory: MarketplaceSkillInventory;
   sourceUrl: string;
   isInstalled: boolean;
-  installedSkill?: FractalMarketplaceInstalledSkill;
-  related: FractalMarketplaceSkillListing[];
+  installedSkill?: MarketplaceInstalledSkill;
+  related: MarketplaceSkillListing[];
   installedNames: string[];
 }
 
@@ -72,7 +72,7 @@ export function MarketplaceDetailsPageInner({
   const router = useRouter();
   const navigate = useNavigate();
   const [selectedItem, setSelectedItem] =
-    React.useState<FractalMarketplaceSkillComponentItem | null>(null);
+    React.useState<MarketplaceSkillComponentItem | null>(null);
   const [sheetOpen, setSheetOpen] = React.useState(false);
 
   const installedNameSet = React.useMemo(
@@ -112,7 +112,7 @@ export function MarketplaceDetailsPageInner({
       },
     });
 
-  function handleToolsetClick(item: FractalMarketplaceSkillComponentItem) {
+  function handleToolsetClick(item: MarketplaceSkillComponentItem) {
     if (item.kind !== "toolsets") return;
     setSelectedItem(item);
     setSheetOpen(true);
@@ -148,7 +148,7 @@ export function MarketplaceDetailsPageInner({
               </p>
               <p>
                 Verified by{" "}
-                <span className="font-medium text-foreground">Fractal</span>
+                <span className="font-medium text-foreground">AOS</span>
               </p>
               {sourceUrl ? (
                 <a

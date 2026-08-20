@@ -1,4 +1,4 @@
-import type { FractalArtifactListItem } from "@/features/artifact/interfaces/artifact.interfaces";
+import type { ArtifactListItem } from "@/features/artifact/interfaces/artifact.interfaces";
 import type { ViewportTabState } from "@/features/workspace/presentation/stores/viewport.store";
 import { aos } from "@/app/aos";
 
@@ -32,7 +32,7 @@ export class ArtifactHelper {
    *
    * @param artifact - Artifact list item with resolved URLs.
    */
-  public static openInBrowserTab(artifact: FractalArtifactListItem): void {
+  public static openInBrowserTab(artifact: ArtifactListItem): void {
     const viewportTabs = aos.stores.viewport.state.tabs;
 
     const existingTab = viewportTabs.items.find(

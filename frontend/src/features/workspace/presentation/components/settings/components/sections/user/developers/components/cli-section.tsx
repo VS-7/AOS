@@ -18,8 +18,13 @@ import {
 } from "@/components/ui/form-section";
 import { cn } from "@/lib/utils";
 
-const CLI_INSTALL_COMMAND = "npm install -g @fractal-os/cli";
-const CLI_VERSION_LABEL = "Fractal CLI is available via npm.";
+// No npm distribution (see docs/08 - Entrega/Build e Cross-Compile.md's "Sem
+// distribuição via npm" decision) — the original's Node shim existed only to
+// ship binaries through a JS package manager, which a native Go binary
+// doesn't need. `go install` is the one install path that needs no download
+// host of its own.
+const CLI_INSTALL_COMMAND = "go install github.com/OWNER/aos/cmd/aos@latest";
+const CLI_VERSION_LABEL = "AOS CLI, installed with Go.";
 
 const CLI_CAPABILITIES: {
   icon: IconSvgElement;
@@ -30,21 +35,21 @@ const CLI_CAPABILITIES: {
   {
     icon: Plug01Icon,
     title: "MCP Server",
-    command: "fractal --mcp",
+    command: "aos --mcp",
     description:
-      "Connect Fractal to your agent or coding tool as an MCP server.",
+      "Connect AOS to your agent or coding tool as an MCP server.",
   },
   {
     icon: Rocket01Icon,
     title: "Gateway",
-    command: "fractal gateway start",
-    description: "Start the local Fractal gateway from your terminal.",
+    command: "aos gateway start",
+    description: "Start the local AOS gateway from your terminal.",
   },
   {
     icon: StartUp01Icon,
     title: "Onboarding",
-    command: "fractal onboarding",
-    description: "Run the Fractal onboarding flow to set up a workspace.",
+    command: "aos onboarding",
+    description: "Run the AOS onboarding flow to set up a workspace.",
   },
 ];
 
@@ -154,7 +159,7 @@ export function DevelopersCliSection() {
 
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             <p className="text-sm text-muted-foreground">
-              Browse and run Fractal from the command line. Works directly with
+              Browse and run AOS from the command line. Works directly with
               Codex, Claude Code, and more.
             </p>
             <p className="text-sm font-semibold text-foreground">

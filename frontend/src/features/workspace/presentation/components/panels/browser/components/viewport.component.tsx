@@ -31,7 +31,7 @@ export function BrowserViewport({
             <AnimatedEmptyState.Content>
               <AnimatedEmptyState.Title>Browser is available in the Electron app</AnimatedEmptyState.Title>
               <AnimatedEmptyState.Description>
-                The Browser workspace needs the native Fractal bridge to render secure web content.
+                The Browser workspace needs the native AOS bridge to render secure web content.
               </AnimatedEmptyState.Description>
             </AnimatedEmptyState.Content>
           </AnimatedEmptyState>

@@ -19,7 +19,7 @@ import {
   TASK_STATUS_ORDER,
   TASK_PRIORITY_CONFIG,
 } from "../../../../consts/task";
-import type { FractalTaskPriority } from "@/features/task/interfaces/task.interfaces";
+import type { TaskPriority } from "@/features/task/interfaces/task.interfaces";
 import { TaskHelper } from "../../../../helpers/task.helper";
 import { useTasksContext } from "@/features/task/presentation/pages/(main)/context";
 import { aos } from "@/app/aos";
@@ -175,10 +175,10 @@ export function TasksFilter() {
               <DropdownMenuCheckboxItem
                 key={priority}
                 checked={selectedPriorities.includes(
-                  priority as FractalTaskPriority,
+                  priority as TaskPriority,
                 )}
                 onCheckedChange={() =>
-                  handleTogglePriority(priority as FractalTaskPriority)
+                  handleTogglePriority(priority as TaskPriority)
                 }
               >
                 <Icon className={`mr-2 size-4 ${config.colorClass}`} />

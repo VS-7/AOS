@@ -21,12 +21,12 @@ import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { aos } from "@/app/aos";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
 import type {
-  FractalTask,
-  FractalTaskWithContext,
+  Task,
+  TaskWithContext,
 } from "@/features/task/interfaces/task.interfaces";
 
 interface DependenciesWidgetProps {
-  task: FractalTaskWithContext;
+  task: TaskWithContext;
 }
 
 /**
@@ -49,8 +49,8 @@ export function DependenciesWidget({ task }: DependenciesWidgetProps) {
     query: { limit: "200" },
     enabled: pickerOpen,
   });
-  const tasks: FractalTask[] =
-    (tasksData as { tasks: FractalTask[] } | null | undefined)?.tasks ?? [];
+  const tasks: Task[] =
+    (tasksData as { tasks: Task[] } | null | undefined)?.tasks ?? [];
 
   const currentIds = new Set(dependsOnIds);
   const candidates = tasks.filter(

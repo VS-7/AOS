@@ -1,4 +1,4 @@
-import type { FractalAgent } from "@/features/agent/interfaces/agent.interfaces"
+import type { Agent } from "@/features/agent/interfaces/agent.interfaces"
 import type { ComposerReference } from "../components/composer/composer.types"
 
 export type ChatInlineSourceType = "file" | "folder" | "skill"
@@ -31,7 +31,7 @@ export class ChatInlineMarkupHelper {
   private static readonly INLINE_TAG_PATTERN = /<source\b[^>]*>|<mention\b[^>]*>/g
   private static readonly ATTRIBUTE_PATTERN = /([a-zA-Z_:][\w:.-]*)="([^"]*)"/g
 
-  public static buildMentionTag(agent: FractalAgent | { id: string }) {
+  public static buildMentionTag(agent: Agent | { id: string }) {
     return `<mention id="${agent.id}">`
   }
 

@@ -6,9 +6,9 @@ import { z } from "zod";
 import { aos } from "@/app/aos";
 import { SettingsSectionShell } from "../../../section-shell";
 import { Form } from "@/components/ui/form";
-import { FractalAppError } from "@/core/errors/fractal.error";
-import { FractalWorkspaceTaskType } from "@/features/workspace/interfaces/workspace.interfaces";
-import { FractalWorkspaceTaskTypeSchema } from "@/features/workspace/schemas/workspace.schema";
+import { AppError } from "@/core/errors/aos.error";
+import { WorkspaceTaskType } from "@/features/workspace/interfaces/workspace.interfaces";
+import { WorkspaceTaskTypeSchema } from "@/features/workspace/schemas/workspace.schema";
 import { toast } from "sonner";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Button } from "@/components/ui/button";
@@ -16,12 +16,12 @@ import { Spinner } from "@/components/ui/spinner";
 import { UpsertTaskTypeView } from "./views/upsert-task-type.view";
 
 const taskTypesFormSchema = z.object({
-  tasks: z.array(FractalWorkspaceTaskTypeSchema).min(1, "At least one task type is required."),
+  tasks: z.array(WorkspaceTaskTypeSchema).min(1, "At least one task type is required."),
 });
 
 export function WorkspaceTasksSection() {
   
-  // `aos.useContext()` is Fractal's global route context (`withContext(...)`),
+  // `aos.useContext()` is AOS's global route context (`withContext(...)`),
   // which this port's `app/aos.tsx` never wires -- `DefaultContext` (`app/
   // builders/types.ts`) is deliberately loose (`Record<string, any>`) for
   // exactly this unset case, so no per-call-site cast is needed here.
@@ -30,7 +30,7 @@ export function WorkspaceTasksSection() {
   const [search, setSearch] = useState("");
   const [upsertOpen, setUpsertOpen] = useState(false);
   const [selectedTaskType, setSelectedTaskType] = useState<
-    { data: FractalWorkspaceTaskType; index: number } | undefined
+    { data: WorkspaceTaskType; index: number } | undefined
   >();
 
   const form = aos.useForm({
@@ -42,7 +42,7 @@ export function WorkspaceTasksSection() {
       // `WorkspaceTaskType`) types `label`/`color` optional — Go's
       // `workspace_get` doesn't always populate them (see that file's own
       // doc comment on the honest-empty-state policy). This form's Zod
-      // schema (`FractalWorkspaceTaskTypeSchema`, pristine) requires both
+      // schema (`WorkspaceTaskTypeSchema`, pristine) requires both
       // as non-empty strings, so entries missing either get the same
       // fallback the empty-workspace default below already uses, rather
       // than widening the schema itself to accept what Go's shape allows.
@@ -60,7 +60,7 @@ export function WorkspaceTasksSection() {
     }),
     onResponse: ({ error }) => {
       if (error) {
-        if (error instanceof FractalAppError) {
+        if (error instanceof AppError) {
           toast.error(error.message);
           return;
         }
@@ -78,7 +78,7 @@ export function WorkspaceTasksSection() {
   // shape from `taskTypesFormSchema` through to `form.control` here, so
   // `useFieldArray` falls back to react-hook-form's default (untyped)
   // field shape without this explicit type parameter.
-  const taskTypesFieldArray = useFieldArray<{ tasks: FractalWorkspaceTaskType[] }, "tasks">({
+  const taskTypesFieldArray = useFieldArray<{ tasks: WorkspaceTaskType[] }, "tasks">({
     control: form.control as any,
     name: "tasks",
   });
@@ -91,7 +91,7 @@ export function WorkspaceTasksSection() {
         item.field.id.toLowerCase().includes(search.toLowerCase()),
     );
 
-  function handleSave(data: FractalWorkspaceTaskType, index?: number) {
+  function handleSave(data: WorkspaceTaskType, index?: number) {
     if (index !== undefined) {
       taskTypesFieldArray.update(index, data);
     } else {

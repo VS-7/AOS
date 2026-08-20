@@ -2,10 +2,10 @@ import React from "react"
 import { ExternalLink, Search, ZoomIn, ZoomOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import type { FractalFile } from "@/features/file/interfaces/file.interfaces"
+import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces"
 
 interface FilesPdfViewerProps {
-  file: FractalFile
+  file: WorkspaceFile
   onOpenExternal: () => void
 }
 

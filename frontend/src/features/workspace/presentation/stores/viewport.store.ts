@@ -49,9 +49,9 @@ export interface ViewportVisibilityState {
 }
 
 const INITIAL_APP_TAB: ViewportTabState = {
-  id: "fractal",
+  id: "aos",
   type: "in-app",
-  title: "Fractal",
+  title: "AOS",
   closable: false,
   metadata: {
     hasPageSidebar: false,
@@ -76,7 +76,7 @@ export const ViewportStore = AosStore.create("viewport")
     commander: { dialog: { visible: false } },
     tabs: {
       items: [INITIAL_APP_TAB] as ViewportTabState[],
-      current: "fractal" as string,
+      current: "aos" as string,
     },
   })
   .withNamespace({
@@ -122,7 +122,7 @@ export const ViewportStore = AosStore.create("viewport")
           tabs: {
             ...state.tabs,
             items: state.tabs.items.map((tab) =>
-              tab.id === "fractal"
+              tab.id === "aos"
                 ? {
                     ...tab,
                     title: metadata.title,
@@ -291,7 +291,7 @@ export const ViewportStore = AosStore.create("viewport")
   })
   .addAction("closeTab", (ctx) => (tabId: string) => {
     const state = ctx.state.get();
-    if (tabId === "fractal") return;
+    if (tabId === "aos") return;
 
     const tabIndex = state.tabs.items.findIndex((t) => t.id === tabId);
     if (tabIndex === -1) return;
@@ -300,7 +300,7 @@ export const ViewportStore = AosStore.create("viewport")
     let nextActiveId = state.tabs.current;
 
     if (state.tabs.current === tabId) {
-      nextActiveId = state.tabs.items[tabIndex - 1]?.id || "fractal";
+      nextActiveId = state.tabs.items[tabIndex - 1]?.id || "aos";
     }
 
     ctx.state.set({
@@ -312,14 +312,14 @@ export const ViewportStore = AosStore.create("viewport")
   })
   .addAction("reorderTabs", (ctx) => (activeId: string, overId: string) => {
     if (activeId === overId) return;
-    if (activeId === "fractal" || overId === "fractal") return;
+    if (activeId === "aos" || overId === "aos") return;
 
     const state = ctx.state.get();
-    const anchorIndex = state.tabs.items.findIndex((tab) => tab.id === "fractal");
+    const anchorIndex = state.tabs.items.findIndex((tab) => tab.id === "aos");
     if (anchorIndex === -1) return;
 
     const anchor = state.tabs.items[anchorIndex];
-    const movable = state.tabs.items.filter((tab) => tab.id !== "fractal");
+    const movable = state.tabs.items.filter((tab) => tab.id !== "aos");
 
     const oldIndex = movable.findIndex((tab) => tab.id === activeId);
     const newIndex = movable.findIndex((tab) => tab.id === overId);

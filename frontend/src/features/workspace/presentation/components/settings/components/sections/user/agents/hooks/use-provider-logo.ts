@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { aos } from "@/app/aos";
-import type { FractalModelProvider } from "@/features/model/interfaces/model.interfaces";
+import type { ModelProvider } from "@/features/model/interfaces/model.interfaces";
 
 /**
  * Resolves the provider logo URL for the active theme mode.
@@ -12,7 +12,7 @@ import type { FractalModelProvider } from "@/features/model/interfaces/model.int
  * currently active in the UI (light / dark / system -> follows OS) to pick
  * the right one.
  */
-export function useProviderLogo(provider: Pick<FractalModelProvider, "logo">) {
+export function useProviderLogo(provider: Pick<ModelProvider, "logo">) {
   const themeMode = aos.stores.theme.useState((s) => s.mode);
 
   return React.useMemo(() => {

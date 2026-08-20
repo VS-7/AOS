@@ -12,14 +12,14 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } fr
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { FractalWorkspaceGitSchema } from "@/features/workspace/schemas/workspace.schema";
+import { WorkspaceGitSchema } from "@/features/workspace/schemas/workspace.schema";
 import { toast } from "sonner";
-import { FractalAppError } from "@/core/errors/fractal.error";
+import { AppError } from "@/core/errors/aos.error";
 
 export function WorkspaceGitSection() {
   const router = useRouter();
   
-  // `aos.useContext()` is Fractal's global route context (`withContext(...)`),
+  // `aos.useContext()` is AOS's global route context (`withContext(...)`),
   // which this port's `app/aos.tsx` never wires -- `DefaultContext` (`app/
   // builders/types.ts`) is deliberately loose (`Record<string, any>`) for
   // exactly this unset case, so no per-call-site cast is needed here.
@@ -27,7 +27,7 @@ export function WorkspaceGitSection() {
   const currentWorkspace = context.workspaces?.current;
 
   const form = aos.useForm({
-    schema: FractalWorkspaceGitSchema,
+    schema: WorkspaceGitSchema,
     mode: "onChange",
     mutation: "workspace.update",
     values: {
@@ -42,7 +42,7 @@ export function WorkspaceGitSection() {
     }),
     onResponse: ({ error }) => {
       if (error) {
-        if (error instanceof FractalAppError) {
+        if (error instanceof AppError) {
           toast.error(error.message);
           return;
         }

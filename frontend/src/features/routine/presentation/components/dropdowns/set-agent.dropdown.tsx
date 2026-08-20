@@ -5,7 +5,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarAgentFallback } from "@/components/ui/avatar";
 import { aos } from "@/app/aos";
-import { FractalRoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
+import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
 import { ROUTINE_RESERVED_AGENT_CONFIG } from "@/features/routine/presentation/consts/routine";
 
 interface SetRoutineAgentDropdownProps {
@@ -25,7 +25,7 @@ export function SetRoutineAgentDropdown({
         Workspace targets
       </DropdownMenuLabel>
 
-      {FractalRoutineHelper.RESERVED_AGENTS.map((agentId) => (
+      {RoutineHelper.RESERVED_AGENTS.map((agentId) => (
         <DropdownMenuItem
           key={agentId}
           onClick={() => onAgentChange(agentId)}

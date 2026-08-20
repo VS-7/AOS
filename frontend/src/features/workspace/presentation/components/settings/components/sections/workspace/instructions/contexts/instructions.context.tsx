@@ -8,7 +8,7 @@ import React, {
 import { z } from "zod";
 import { toast } from "sonner";
 import { aos } from "@/app/aos";
-import type { FractalInstruction } from "@/features/instruction/interfaces/instruction.interfaces";
+import type { Instruction } from "@/features/instruction/interfaces/instruction.interfaces";
 
 const NEW_INSTRUCTION_ID = "__new_instruction__";
 
@@ -23,10 +23,10 @@ const instructionFormSchema = z.object({
 type InstructionFormValues = z.infer<typeof instructionFormSchema>;
 
 interface InstructionsContextType {
-  instructions: FractalInstruction[];
-  filteredInstructions: FractalInstruction[];
+  instructions: Instruction[];
+  filteredInstructions: Instruction[];
   selectedInstructionId: string | null;
-  selectedInstruction: FractalInstruction | undefined;
+  selectedInstruction: Instruction | undefined;
   isCreateMode: boolean;
   isLoadingContent: boolean;
   isDeleting: boolean;
@@ -42,12 +42,12 @@ const InstructionsContext = createContext<InstructionsContextType | null>(null);
 
 interface InstructionsProviderProps {
   children: React.ReactNode;
-  instructions: FractalInstruction[];
+  instructions: Instruction[];
   refreshInstructions: () => Promise<void>;
 }
 
 function buildInstructionFormValues(
-  instruction?: FractalInstruction | null,
+  instruction?: Instruction | null,
 ): InstructionFormValues {
   return {
     name: instruction?.name ?? "",
@@ -87,7 +87,7 @@ export function InstructionsProvider({
     string | null
   >(null);
   const [selectedInstructionFull, setSelectedInstructionFull] = useState<
-    FractalInstruction | undefined
+    Instruction | undefined
   >(undefined);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");

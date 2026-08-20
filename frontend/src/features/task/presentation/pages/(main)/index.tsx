@@ -2,7 +2,7 @@ import { aos } from "@/app/aos";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
 import { Schema } from "@/core/helpers/schema.helper";
 import { z } from "zod";
-import type { FractalTask, FractalTaskPriority } from "@/features/task/interfaces/task.interfaces";
+import type { Task, TaskPriority } from "@/features/task/interfaces/task.interfaces";
 
 import { TasksProvider } from "./context";
 import { TasksPageInner } from "./inner";
@@ -41,7 +41,7 @@ export const TasksPage = aos
   .withLoader(async ({ client, request }) => {
     const query = request.query || {};
     const priority = parseOptionalMultiValue(query.priority) as
-      | FractalTaskPriority[]
+      | TaskPriority[]
       | undefined;
     const type = parseOptionalMultiValue(query.type);
     const project = parseOptionalMultiValue(query.project);
@@ -62,7 +62,7 @@ export const TasksPage = aos
     // client, so every call site that reads `.data` needs this cast; Go's
     // own input/output validation is the real safety net, per the
     // facade's own docs.
-    const data = response.data as { tasks: FractalTask[] } | undefined;
+    const data = response.data as { tasks: Task[] } | undefined;
     const tasks = data?.tasks || [];
     return { tasks };
   })

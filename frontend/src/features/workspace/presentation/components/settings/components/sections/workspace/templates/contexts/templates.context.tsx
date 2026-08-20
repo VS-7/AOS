@@ -8,7 +8,7 @@ import React, {
 import { z } from "zod";
 import { toast } from "sonner";
 import { aos } from "@/app/aos";
-import type { FractalTemplate } from "@/features/template/interfaces/template.interfaces";
+import type { Template } from "@/features/template/interfaces/template.interfaces";
 
 const NEW_TEMPLATE_ID = "__new_template__";
 
@@ -24,10 +24,10 @@ const templateFormSchema = z.object({
 type TemplateFormValues = z.infer<typeof templateFormSchema>;
 
 interface TemplatesContextType {
-  templates: Omit<FractalTemplate, "schema" | "content">[];
-  filteredTemplates: Omit<FractalTemplate, "schema" | "content">[];
+  templates: Omit<Template, "schema" | "content">[];
+  filteredTemplates: Omit<Template, "schema" | "content">[];
   selectedTemplateId: string | null;
-  selectedTemplate: FractalTemplate | undefined;
+  selectedTemplate: Template | undefined;
   isCreateMode: boolean;
   isLoadingContent: boolean;
   isDeleting: boolean;
@@ -43,12 +43,12 @@ const TemplatesContext = createContext<TemplatesContextType | null>(null);
 
 interface TemplatesProviderProps {
   children: React.ReactNode;
-  templates: Omit<FractalTemplate, "schema" | "content">[];
+  templates: Omit<Template, "schema" | "content">[];
   refreshTemplates: () => Promise<void>;
 }
 
 function buildTemplateFormValues(
-  template?: FractalTemplate | null,
+  template?: Template | null,
 ): TemplateFormValues {
   return {
     name: template?.name ?? "",
@@ -62,7 +62,7 @@ function buildTemplateFormValues(
   };
 }
 
-function parseFractalTemplateSchema(schemaText?: string) {
+function parseTemplateSchema(schemaText?: string) {
   const trimmed = schemaText?.trim();
 
   if (!trimmed) return undefined;
@@ -76,7 +76,7 @@ function getTemplatePayload(values: TemplateFormValues) {
     skill: values.skill?.trim() || undefined,
     description: values.description.trim(),
     output: values.output?.trim() || undefined,
-    schema: parseFractalTemplateSchema(values.schemaText),
+    schema: parseTemplateSchema(values.schemaText),
     content: values.content?.trim() || undefined,
   };
 }
@@ -95,7 +95,7 @@ export function TemplatesProvider({
     null,
   );
   const [selectedTemplateFull, setSelectedTemplateFull] = useState<
-    FractalTemplate | undefined
+    Template | undefined
   >(undefined);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -111,7 +111,7 @@ export function TemplatesProvider({
       try {
         body = getTemplatePayload(values);
       } catch {
-        toast.error("FractalTemplate schema must be valid JSON.");
+        toast.error("Template schema must be valid JSON.");
         return;
       }
 
@@ -125,11 +125,11 @@ export function TemplatesProvider({
           return;
         }
 
-        toast.success("FractalTemplate created.");
+        toast.success("Template created.");
         await refreshTemplates();
-        setSelectedTemplateFull(createdTemplate as FractalTemplate);
+        setSelectedTemplateFull(createdTemplate as Template);
         setSelectedTemplateId(createdTemplate.id);
-        form.reset(buildTemplateFormValues(createdTemplate as FractalTemplate));
+        form.reset(buildTemplateFormValues(createdTemplate as Template));
         return;
       }
 
@@ -153,17 +153,17 @@ export function TemplatesProvider({
         return;
       }
 
-      toast.success("FractalTemplate updated.");
+      toast.success("Template updated.");
       await refreshTemplates();
-      setSelectedTemplateFull(updatedTemplate as FractalTemplate);
-      form.reset(buildTemplateFormValues(updatedTemplate as FractalTemplate));
+      setSelectedTemplateFull(updatedTemplate as Template);
+      form.reset(buildTemplateFormValues(updatedTemplate as Template));
     },
   });
 
   const { mutate: deleteTemplate, loading: isDeleting } =
     aos.client.template.delete.useMutation({
       onSuccess: async () => {
-        toast.success("FractalTemplate deleted.");
+        toast.success("Template deleted.");
         await refreshTemplates();
         setSelectedTemplateId(null);
         setSelectedTemplateFull(undefined);
@@ -206,8 +206,8 @@ export function TemplatesProvider({
     );
 
     if (baseTemplate) {
-      setSelectedTemplateFull(baseTemplate as FractalTemplate);
-      form.reset(buildTemplateFormValues(baseTemplate as FractalTemplate));
+      setSelectedTemplateFull(baseTemplate as Template);
+      form.reset(buildTemplateFormValues(baseTemplate as Template));
     }
 
     setIsLoadingContent(true);
@@ -216,8 +216,8 @@ export function TemplatesProvider({
       .query({ params: { template: selectedTemplateId } })
       .then((response) => {
         if (response.data?.id) {
-          setSelectedTemplateFull(response.data as FractalTemplate);
-          form.reset(buildTemplateFormValues(response.data as FractalTemplate));
+          setSelectedTemplateFull(response.data as Template);
+          form.reset(buildTemplateFormValues(response.data as Template));
         }
       })
       .finally(() => {

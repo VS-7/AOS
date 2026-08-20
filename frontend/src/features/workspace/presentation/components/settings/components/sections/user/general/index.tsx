@@ -19,7 +19,7 @@ import {
   Form,
 } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
-import { FractalAppError } from "@/core/errors/fractal.error";
+import { AppError } from "@/core/errors/aos.error";
 import { toast } from "sonner";
 
 const generalFormSchema = z.object({
@@ -30,7 +30,7 @@ const generalFormSchema = z.object({
 export function UserGeneralSection() {
   const router = useRouter();
   
-  // `aos.useContext()` is Fractal's global route context (`withContext(...)`),
+  // `aos.useContext()` is AOS's global route context (`withContext(...)`),
   // which this port's `app/aos.tsx` never wires -- `DefaultContext` (`app/
   // builders/types.ts`) is deliberately loose (`Record<string, any>`) for
   // exactly this unset case, so no per-call-site cast is needed here.
@@ -52,7 +52,7 @@ export function UserGeneralSection() {
     }),
     onResponse: ({ error }) => {
       if (error) {
-        if (error instanceof FractalAppError) {
+        if (error instanceof AppError) {
           toast.error(error.message);
           return;
         }

@@ -11,8 +11,8 @@ import { useRouter } from "@tanstack/react-router";
 
 export const LoginPage = aos.page("/login")
   .withMetadata({
-    title: "Login — Fractal",
-    description: "Authenticate to access your Fractal instance",
+    title: "Login — AOS",
+    description: "Authenticate to access your AOS instance",
   })
   .use(WorkspacePageMiddleware())
   .withComponent(({ route }) => {
@@ -73,7 +73,7 @@ export const LoginPage = aos.page("/login")
               </div>
 
               <h1 className="text-3xl font-bold tracking-tight">
-                Log in to Fractal
+                Log in to AOS
               </h1>
 
               <form

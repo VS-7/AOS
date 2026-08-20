@@ -46,7 +46,7 @@ import { ThemeSelector } from "@/components/ui/theme-selector";
 import { cn } from "@/lib/utils";
 import { SettingsFieldLabel } from "./components/settings-field-label";
 import { getThemePreviewColors } from "@/components/ui/theme-preview-swatch";
-import type { FractalTheme } from "@/features/theme/interfaces/theme.interfaces";
+import type { Theme } from "@/features/theme/interfaces/theme.interfaces";
 
 const SETTINGS_CONTROL_WIDTH = "h-8 w-48 px-2 shadow-none";
 const SETTINGS_SELECT_TRIGGER = cn(
@@ -95,7 +95,7 @@ function buildAppearanceFormValues(values: AppearanceFormValues) {
 export function UserAppearanceSection() {
   const state = aos.stores.theme.useState();
   const themesQuery = aos.client.theme.list.useQuery();
-  const themeList: FractalTheme[] = themesQuery.data?.themes ?? [];
+  const themeList: Theme[] = themesQuery.data?.themes ?? [];
   const mode = useMemo(
     () =>
       state.mode === "system"
@@ -142,7 +142,7 @@ export function UserAppearanceSection() {
     },
   });
 
-  const isNative = typeof window !== "undefined" && !!window.fractal;
+  const isNative = typeof window !== "undefined" && !!window.aos;
   const currentValues = form.watch();
   const themePreviewById = useMemo(() => {
     const map = new Map<
@@ -186,7 +186,7 @@ export function UserAppearanceSection() {
             <FormSectionItem className="border-y-0!">
               <SettingsFieldLabel
                 label="Theme mode"
-                description="Choose how Fractal adapts to your environment"
+                description="Choose how AOS adapts to your environment"
               />
               <FormField
                 control={form.control}

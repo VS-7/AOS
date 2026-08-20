@@ -1,8 +1,8 @@
 import type { CSSProperties } from "react";
 import type {
-  FractalFile,
-  FractalFileExplorerContext,
-  FractalFileExplorerSnapshot,
+  WorkspaceFile,
+  FileExplorerContext,
+  FileExplorerSnapshot,
 } from "@/features/file/interfaces/file.interfaces";
 import type { ThemeIconsConfig } from "@/features/theme/presentation/stores/theme.store";
 import { getIconForExtension } from "@/lib/utils";
@@ -15,18 +15,18 @@ import {
 } from "@/features/file/presentation/helpers/file-viewer.helper";
 
 export function serializeExplorerContext(
-  context: FractalFileExplorerContext,
+  context: FileExplorerContext,
 ): string {
   return JSON.stringify(context);
 }
 
 export function parseExplorerContext(
   value: unknown,
-): FractalFileExplorerContext {
+): FileExplorerContext {
   if (!value) return { type: "main" };
 
   if (typeof value === "object" && value !== null && "type" in value) {
-    const candidate = value as FractalFileExplorerContext;
+    const candidate = value as FileExplorerContext;
     if (candidate.type === "main") return { type: "main" };
     if (candidate.type === "task" && typeof candidate.taskId === "string" && candidate.taskId) {
       return { type: "task", taskId: candidate.taskId };
@@ -52,8 +52,8 @@ export function parseExplorerContext(
 }
 
 export function formatExplorerContextLabel(
-  context: FractalFileExplorerContext,
-  snapshot?: Pick<FractalFileExplorerSnapshot, "tasks"> | null,
+  context: FileExplorerContext,
+  snapshot?: Pick<FileExplorerSnapshot, "tasks"> | null,
 ): string {
   if (context.type === "main") return "main";
   if (context.type === "branch") return context.branch;
@@ -62,8 +62,8 @@ export function formatExplorerContextLabel(
 }
 
 export function explorerContextsEqual(
-  left: FractalFileExplorerContext,
-  right: FractalFileExplorerContext,
+  left: FileExplorerContext,
+  right: FileExplorerContext,
 ): boolean {
   if (left.type !== right.type) return false;
   if (left.type === "task" && right.type === "task") {
@@ -154,7 +154,7 @@ export function synthesizeFileFromPath(
   filePath: string,
   allPaths: readonly string[],
   explorerRootAbsolute?: string,
-): FractalFile {
+): WorkspaceFile {
   const hasTrailingSlash = /\/$/.test(filePath);
   const normalized = filePath.replace(/\/+$/, "");
   const name = basenameOf(normalized);
@@ -190,7 +190,7 @@ export function synthesizeFileFromPath(
 }
 
 /**
- * Tab / fallback icons aligned with Fractal file helpers.
+ * Tab / fallback icons aligned with AOS file helpers.
  * Pierre tree icons stay inside the shadow DOM via theme.icons;
  * tabs reuse Lucide mapped by extension for a consistent language.
  */
@@ -229,8 +229,8 @@ export function getDirectoryTabIcon(): LucideIcon {
 }
 
 export function buildFileTabMetadata(
-  file: FractalFile,
-  explorerContext: FractalFileExplorerContext,
+  file: WorkspaceFile,
+  explorerContext: FileExplorerContext,
   extras?: { fileDirty?: boolean; fileReadOnly?: boolean },
 ) {
   return {

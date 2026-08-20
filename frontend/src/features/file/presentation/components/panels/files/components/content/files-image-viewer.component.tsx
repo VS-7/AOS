@@ -1,10 +1,10 @@
 import React from "react"
 import { Maximize, RotateCw, Scan, ZoomIn, ZoomOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import type { FractalFile } from "@/features/file/interfaces/file.interfaces"
+import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces"
 
 interface FilesImageViewerProps {
-  file: FractalFile
+  file: WorkspaceFile
 }
 
 const SCALE_STEP = 0.15

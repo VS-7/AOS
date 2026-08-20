@@ -4,13 +4,13 @@ import type { ResponseWithCTA } from "@/core/interfaces/response.interfaces";
 /**
  * Recovered from `_extracted/index/src/features/agent/agent.interfaces.ts`
  * (Task 9, replacing the earlier task's hand-written placeholder per
- * controller ruling R16 — the Fractal presentation code this task copies
- * in imports `FractalAgent`, not `Agent`).
+ * controller ruling R16 — the AOS presentation code this task copies
+ * in imports `Agent`, not `Agent`).
  *
- * The source file's `Agent`/`*Agent*` types are renamed to `FractalAgent`/
- * `*FractalAgent*` throughout — a mechanical, disclosed rename: the
+ * The source file's `Agent`/`*Agent*` types are renamed to `Agent`/
+ * `*Agent*` throughout — a mechanical, disclosed rename: the
  * `v401/web` presentation code (`chat-thread.helper.ts`, `agents.context.
- * tsx`, etc.) uniformly imports `FractalAgent`, so this file's source
+ * tsx`, etc.) uniformly imports `Agent`, so this file's source
  * (the backend-side snapshot, where the type is just `Agent`) didn't match
  * the frontend's own now-erased copy by name.
  *
@@ -22,7 +22,7 @@ import type { ResponseWithCTA } from "@/core/interfaces/response.interfaces";
  * `v401/web/src` for named imports from this file) — they belong to the
  * agent execution runtime, not the frontend's agent CRUD/list UI.
  */
-export const FractalAgentChannelSchema = z.object({
+export const AgentChannelSchema = z.object({
   provider: z
     .string()
     .describe("Channel provider slug. Example: 'telegram'"),
@@ -32,8 +32,8 @@ export const FractalAgentChannelSchema = z.object({
 });
 
 /**
- * AgentSchema: Primary schema for a Fractal Agent record.
- * @description Defines the complete structure of a Fractal Agent, including its identity, AI configuration, and system instructions.
+ * AgentSchema: Primary schema for a AOS Agent record.
+ * @description Defines the complete structure of a AOS Agent, including its identity, AI configuration, and system instructions.
  * @example
  * ```typescript
  * const agent = {
@@ -46,7 +46,7 @@ export const FractalAgentChannelSchema = z.object({
  * };
  * ```
  */
-export const FractalAgentSchema = z.object({
+export const AgentSchema = z.object({
   id: z
     .string()
     .describe(
@@ -105,7 +105,7 @@ export const FractalAgentSchema = z.object({
   voice: z.string().optional().describe("Voice name for speech output."),
 
   channels: z
-    .array(FractalAgentChannelSchema)
+    .array(AgentChannelSchema)
     .optional()
     .describe("Configured communication channels for the agent."),
 
@@ -118,23 +118,23 @@ export const FractalAgentSchema = z.object({
 });
 
 /**
- * CreateFractalAgentSchema: Schema for creating a new agent.
+ * CreateAgentSchema: Schema for creating a new agent.
  * @description Excludes generated or internal fields if any (currently includes ID as it is used for file naming).
  */
-export const CreateFractalAgentSchema = FractalAgentSchema.omit({ id: true });
+export const CreateAgentSchema = AgentSchema.omit({ id: true });
 
 /**
- * UpdateFractalAgentSchema: Schema for updating an existing agent.
+ * UpdateAgentSchema: Schema for updating an existing agent.
  * @description Allows partial updates to an agent record, excluding the immutable ID.
  */
-export const UpdateFractalAgentSchema = FractalAgentSchema.omit({ id: true })
+export const UpdateAgentSchema = AgentSchema.omit({ id: true })
   .extend({ agent: z.string() })
   .partial();
 
 /**
- * GetFractalAgentByIdSchema: Schema for retrieving an agent by ID.
+ * GetAgentByIdSchema: Schema for retrieving an agent by ID.
  */
-export const GetFractalAgentByIdSchema = z.object({
+export const GetAgentByIdSchema = z.object({
   id: z
     .string()
     .optional()
@@ -144,9 +144,9 @@ export const GetFractalAgentByIdSchema = z.object({
 });
 
 /**
- * DeleteFractalAgentSchema: Schema for deleting an agent by ID.
+ * DeleteAgentSchema: Schema for deleting an agent by ID.
  */
-export const DeleteFractalAgentSchema = z.object({
+export const DeleteAgentSchema = z.object({
   agent: z
     .string()
     .describe(
@@ -155,40 +155,40 @@ export const DeleteFractalAgentSchema = z.object({
 });
 
 /**
- * FractalAgent: TypeScript type inferred from FractalAgentSchema.
- * @description Represents the complete structure of a Fractal Agent record as defined by the schema. This type is used throughout the application to ensure type safety when working with agent data.
+ * Agent: TypeScript type inferred from AgentSchema.
+ * @description Represents the complete structure of a AOS Agent record as defined by the schema. This type is used throughout the application to ensure type safety when working with agent data.
  */
-export type FractalAgent = z.infer<typeof FractalAgentSchema>;
+export type Agent = z.infer<typeof AgentSchema>;
 
-/** CreateFractalAgentInput: Input type for agent creation. */
-export type CreateFractalAgentInput = z.infer<typeof CreateFractalAgentSchema>;
+/** CreateAgentInput: Input type for agent creation. */
+export type CreateAgentInput = z.infer<typeof CreateAgentSchema>;
 
-/** UpdateFractalAgentInput: Input type for agent updates. */
-export type UpdateFractalAgentInput = z.infer<typeof UpdateFractalAgentSchema>;
+/** UpdateAgentInput: Input type for agent updates. */
+export type UpdateAgentInput = z.infer<typeof UpdateAgentSchema>;
 
-/** GetFractalAgentByIdInput: Input type for fetching an agent by its identifier. */
-export type GetFractalAgentByIdInput = z.infer<typeof GetFractalAgentByIdSchema>;
+/** GetAgentByIdInput: Input type for fetching an agent by its identifier. */
+export type GetAgentByIdInput = z.infer<typeof GetAgentByIdSchema>;
 
-/** DeleteFractalAgentInput: Input type for agent deletion. */
-export type DeleteFractalAgentInput = z.infer<typeof DeleteFractalAgentSchema>;
+/** DeleteAgentInput: Input type for agent deletion. */
+export type DeleteAgentInput = z.infer<typeof DeleteAgentSchema>;
 
 /**
- * @interface IFractalAgentService
- * @description Defines the contract for the AgentService managing Fractal Agents.
+ * @interface IAgentService
+ * @description Defines the contract for the AgentService managing AOS Agents.
  * All methods return `ResponseWithCTA`-wrapped data to provide rich CLI call-to-action hints.
  */
-export interface IFractalAgentService {
-  list(): Promise<ResponseWithCTA<{ agents: FractalAgent[] }>>;
+export interface IAgentService {
+  list(): Promise<ResponseWithCTA<{ agents: Agent[] }>>;
   getById(
-    params: GetFractalAgentByIdInput,
-  ): Promise<ResponseWithCTA<{ agent: FractalAgent | null }>>;
-  create(params: CreateFractalAgentInput): Promise<ResponseWithCTA<FractalAgent>>;
-  update(params: UpdateFractalAgentInput): Promise<ResponseWithCTA<FractalAgent>>;
-  delete(params: DeleteFractalAgentInput): Promise<ResponseWithCTA>;
+    params: GetAgentByIdInput,
+  ): Promise<ResponseWithCTA<{ agent: Agent | null }>>;
+  create(params: CreateAgentInput): Promise<ResponseWithCTA<Agent>>;
+  update(params: UpdateAgentInput): Promise<ResponseWithCTA<Agent>>;
+  delete(params: DeleteAgentInput): Promise<ResponseWithCTA>;
   /**
    * Resolves the current agent's full identity record.
    * When called from within an agent execution context, returns that agent's record.
    * When called from a terminal (human user), returns the orchestrator agent's record.
    */
-  me(): Promise<ResponseWithCTA<{ agent: FractalAgent }>>;
+  me(): Promise<ResponseWithCTA<{ agent: Agent }>>;
 }

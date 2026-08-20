@@ -13,16 +13,16 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } fr
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { FractalWorkspaceWorktreesSchema } from "@/features/workspace/schemas/workspace.schema";
+import { WorkspaceWorktreesSchema } from "@/features/workspace/schemas/workspace.schema";
 import { toast } from "sonner";
-import { FractalAppError } from "@/core/errors/fractal.error";
+import { AppError } from "@/core/errors/aos.error";
 
 export function WorkspaceWorktreesSection() {
   const currentWorkspace = aos.stores.workspace.useState((state) => state.current);
   const router = useRouter();
 
   const form = aos.useForm({
-    schema: FractalWorkspaceWorktreesSchema,
+    schema: WorkspaceWorktreesSchema,
     mode: "onChange",
     mutation: "workspace.update",
     values: {
@@ -36,7 +36,7 @@ export function WorkspaceWorktreesSection() {
     }),
     onResponse: ({ error }) => {
       if (error) {
-        if (error instanceof FractalAppError) {
+        if (error instanceof AppError) {
           toast.error(error.message);
           return;
         }

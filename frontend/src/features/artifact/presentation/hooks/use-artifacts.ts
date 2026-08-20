@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { aos } from "@/app/aos";
-import type { FractalArtifactListItem } from "@/features/artifact/interfaces/artifact.interfaces";
+import type { ArtifactListItem } from "@/features/artifact/interfaces/artifact.interfaces";
 import { ArtifactHelper } from "@/features/artifact/presentation/helpers/artifact.helper";
 import { ArtifactStore } from "@/features/artifact/presentation/stores/artifact.store";
 
@@ -24,7 +24,7 @@ export function useArtifacts() {
     );
   }, [rawArtifacts]);
 
-  function open(artifact: FractalArtifactListItem) {
+  function open(artifact: ArtifactListItem) {
     ArtifactHelper.openInBrowserTab(artifact);
   }
 

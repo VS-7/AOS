@@ -1,11 +1,11 @@
 import { AosTriggerGroup } from "@/app/builders/trigger";
-import type { FractalCustomCollection } from "../../interfaces/collection.interfaces";
+import type { CustomCollection } from "../../interfaces/collection.interfaces";
 import { String } from "@/core/helpers/string";
 
 export const collectionGroup = AosTriggerGroup.create("Collections")
   .withOrder(4)
   .withLoader(({ query, stores }) => {
-    const collections: FractalCustomCollection[] = stores.collections.state.items;
+    const collections: CustomCollection[] = stores.collections.state.items;
 
     const items = !query
       ? collections

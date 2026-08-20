@@ -19,7 +19,7 @@ import { SettingsRouteHelper } from "@/features/workspace/presentation/helpers/s
 import { useSidebarActiveRoute } from "../../../hooks/use-sidebar-active-route";
 import { aos } from "@/app/aos";
 import { api } from "@/lib/aos-facade";
-import type { FractalWorkspaceMember } from "@/features/workspace/interfaces/workspace.interfaces";
+import type { WorkspaceMember } from "@/features/workspace/interfaces/workspace.interfaces";
 
 function useSettingsSectionVisibility() {
   const authUser = aos.stores.auth.useState((state) => state.user);
@@ -30,7 +30,7 @@ function useSettingsSectionVisibility() {
     enabled: Boolean(workspaceId),
   });
 
-  const members = (membersQuery.data as FractalWorkspaceMember[] | undefined) ?? [];
+  const members = (membersQuery.data as WorkspaceMember[] | undefined) ?? [];
   const isWorkspaceOwner = members.some(
     (member) => member.userId === authUser?.id && member.role === "owner",
   );

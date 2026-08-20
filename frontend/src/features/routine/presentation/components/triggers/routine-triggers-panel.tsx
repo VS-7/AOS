@@ -2,7 +2,7 @@ import * as React from "react";
 import { PlusIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import type { FractalActivityEventDefinition } from "@/features/activity/interfaces/activity.interfaces";
+import type { ActivityEventDefinition } from "@/features/activity/interfaces/activity.interfaces";
 import type { RoutineTriggerFormValue } from "@/features/routine/presentation/consts/routine-triggers";
 import { RoutineTriggersHelper } from "@/features/routine/presentation/helpers/routine-triggers.helper";
 import { RoutineTriggerAddMenu } from "./routine-trigger-add-menu";
@@ -14,7 +14,7 @@ interface RoutineTriggersPanelProps {
   value: RoutineTriggerFormValue[];
   onChange: (next: RoutineTriggerFormValue[]) => void;
   fireUrl?: string | null;
-  activityEvents: FractalActivityEventDefinition[];
+  activityEvents: ActivityEventDefinition[];
 }
 
 export function RoutineTriggersPanel({

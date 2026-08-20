@@ -8,8 +8,8 @@ import React, {
 } from "react";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import type {
-  FractalGoal,
-  FractalGoalPriority,
+  Goal,
+  GoalPriority,
 } from "@/features/goal/interfaces/goal.interfaces";
 import { GoalHelper } from "../../helpers/goal.helper";
 
@@ -21,19 +21,19 @@ interface GoalsPageSearchSchema {
 }
 
 interface GoalsContextValue {
-  goals: FractalGoal[];
-  filteredGoals: FractalGoal[];
-  displayedGroupedGoals: Record<FractalGoal["status"], FractalGoal[]>;
+  goals: Goal[];
+  filteredGoals: Goal[];
+  displayedGroupedGoals: Record<Goal["status"], Goal[]>;
   search: GoalsPageSearchSchema;
   searchDraft: string;
-  selectedStatuses: FractalGoal["status"][];
-  selectedPriorities: FractalGoalPriority[];
+  selectedStatuses: Goal["status"][];
+  selectedPriorities: GoalPriority[];
   selectedProjects: string[];
   activeFilterCount: number;
   updateSearch: (next: Partial<GoalsPageSearchSchema>) => void;
   handleSearchChange: (value: string) => void;
-  handleToggleStatus: (status: FractalGoal["status"]) => void;
-  handleTogglePriority: (priority: FractalGoalPriority) => void;
+  handleToggleStatus: (status: Goal["status"]) => void;
+  handleTogglePriority: (priority: GoalPriority) => void;
   handleToggleProject: (project: string) => void;
   clearFilters: () => void;
 }
@@ -70,7 +70,7 @@ function toggleFilterValue(values: string[], value: string): string[] {
 
 interface GoalsProviderProps {
   children: React.ReactNode;
-  goals: FractalGoal[];
+  goals: Goal[];
   search: GoalsPageSearchSchema;
 }
 
@@ -84,12 +84,12 @@ export function GoalsProvider({ children, goals, search }: GoalsProviderProps) {
   }, [search.query]);
 
   const selectedStatuses = useMemo(
-    () => parseMultiValue(search.status) as FractalGoal["status"][],
+    () => parseMultiValue(search.status) as Goal["status"][],
     [search.status],
   );
 
   const selectedPriorities = useMemo(
-    () => parseMultiValue(search.priority) as FractalGoalPriority[],
+    () => parseMultiValue(search.priority) as GoalPriority[],
     [search.priority],
   );
 
@@ -167,7 +167,7 @@ export function GoalsProvider({ children, goals, search }: GoalsProviderProps) {
   );
 
   const handleToggleStatus = useCallback(
-    (status: FractalGoal["status"]) => {
+    (status: Goal["status"]) => {
       updateSearch({
         status: serializeMultiValue(
           toggleFilterValue(selectedStatuses, status),
@@ -178,7 +178,7 @@ export function GoalsProvider({ children, goals, search }: GoalsProviderProps) {
   );
 
   const handleTogglePriority = useCallback(
-    (priority: FractalGoalPriority) => {
+    (priority: GoalPriority) => {
       updateSearch({
         priority: serializeMultiValue(
           toggleFilterValue(selectedPriorities, priority),

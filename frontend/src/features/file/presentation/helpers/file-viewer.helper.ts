@@ -1,4 +1,4 @@
-import type { FractalFileViewer } from "@/features/file/interfaces/file.interfaces";
+import type { FileViewer } from "@/features/file/interfaces/file.interfaces";
 
 /**
  * File viewer resolution for the Files panel.
@@ -205,7 +205,7 @@ function normalizeBaseName(fileName: string): string {
 /**
  * Resolve which Files panel viewer should handle a path/name.
  */
-export function resolveFileViewer(fileName: string): FractalFileViewer {
+export function resolveFileViewer(fileName: string): FileViewer {
   const baseName = normalizeBaseName(fileName);
   const extension = getFileExtension(baseName);
 
@@ -240,7 +240,7 @@ export function resolveFileViewer(fileName: string): FractalFileViewer {
  * @param viewer - Resolved viewer kind for a file (see {@link resolveFileViewer}).
  * @returns `true` when the viewer is backed by Monaco text rendering.
  */
-export function isTextContentViewer(viewer: FractalFileViewer): boolean {
+export function isTextContentViewer(viewer: FileViewer): boolean {
   return (
     viewer === "text" ||
     viewer === "markdown" ||
@@ -258,7 +258,7 @@ export function isTextContentViewer(viewer: FractalFileViewer): boolean {
  * @param viewer - Resolved viewer kind for a file (see {@link resolveFileViewer}).
  * @returns `true` when the viewer is backed by Monaco text editing.
  */
-export function isEditableFileViewer(viewer: FractalFileViewer): boolean {
+export function isEditableFileViewer(viewer: FileViewer): boolean {
   return isTextContentViewer(viewer);
 }
 

@@ -10,15 +10,15 @@ import { aos } from "@/app/aos";
 import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
 import { openChatTab } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
 import {
-  FractalChatKindHelper,
-  type FractalChatKind,
+  ChatKindHelper,
+  type ChatKind,
 } from "@/features/chat/services/chat/chat-kind.helper";
 import { ChatActivityStamp } from "./chat-activity-stamp";
 import { ChatRowKindIcon } from "./chat-row-kind-icon";
 
 interface ChatRowProps {
   chat: Chat;
-  kind: FractalChatKind;
+  kind: ChatKind;
   isActive: boolean;
   index: number;
   subtitle?: string;
@@ -38,7 +38,7 @@ export function ChatRow({
   preferSpinner = false,
 }: ChatRowProps) {
   const isProcessing = aos.stores.agent.useState((s) =>
-    FractalChatKindHelper.isProcessing(chat.id, s.occupancy),
+    ChatKindHelper.isProcessing(chat.id, s.occupancy),
   );
 
   const showSpinner = preferSpinner || isProcessing;

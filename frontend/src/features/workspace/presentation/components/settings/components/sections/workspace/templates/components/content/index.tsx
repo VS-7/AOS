@@ -54,7 +54,7 @@ export function SelectedTemplateContent() {
           </AnimatedEmptyState.Carousel>
           <AnimatedEmptyState.Content>
             <AnimatedEmptyState.Title>
-              No FractalTemplate Selected
+              No Template Selected
             </AnimatedEmptyState.Title>
             <AnimatedEmptyState.Description>
               Select a template from the list or create a new one.
@@ -78,7 +78,7 @@ export function SelectedTemplateContent() {
         <SplitPageLayout.ContentHeaderMain>
           <SplitPageLayout.ContentTitle>
             {title?.trim() ||
-              (isCreateMode ? "New FractalTemplate" : selectedTemplate?.name)}
+              (isCreateMode ? "New Template" : selectedTemplate?.name)}
           </SplitPageLayout.ContentTitle>
         </SplitPageLayout.ContentHeaderMain>
 
@@ -179,7 +179,7 @@ export function SelectedTemplateContent() {
                     </FormControl>
                     {!isCreateMode ? (
                       <p className="text-xs text-muted-foreground">
-                        FractalTemplate names stay stable after creation because they
+                        Template names stay stable after creation because they
                         define the template ID.
                       </p>
                     ) : null}

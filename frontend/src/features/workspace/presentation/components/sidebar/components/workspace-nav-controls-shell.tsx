@@ -11,7 +11,7 @@ export const WORKSPACE_NAV_CONTROLS_INSET_CLASS = {
 
 export function WorkspaceNavControlsShell() {
   const isNative =
-    typeof window !== "undefined" && !!(window as Window & { fractal?: unknown }).fractal;
+    typeof window !== "undefined" && !!(window as Window & { aos?: unknown }).aos;
   const { open: isMainSidebarOpen } = useSidebar();
 
   return (

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarAgentFallback, AvatarFallback } from "@/components/ui/avatar";
-import type { FractalComment } from "@/features/task/interfaces/comment.interfaces";
+import type { TaskComment } from "@/features/task/interfaces/comment.interfaces";
 import { Badge } from "@/components/ui/badge";
 import { cn, timeAgo } from "@/lib/utils";
 import { MarkdownRenderer } from "@/components/ui/markdown-content";
@@ -17,8 +17,8 @@ function getMentionLabel(author: string) {
 // Reads `comment.content` — Go's stored `Comment` has no `body` field, only
 // `content` (`internal/domain/comment/entity.go`); `body` is a write-side
 // name for comment.create/update's input, not what a fetched comment
-// carries back. See `interfaces/task.interfaces.ts`'s `FractalCommentSchema`.
-function getRenderedBody(comment: FractalComment, mentionedAuthor?: string) {
+// carries back. See `interfaces/task.interfaces.ts`'s `CommentSchema`.
+function getRenderedBody(comment: TaskComment, mentionedAuthor?: string) {
   if (!mentionedAuthor) {
     return comment.content;
   }
@@ -38,7 +38,7 @@ function shouldCollapseComment(body: string) {
 }
 
 export interface CommentThreadNode {
-  comment: FractalComment;
+  comment: TaskComment;
   depth: number;
   mentionedAuthor?: string;
   children: CommentThreadNode[];
@@ -54,7 +54,7 @@ export function CommentItem({ node, onReply, replyTargetId }: CommentItemProps) 
   const [isExpanded, setIsExpanded] = useState(false);
   const { comment, depth, mentionedAuthor, children } = node;
   // The source read `comment.role`; the actual field (both the Go side's
-  // `Comment.AuthorType` and this port's `FractalCommentSchema`) is
+  // `Comment.AuthorType` and this port's `CommentSchema`) is
   // `authorType`, already `"user" | "agent"` — same purpose, real name.
   const role = comment.authorType ?? "user";
   const isAgent = role === "agent";

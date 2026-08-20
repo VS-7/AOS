@@ -1,26 +1,26 @@
 import type { z } from "zod";
 import type { ResponseWithCTA } from "@/core/interfaces/response.interfaces";
 import type { RequestActor } from "@/core/helpers/request-context";
-import type { FractalActivityInstance } from "@/core/services/activity";
+import type { ActivityInstance } from "@/core/services/activity";
 import type {
-  FractalConfigAgentModelSchema,
-  FractalConfigAgentModelsSchema,
-  FractalConfigAgentProviderConnectionSchema,
-  FractalConfigAgentReasoningSchema,
-  FractalConfigAgentSchema,
-  FractalConfigAppearanceFontSizesSchema,
-  FractalConfigAppearanceSchema,
-  FractalConfigAppearanceThemeSchema,
-  FractalConfigGeneralSchema,
-  FractalConfigGetInputSchema,
-  FractalConfigNotificationsSchema,
-  FractalConfigRegionSchema,
-  FractalConfigSchema,
-  FractalConfigSecuritySchema,
-  FractalConfigTelemetrySchema,
-  FractalConfigTunnelSchema,
-  FractalConfigUpdateInputSchema,
-  FractalConfigUserSchema,
+  ConfigAgentModelSchema,
+  ConfigAgentModelsSchema,
+  ConfigAgentProviderConnectionSchema,
+  ConfigAgentReasoningSchema,
+  ConfigAgentSchema,
+  ConfigAppearanceFontSizesSchema,
+  ConfigAppearanceSchema,
+  ConfigAppearanceThemeSchema,
+  ConfigGeneralSchema,
+  ConfigGetInputSchema,
+  ConfigNotificationsSchema,
+  ConfigRegionSchema,
+  ConfigSchema,
+  ConfigSecuritySchema,
+  ConfigTelemetrySchema,
+  ConfigTunnelSchema,
+  ConfigUpdateInputSchema,
+  ConfigUserSchema,
 } from "../schemas/config.schema";
 
 // ============================================================================
@@ -28,9 +28,9 @@ import type {
 // Inferred enum types for Config
 // ============================================================================
 
-/** {@inheritDoc FractalConfigAgentReasoningSchema} */
-export type FractalConfigAgentReasoning = z.infer<
-  typeof FractalConfigAgentReasoningSchema
+/** {@inheritDoc ConfigAgentReasoningSchema} */
+export type ConfigAgentReasoning = z.infer<
+  typeof ConfigAgentReasoningSchema
 >;
 
 // ============================================================================
@@ -38,76 +38,76 @@ export type FractalConfigAgentReasoning = z.infer<
 // Inferred nested object types
 // ============================================================================
 
-/** {@inheritDoc FractalConfigUserSchema} */
-export type FractalConfigUser = z.infer<typeof FractalConfigUserSchema>;
+/** {@inheritDoc ConfigUserSchema} */
+export type ConfigUser = z.infer<typeof ConfigUserSchema>;
 
-/** {@inheritDoc FractalConfigAgentProviderConnectionSchema} */
-export type FractalConfigAgentProviderConnection = z.infer<
-  typeof FractalConfigAgentProviderConnectionSchema
+/** {@inheritDoc ConfigAgentProviderConnectionSchema} */
+export type ConfigAgentProviderConnection = z.infer<
+  typeof ConfigAgentProviderConnectionSchema
 >;
 
-/** {@inheritDoc FractalConfigAgentModelSchema} */
-export type FractalConfigAgentModel = z.infer<
-  typeof FractalConfigAgentModelSchema
+/** {@inheritDoc ConfigAgentModelSchema} */
+export type ConfigAgentModel = z.infer<
+  typeof ConfigAgentModelSchema
 >;
 
-/** {@inheritDoc FractalConfigAgentModelsSchema} */
-export type FractalConfigAgentModels = z.infer<
-  typeof FractalConfigAgentModelsSchema
+/** {@inheritDoc ConfigAgentModelsSchema} */
+export type ConfigAgentModels = z.infer<
+  typeof ConfigAgentModelsSchema
 >;
 
-/** {@inheritDoc FractalConfigAgentSchema} */
-export type FractalConfigAgent = z.infer<typeof FractalConfigAgentSchema>;
+/** {@inheritDoc ConfigAgentSchema} */
+export type ConfigAgent = z.infer<typeof ConfigAgentSchema>;
 
-/** {@inheritDoc FractalConfigRegionSchema} */
-export type FractalConfigRegion = z.infer<typeof FractalConfigRegionSchema>;
+/** {@inheritDoc ConfigRegionSchema} */
+export type ConfigRegion = z.infer<typeof ConfigRegionSchema>;
 
-/** {@inheritDoc FractalConfigAppearanceThemeSchema} */
-export type FractalConfigAppearanceTheme = z.infer<
-  typeof FractalConfigAppearanceThemeSchema
+/** {@inheritDoc ConfigAppearanceThemeSchema} */
+export type ConfigAppearanceTheme = z.infer<
+  typeof ConfigAppearanceThemeSchema
 >;
 
-/** {@inheritDoc FractalConfigAppearanceFontSizesSchema} */
-export type FractalConfigAppearanceFontSizes = z.infer<
-  typeof FractalConfigAppearanceFontSizesSchema
+/** {@inheritDoc ConfigAppearanceFontSizesSchema} */
+export type ConfigAppearanceFontSizes = z.infer<
+  typeof ConfigAppearanceFontSizesSchema
 >;
 
-/** {@inheritDoc FractalConfigAppearanceSchema} */
-export type FractalConfigAppearance = z.infer<
-  typeof FractalConfigAppearanceSchema
+/** {@inheritDoc ConfigAppearanceSchema} */
+export type ConfigAppearance = z.infer<
+  typeof ConfigAppearanceSchema
 >;
 
-/** {@inheritDoc FractalConfigGeneralSchema} */
-export type FractalConfigGeneral = z.infer<typeof FractalConfigGeneralSchema>;
+/** {@inheritDoc ConfigGeneralSchema} */
+export type ConfigGeneral = z.infer<typeof ConfigGeneralSchema>;
 
-/** {@inheritDoc FractalConfigNotificationsSchema} */
-export type FractalConfigNotifications = z.infer<
-  typeof FractalConfigNotificationsSchema
+/** {@inheritDoc ConfigNotificationsSchema} */
+export type ConfigNotifications = z.infer<
+  typeof ConfigNotificationsSchema
 >;
 
-/** {@inheritDoc FractalConfigSecuritySchema} */
-export type FractalConfigSecurity = z.infer<typeof FractalConfigSecuritySchema>;
+/** {@inheritDoc ConfigSecuritySchema} */
+export type ConfigSecurity = z.infer<typeof ConfigSecuritySchema>;
 
-/** {@inheritDoc FractalConfigTelemetrySchema} */
-export type FractalConfigTelemetry = z.infer<
-  typeof FractalConfigTelemetrySchema
+/** {@inheritDoc ConfigTelemetrySchema} */
+export type ConfigTelemetry = z.infer<
+  typeof ConfigTelemetrySchema
 >;
 
-/** {@inheritDoc FractalConfigTunnelSchema} */
-export type FractalConfigTunnel = z.infer<typeof FractalConfigTunnelSchema>;
+/** {@inheritDoc ConfigTunnelSchema} */
+export type ConfigTunnel = z.infer<typeof ConfigTunnelSchema>;
 
 // ============================================================================
 // Entity
 // Full entity type
 // ============================================================================
 
-/** {@inheritDoc FractalConfigSchema} */
-export type FractalConfig = z.infer<typeof FractalConfigSchema>;
+/** {@inheritDoc ConfigSchema} */
+export type Config = z.infer<typeof ConfigSchema>;
 
 /**
  * Default config.json payload used for first-run bootstrap and DeepMerge bases.
  */
-export const FRACTAL_DEFAULT_CONFIG: FractalConfig = {
+export const AOS_DEFAULT_CONFIG: Config = {
   user: { name: "", role: "", email: "" },
   agents: {
     models: {
@@ -142,23 +142,23 @@ export const FRACTAL_DEFAULT_CONFIG: FractalConfig = {
 // Input + Result
 // ============================================================================
 
-/** {@inheritDoc FractalConfigGetInputSchema} */
-export type FractalConfigGetInput = z.infer<typeof FractalConfigGetInputSchema>;
+/** {@inheritDoc ConfigGetInputSchema} */
+export type ConfigGetInput = z.infer<typeof ConfigGetInputSchema>;
 
 /**
  * Get-config service result — installation status plus the persisted config.
  *
- * `status` is a virtual field (`waiting` | `done`) derived from whether Fractal
+ * `status` is a virtual field (`waiting` | `done`) derived from whether AOS
  * has completed first-run setup. Used by the frontend boot middleware to decide
  * between `/onboarding` and `/login`.
  *
- * Returned by {@link IFractalConfigService.get}.
+ * Returned by {@link IConfigService.get}.
  */
-export type FractalConfigGetResult = ResponseWithCTA<{
+export type ConfigGetResult = ResponseWithCTA<{
   /** Whether first-run onboarding is still required. */
   status: "waiting" | "done";
   /** Full persisted global configuration document. */
-  config: FractalConfig;
+  config: Config;
 }>;
 
 // ============================================================================
@@ -166,72 +166,72 @@ export type FractalConfigGetResult = ResponseWithCTA<{
 // Input + Result
 // ============================================================================
 
-/** {@inheritDoc FractalConfigUpdateInputSchema} */
-export type FractalConfigUpdateInput = z.infer<
-  typeof FractalConfigUpdateInputSchema
+/** {@inheritDoc ConfigUpdateInputSchema} */
+export type ConfigUpdateInput = z.infer<
+  typeof ConfigUpdateInputSchema
 >;
 
 /**
- * @deprecated Prefer {@link FractalConfigUpdateInput}.
+ * @deprecated Prefer {@link ConfigUpdateInput}.
  */
-export type FractalConfigUpdate = FractalConfigUpdateInput;
+export type ConfigUpdate = ConfigUpdateInput;
 
 /**
  * Update-config service result — named payload wrapped with CTA commands.
  *
- * Returned by {@link IFractalConfigService.update}.
+ * Returned by {@link IConfigService.update}.
  */
-export type FractalConfigUpdateResult = ResponseWithCTA<{
-  config: FractalConfig;
+export type ConfigUpdateResult = ResponseWithCTA<{
+  config: Config;
 }>;
 
 // ============================================================================
 // Activity Events
-// Catalog emit types inferred from FractalActivityInstance (activity.ts SSOT)
+// Catalog emit types inferred from ActivityInstance (activity.ts SSOT)
 // ============================================================================
 
 /**
  * Notify contracts for the `config` activity namespace.
  *
- * Mapped from {@link FractalActivityInstance} at `events.config`.
+ * Mapped from {@link ActivityInstance} at `events.config`.
  */
-export type FractalConfigActivityEvents =
-  FractalActivityInstance["events"]["config"];
+export type ConfigActivityEvents =
+  ActivityInstance["events"]["config"];
 
 /**
  * Literal event keys registered under `activity.events.config`.
  *
  * @example
  * ```typescript
- * const event: FractalConfigActivityEvent = "updated";
+ * const event: ConfigActivityEvent = "updated";
  * ```
  */
-export type FractalConfigActivityEvent = keyof FractalConfigActivityEvents;
+export type ConfigActivityEvent = keyof ConfigActivityEvents;
 
 /**
  * Full notify payload for a config activity event (includes `causer`).
  *
  * @typeParam E - Event key under `activity.events.config`.
  */
-export type FractalConfigActivityEventData<
-  E extends FractalConfigActivityEvent,
-> = Parameters<FractalConfigActivityEvents[E]["notify"]>[0];
+export type ConfigActivityEventData<
+  E extends ConfigActivityEvent,
+> = Parameters<ConfigActivityEvents[E]["notify"]>[0];
 
 /**
  * Emit payload for a config activity event — **without** `causer`.
  *
- * Nested under {@link FractalConfigEmitInput.data}. Pass `causer` on the
+ * Nested under {@link ConfigEmitInput.data}. Pass `causer` on the
  * input object when ambient {@link RequestContext} is unavailable.
  *
  * @typeParam E - Event key under `activity.events.config`.
  */
-export type FractalConfigEmitData<E extends FractalConfigActivityEvent> = Omit<
-  FractalConfigActivityEventData<E>,
+export type ConfigEmitData<E extends ConfigActivityEvent> = Omit<
+  ConfigActivityEventData<E>,
   "causer"
 >;
 
 /**
- * Single params object for {@link IFractalConfigService.emit}.
+ * Single params object for {@link IConfigService.emit}.
  *
  * `causer` is optional — when omitted, `emit` resolves ambient identity via
  * {@link RequestContext.getActorWithThrow}.
@@ -243,11 +243,11 @@ export type FractalConfigEmitData<E extends FractalConfigActivityEvent> = Omit<
  * await config.emit({ event: "updated", data: { section: "region" } });
  * ```
  */
-export type FractalConfigEmitInput<E extends FractalConfigActivityEvent> = {
+export type ConfigEmitInput<E extends ConfigActivityEvent> = {
   /** Catalog event name (literal key under `activity.events.config`). */
   event: E;
   /** Event payload without `causer`. */
-  data: FractalConfigEmitData<E>;
+  data: ConfigEmitData<E>;
   /** Optional actor; omit to use ambient RequestContext. */
   causer?: RequestActor;
 };

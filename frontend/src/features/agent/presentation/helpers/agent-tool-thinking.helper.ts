@@ -1,5 +1,5 @@
 import type { IconName } from "@/lib/icon-context";
-import type { FractalChatMessage } from "@/features/chat/interfaces/chat.interfaces";
+import type { ChatMessage } from "@/features/chat/interfaces/chat.interfaces";
 
 /**
  * @description Action category used to summarize agent tool activity in chat thinking steps.
@@ -17,7 +17,7 @@ export type AgentThinkingActionKind =
   | "other";
 
 /**
- * @description Visual and semantic configuration for one Fractal agent tool.
+ * @description Visual and semantic configuration for one AOS agent tool.
  *
  * @example
  * const config: AgentToolThinkingConfig = {
@@ -135,7 +135,7 @@ interface AgentMessagePart {
 }
 
 /**
- * @description Static helper for mapping Fractal agent tool parts into compact thinking UI.
+ * @description Static helper for mapping AOS agent tool parts into compact thinking UI.
  *
  * Centralizes tool metadata from `tools.md`, AI SDK state normalization, message part
  * splitting, elapsed-time formatting, and summary counters used by chat rendering.
@@ -301,7 +301,7 @@ export class AgentToolThinkingHelper {
 
   /**
    * @description Returns the mapped display configuration for a tool.
-   * @param toolName - AI SDK or Fractal tool name.
+   * @param toolName - AI SDK or AOS tool name.
    * @returns Tool display configuration with a fallback for unknown tools.
    *
    * @example
@@ -366,7 +366,7 @@ export class AgentToolThinkingHelper {
    * @example
    * const { thinkingParts, finalTextPart } = AgentToolThinkingHelper.splitMessageParts(message);
    */
-  public static splitMessageParts(message: Pick<FractalChatMessage, "parts">): {
+  public static splitMessageParts(message: Pick<ChatMessage, "parts">): {
     thinkingParts: Array<{ part: AgentMessagePart; index: number }>;
     finalTextPart: { part: AgentMessagePart; index: number } | null;
   } {
@@ -413,7 +413,7 @@ export class AgentToolThinkingHelper {
    * @example
    * const steps = AgentToolThinkingHelper.toThinkingSteps(message);
    */
-  public static toThinkingSteps(message: Pick<FractalChatMessage, "id" | "parts">): AgentThinkingStepViewModel[] {
+  public static toThinkingSteps(message: Pick<ChatMessage, "id" | "parts">): AgentThinkingStepViewModel[] {
     const { thinkingParts } = this.splitMessageParts(message);
 
     return thinkingParts.map(({ part, index }, displayIndex) => {
@@ -457,9 +457,9 @@ export class AgentToolThinkingHelper {
    * const summary = AgentToolThinkingHelper.getSummary(message, Date.now());
    */
   public static getSummary(
-    message: FractalChatMessage,
+    message: ChatMessage,
     nowMs = Date.now(),
-    sourceMessage?: FractalChatMessage,
+    sourceMessage?: ChatMessage,
   ): AgentThinkingSummary {
     const summary: AgentThinkingSummary = {
       total: 0,
@@ -514,9 +514,9 @@ export class AgentToolThinkingHelper {
    * AgentToolThinkingHelper.getHeaderLabel(message, Date.now());
    */
   public static getHeaderLabel(
-    message: FractalChatMessage,
+    message: ChatMessage,
     nowMs = Date.now(),
-    sourceMessage?: FractalChatMessage,
+    sourceMessage?: ChatMessage,
   ): string {
     const summary = this.getSummary(message, nowMs, sourceMessage);
     const prefix = summary.isRunning ? "Working for" : "Finished in";
@@ -565,7 +565,7 @@ export class AgentToolThinkingHelper {
    * @example
    * AgentToolThinkingHelper.isRunning(message);
    */
-  public static isRunning(message: FractalChatMessage): boolean {
+  public static isRunning(message: ChatMessage): boolean {
     if (message.metadata?.type === "agent") {
       return message.metadata.execution?.status === "running";
     }
@@ -670,9 +670,9 @@ export class AgentToolThinkingHelper {
   }
 
   private static getElapsedMs(
-    message: FractalChatMessage,
+    message: ChatMessage,
     nowMs: number,
-    sourceMessage?: FractalChatMessage,
+    sourceMessage?: ChatMessage,
   ): number {
     const sourceCreatedAt = this.parseDate(sourceMessage?.metadata?.createdAt);
     const sourceUpdatedAt = this.parseDate(sourceMessage?.metadata?.updatedAt);

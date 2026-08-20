@@ -4,7 +4,7 @@ import { Page, PageBody } from "@/components/ui/page";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { TaskDetailsMain } from "./components/main";
 import { TaskDetailsSidebar } from "./components/details";
-import type { FractalTaskWithContext, FractalTaskPriority } from "@/features/task/interfaces/task.interfaces";
+import type { TaskWithContext, TaskPriority } from "@/features/task/interfaces/task.interfaces";
 import { toast } from "sonner";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
@@ -23,7 +23,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
     const result = await client.task.getById.query({ params: { task: request.params.id } });
     // See `(main)/index.tsx`'s loader for why this cast is needed —
     // the facade returns `Envelope<unknown>`, not a typed payload.
-    const task = (result.data as { task: FractalTaskWithContext } | undefined)?.task;
+    const task = (result.data as { task: TaskWithContext } | undefined)?.task;
 
     if (!task) {
       return response.notFound();
@@ -45,7 +45,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
       aos.stores.viewport.actions.toggle("page.details.visible", true);
     }, []);
 
-    async function handleStatusChange(status: FractalTaskWithContext["status"]) {
+    async function handleStatusChange(status: TaskWithContext["status"]) {
       if (status === task.status) return;
       if (status === "finished") {
         finishTransition.open(task, status);
@@ -64,7 +64,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
       router.invalidate();
     }
 
-    async function handlePriorityChange(priority: FractalTaskPriority) {
+    async function handlePriorityChange(priority: TaskPriority) {
       try {
         await aos.client.task.update.mutate({ params: { task: task.id }, body: { priority } });
         toast.success("Priority updated");

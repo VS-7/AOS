@@ -6,7 +6,7 @@
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "strict": true,
-    // Relaxed for the code ported from Fractal, written under a different
+    // Relaxed for the code ported from the original, written under a different
     // profile. The first two are lint, not safety. noUncheckedIndexedAccess
     // is safety, and turning it off is a real loss — accepted because the
     // alternative is editing 413 index accesses in code we did not write,
@@ -20,7 +20,11 @@
     "isolatedModules": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "types": ["vite/client"],
+    // "node" alongside vite/client so the one suite that asserts on a file's
+    // text (styles/theme-contract.test.ts) can read it with node:fs. Vitest
+    // stubs every CSS import to an empty string, `?raw` included, so a
+    // bundler-side read of the stylesheet is not available to it.
+    "types": ["vite/client", "node"],
     "noEmit": true,
     "baseUrl": ".",
     "paths": { "@/*": ["./src/*"] }

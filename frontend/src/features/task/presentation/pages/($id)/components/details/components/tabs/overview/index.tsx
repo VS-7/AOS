@@ -5,8 +5,8 @@ import {
 import { SetStatusDropdown } from "@/features/task/presentation/components/dropdowns/set-status.dropdown";
 import { SetTypeDropdown } from "@/features/task/presentation/components/dropdowns/set-type.dropdown";
 import {
-  FractalTaskPriority,
-  FractalTaskWithContext,
+  TaskPriority,
+  TaskWithContext,
 } from "@/features/task/interfaces/task.interfaces";
 import {
   Avatar,
@@ -44,9 +44,9 @@ import { Icon } from "@/components/ui/icon";
 import { ProjectHelper } from "@/features/project/presentation/helpers/project.helper";
 
 interface TaskDetailsSidebarProps {
-  task: FractalTaskWithContext;
-  onStatusChange: (status: FractalTaskWithContext["status"]) => void;
-  onPriorityChange: (priority: FractalTaskPriority) => void;
+  task: TaskWithContext;
+  onStatusChange: (status: TaskWithContext["status"]) => void;
+  onPriorityChange: (priority: TaskPriority) => void;
   onTypeChange: (type: string) => void;
   onAssigneeChange: (assignee: string | undefined) => void;
   onDueDateChange: (dueAt: string | undefined) => void;
@@ -105,7 +105,7 @@ export function TaskOverviewTab({
                 <SetStatusDropdown
                   currentStatus={task.status}
                   onStatusChange={(s) =>
-                    onStatusChange(s as FractalTaskWithContext["status"])
+                    onStatusChange(s as TaskWithContext["status"])
                   }
                 />
               </DropdownMenuContent>

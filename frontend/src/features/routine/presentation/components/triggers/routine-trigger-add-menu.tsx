@@ -11,8 +11,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { FractalActivityEventDefinition } from "@/features/activity/interfaces/activity.interfaces";
-import { FractalActivityEventHelper } from "@/features/activity/presentation/helpers/activity-event.helper";
+import type { ActivityEventDefinition } from "@/features/activity/interfaces/activity.interfaces";
+import { ActivityEventHelper } from "@/features/activity/presentation/helpers/activity-event.helper";
 import {
   ROUTINE_SCHEDULED_PRESET_OPTIONS,
   ROUTINE_TRIGGER_TYPE_ORDER,
@@ -26,7 +26,7 @@ import { RoutineTriggersHelper } from "@/features/routine/presentation/helpers/r
 interface RoutineTriggerAddMenuProps {
   availableTypes: RoutineTriggerTypeId[];
   activeTriggers: RoutineTriggerFormValue[];
-  activityEvents: FractalActivityEventDefinition[];
+  activityEvents: ActivityEventDefinition[];
   onAdd: (trigger: RoutineTriggerFormValue) => void;
   trigger: React.ReactNode;
 }
@@ -71,7 +71,7 @@ export function RoutineTriggerAddMenu({
     const haystack = [
       item.namespace,
       item.event,
-      FractalActivityEventHelper.getDisplayLabel(item),
+      ActivityEventHelper.getDisplayLabel(item),
       item.description,
       item.title,
     ]
@@ -170,7 +170,7 @@ export function RoutineTriggerAddMenu({
                           }
                         >
                           <span className="text-sm font-medium line-clamp-1">
-                            {FractalActivityEventHelper.getDisplayLabel(item)}
+                            {ActivityEventHelper.getDisplayLabel(item)}
                           </span>
                         </DropdownMenuItem>
                       ))

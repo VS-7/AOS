@@ -31,8 +31,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { FractalWorkspaceUpdateInputSchema } from "@/features/workspace/schemas/workspace.schema";
-import { FractalAppError } from "@/core/errors/fractal.error";
+import { WorkspaceUpdateInputSchema } from "@/features/workspace/schemas/workspace.schema";
+import { AppError } from "@/core/errors/aos.error";
 import { toast } from "sonner";
 import { ColorPickerPopover } from "@/components/ui/color-picker";
 
@@ -48,7 +48,7 @@ export function WorkspaceProfileSection() {
   const [deleting, setDeleting] = useState(false);
 
   const form = aos.useForm({
-    schema: FractalWorkspaceUpdateInputSchema,
+    schema: WorkspaceUpdateInputSchema,
     mode: "onChange",
     mutation: "workspace.update",
     values: {
@@ -75,7 +75,7 @@ export function WorkspaceProfileSection() {
     }),
     onResponse: ({ error }) => {
       if (error) {
-        if (error instanceof FractalAppError) {
+        if (error instanceof AppError) {
           toast.error(error.message);
           return;
         }
@@ -102,7 +102,7 @@ export function WorkspaceProfileSection() {
       navigate({ to: "/" });
     } catch (error) {
       const message =
-        error instanceof FractalAppError
+        error instanceof AppError
           ? error.message
           : error instanceof Error
             ? error.message

@@ -234,7 +234,7 @@ export function BrowserRenderer({
           ref.current = node as BrowserWebViewElement | null;
         }}
         src={tab.url}
-        partition="persist:fractal-browser"
+        partition="persist:aos-browser"
         useragent={DESKTOP_USER_AGENT}
         webpreferences="contextIsolation=yes,nodeIntegration=no,allowRunningInsecureContent=yes"
         allowpopups

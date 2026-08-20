@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-/** Canonical border radius — matches Fractal theme. */
+/** Canonical border radius — matches AOS theme. */
 export const RADIUS_MD = "rounded-md";
 
 /** Gap tokens used by Stack / Grid registry components. */

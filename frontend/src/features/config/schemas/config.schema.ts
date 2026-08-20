@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Schema } from "@/core/helpers/schema.helper";
-import { FractalThemeSettingsSchema } from "@/features/theme/schemas/theme.schema";
+import { ThemeSettingsSchema } from "@/features/theme/schemas/theme.schema";
 
 // ============================================================================
 // Nested Objects
@@ -8,7 +8,7 @@ import { FractalThemeSettingsSchema } from "@/features/theme/schemas/theme.schem
 // ============================================================================
 
 /**
- * Fractal user profile fields stored in global config.
+ * AOS user profile fields stored in global config.
  *
  * @example
  * ```typescript
@@ -19,7 +19,7 @@ import { FractalThemeSettingsSchema } from "@/features/theme/schemas/theme.schem
  * }
  * ```
  */
-export const FractalConfigUserSchema = Schema.object({
+export const ConfigUserSchema = Schema.object({
   name: z
     .string()
     .default("User")
@@ -44,7 +44,7 @@ export const FractalConfigUserSchema = Schema.object({
  * }
  * ```
  */
-export const FractalConfigAgentProviderConnectionSchema = Schema.object({
+export const ConfigAgentProviderConnectionSchema = Schema.object({
   id: z
     .string()
     .describe('Unique provider identifier. Example: "openai".'),
@@ -62,7 +62,7 @@ export const FractalConfigAgentProviderConnectionSchema = Schema.object({
  * "medium"
  * ```
  */
-export const FractalConfigAgentReasoningSchema = z
+export const ConfigAgentReasoningSchema = z
   .enum([
     "provider-default",
     "none",
@@ -88,18 +88,18 @@ export const FractalConfigAgentReasoningSchema = z
  * }
  * ```
  */
-export const FractalConfigAgentModelSchema = Schema.object({
+export const ConfigAgentModelSchema = Schema.object({
   provider: z
     .string()
     .describe('Provider ID for this model slot. Example: "openai".'),
   model: z
     .string()
     .describe('Model identifier for this slot. Example: "gpt-4o".'),
-  reasoning: FractalConfigAgentReasoningSchema.default("medium"),
+  reasoning: ConfigAgentReasoningSchema.default("medium"),
 });
 
 /**
- * Model slots used by Fractal agents (default, subconscious, media, …).
+ * Model slots used by AOS agents (default, subconscious, media, …).
  *
  * @example
  * ```typescript
@@ -113,13 +113,13 @@ export const FractalConfigAgentModelSchema = Schema.object({
  * }
  * ```
  */
-export const FractalConfigAgentModelsSchema = Schema.object({
-  default: FractalConfigAgentModelSchema,
-  subconscious: FractalConfigAgentModelSchema,
-  realtime: FractalConfigAgentModelSchema,
-  voice: FractalConfigAgentModelSchema,
-  image: FractalConfigAgentModelSchema,
-  video: FractalConfigAgentModelSchema,
+export const ConfigAgentModelsSchema = Schema.object({
+  default: ConfigAgentModelSchema,
+  subconscious: ConfigAgentModelSchema,
+  realtime: ConfigAgentModelSchema,
+  voice: ConfigAgentModelSchema,
+  image: ConfigAgentModelSchema,
+  video: ConfigAgentModelSchema,
 });
 
 /**
@@ -135,18 +135,18 @@ export const FractalConfigAgentModelsSchema = Schema.object({
  * }
  * ```
  */
-export const FractalConfigAgentSchema = Schema.object({
+export const ConfigAgentSchema = Schema.object({
   providers: z
-    .array(FractalConfigAgentProviderConnectionSchema)
+    .array(ConfigAgentProviderConnectionSchema)
     .optional()
     .describe(
       'Configured provider connections. Example: [{ "id": "openai" }].',
     ),
-  models: FractalConfigAgentModelsSchema.optional(),
+  models: ConfigAgentModelsSchema.optional(),
 });
 
 /**
- * Locale / location preferences for the Fractal user.
+ * Locale / location preferences for the AOS user.
  *
  * @example
  * ```typescript
@@ -158,7 +158,7 @@ export const FractalConfigAgentSchema = Schema.object({
  * }
  * ```
  */
-export const FractalConfigRegionSchema = Schema.object({
+export const ConfigRegionSchema = Schema.object({
   language: z
     .string()
     .describe('The user\'s preferred language. Example: "en-US".'),
@@ -182,19 +182,19 @@ export const FractalConfigRegionSchema = Schema.object({
  * @example
  * ```typescript
  * {
- *   preset: "fractal",
+ *   preset: "aos",
  *   settings: { dark: { accent: "#fff" }, light: { accent: "#000" } }
  * }
  * ```
  */
-export const FractalConfigAppearanceThemeSchema = Schema.object({
+export const ConfigAppearanceThemeSchema = Schema.object({
   preset: z
     .string()
-    .default("fractal")
-    .describe('Theme preset identifier. Example: "fractal".'),
+    .default("aos")
+    .describe('Theme preset identifier. Example: "aos".'),
   settings: Schema.object({
-    dark: FractalThemeSettingsSchema,
-    light: FractalThemeSettingsSchema,
+    dark: ThemeSettingsSchema,
+    light: ThemeSettingsSchema,
   }),
 });
 
@@ -209,7 +209,7 @@ export const FractalConfigAppearanceThemeSchema = Schema.object({
  * }
  * ```
  */
-export const FractalConfigAppearanceFontSizesSchema = Schema.object({
+export const ConfigAppearanceFontSizesSchema = Schema.object({
   ui: z.number().describe("UI font size in pixels. Example: 14."),
   code: z.number().describe("Code font size in pixels. Example: 13."),
 });
@@ -217,24 +217,24 @@ export const FractalConfigAppearanceFontSizesSchema = Schema.object({
 /**
  * Full appearance preferences used by the theme UI store.
  *
- * Not persisted inside {@link FractalConfigSchema} — kept here as the shared
+ * Not persisted inside {@link ConfigSchema} — kept here as the shared
  * companion DTO for appearance/theme presentation.
  *
  * @example
  * ```typescript
  * {
  *   mode: "dark",
- *   theme: { preset: "fractal", settings: { dark: {}, light: {} } },
+ *   theme: { preset: "aos", settings: { dark: {}, light: {} } },
  *   fontSizes: { ui: 14, code: 13 }
  * }
  * ```
  */
-export const FractalConfigAppearanceSchema = Schema.object({
+export const ConfigAppearanceSchema = Schema.object({
   mode: z
     .enum(["light", "dark", "system"])
     .describe('UI Mode preference. Example: "dark".'),
-  theme: FractalConfigAppearanceThemeSchema,
-  fontSizes: FractalConfigAppearanceFontSizesSchema,
+  theme: ConfigAppearanceThemeSchema,
+  fontSizes: ConfigAppearanceFontSizesSchema,
 });
 
 /**
@@ -247,7 +247,7 @@ export const FractalConfigAppearanceSchema = Schema.object({
  * }
  * ```
  */
-export const FractalConfigGeneralSchema = Schema.object({
+export const ConfigGeneralSchema = Schema.object({
   preventSleep: z
     .boolean()
     .describe(
@@ -265,7 +265,7 @@ export const FractalConfigGeneralSchema = Schema.object({
  * }
  * ```
  */
-export const FractalConfigNotificationsSchema = Schema.object({
+export const ConfigNotificationsSchema = Schema.object({
   enabled: z
     .boolean()
     .describe(
@@ -286,12 +286,12 @@ export const FractalConfigNotificationsSchema = Schema.object({
  * }
  * ```
  */
-export const FractalConfigSecuritySchema = Schema.object({
+export const ConfigSecuritySchema = Schema.object({
   enabled: z
     .boolean()
     .default(false)
     .describe(
-      "Whether authentication is required to access the Fractal instance. Example: false.",
+      "Whether authentication is required to access the AOS instance. Example: false.",
     ),
   password: z
     .string()
@@ -309,7 +309,7 @@ export const FractalConfigSecuritySchema = Schema.object({
     .string()
     .default("")
     .describe(
-      "@deprecated Legacy installation API token. Kept only so the multi-user migration can copy it onto the bootstrap super account. New installs MUST store `fractal_` tokens per user on `users.json`.",
+      "@deprecated Legacy installation API token. Kept only so the multi-user migration can copy it onto the bootstrap super account. New installs MUST store `aos_` tokens per user on `users.json`.",
     ),
   multiUserMigrated: z
     .boolean()
@@ -336,7 +336,7 @@ export const FractalConfigSecuritySchema = Schema.object({
  * }
  * ```
  */
-export const FractalConfigTelemetrySchema = Schema.object({
+export const ConfigTelemetrySchema = Schema.object({
   enabled: z
     .boolean()
     .default(true)
@@ -347,7 +347,7 @@ export const FractalConfigTelemetrySchema = Schema.object({
     .string()
     .default("")
     .describe(
-      "Anonymous random UUID used only to identify this Fractal installation. Example: \"installation-id\".",
+      "Anonymous random UUID used only to identify this AOS installation. Example: \"installation-id\".",
     ),
 });
 
@@ -364,7 +364,7 @@ export const FractalConfigTelemetrySchema = Schema.object({
  * }
  * ```
  */
-export const FractalConfigTunnelSchema = Schema.object({
+export const ConfigTunnelSchema = Schema.object({
   enabled: z
     .boolean()
     .default(false)
@@ -373,7 +373,7 @@ export const FractalConfigTunnelSchema = Schema.object({
     .string()
     .default("")
     .describe(
-      'The public hostname assigned to the tunnel. Example: "my-fractal.tryfractal.co".',
+      'The public hostname assigned to the tunnel. Example: "my-workspace.example.com".',
     ),
   token: z
     .string()
@@ -393,7 +393,7 @@ export const FractalConfigTunnelSchema = Schema.object({
 // ============================================================================
 
 /**
- * Primary schema for the user configuration stored in `~/.fractal/config.json`.
+ * Primary schema for the user configuration stored in `~/.aos/config.json`.
  *
  * @example
  * ```typescript
@@ -409,15 +409,15 @@ export const FractalConfigTunnelSchema = Schema.object({
  * }
  * ```
  */
-export const FractalConfigSchema = Schema.object({
-  user: FractalConfigUserSchema,
-  agents: FractalConfigAgentSchema,
-  region: FractalConfigRegionSchema,
-  general: FractalConfigGeneralSchema,
-  notifications: FractalConfigNotificationsSchema,
-  security: FractalConfigSecuritySchema,
-  telemetry: FractalConfigTelemetrySchema,
-  tunnel: FractalConfigTunnelSchema,
+export const ConfigSchema = Schema.object({
+  user: ConfigUserSchema,
+  agents: ConfigAgentSchema,
+  region: ConfigRegionSchema,
+  general: ConfigGeneralSchema,
+  notifications: ConfigNotificationsSchema,
+  security: ConfigSecuritySchema,
+  telemetry: ConfigTelemetrySchema,
+  tunnel: ConfigTunnelSchema,
 });
 
 // ============================================================================
@@ -436,7 +436,7 @@ export const FractalConfigSchema = Schema.object({
  * {}
  * ```
  */
-export const FractalConfigGetInputSchema = Schema.object({});
+export const ConfigGetInputSchema = Schema.object({});
 
 // ============================================================================
 // Update
@@ -456,26 +456,26 @@ export const FractalConfigGetInputSchema = Schema.object({});
  * }
  * ```
  */
-export const FractalConfigUpdateInputSchema = FractalConfigSchema.extend({
-  user: FractalConfigUserSchema.partial(),
-  agents: FractalConfigAgentSchema.partial(),
-  region: FractalConfigRegionSchema.partial(),
-  general: FractalConfigGeneralSchema.partial(),
-  notifications: FractalConfigNotificationsSchema.partial(),
-  security: FractalConfigSecuritySchema.partial(),
-  telemetry: FractalConfigTelemetrySchema.partial(),
-  tunnel: FractalConfigTunnelSchema.partial(),
+export const ConfigUpdateInputSchema = ConfigSchema.extend({
+  user: ConfigUserSchema.partial(),
+  agents: ConfigAgentSchema.partial(),
+  region: ConfigRegionSchema.partial(),
+  general: ConfigGeneralSchema.partial(),
+  notifications: ConfigNotificationsSchema.partial(),
+  security: ConfigSecuritySchema.partial(),
+  telemetry: ConfigTelemetrySchema.partial(),
+  tunnel: ConfigTunnelSchema.partial(),
 }).partial();
 
 /**
- * @deprecated Prefer {@link FractalConfigUpdateInputSchema}.
+ * @deprecated Prefer {@link ConfigUpdateInputSchema}.
  */
-export const FractalConfigUpdateSchema = FractalConfigUpdateInputSchema;
+export const ConfigUpdateSchema = ConfigUpdateInputSchema;
 
 /**
  * Default config document used for first-run writes and deep-merge normalization.
  *
- * Seeds `~/.fractal/config.json` when missing and acts as the left-hand baseline for
+ * Seeds `~/.aos/config.json` when missing and acts as the left-hand baseline for
  * {@link DeepMergeHelper.merge} when repairing partial bootstrap files.
  *
  * @example
@@ -487,7 +487,7 @@ export const FractalConfigUpdateSchema = FractalConfigUpdateInputSchema;
  * }
  * ```
  */
-export const FRACTAL_DEFAULT_CONFIG: z.infer<typeof FractalConfigSchema> = {
+export const AOS_DEFAULT_CONFIG: z.infer<typeof ConfigSchema> = {
   user: { name: "", role: "", email: "" },
   agents: {
     models: {

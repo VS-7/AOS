@@ -1,6 +1,6 @@
 import type {
-  FractalMarketplaceSkill,
-  FractalMarketplaceSkillListing,
+  MarketplaceSkill,
+  MarketplaceSkillListing,
 } from "@/features/marketplace/interfaces/marketplace.interfaces";
 import {
   MARKETPLACE_ALLOWED_CATEGORIES,
@@ -15,24 +15,24 @@ export function marketplaceSectionId(label: string): string {
 }
 
 export function buildInstallCommand(pluginName: string): string {
-  return `fractal skills install --source tryfractal/registry --skill ${pluginName}`;
+  return `aos skills install --source aos/registry --skill ${pluginName}`;
 }
 
 export function buildGithubFolderUrl(pluginName: string, folder: string): string {
-  return `https://github.com/tryfractal/registry/tree/main/skills/${encodeURIComponent(pluginName)}/${folder}`;
+  return `https://github.com/aos/registry/tree/main/skills/${encodeURIComponent(pluginName)}/${folder}`;
 }
 
 export function groupListingsByCategory(
-  listings: FractalMarketplaceSkillListing[],
-): Record<string, FractalMarketplaceSkillListing[]> {
+  listings: MarketplaceSkillListing[],
+): Record<string, MarketplaceSkillListing[]> {
   const grouped = Object.fromEntries(
     MARKETPLACE_ALLOWED_CATEGORIES.map((category) => [
       category,
-      [] as FractalMarketplaceSkillListing[],
+      [] as MarketplaceSkillListing[],
     ]),
-  ) as Record<string, FractalMarketplaceSkillListing[]>;
+  ) as Record<string, MarketplaceSkillListing[]>;
 
-  const uncategorized: FractalMarketplaceSkillListing[] = [];
+  const uncategorized: MarketplaceSkillListing[] = [];
 
   for (const listing of listings) {
     if (grouped[listing.category]) {
@@ -51,19 +51,19 @@ export function groupListingsByCategory(
 
 /** Only curated featured slugs that exist in `listings` — no fallback padding. */
 export function pickFeaturedListings(
-  listings: FractalMarketplaceSkillListing[],
-): FractalMarketplaceSkillListing[] {
+  listings: MarketplaceSkillListing[],
+): MarketplaceSkillListing[] {
   const byName = new Map(listings.map((listing) => [listing.name, listing]));
 
   return MARKETPLACE_FEATURED_PLUGIN_SLUGS.map((slug) => byName.get(slug)).filter(
-    (listing): listing is FractalMarketplaceSkillListing => listing !== undefined,
+    (listing): listing is MarketplaceSkillListing => listing !== undefined,
   );
 }
 
 export function filterListings(
-  listings: FractalMarketplaceSkillListing[],
+  listings: MarketplaceSkillListing[],
   options: { query?: string; category?: string },
-): FractalMarketplaceSkillListing[] {
+): MarketplaceSkillListing[] {
   const normalizedQuery = (options.query ?? "").trim().toLowerCase();
   const normalizedCategory = (options.category ?? "").trim().toLowerCase();
 
@@ -97,11 +97,11 @@ export function filterListings(
  * Dedupes by plugin name so installed registry plugins are not listed twice.
  */
 export function mergeListingsWithInstalled(
-  marketplaceListings: FractalMarketplaceSkillListing[],
+  marketplaceListings: MarketplaceSkillListing[],
   installed: Array<{ name: string; description: string }>,
-  allMarketplaceListings: FractalMarketplaceSkillListing[],
+  allMarketplaceListings: MarketplaceSkillListing[],
   query?: string,
-): FractalMarketplaceSkillListing[] {
+): MarketplaceSkillListing[] {
   const byName = new Map(
     marketplaceListings.map((listing) => [listing.name, listing]),
   );
@@ -129,10 +129,10 @@ export function mergeListingsWithInstalled(
 }
 
 export function getRelatedListings(
-  listings: FractalMarketplaceSkillListing[],
-  current: FractalMarketplaceSkill,
+  listings: MarketplaceSkillListing[],
+  current: MarketplaceSkill,
   limit = 5,
-): FractalMarketplaceSkillListing[] {
+): MarketplaceSkillListing[] {
   return listings
     .filter(
       (listing) =>
@@ -145,8 +145,8 @@ export function getRelatedListings(
 export function resolveInstalledListing(
   pluginName: string,
   description: string,
-  marketplacePlugins: FractalMarketplaceSkillListing[],
-): FractalMarketplaceSkillListing {
+  marketplacePlugins: MarketplaceSkillListing[],
+): MarketplaceSkillListing {
   const fromMarketplace = marketplacePlugins.find(
     (listing) => listing.name === pluginName,
   );

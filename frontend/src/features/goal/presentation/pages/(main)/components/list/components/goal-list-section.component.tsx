@@ -7,7 +7,7 @@ import {
   CollapsibleTitle,
   CollapsibleIcon,
 } from "@/components/ui/collapsible";
-import type { FractalGoal } from "@/features/goal/interfaces/goal.interfaces";
+import type { Goal } from "@/features/goal/interfaces/goal.interfaces";
 import { GoalHelper } from "@/features/goal/presentation/helpers/goal.helper";
 import { GOAL_STATUS_CONFIG } from "@/features/goal/presentation/consts/goal";
 import { GoalListRow } from "./goal-list-row.component";
@@ -33,8 +33,8 @@ const sectionVariants = {
 };
 
 interface GoalsListSectionProps {
-  status: FractalGoal["status"];
-  goals: FractalGoal[];
+  status: Goal["status"];
+  goals: Goal[];
 }
 
 export function GoalsListSection({ status, goals }: GoalsListSectionProps) {

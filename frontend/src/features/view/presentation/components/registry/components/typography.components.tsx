@@ -56,7 +56,7 @@ const VARIANT_CLASS: Record<string, string> = {
 };
 
 /**
- * Paragraph / inline text with Fractal typography tokens.
+ * Paragraph / inline text with AOS typography tokens.
  */
 export function TextComponent({ props }: BaseComponentProps<TextProps>) {
   const variant = props.variant ?? "body";
@@ -140,7 +140,7 @@ type MarkdownContentProps = {
 };
 
 /**
- * Fractal markdown renderer — same component used in tasks, chat, and comments.
+ * AOS markdown renderer — same component used in tasks, chat, and comments.
  */
 export function MarkdownContentComponent({
   props,

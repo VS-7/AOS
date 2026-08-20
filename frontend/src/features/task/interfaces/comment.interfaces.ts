@@ -1,1 +1,1 @@
-export type { FractalComment, FractalAttachment } from "./task.interfaces";
+export type { TaskComment, TaskAttachment } from "./task.interfaces";

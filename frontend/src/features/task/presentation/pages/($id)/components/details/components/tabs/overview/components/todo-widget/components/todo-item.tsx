@@ -7,11 +7,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import type { FractalTodo } from "@/features/task/interfaces/todo.interfaces";
+import type { Todo } from "@/features/task/interfaces/todo.interfaces";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
 
 interface TodoItemProps {
-  todo: FractalTodo;
+  todo: Todo;
 }
 
 export function TodoItem({ todo }: TodoItemProps) {
@@ -52,7 +52,7 @@ export function TodoItem({ todo }: TodoItemProps) {
           <SplitPageLayout.WidgetItem className="group relative pr-7">
             <StatusIcon className={`size-3.5 shrink-0 mt-0.5 ${statusColor}`} />
             {/* Go's `Todo` field is `title`, not `description` — see
-                `interfaces/task.interfaces.ts`'s `FractalTaskTodoSchema`. */}
+                `interfaces/task.interfaces.ts`'s `TaskTodoSchema`. */}
             <span className={`text-xs leading-snug line-clamp-1 flex-1 ${isFinished ? "line-through text-muted-foreground" : ""}`}>
               {todo.title}
             </span>

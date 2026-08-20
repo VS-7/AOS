@@ -4,8 +4,8 @@ import { aos } from "@/app/aos";
 import { useRealtime } from "@/hooks/use-realtime";
 import { AnimatedEmptyState } from "@/components/ui/animated-empty-state";
 import type {
-  FractalFileChangeEntry,
-  FractalFileExplorerContext,
+  FileChangeEntry,
+  FileExplorerContext,
 } from "@/features/file/interfaces/file.interfaces";
 import {
   explorerContextsEqual,
@@ -20,7 +20,7 @@ import { ChangesFileList } from "./changes-file-list";
 
 interface ChangesContentProps {
   tabId: string;
-  explorerContext: FractalFileExplorerContext;
+  explorerContext: FileExplorerContext;
 }
 
 export function ChangesContent({
@@ -51,7 +51,7 @@ export function ChangesContent({
   });
 
   const snapshot = changesQuery.data?.snapshot;
-  const files: FractalFileChangeEntry[] = snapshot?.files ?? [];
+  const files: FileChangeEntry[] = snapshot?.files ?? [];
   const filteredFiles = React.useMemo(() => {
     const query = findQuery.trim().toLowerCase();
     if (!query) return files;

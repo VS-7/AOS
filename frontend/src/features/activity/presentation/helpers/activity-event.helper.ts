@@ -1,13 +1,13 @@
-import type { FractalActivityEventDefinition } from "@/features/activity/interfaces/activity.interfaces";
+import type { ActivityEventDefinition } from "@/features/activity/interfaces/activity.interfaces";
 
 /**
  * Pure helpers for workspace notification event definitions consumed by the UI.
  *
- * Transforms {@link FractalActivityEventDefinition} records returned by
+ * Transforms {@link ActivityEventDefinition} records returned by
  * `GET /activity/events` into stable keys, labels, and filter field lists
  * without duplicating backend notification registries in the frontend.
  */
-export class FractalActivityEventHelper {
+export class ActivityEventHelper {
   /**
    * Default filter field when a JSON Schema exposes no top-level properties.
    */
@@ -33,10 +33,10 @@ export class FractalActivityEventHelper {
    * @returns Matching definition or `undefined` when not registered.
    */
   public static findDefinition(
-    definitions: FractalActivityEventDefinition[],
+    definitions: ActivityEventDefinition[],
     namespace: string,
     event: string,
-  ): FractalActivityEventDefinition | undefined {
+  ): ActivityEventDefinition | undefined {
     return definitions.find(
       (definition) =>
         definition.namespace === namespace && definition.event === event,
@@ -51,13 +51,13 @@ export class FractalActivityEventHelper {
    * @returns Definitions available for new activity triggers.
    */
   public static getAvailableDefinitions(
-    definitions: FractalActivityEventDefinition[],
+    definitions: ActivityEventDefinition[],
     usedKeys: Set<string>,
-  ): FractalActivityEventDefinition[] {
+  ): ActivityEventDefinition[] {
     return definitions.filter(
       (definition) =>
         !usedKeys.has(
-          FractalActivityEventHelper.getEventKey(
+          ActivityEventHelper.getEventKey(
             definition.namespace,
             definition.event,
           ),
@@ -74,7 +74,7 @@ export class FractalActivityEventHelper {
    * @returns Display label for UI surfaces.
    */
   public static getDisplayLabel(
-    definition: FractalActivityEventDefinition,
+    definition: ActivityEventDefinition,
   ): string {
     const description = definition.description?.trim();
     if (description) {
@@ -88,16 +88,16 @@ export class FractalActivityEventHelper {
    * Extracts filterable payload field paths from a JSON Schema document.
    *
    * Uses top-level `properties` keys from the serialized schema. When the
-   * schema has no object properties, returns {@link FractalActivityEventHelper.DEFAULT_FILTER_FIELD}.
+   * schema has no object properties, returns {@link ActivityEventHelper.DEFAULT_FILTER_FIELD}.
    *
    * @param definition - Event definition carrying a JSON Schema payload.
    * @returns Sorted list of dot-path roots available in the filter editor.
    */
   public static getFilterableFields(
-    definition: FractalActivityEventDefinition | undefined,
+    definition: ActivityEventDefinition | undefined,
   ): string[] {
     if (!definition) {
-      return [FractalActivityEventHelper.DEFAULT_FILTER_FIELD];
+      return [ActivityEventHelper.DEFAULT_FILTER_FIELD];
     }
 
     const properties = definition.schema.properties;
@@ -110,6 +110,6 @@ export class FractalActivityEventHelper {
       }
     }
 
-    return [FractalActivityEventHelper.DEFAULT_FILTER_FIELD];
+    return [ActivityEventHelper.DEFAULT_FILTER_FIELD];
   }
 }

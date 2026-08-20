@@ -20,7 +20,7 @@ export const NOT_MAPPED_CODE = "AOS_CALL_NOT_MAPPED";
  * C4 of the final review: this used to be a plain `{code, message}` object.
  * ~54 ported call sites do `error instanceof Error ? error.message : "Failed
  * to…"` (e.g. `.../workspace/members/index.tsx:97,125,147`) — a pattern
- * copied from Fractal's original, where the generated client's errors *were*
+ * copied from the original, where the generated client's errors *were*
  * real `Error`s. Against a plain object that check was always `false`, so
  * every one of those sites silently discarded the real message (dormant's
  * included) for a generic fallback string. Making this a real `Error`
@@ -72,7 +72,7 @@ export interface CallOpts {
 }
 
 /**
- * Fractal split params/query/body because it talked to a REST API. The Go
+ * The original split params/query/body because it talked to a REST API. The Go
  * registry takes one flat object per command, so the three get merged.
  * `enabled` belongs to useQuery and does not belong in the payload.
  */
@@ -255,7 +255,7 @@ interface ActionNode {
    * pattern that every other feature is likely to hit it too, so this is
    * fixed at the facade rather than worked around per call site.
    *
-   * `& { loading: boolean }`: the Fractal original's generated mutation
+   * `& { loading: boolean }`: the original's generated mutation
    * hook exposed `.loading`, not React Query's own `.isPending` — 30 call
    * sites across 18 freshly-copied files (Task 9) read `.loading`
    * directly. Adding the alias here, once, is the fix; teaching every one
@@ -367,7 +367,7 @@ function actionNode(feature: string, action: string): ActionNode {
 }
 
 /**
- * `api.task.list.useQuery()` — the facade the Fractal code expects.
+ * `api.task.list.useQuery()` — the facade the ported code expects.
  *
  * Two levels of Proxy instead of a generated object: the map has 113
  * entries today and grows with every domain the Go side gains; generating

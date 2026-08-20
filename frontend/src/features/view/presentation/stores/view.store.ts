@@ -1,10 +1,10 @@
 import { AosStore } from "@/app/builders/store";
-import { type FractalViewSummary } from "@/features/view/interfaces/view.interfaces";
+import { type ViewSummary } from "@/features/view/interfaces/view.interfaces";
 import { api } from "@/lib/aos-facade";
 
 export const ViewStore = AosStore.create("views")
   .withState({
-    items: [] as FractalViewSummary[],
+    items: [] as ViewSummary[],
   })
   .withPersistence({
     enabled: false,

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { SidebarMenu, SidebarMenuMotionItem } from "@/components/ui/sidebar";
 import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
-import { FractalChatKindHelper } from "@/features/chat/services/chat/chat-kind.helper";
+import { ChatKindHelper } from "@/features/chat/services/chat/chat-kind.helper";
 import { ChannelItem } from "../../channels/components/channel-item";
 
 interface ChatChannelsListProps {
@@ -21,7 +21,7 @@ export function ChatChannelsList({
   onChanged,
 }: ChatChannelsListProps) {
   const channelChats = React.useMemo(
-    () => FractalChatKindHelper.filterByKind(chats, "channel", agentIds),
+    () => ChatKindHelper.filterByKind(chats, "channel", agentIds),
     [agentIds, chats],
   );
 

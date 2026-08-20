@@ -12,11 +12,11 @@ import { GoalHelper } from "@/features/goal/presentation/helpers/goal.helper";
 import { aos } from "@/app/aos";
 import { Plus, ArrowUpRight, CalendarDays } from "lucide-react";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading.hook";
-import type { FractalGoal } from "@/features/goal/interfaces/goal.interfaces";
-import type { FractalProject } from "@/features/project/interfaces/project.interfaces";
+import type { Goal } from "@/features/goal/interfaces/goal.interfaces";
+import type { Project } from "@/features/project/interfaces/project.interfaces";
 
 interface ProjectGoalsTabProps {
-  project: FractalProject;
+  project: Project;
 }
 
 const GOAL_TABS = GOAL_STATUS_ORDER.map((status) => ({
@@ -25,7 +25,7 @@ const GOAL_TABS = GOAL_STATUS_ORDER.map((status) => ({
 }));
 
 interface GoalRowProps {
-  goal: FractalGoal;
+  goal: Goal;
 }
 
 function GoalRow({ goal }: GoalRowProps) {
@@ -122,14 +122,14 @@ function GoalsSection({ title, subtitle, action, children }: SectionProps) {
 export function ProjectGoalsTab({ project }: ProjectGoalsTabProps) {
   const navigate = useNavigate();
   const [selectedStatus, setSelectedStatus] =
-    React.useState<FractalGoal["status"]>("active");
+    React.useState<Goal["status"]>("active");
 
   const goalQuery = aos.client.goal.list.useQuery({
     query: { project: project.id, limit: "50" },
     staleTime: 5 * 60 * 1000,
   });
 
-  const goals: FractalGoal[] = goalQuery.data?.goals ?? [];
+  const goals: Goal[] = goalQuery.data?.goals ?? [];
   const isLoading = useDelayedLoading(goalQuery.isLoading);
 
   const filteredGoals = React.useMemo(

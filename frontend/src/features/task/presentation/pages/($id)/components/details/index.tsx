@@ -1,15 +1,15 @@
 import type { UseChatResult } from "@/features/chat/presentation/hooks/use-chat";
-import type { FractalTaskWithContext, FractalTaskPriority } from "@/features/task/interfaces/task.interfaces";
+import type { TaskWithContext, TaskPriority } from "@/features/task/interfaces/task.interfaces";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { TaskOverviewTab } from "./components/tabs/overview";
 import { TaskExecutionTab } from "./components/tabs/execution";
 import { ListChecks, PlayIcon } from "lucide-react";
 
 interface TaskDetailsSidebarProps {
-  task: FractalTaskWithContext;
+  task: TaskWithContext;
   liveChat?: UseChatResult | null;
-  onStatusChange: (status: FractalTaskWithContext["status"]) => void;
-  onPriorityChange: (priority: FractalTaskPriority) => void;
+  onStatusChange: (status: TaskWithContext["status"]) => void;
+  onPriorityChange: (priority: TaskPriority) => void;
   onTypeChange: (type: string) => void;
   onAssigneeChange: (assignee: string | undefined) => void;
   onDueDateChange: (dueAt: string | undefined) => void;

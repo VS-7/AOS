@@ -1,13 +1,13 @@
 import { type FileUIPart, type SourceDocumentUIPart } from "ai";
-import type { FractalFile } from "@/features/file/interfaces/file.interfaces";
-import type { FractalAgent } from "@/features/agent/interfaces/agent.interfaces";
-import type { FractalInstruction } from "@/features/instruction/interfaces/instruction.interfaces";
-import type { FractalSkill } from "@/features/skill/interfaces/skill.interfaces";
+import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces";
+import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
+import type { Instruction } from "@/features/instruction/interfaces/instruction.interfaces";
+import type { Skill } from "@/features/skill/interfaces/skill.interfaces";
 import type {
   Chat,
-  FractalChatMessage,
+  ChatMessage,
 } from "@/features/chat/interfaces/chat.interfaces";
-import type { FractalWorkspaceDirectoryUser } from "@/features/workspace/interfaces/directory.interfaces";
+import type { WorkspaceDirectoryUser } from "@/features/workspace/interfaces/directory.interfaces";
 import type {
   ActiveMention,
   ActiveSkillTrigger,
@@ -133,7 +133,7 @@ export class ComposerHelper {
     return tail;
   }
 
-  public static toReferenceFromFile(file: FractalFile): ComposerReference {
+  public static toReferenceFromFile(file: WorkspaceFile): ComposerReference {
     const isDirectory = file.type === "directory";
 
     return {
@@ -148,19 +148,19 @@ export class ComposerHelper {
     };
   }
 
-  public static toReferenceFromSkill(skill: FractalSkill): ComposerReference {
+  public static toReferenceFromSkill(skill: Skill): ComposerReference {
     return {
       id: `skill:${skill.id}`,
       kind: "skill",
       label: skill.name,
-      prompt: `${COMPOSER_PROMPT_PART_PREFIX} Skill activation request: Activate the Fractal skill "${skill.id}" for this request.`,
+      prompt: `${COMPOSER_PROMPT_PART_PREFIX} Skill activation request: Activate the AOS skill "${skill.id}" for this request.`,
       searchableValue: `${skill.id} ${skill.name} ${skill.description}`,
       tagName: skill.id,
     };
   }
 
   public static toReferenceFromInstruction(
-    instruction: FractalInstruction,
+    instruction: Instruction,
   ): ComposerReference {
     return {
       id: `instruction:${instruction.id}`,
@@ -191,7 +191,7 @@ export class ComposerHelper {
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   }
 
-  public static isWorkspaceWideInstruction(instruction: FractalInstruction) {
+  public static isWorkspaceWideInstruction(instruction: Instruction) {
     const paths = instruction.paths ?? [];
 
     if (paths.length === 0) {
@@ -205,7 +205,7 @@ export class ComposerHelper {
   }
 
   public static getInstructionMatchesForPath(
-    instructions: FractalInstruction[],
+    instructions: Instruction[],
     path: string,
   ) {
     const normalizedPath = ComposerHelper.normalizePath(path);
@@ -227,7 +227,7 @@ export class ComposerHelper {
     autoAttachedInstructionReferences: ComposerReference[];
     submitMessage: ChatComposerSubmitMessage;
   }) {
-    const parts: FractalChatMessage["parts"] = [];
+    const parts: ChatMessage["parts"] = [];
     const mainText = params.submitMessage.text.trim();
 
     params.autoAttachedInstructionReferences.forEach((reference) => {
@@ -269,11 +269,11 @@ export class ComposerHelper {
     switch (kind) {
       case "file":
       case "folder":
-        return "application/vnd.fractal.workspace-reference";
+        return "application/vnd.aos.workspace-reference";
       case "skill":
-        return "application/vnd.fractal.skill-reference";
+        return "application/vnd.aos.skill-reference";
       case "instruction":
-        return "application/vnd.fractal.instruction-reference";
+        return "application/vnd.aos.instruction-reference";
     }
   }
 
@@ -282,7 +282,7 @@ export class ComposerHelper {
     // `.type`), not the AI SDK's `FileUIPart` this signature originally
     // declared — the function body only reads `filename`/`mediaType`/`url`.
     file: ComposerAttachedFile,
-  ): FractalChatMessage["parts"][number] {
+  ): ChatMessage["parts"][number] {
     return {
       type: "file",
       filename: file.filename,
@@ -305,7 +305,7 @@ export class ComposerHelper {
    */
   public static isAgentDirectMessage(
     chat: Pick<Chat, "id" | "kind" | "participants">,
-    agents?: Array<Pick<FractalAgent, "id">>,
+    agents?: Array<Pick<Agent, "id">>,
   ): boolean {
     const participants = chat.participants ?? [];
 
@@ -333,9 +333,9 @@ export class ComposerHelper {
    * - Always excludes the ambient self user
    */
   public static resolveMentionTargets(params: {
-    agents: FractalAgent[];
+    agents: Agent[];
     chat: Pick<Chat, "id" | "kind" | "visibility" | "participants">;
-    directoryUsers: FractalWorkspaceDirectoryUser[];
+    directoryUsers: WorkspaceDirectoryUser[];
     selfUserId?: string;
     query?: string;
   }): ComposerMentionTarget[] {

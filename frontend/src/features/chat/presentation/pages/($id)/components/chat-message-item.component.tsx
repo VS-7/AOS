@@ -29,11 +29,11 @@ import {
   SmilePlusIcon,
 } from "lucide-react";
 import { isTextUIPart, isToolUIPart } from "ai";
-import type { FractalAgent } from "@/features/agent/interfaces/agent.interfaces";
+import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
 import { AgentToolThinkingHelper } from "@/features/agent/presentation/helpers/agent-tool-thinking.helper";
 import type { AgentThinkingSummary } from "@/features/agent/presentation/helpers/agent-tool-thinking.helper";
-import type { Chat, FractalChatMessage } from "@/features/chat/interfaces/chat.interfaces";
-import type { FractalWorkspaceDirectoryUser } from "@/features/workspace/interfaces/directory.interfaces";
+import type { Chat, ChatMessage } from "@/features/chat/interfaces/chat.interfaces";
+import type { WorkspaceDirectoryUser } from "@/features/workspace/interfaces/directory.interfaces";
 import { ToolBlock } from "@/features/chat/presentation/components/message/tool-part";
 import { ChatThreadHelper } from "@/features/chat/presentation/helpers/chat-thread.helper";
 import { ChatInlineMarkupHelper } from "@/features/chat/presentation/helpers/chat-inline-markup.helper";
@@ -178,18 +178,18 @@ export interface ChatMessageReaction {
 }
 
 interface ChatMessageItemProps {
-  agents: FractalAgent[];
+  agents: Agent[];
   chat: Chat;
-  message: FractalChatMessage;
-  nextMessage?: FractalChatMessage;
-  previousMessage?: FractalChatMessage;
+  message: ChatMessage;
+  nextMessage?: ChatMessage;
+  previousMessage?: ChatMessage;
   reactions: ChatMessageReaction[];
   reactionsDisabled?: boolean;
   onAddReaction: (emoji: string) => void;
   onToggleReaction: (emoji: string) => void;
   selfUserId?: string;
   userName: string;
-  usersById?: ReadonlyMap<string, FractalWorkspaceDirectoryUser>;
+  usersById?: ReadonlyMap<string, WorkspaceDirectoryUser>;
   /**
    * When true the message animates in on mount. Pass false for messages that
    * were already persisted on initial load so virtualization remounts stay
@@ -416,7 +416,7 @@ export function ChatMessageItem({
   }
 
   function renderFilePart(
-    part: Extract<FractalChatMessage["parts"][number], { type: "file" }>,
+    part: Extract<ChatMessage["parts"][number], { type: "file" }>,
     index: number,
   ) {
     const mediaType = part.mediaType || "application/octet-stream";

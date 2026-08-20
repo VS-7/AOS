@@ -1,5 +1,5 @@
 /**
- * Task 10: the Fractal route tree (`@app/router.tsx`), ported. The only
+ * Task 10: the AOS route tree (`@app/router.tsx`), ported. The only
  * changes from the pristine original are the two Igniter-specific imports
  * just below (`IgniterRouter` → `AosRouter`, the `igniter` instance →
  * `aos`) — `AosRouter.create(app).addRoute(route).build(options)` mirrors
@@ -48,7 +48,6 @@ import { MarketplacePage } from "@/features/marketplace/presentation/pages/marke
 import { MarketplaceDetailsPage } from "@/features/marketplace/presentation/pages/marketplace/[name]";
 import { SettingsIndexPage } from "@/features/workspace/presentation/pages/settings";
 import { SettingsSectionPage } from "@/features/workspace/presentation/pages/settings/($group)/($section)";
-import { DownloadPage } from "@/features/workspace/presentation/pages/download";
 
 // ─── Route-level error fallback ───────────────────────────────────────────────
 // TanStack Router renders this inside its own error boundary for loader errors.
@@ -139,7 +138,7 @@ const ROUTE_FALLBACK_STYLES = `
     background: transparent;
     overflow: hidden;
     font-family: "Geist Variable", system-ui, sans-serif;
-    color: hsl(var(--foreground, 210 40% 98%));
+    color: var(--foreground, hsl(210 40% 98%));
   }
   .eb-card {
     position: relative;
@@ -154,37 +153,37 @@ const ROUTE_FALLBACK_STYLES = `
     animation: eb-fade-up 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
   .eb-logo {
-    color: hsl(var(--foreground, 210 40% 98%));
+    color: var(--foreground, hsl(210 40% 98%));
     opacity: 0.55;
     line-height: 0;
   }
   .eb-text { display: flex; flex-direction: column; gap: 4px; }
-  .eb-title { margin: 0; font-weight: 600; letter-spacing: -0.02em; color: hsl(var(--foreground, 210 40% 98%)); line-height: 1.3; }
-  .eb-desc { margin: 0; font-size: 0.8125rem; line-height: 1.5; color: hsl(var(--muted-foreground, 215 16% 47%)); }
+  .eb-title { margin: 0; font-weight: 600; letter-spacing: -0.02em; color: var(--foreground, hsl(210 40% 98%)); line-height: 1.3; }
+  .eb-desc { margin: 0; font-size: 0.8125rem; line-height: 1.5; color: var(--muted-foreground, hsl(215 16% 47%)); }
   .eb-error-pill {
     display: inline-flex;
     align-items: baseline;
     gap: 6px;
     padding: 5px 10px;
     border-radius: 7px;
-    background: hsl(var(--muted, 215 20% 12%));
-    border: 1px solid hsl(var(--border, 215 20% 16%));
+    background: var(--muted, hsl(215 20% 12%));
+    border: 1px solid var(--border, hsl(215 20% 16%));
     max-width: 100%;
     overflow: hidden;
   }
   .eb-error-name {
     font-size: 0.6875rem;
     font-weight: 600;
-    color: hsl(var(--destructive, 0 72% 58%));
+    color: var(--destructive, hsl(0 72% 58%));
     white-space: nowrap;
     flex-shrink: 0;
     font-family: ui-monospace, monospace;
   }
-  .eb-error-sep { color: hsl(var(--border, 215 20% 28%)); font-size: 0.75rem; flex-shrink: 0; }
+  .eb-error-sep { color: var(--border, hsl(215 20% 28%)); font-size: 0.75rem; flex-shrink: 0; }
   .eb-error-msg {
     font-size: 0.6875rem;
     font-family: ui-monospace, monospace;
-    color: hsl(var(--muted-foreground, 215 16% 47%));
+    color: var(--muted-foreground, hsl(215 16% 47%));
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -209,8 +208,8 @@ const ROUTE_FALLBACK_STYLES = `
   }
   .eb-btn:active { transform: scale(0.97); }
   .eb-btn--primary {
-    background: hsl(var(--foreground, 210 40% 98%));
-    color: hsl(var(--background, 220 13% 7%));
+    background: var(--foreground, hsl(210 40% 98%));
+    color: var(--background, hsl(220 13% 7%));
   }
   .eb-btn--primary:hover { opacity: 0.88; }
 `;
@@ -238,7 +237,6 @@ export const router = AosRouter.create(aos)
   .addRoute(MarketplaceDetailsPage)
   .addRoute(SettingsIndexPage)
   .addRoute(SettingsSectionPage)
-  .addRoute(DownloadPage)
   .build({ defaultErrorComponent: RouteErrorFallback });
 
 declare module "@tanstack/react-router" {

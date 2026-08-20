@@ -10,8 +10,8 @@ import React, {
 } from "react";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import type {
-  FractalTask,
-  FractalTaskPriority,
+  Task,
+  TaskPriority,
 } from "@/features/task/interfaces/task.interfaces";
 import { TaskHelper } from "../../helpers/task.helper";
 import { TASK_STATUS_ORDER } from "../../consts/task";
@@ -36,10 +36,10 @@ interface TasksPageSearchSchema {
 
 interface DragContextValue {
   activeTaskId: string | null;
-  activeTask: FractalTask | null;
-  overContainerId: FractalTask["status"] | null;
+  activeTask: Task | null;
+  overContainerId: Task["status"] | null;
   isDragActive: boolean;
-  activeDropStatus: FractalTask["status"] | null;
+  activeDropStatus: Task["status"] | null;
   handleDragStart: (event: DragStartEvent) => void;
   handleDragOver: (event: DragOverEvent) => void;
   handleDragEnd: (event: DragEndEvent) => void;
@@ -60,10 +60,10 @@ export function useDragContext() {
 
 interface TasksContextValue {
   // Data
-  tasks: FractalTask[];
-  filteredTasks: FractalTask[];
-  displayedGroupedTasks: Record<FractalTask["status"], FractalTask[]>;
-  statusCountByType: Record<FractalTask["status"], number>;
+  tasks: Task[];
+  filteredTasks: Task[];
+  displayedGroupedTasks: Record<Task["status"], Task[]>;
+  statusCountByType: Record<Task["status"], number>;
   taskTypes: string[];
 
   // Search state
@@ -71,24 +71,24 @@ interface TasksContextValue {
   searchDraft: string;
 
   // Selected filters
-  selectedStatuses: FractalTask["status"][];
-  selectedPriorities: FractalTaskPriority[];
+  selectedStatuses: Task["status"][];
+  selectedPriorities: TaskPriority[];
   selectedTypes: string[];
   selectedProjects: string[];
   selectedGoals: string[];
 
   // UI state
   activeFilterCount: number;
-  hasStatusShortcut: "all" | FractalTask["status"];
+  hasStatusShortcut: "all" | Task["status"];
   currentView: "list" | "kanban";
 
   // Actions (stable refs)
   updateSearch: (next: Partial<TasksPageSearchSchema>) => void;
   handleViewChange: (view: "list" | "kanban") => void;
   handleSearchChange: (value: string) => void;
-  handleStatusShortcut: (status: "all" | FractalTask["status"]) => void;
-  handleToggleStatus: (status: FractalTask["status"]) => void;
-  handleTogglePriority: (priority: FractalTaskPriority) => void;
+  handleStatusShortcut: (status: "all" | Task["status"]) => void;
+  handleToggleStatus: (status: Task["status"]) => void;
+  handleTogglePriority: (priority: TaskPriority) => void;
   handleToggleType: (type: string) => void;
   handleToggleProject: (project: string) => void;
   handleToggleGoal: (goal: string) => void;
@@ -135,7 +135,7 @@ function toggleFilterValue(values: string[], value: string): string[] {
 
 interface TasksProviderProps {
   children: React.ReactNode;
-  tasks: FractalTask[];
+  tasks: Task[];
   search: TasksPageSearchSchema;
   client: any;
   route: any;
@@ -153,7 +153,7 @@ export function TasksProvider({
   const [searchDraft, setSearchDraft] = useState(search.query ?? "");
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [overContainerId, setOverContainerId] = useState<
-    FractalTask["status"] | null
+    Task["status"] | null
   >(null);
   const finishTransition = useTasksStatusTransition();
 
@@ -168,11 +168,11 @@ export function TasksProvider({
   // --- Parsed filters (memoized) ---
 
   const selectedStatuses = useMemo(
-    () => parseMultiValue(search.status) as FractalTask["status"][],
+    () => parseMultiValue(search.status) as Task["status"][],
     [search.status],
   );
   const selectedPriorities = useMemo(
-    () => parseMultiValue(search.priority) as FractalTaskPriority[],
+    () => parseMultiValue(search.priority) as TaskPriority[],
     [search.priority],
   );
   const selectedTypes = useMemo(
@@ -204,7 +204,7 @@ export function TasksProvider({
         acc[status] = tasks.filter((task) => task.status === status).length;
         return acc;
       },
-      {} as Record<FractalTask["status"], number>,
+      {} as Record<Task["status"], number>,
     );
   }, [tasks]);
 
@@ -232,7 +232,7 @@ export function TasksProvider({
     selectedProjects.length +
     selectedGoals.length;
 
-  const hasStatusShortcut: "all" | FractalTask["status"] =
+  const hasStatusShortcut: "all" | Task["status"] =
     selectedStatuses.length === 1 ? selectedStatuses[0] : "all";
 
   const currentView = search.view === "kanban" ? "kanban" : "list";
@@ -272,7 +272,7 @@ export function TasksProvider({
   );
 
   const handleStatusShortcut = useCallback(
-    (status: "all" | FractalTask["status"]) => {
+    (status: "all" | Task["status"]) => {
       updateSearch({
         status: status === "all" ? undefined : serializeMultiValue([status]),
       });
@@ -281,7 +281,7 @@ export function TasksProvider({
   );
 
   const handleToggleStatus = useCallback(
-    (status: FractalTask["status"]) => {
+    (status: Task["status"]) => {
       updateSearch({
         status: serializeMultiValue(
           toggleFilterValue(
@@ -295,7 +295,7 @@ export function TasksProvider({
   );
 
   const handleTogglePriority = useCallback(
-    (priority: FractalTaskPriority) => {
+    (priority: TaskPriority) => {
       updateSearch({
         priority: serializeMultiValue(
           toggleFilterValue(
@@ -357,10 +357,10 @@ export function TasksProvider({
   // --- Drag handlers (use ref for tasks to avoid stale closures) ---
 
   const resolveStatusFromId = useCallback(
-    (id: string | null): FractalTask["status"] | null => {
+    (id: string | null): Task["status"] | null => {
       if (!id) return null;
-      if (TASK_STATUS_ORDER.includes(id as FractalTask["status"])) {
-        return id as FractalTask["status"];
+      if (TASK_STATUS_ORDER.includes(id as Task["status"])) {
+        return id as Task["status"];
       }
       const task = tasksRef.current.find((t) => t.id === id);
       return task?.status ?? null;

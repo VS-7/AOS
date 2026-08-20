@@ -1,22 +1,22 @@
 import type { Chat } from "../../interfaces/chat.interfaces";
 // Re-exported (not just imported): three sidebar files (`chat-row.tsx`,
-// `chat-row-kind-icon.tsx`, `chat-search.helper.ts`) import `FractalChatKind`
+// `chat-row-kind-icon.tsx`, `chat-search.helper.ts`) import `ChatKind`
 // from this module, not `chat.interfaces.ts` directly.
-export type { FractalChatKind } from "../../interfaces/chat.interfaces";
-import type { FractalChatKind } from "../../interfaces/chat.interfaces";
+export type { ChatKind } from "../../interfaces/chat.interfaces";
+import type { ChatKind } from "../../interfaces/chat.interfaces";
 
 /**
  * Occupancy map from {@link aos.stores.agent} — chatId → agent ids processing.
  */
-export type FractalChatOccupancy = Record<string, string[]>;
+export type ChatOccupancy = Record<string, string[]>;
 
 /**
  * Pure classification, search, and live-sort helpers for chat list surfaces.
  *
- * Shared by {@link FractalChatService.list} and the workspace Chat sidebar so
+ * Shared by {@link ChatService.list} and the workspace Chat sidebar so
  * kind detection stays consistent across HTTP, CLI, and FE.
  */
-export class FractalChatKindHelper {
+export class ChatKindHelper {
   /**
    * Maximum idle (non-processing) chats shown on the Live tab after active ones.
    */
@@ -34,7 +34,7 @@ export class FractalChatKindHelper {
    *
    * @example
    * ```typescript
-   * FractalChatKindHelper.classify(chat, new Set(["atlas"])); // "dm" | "channel" | …
+   * ChatKindHelper.classify(chat, new Set(["atlas"])); // "dm" | "channel" | …
    * ```
    */
   public static classify(
@@ -43,7 +43,7 @@ export class FractalChatKindHelper {
       "id" | "task" | "routine" | "metadata" | "kind" | "participants"
     >,
     agentIds: ReadonlySet<string>,
-  ): FractalChatKind {
+  ): ChatKind {
     const persisted = chat.kind as string | undefined;
 
     // [Condition]: Legacy pre-multi-user label — agent DMs were kind "agent".
@@ -131,7 +131,7 @@ export class FractalChatKindHelper {
       return true;
     }
 
-    const kind = FractalChatKindHelper.classify(chat, agentIds);
+    const kind = ChatKindHelper.classify(chat, agentIds);
     const haystack = [chat.id, chat.title, chat.task, chat.routine, kind]
       .filter(Boolean)
       .join(" ")
@@ -147,9 +147,9 @@ export class FractalChatKindHelper {
    * @returns Count map for every kind key.
    */
   public static count_groups(
-    chats: Array<{ kind: FractalChatKind }>,
-  ): Record<FractalChatKind, number> {
-    const groups: Record<FractalChatKind, number> = {
+    chats: Array<{ kind: ChatKind }>,
+  ): Record<ChatKind, number> {
+    const groups: Record<ChatKind, number> = {
       dm: 0,
       task: 0,
       run: 0,
@@ -173,7 +173,7 @@ export class FractalChatKindHelper {
    */
   public static isProcessing(
     chatId: string,
-    occupancy: FractalChatOccupancy,
+    occupancy: ChatOccupancy,
   ): boolean {
     const agents = occupancy[chatId];
     return Array.isArray(agents) && agents.length > 0;
@@ -189,11 +189,11 @@ export class FractalChatKindHelper {
    */
   public static filterByKind(
     chats: Chat[],
-    kind: FractalChatKind,
+    kind: ChatKind,
     agentIds: ReadonlySet<string>,
   ): Chat[] {
     return chats.filter(
-      (chat) => FractalChatKindHelper.classify(chat, agentIds) === kind,
+      (chat) => ChatKindHelper.classify(chat, agentIds) === kind,
     );
   }
 
@@ -208,12 +208,12 @@ export class FractalChatKindHelper {
    */
   public static countProcessingByKind(
     chats: Chat[],
-    kind: FractalChatKind,
-    occupancy: FractalChatOccupancy,
+    kind: ChatKind,
+    occupancy: ChatOccupancy,
     agentIds: ReadonlySet<string>,
   ): number {
-    return FractalChatKindHelper.filterByKind(chats, kind, agentIds).filter(
-      (chat) => FractalChatKindHelper.isProcessing(chat.id, occupancy),
+    return ChatKindHelper.filterByKind(chats, kind, agentIds).filter(
+      (chat) => ChatKindHelper.isProcessing(chat.id, occupancy),
     ).length;
   }
 
@@ -226,11 +226,11 @@ export class FractalChatKindHelper {
    */
   public static listProcessing(
     chats: Chat[],
-    occupancy: FractalChatOccupancy,
+    occupancy: ChatOccupancy,
   ): Chat[] {
     return chats
       .filter((chat) =>
-        FractalChatKindHelper.isProcessing(chat.id, occupancy),
+        ChatKindHelper.isProcessing(chat.id, occupancy),
       )
       .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
   }
@@ -245,14 +245,14 @@ export class FractalChatKindHelper {
    */
   public static sortLive(
     chats: Chat[],
-    occupancy: FractalChatOccupancy,
-    idleCap: number = FractalChatKindHelper.LIVE_IDLE_CAP,
+    occupancy: ChatOccupancy,
+    idleCap: number = ChatKindHelper.LIVE_IDLE_CAP,
   ): Chat[] {
     const processing: Chat[] = [];
     const idle: Chat[] = [];
 
     for (const chat of chats) {
-      if (FractalChatKindHelper.isProcessing(chat.id, occupancy)) {
+      if (ChatKindHelper.isProcessing(chat.id, occupancy)) {
         processing.push(chat);
       } else {
         idle.push(chat);
@@ -331,20 +331,20 @@ export class FractalChatKindHelper {
     agentIds: ReadonlySet<string>,
   ): Map<
     string,
-    Array<{ chatId: string; title: string; kind: FractalChatKind }>
+    Array<{ chatId: string; title: string; kind: ChatKind }>
   > {
     const index = new Map<
       string,
-      Array<{ chatId: string; title: string; kind: FractalChatKind }>
+      Array<{ chatId: string; title: string; kind: ChatKind }>
     >();
 
     for (const chat of chats) {
-      const active = FractalChatKindHelper.active_agent_ids(chat);
+      const active = ChatKindHelper.active_agent_ids(chat);
       if (active.length === 0) {
         continue;
       }
 
-      const kind = FractalChatKindHelper.classify(chat, agentIds);
+      const kind = ChatKindHelper.classify(chat, agentIds);
       const entry = {
         chatId: chat.id,
         title: chat.title,
@@ -372,7 +372,7 @@ export class FractalChatKindHelper {
    */
   public static list_processing_for_agent(
     agentId: string,
-    occupancy: FractalChatOccupancy,
+    occupancy: ChatOccupancy,
     chats: Array<
       Pick<
         Chat,
@@ -386,12 +386,12 @@ export class FractalChatKindHelper {
       >
     >,
     agentIds: ReadonlySet<string>,
-  ): Array<{ chatId: string; title: string; kind: FractalChatKind }> {
+  ): Array<{ chatId: string; title: string; kind: ChatKind }> {
     const byId = new Map(chats.map((chat) => [chat.id, chat]));
     const result: Array<{
       chatId: string;
       title: string;
-      kind: FractalChatKind;
+      kind: ChatKind;
     }> = [];
 
     for (const [chatId, agents] of Object.entries(occupancy)) {
@@ -408,7 +408,7 @@ export class FractalChatKindHelper {
       result.push({
         chatId,
         title: chat.title,
-        kind: FractalChatKindHelper.classify(chat, agentIds),
+        kind: ChatKindHelper.classify(chat, agentIds),
       });
     }
 
@@ -424,10 +424,10 @@ export class FractalChatKindHelper {
   public static occupancy_from_processing_index(
     processingByAgent: Map<
       string,
-      Array<{ chatId: string; title: string; kind: FractalChatKind }>
+      Array<{ chatId: string; title: string; kind: ChatKind }>
     >,
-  ): FractalChatOccupancy {
-    const occupancy: FractalChatOccupancy = {};
+  ): ChatOccupancy {
+    const occupancy: ChatOccupancy = {};
 
     for (const [agentId, entries] of processingByAgent) {
       for (const entry of entries) {

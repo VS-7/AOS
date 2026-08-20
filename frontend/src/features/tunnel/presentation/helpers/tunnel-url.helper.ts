@@ -5,7 +5,7 @@
  * and other tunnel presentation consumers. Backend services keep equivalent
  * private `_snake_case` methods — do not import this helper from services.
  */
-export class FractalTunnelUrlHelper {
+export class TunnelUrlHelper {
   /**
    * Normalizes a tunnel hostname to `hostname[:port]` without protocol or trailing slash.
    *
@@ -35,7 +35,7 @@ export class FractalTunnelUrlHelper {
    */
   public static buildPublicUrl(hostname: string): string {
     // [Data Transformation]: Ensure https:// prefix for public tunnel URLs.
-    const normalized = FractalTunnelUrlHelper.normalizeHostname(hostname);
+    const normalized = TunnelUrlHelper.normalizeHostname(hostname);
     if (!normalized) return "";
 
     if (/^https?:\/\//i.test(normalized)) {
@@ -54,6 +54,6 @@ export class FractalTunnelUrlHelper {
    */
   public static fingerprint(hostname: string, token: string): string {
     // [Data Transformation]: Concatenate normalized hostname with trimmed token.
-    return `${FractalTunnelUrlHelper.normalizeHostname(hostname)}::${token.trim()}`;
+    return `${TunnelUrlHelper.normalizeHostname(hostname)}::${token.trim()}`;
   }
 }
