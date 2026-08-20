@@ -22,7 +22,7 @@ var Catalog = []Entry{
 	{Code: "AOS_AUTH_ALREADY_ONBOARDED", Package: "internal/domain/auth", File: "internal/domain/auth/errors.go", Line: 72, Status: 409, Causer: "auth.Service.Onboarding", CTA: true},
 	{Code: "AOS_AUTH_HTTP_BAD_BODY", Package: "internal/transport/authapi", File: "internal/transport/authapi/errors.go", Line: 23, Status: 400, Causer: "authapi.decode", CTA: true},
 	{Code: "AOS_AUTH_HTTP_BODY_TOO_LARGE", Package: "internal/transport/authapi", File: "internal/transport/authapi/errors.go", Line: 14, Status: 500, Causer: "authapi.decode", CTA: true, Issues: []string{"limit"}},
-	{Code: "AOS_AUTH_HTTP_INTERNAL", Package: "internal/transport/authapi", File: "internal/transport/authapi/authapi.go", Line: 263, Status: 500, Causer: "authapi", CTA: false},
+	{Code: "AOS_AUTH_HTTP_INTERNAL", Package: "internal/transport/authapi", File: "internal/transport/authapi/authapi.go", Line: 274, Status: 500, Causer: "authapi", CTA: false},
 	{Code: "AOS_AUTH_HTTP_UNAUTHENTICATED", Package: "internal/transport/authapi", File: "internal/transport/authapi/errors.go", Line: 6, Status: 401, Causer: "authapi", CTA: true},
 	{Code: "AOS_AUTH_INVALID_CREDENTIALS", Package: "internal/domain/auth", File: "internal/domain/auth/errors.go", Line: 37, Status: 401, Causer: "auth.Service.Login", CTA: true},
 	{Code: "AOS_AUTH_INVALID_ROLE", Package: "internal/domain/auth", File: "internal/domain/auth/errors.go", Line: 115, Status: 400, Causer: "auth.Service.SetRole", CTA: true, Issues: []string{"allowed", "role"}},

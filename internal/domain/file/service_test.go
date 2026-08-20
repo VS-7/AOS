@@ -520,3 +520,244 @@ func TestDiffMarksABinaryPairWithoutText(t *testing.T) {
 		t.Fatalf("got %+v, want IsBinary with neither side of text set", d)
 	}
 }
+
+// The suite above proves what the service does when its ports work. What
+// follows proves what it does when they do not — every failure the ports can
+// report has to arrive as a classified error, because the transport above
+// turns the code into an HTTP status and the UI turns it into a message.
+
+// brokenFS wraps a working fake and makes exactly one method fail, so a test
+// names the failure it is about instead of building a whole broken world.
+type brokenFS struct {
+	*fakeFS
+	fail error
+
+	on string // "resolve", "stat", "readdir", "read", "write", "mkdir", "rename", "remove"
+}
+
+func (b brokenFS) Resolve(ctx context.Context, root, p string) (string, error) {
+	if b.on == "resolve" {
+		return "", b.fail
+	}
+	return b.fakeFS.Resolve(ctx, root, p)
+}
+
+func (b brokenFS) Stat(ctx context.Context, p string) (file.Info, error) {
+	if b.on == "stat" {
+		return file.Info{}, b.fail
+	}
+	return b.fakeFS.Stat(ctx, p)
+}
+
+func (b brokenFS) ReadDir(ctx context.Context, p string) ([]file.Info, error) {
+	if b.on == "readdir" {
+		return nil, b.fail
+	}
+	return b.fakeFS.ReadDir(ctx, p)
+}
+
+func (b brokenFS) ReadFile(ctx context.Context, p string, limit int64) ([]byte, bool, error) {
+	if b.on == "read" {
+		return nil, false, b.fail
+	}
+	return b.fakeFS.ReadFile(ctx, p, limit)
+}
+
+func (b brokenFS) WriteFile(ctx context.Context, p string, data []byte) error {
+	if b.on == "write" {
+		return b.fail
+	}
+	return b.fakeFS.WriteFile(ctx, p, data)
+}
+
+func (b brokenFS) MkdirAll(ctx context.Context, p string) error {
+	if b.on == "mkdir" {
+		return b.fail
+	}
+	return b.fakeFS.MkdirAll(ctx, p)
+}
+
+func (b brokenFS) Rename(ctx context.Context, from, to string) error {
+	if b.on == "rename" {
+		return b.fail
+	}
+	return b.fakeFS.Rename(ctx, from, to)
+}
+
+func (b brokenFS) Remove(ctx context.Context, p string) error {
+	if b.on == "remove" {
+		return b.fail
+	}
+	return b.fakeFS.Remove(ctx, p)
+}
+
+type brokenGit struct {
+	*fakeGit
+	fail error
+	on   string // "status" or "show"
+}
+
+func (g brokenGit) Status(ctx context.Context, root, p string) (string, error) {
+	if g.on == "status" {
+		return "", g.fail
+	}
+	return g.fakeGit.Status(ctx, root, p)
+}
+
+func (g brokenGit) Show(ctx context.Context, root, ref, p string) ([]byte, bool, error) {
+	if g.on == "show" {
+		return nil, false, g.fail
+	}
+	return g.fakeGit.Show(ctx, root, ref, p)
+}
+
+type brokenWorkspaces struct{ fail error }
+
+func (w brokenWorkspaces) Root(context.Context) (string, error) { return "", w.fail }
+
+// A workspace that cannot report its root is not a path problem, and saying
+// so is the difference between "check your path" and "the daemon lost the
+// workspace" in front of whoever is reading the message.
+func TestEveryOperationReportsAnUnavailableWorkspace(t *testing.T) {
+	svc := file.NewService(file.Deps{
+		FS:         newFakeFS(),
+		Git:        newFakeGit(),
+		Workspaces: brokenWorkspaces{fail: errors.New("the workspace store is unreachable")},
+	})
+	ctx := t.Context()
+
+	for name, call := range map[string]func() error{
+		"Tree":   func() error { _, err := svc.Tree(ctx, file.TreeInput{}); return err },
+		"Read":   func() error { _, err := svc.Read(ctx, file.ReadInput{Path: "a.md"}); return err },
+		"Write":  func() error { return svc.Write(ctx, file.WriteInput{Path: "a.md"}) },
+		"Move":   func() error { return svc.Move(ctx, "a.md", "b.md") },
+		"Delete": func() error { return svc.Delete(ctx, "a.md") },
+		"Diff":   func() error { _, err := svc.Diff(ctx, file.DiffInput{Path: "a.md"}); return err },
+	} {
+		if code := codeOf(t, call()); code != "AOS_FILE_WORKSPACE_UNAVAILABLE" {
+			t.Fatalf("%s: code = %q, want FILE_WORKSPACE_UNAVAILABLE", name, code)
+		}
+	}
+}
+
+// A resolution failure that is not a containment breach must not be reported
+// as one: FILE_OUTSIDE_WORKSPACE reads as an attempted escape, and sending
+// whoever reads the audit log after an attack that did not happen is its own
+// kind of failure.
+func TestAResolutionFailureThatIsNotAnEscapeIsReportedAsUnreadable(t *testing.T) {
+	fs := brokenFS{fakeFS: newFakeFS(), on: "resolve", fail: errors.New("the path could not be walked")}
+	svc := newService2(fs, newFakeGit())
+
+	_, err := svc.Read(t.Context(), file.ReadInput{Path: "a.md"})
+	if code := codeOf(t, err); code != "AOS_FILE_PATH_UNREADABLE" {
+		t.Fatalf("code = %q, want FILE_PATH_UNREADABLE", code)
+	}
+}
+
+func TestTreeRefusesAPathThatIsNotADirectory(t *testing.T) {
+	fs := newFakeFS()
+	fs.put(rel("README.md"), []byte("hello"))
+	svc := newService(fs, newFakeGit())
+
+	_, err := svc.Tree(t.Context(), file.TreeInput{Path: "README.md"})
+	if code := codeOf(t, err); code != "AOS_FILE_NOT_A_DIRECTORY" {
+		t.Fatalf("code = %q, want FILE_NOT_A_DIRECTORY", code)
+	}
+}
+
+func TestReadRefusesADirectory(t *testing.T) {
+	fs := newFakeFS()
+	fs.mkdir(rel("internal"))
+	svc := newService(fs, newFakeGit())
+
+	_, err := svc.Read(t.Context(), file.ReadInput{Path: "internal"})
+	if code := codeOf(t, err); code != "AOS_FILE_IS_A_DIRECTORY" {
+		t.Fatalf("code = %q, want FILE_IS_A_DIRECTORY", code)
+	}
+}
+
+// Write has no separate create, so a write onto a directory would otherwise
+// be an attempt to replace it with a file.
+func TestWriteRefusesADirectory(t *testing.T) {
+	fs := newFakeFS()
+	fs.mkdir(rel("internal"))
+	svc := newService(fs, newFakeGit())
+
+	err := svc.Write(t.Context(), file.WriteInput{Path: "internal", Content: "x"})
+	if code := codeOf(t, err); code != "AOS_FILE_IS_A_DIRECTORY" {
+		t.Fatalf("code = %q, want FILE_IS_A_DIRECTORY", code)
+	}
+}
+
+// Every filesystem failure arrives as one code carrying which operation
+// failed, so the message can name it without the transport having to know
+// the difference between a failed rename and a failed mkdir.
+func TestEveryFilesystemFailureArrivesAsIOFailed(t *testing.T) {
+	boom := errors.New("the device is not ready")
+
+	for name, tc := range map[string]struct {
+		on   string
+		call func(*file.Service) error
+	}{
+		"Tree/stat": {"stat", func(s *file.Service) error {
+			_, err := s.Tree(t.Context(), file.TreeInput{})
+			return err
+		}},
+		"Tree/readdir": {"readdir", func(s *file.Service) error {
+			_, err := s.Tree(t.Context(), file.TreeInput{})
+			return err
+		}},
+		"Read/read": {"read", func(s *file.Service) error {
+			_, err := s.Read(t.Context(), file.ReadInput{Path: "a.md"})
+			return err
+		}},
+		"Write/mkdir": {"mkdir", func(s *file.Service) error {
+			return s.Write(t.Context(), file.WriteInput{Path: "new/a.md", Content: "x"})
+		}},
+		"Write/write": {"write", func(s *file.Service) error {
+			return s.Write(t.Context(), file.WriteInput{Path: "a.md", Content: "x"})
+		}},
+		"Move/rename": {"rename", func(s *file.Service) error {
+			return s.Move(t.Context(), "a.md", "b.md")
+		}},
+		"Delete/remove": {"remove", func(s *file.Service) error {
+			return s.Delete(t.Context(), "a.md")
+		}},
+	} {
+		fs := newFakeFS()
+		fs.put(rel("a.md"), []byte("hello"))
+		svc := newService2(brokenFS{fakeFS: fs, on: tc.on, fail: boom}, newFakeGit())
+
+		if code := codeOf(t, tc.call(svc)); code != "AOS_FILE_IO_FAILED" {
+			t.Fatalf("%s: code = %q, want FILE_IO_FAILED", name, code)
+		}
+	}
+}
+
+// Diff is the only place git is reached, and both of its calls have to be
+// classified — a git failure is not a filesystem failure, and telling
+// someone to check their path when the repository is what broke sends them
+// looking in the wrong place.
+func TestDiffReportsAGitFailureAsItsOwnCode(t *testing.T) {
+	boom := errors.New("not a git repository")
+
+	for _, on := range []string{"status", "show"} {
+		fs := newFakeFS()
+		fs.put(rel("src.go"), []byte("depois"))
+		git := newFakeGit()
+		git.status["src.go"] = "modified"
+		git.head["src.go"] = []byte("antes")
+
+		svc := newService(fs, brokenGit{fakeGit: git, on: on, fail: boom})
+		_, err := svc.Diff(t.Context(), file.DiffInput{Path: "src.go"})
+		if code := codeOf(t, err); code != "AOS_FILE_GIT_FAILED" {
+			t.Fatalf("git %s: code = %q, want FILE_GIT_FAILED", on, code)
+		}
+	}
+}
+
+// newService2 takes an FS rather than the concrete fake, for the tests above
+// that substitute a broken one.
+func newService2(fs file.FS, git file.Git) *file.Service {
+	return file.NewService(file.Deps{FS: fs, Git: git, Workspaces: fakeWorkspaces{}})
+}

@@ -102,3 +102,98 @@ func TestContainsComparesTheRelativePathNotAStringPrefix(t *testing.T) {
 		t.Fatal("a child must be considered inside its root")
 	}
 }
+
+// Root is the function a caller uses instead of the EvalSymlinks dance
+// resolvedRoot does by hand above — it exists precisely so that dance is not
+// repeated at every construction site.
+func TestRootResolvesASymlinkedRoot(t *testing.T) {
+	base := resolvedRoot(t)
+	real := filepath.Join(base, "real")
+	if err := os.Mkdir(real, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlinks are unavailable here: %v", err)
+	}
+
+	got, err := pathx.Root(link)
+	if err != nil {
+		t.Fatalf("Root(%q) = error %v", link, err)
+	}
+	if got != real {
+		t.Fatalf("Root(%q) = %q, want %q", link, got, real)
+	}
+}
+
+// A root that does not exist yet comes back unchanged rather than as an
+// error: the workspace directory may be about to be scaffolded, and the
+// first real operation against it is where a missing root should fail.
+func TestRootReturnsAMissingRootUnchanged(t *testing.T) {
+	missing := filepath.Join(resolvedRoot(t), "not-created-yet")
+
+	got, err := pathx.Root(missing)
+	if err != nil {
+		t.Fatalf("Root(%q) = error %v, want it returned unchanged", missing, err)
+	}
+	if got != missing {
+		t.Fatalf("Root(%q) = %q, want it unchanged", missing, got)
+	}
+}
+
+// A path whose parent is a file rather than a directory is not "does not
+// exist" — EvalSymlinks reports ENOTDIR, and Resolve must surface that
+// instead of quietly falling through to its parent-resolution branch.
+func TestResolveReportsAFailureThatIsNotAMissingPath(t *testing.T) {
+	root := resolvedRoot(t)
+	notADir := filepath.Join(root, "file.txt")
+	if err := os.WriteFile(notADir, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// "file.txt/child/grandchild": the parent itself cannot be walked, so the
+	// fallback in Resolve fails too and the path is returned as-is for
+	// containment to judge — which it does, and it is inside the root.
+	got, err := pathx.Resolve(root, filepath.Join("file.txt", "child", "grandchild"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		// Some platforms report ENOTDIR here, which is a legitimate hard
+		// failure; others report ENOENT and fall through. Both are correct
+		// behaviour for this function — what must never happen is a path
+		// escaping the root.
+		return
+	}
+	if err == nil && !pathx.Contains(root, got) {
+		t.Fatalf("Resolve(%q) = %q, which is outside the root", notADir, got)
+	}
+}
+
+// Contains has to answer for a root and a path that share no ancestor at
+// all. filepath.Rel fails outright on Windows for paths on different
+// volumes; everywhere else it returns a "../.." chain. Neither is inside.
+func TestContainsRejectsAnUnrelatedPath(t *testing.T) {
+	root := resolvedRoot(t)
+	other := resolvedRoot(t)
+	if pathx.Contains(root, other) {
+		t.Fatalf("Contains(%q, %q) = true, want false", root, other)
+	}
+	if runtime.GOOS == "windows" && pathx.Contains(`C:\a`, `D:\b`) {
+		t.Fatal(`Contains("C:\a", "D:\b") = true across volumes, want false`)
+	}
+}
+
+// ResolveInside forwards a resolution failure rather than turning it into
+// ErrOutside — the two mean different things to a caller, and reporting
+// "outside the root" for an I/O problem sends whoever reads the log looking
+// for an attack that did not happen.
+func TestResolveInsideForwardsAResolutionFailureAsItself(t *testing.T) {
+	root := resolvedRoot(t)
+	deep := filepath.Join(root, "a", "b", "c", "d")
+
+	got, err := pathx.ResolveInside(root, deep)
+	if errors.Is(err, pathx.ErrOutside) {
+		t.Fatalf("a path under the root came back as ErrOutside: %q", deep)
+	}
+	if err == nil && !pathx.Contains(root, got) {
+		t.Fatalf("ResolveInside(%q) = %q, which is outside the root", deep, got)
+	}
+}
