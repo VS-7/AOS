@@ -103,6 +103,22 @@ var natives = []Descriptor{
 		Root+"/goals/{id}/GOAL.md",
 		Root+"/skills/{skill}/goals/{id}/GOAL.md",
 	),
+	// A collection definition is JSON rather than Markdown because it is
+	// schema, not prose — there is no body to write, and every field of it is
+	// structured. The records it describes may be either; that is the
+	// collection's own Format.
+	d("collections", FormatJSON, true,
+		Root+"/collections/{id}/schema.json",
+		Root+"/skills/{skill}/collections/{id}/schema.json",
+	),
+	d("views", FormatJSON, false,
+		Root+"/views/{id}.view.json",
+		Root+"/skills/{skill}/views/{id}.view.json",
+	),
+	d("toolsets", FormatMarkdown, false,
+		Root+"/toolsets/{id}.toolset.md",
+		Root+"/skills/{skill}/toolsets/{id}.toolset.md",
+	),
 }
 
 // Natives returns every native collection descriptor, in a stable order.

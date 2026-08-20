@@ -10,14 +10,18 @@ import (
 	"github.com/OWNER/aos/internal/core/collections"
 )
 
-// TestThirteenNativeCollections pins the set. The original has fourteen
+// TestSixteenNativeCollections pins the set. The original has fourteen
 // collection files; artifacts is the one missing here and arrives in phase 8,
 // and workspaces is not a collection there either — it is a hand-written store
-// over ~/.fractal/workspaces.
-func TestThirteenNativeCollections(t *testing.T) {
+// over ~/.fractal/workspaces. collections, views and toolsets have no
+// equivalent file in the original: they are the engine's own meta-collections,
+// added in phase 8 for declarations an agent writes at runtime rather than a
+// programmer.
+func TestSixteenNativeCollections(t *testing.T) {
 	want := []string{
-		"agents", "chats", "comments", "goals", "instructions", "memories",
-		"projects", "routines", "runs", "skills", "tasks", "templates", "todos",
+		"agents", "chats", "collections", "comments", "goals", "instructions",
+		"memories", "projects", "routines", "runs", "skills", "tasks",
+		"templates", "todos", "toolsets", "views",
 	}
 	got := collections.Natives()
 	if len(got) != len(want) {
@@ -81,6 +85,10 @@ func TestCascadeIsDeclaredForDirectoryBackedCollections(t *testing.T) {
 	cascading := map[string]bool{
 		"agents": true, "skills": true, "tasks": true,
 		"routines": true, "projects": true, "goals": true,
+		// A collection's directory holds its schema.json and every record
+		// under records/ — deleting the declaration without the directory
+		// would leave the records of a collection that no longer exists.
+		"collections": true,
 	}
 	for _, desc := range collections.Natives() {
 		if desc.CascadeDelete != cascading[desc.Name] {
@@ -96,7 +104,7 @@ func TestCascadeIsDeclaredForDirectoryBackedCollections(t *testing.T) {
 // escaped newlines — the exact thing ADR-0004 rejects. The divergence is
 // recorded in the Todo (Go) and Comment (Go) notes.
 func TestFormatMatchesTheOriginal(t *testing.T) {
-	jsonBacked := map[string]bool{"chats": true, "runs": true}
+	jsonBacked := map[string]bool{"chats": true, "runs": true, "collections": true, "views": true}
 	for _, desc := range collections.Natives() {
 		want := collections.FormatMarkdown
 		if jsonBacked[desc.Name] {
