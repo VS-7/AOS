@@ -53,8 +53,16 @@ type ListOutput struct {
 }
 
 // GetInput names one view.
+//
+// Skill is optional and only needed for a skill-scoped view: the engine
+// stores that declaration under a second, skill-qualified pattern
+// (.aos/skills/{skill}/views/{id}.view.json), and {"id": id} alone does not
+// resolve it. A record List returns already carries its own Skill
+// (View.Skill), so a caller that got an id from List has what it needs to
+// hand back here.
 type GetInput struct {
-	ID string `json:"id"`
+	ID    string `json:"id"`
+	Skill string `json:"skill,omitempty"`
 }
 
 // CreateInput composes a new view. Validate runs against it before anything
@@ -70,14 +78,18 @@ type CreateInput struct {
 	Tree        Node   `json:"tree"`
 }
 
-// DeleteInput names the view to remove.
+// DeleteInput names the view to remove. Skill is the same optional
+// qualifier GetInput takes, for the same reason.
 type DeleteInput struct {
-	ID string `json:"id"`
+	ID    string `json:"id"`
+	Skill string `json:"skill,omitempty"`
 }
 
-// RenderInput names the view to resolve against its source data.
+// RenderInput names the view to resolve against its source data. Skill is
+// the same optional qualifier GetInput takes, for the same reason.
 type RenderInput struct {
-	ID string `json:"id"`
+	ID    string `json:"id"`
+	Skill string `json:"skill,omitempty"`
 }
 
 // Rendered is a view with its source data attached — what the frontend's
@@ -122,12 +134,22 @@ func (s *Service) List(ctx context.Context, _ ListInput) (ListOutput, error) {
 // Get reads one view.
 func (s *Service) Get(ctx context.Context, in GetInput) (*View, error) {
 	id := strings.TrimSpace(in.ID)
-	v, err := s.repo.Get(ctx, collections.Key{"id": id})
+	v, err := s.repo.Get(ctx, keyOf(id, in.Skill))
 	if err != nil {
 		return nil, errNotFound(id)
 	}
 	out := cloneView(*v)
 	return &out, nil
+}
+
+// keyOf builds the lookup key Get and Delete share — see the mirror of this
+// in internal/domain/collection/service.go, which this is the same fix for.
+func keyOf(id, skill string) collections.Key {
+	key := collections.Key{"id": id}
+	if skill = strings.TrimSpace(skill); skill != "" {
+		key["skill"] = skill
+	}
+	return key
 }
 
 // Create validates the whole tree against the catalog and the source
@@ -184,10 +206,10 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*View, error) {
 // Delete happens to report for a key that was never there.
 func (s *Service) Delete(ctx context.Context, in DeleteInput) error {
 	id := strings.TrimSpace(in.ID)
-	if _, err := s.Get(ctx, GetInput{ID: id}); err != nil {
+	if _, err := s.Get(ctx, GetInput{ID: id, Skill: in.Skill}); err != nil {
 		return err
 	}
-	return s.repo.Delete(ctx, collections.Key{"id": id})
+	return s.repo.Delete(ctx, keyOf(id, in.Skill))
 }
 
 // Render resolves a view's source and returns the tree with the data

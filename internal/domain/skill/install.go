@@ -8,6 +8,7 @@ import (
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/domain/collection"
 	"github.com/OWNER/aos/internal/domain/event"
+	"github.com/OWNER/aos/internal/domain/view"
 )
 
 // Applier writes a verified, consented package into the workspace and
@@ -18,6 +19,14 @@ import (
 // ordering and on its behaviour when applying fails partway — see
 // skill_test.go. The default implementation, built by NewInstaller when Deps
 // leaves it nil, is defaultApplier below.
+//
+// Apply is all-or-nothing: a failure at any step must leave the workspace as
+// it found it, not just leave the skill's own record unwritten. Registering
+// the skill last (see Install's own comment) only protects the skill's own
+// registration; a collection created and registered before a later view
+// failed is otherwise an orphan nothing owns — registered, on disk, and
+// answering reads and writes as if it were real. defaultApplier below is
+// what closes that.
 type Applier interface {
 	Apply(ctx context.Context, id string, pkg Package) (*Skill, error)
 }
@@ -29,7 +38,6 @@ type Deps struct {
 	Approver event.Approver
 
 	Repo        Repository
-	Registry    Registry
 	Collections Collections
 	Views       Views
 	Files       Files
@@ -51,11 +59,11 @@ type Installer struct {
 	approver event.Approver
 	applier  Applier
 
-	repo     Repository
-	registry Registry
-	views    Views
-	hooks    Hooks
-	toolsets Toolsets
+	repo        Repository
+	collections Collections
+	views       Views
+	hooks       Hooks
+	toolsets    Toolsets
 }
 
 // NewInstaller wires the installer over its ports.
@@ -72,7 +80,7 @@ func NewInstaller(d Deps) *Installer {
 	}
 	return &Installer{
 		fetcher: d.Fetcher, verifier: verifier, approver: d.Approver, applier: applier,
-		repo: d.Repo, registry: d.Registry, views: d.Views, hooks: d.Hooks, toolsets: d.Toolsets,
+		repo: d.Repo, collections: d.Collections, views: d.Views, hooks: d.Hooks, toolsets: d.Toolsets,
 	}
 }
 
@@ -109,7 +117,9 @@ type UninstallInput struct {
 // agent calling skills_install does not authorise itself (ADR-0007). Apply
 // itself registers the skill's own record last, so a partial failure leaves
 // an unregistered directory — something a person can delete — rather than a
-// half-registered skill, which is something they cannot reason about.
+// half-registered skill, which is something they cannot reason about; and
+// Apply is itself all-or-nothing, so "partial failure" never means an
+// orphaned collection or view survives it either — see Applier's own doc.
 func (i *Installer) Install(ctx context.Context, in InstallInput) (*Skill, error) {
 	source := strings.TrimSpace(in.Source)
 	if source == "" {
@@ -153,16 +163,19 @@ func (i *Installer) Install(ctx context.Context, in InstallInput) (*Skill, error
 // The order inverts Install's, for the reason Install's own comment gives in
 // reverse: hooks and toolsets are torn down first, so nothing keeps
 // intercepting a tool call or holding a connection on behalf of a directory
-// about to disappear. The collections the skill brought are unregistered
-// next — their files go with the skill's directory either way, but nothing
-// else clears the in-memory registry a dynamic collection lives in, and
-// unregistering after the files were removed would leave a window where the
-// registry still resolves a name nothing on disk answers to. Views carry no
-// such registry, so there is nothing to unregister for them. Removing the
-// skill's own record is last, and — because the "skills" native carries
+// about to disappear. The collections and views the skill brought are
+// removed next, through their own domains — collection.Service.Delete and
+// view.Service.Delete, addressed with this skill's id via DeleteInput.Skill,
+// now that both can resolve a skill-scoped record (they could not when this
+// package first shipped; see the report for Finding 2). Routing through
+// them rather than only unregistering is what also takes the collection's
+// and the view's own declaration files, not merely the in-memory
+// registration a collection carries — Uninstall no longer has to trust that
+// CascadeDelete alone will catch what the registry does not track. Removing
+// the skill's own record is last, and — because the "skills" native carries
 // CascadeDelete: true — is also what takes the rest of the directory with
-// it: the agents, memories, routines, templates, instructions, goals and
-// views this domain never touched directly.
+// it: the agents, memories, routines, templates, instructions and goals
+// this domain never touched directly.
 func (i *Installer) Uninstall(ctx context.Context, in UninstallInput) error {
 	id := strings.TrimSpace(in.ID)
 	skl, err := i.Get(ctx, id)
@@ -177,9 +190,14 @@ func (i *Installer) Uninstall(ctx context.Context, in UninstallInput) error {
 		return errUninstallFailed(id, "closing toolsets", err)
 	}
 
+	for _, ref := range skl.Metadata.Views {
+		if err := i.views.Delete(ctx, view.DeleteInput{ID: ref.ID, Skill: id}); err != nil {
+			return errUninstallFailed(id, "removing the view "+ref.ID, err)
+		}
+	}
 	for _, ref := range skl.Metadata.Collections {
-		if err := i.registry.Unregister(ref.ID); err != nil {
-			return errUninstallFailed(id, "unregistering the collection "+ref.ID, err)
+		if err := i.collections.Delete(ctx, collection.DeleteInput{ID: ref.ID, Skill: id}); err != nil {
+			return errUninstallFailed(id, "removing the collection "+ref.ID, err)
 		}
 	}
 
@@ -209,6 +227,15 @@ func skillID(m Manifest) (string, error) {
 // everything else — agents, memories, routines, templates, instructions,
 // goals, references, and each toolset's own declaration — is relocated byte
 // for byte through Files. The skill's own record is written last.
+//
+// It tracks what it created as it goes and undoes it, in reverse order, the
+// moment any step fails — views before collections, because a view can name
+// a collection as its source and nothing should be asked to remove a
+// collection while a view still points at it. A rollback failure is not
+// escalated over the original error: the original error is what the caller
+// needs to act on, and a second failure while cleaning up after it is
+// recorded for whoever reads the logs, not layered into the message that
+// already explains what went wrong.
 type defaultApplier struct {
 	repo        Repository
 	collections Collections
@@ -218,20 +245,34 @@ type defaultApplier struct {
 }
 
 func (a *defaultApplier) Apply(ctx context.Context, id string, pkg Package) (*Skill, error) {
+	var createdCollections, createdViews []string
+	rollback := func() {
+		for i := len(createdViews) - 1; i >= 0; i-- {
+			_ = a.views.Delete(ctx, view.DeleteInput{ID: createdViews[i], Skill: id})
+		}
+		for i := len(createdCollections) - 1; i >= 0; i-- {
+			_ = a.collections.Delete(ctx, collection.DeleteInput{ID: createdCollections[i], Skill: id})
+		}
+	}
+
 	for _, in := range pkg.Collections {
 		in.Scope = collection.ScopeSkill
 		in.Skill = id
 		if _, err := a.collections.Create(ctx, in); err != nil {
+			rollback()
 			return nil, errApplyFailed(id, "collections", err)
 		}
+		createdCollections = append(createdCollections, in.ID)
 	}
 
 	for _, in := range pkg.Views {
 		in.Scope = "skill"
 		in.Skill = id
 		if _, err := a.views.Create(ctx, in); err != nil {
+			rollback()
 			return nil, errApplyFailed(id, "views", err)
 		}
+		createdViews = append(createdViews, in.ID)
 	}
 
 	files := make([]RawFile, 0, len(pkg.Files)+len(pkg.Toolsets))
@@ -241,6 +282,7 @@ func (a *defaultApplier) Apply(ctx context.Context, id string, pkg Package) (*Sk
 	}
 	if len(files) > 0 {
 		if err := a.files.Write(ctx, id, files); err != nil {
+			rollback()
 			return nil, errApplyFailed(id, "files", err)
 		}
 	}
@@ -262,8 +304,12 @@ func (a *defaultApplier) Apply(ctx context.Context, id string, pkg Package) (*Sk
 	// Registered last, deliberately: a partial failure above leaves an
 	// unregistered directory rather than a half-registered skill — the first
 	// is something a person can delete, the second is something they cannot
-	// reason about.
+	// reason about. A failure here still rolls back: without a SKILL.md,
+	// CascadeDelete never fires for this id, so any collection or view
+	// already created above would otherwise survive as exactly the orphan
+	// this whole function exists to prevent.
 	if err := a.repo.Create(ctx, skl); err != nil {
+		rollback()
 		return nil, errApplyFailed(id, "skill", err)
 	}
 	out := skl.Clone()

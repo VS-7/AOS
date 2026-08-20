@@ -251,6 +251,68 @@ func (r *fakeRepo) Delete(_ context.Context, key collections.Key) error {
 
 func ctx() context.Context { return context.Background() }
 
+// keySpyRepo wraps fakeRepo to capture the collections.Key Get and Delete
+// were actually called with — what proves GetInput.Skill and
+// DeleteInput.Skill reach the repository rather than being accepted and
+// silently dropped.
+type keySpyRepo struct {
+	*fakeRepo
+	lastGetKey    collections.Key
+	lastDeleteKey collections.Key
+}
+
+func (s *keySpyRepo) Get(ctx context.Context, key collections.Key) (*collection.Collection, error) {
+	s.lastGetKey = key
+	return s.fakeRepo.Get(ctx, key)
+}
+
+func (s *keySpyRepo) Delete(ctx context.Context, key collections.Key) error {
+	s.lastDeleteKey = key
+	return s.fakeRepo.Delete(ctx, key)
+}
+
+// A skill-scoped declaration lives under its own second, skill-qualified
+// pattern (.aos/skills/{skill}/collections/{id}/schema.json) — {"id": id}
+// alone does not address it. GetInput.Skill and DeleteInput.Skill are how a
+// caller that already knows a record's Skill (List and Get both hand it
+// back on Collection.Skill) can address it precisely.
+func TestGetAndDeleteBuildAKeyWithSkillWhenGiven(t *testing.T) {
+	spy := &keySpyRepo{fakeRepo: &fakeRepo{items: map[string]collection.Collection{
+		"contacts": {ID: "contacts", Skill: "crm", Scope: collection.ScopeSkill},
+	}}}
+	svc := collection.NewService(collection.Deps{Repo: spy, Registry: collections.NewRegistry(), Clock: clockx.Fixed{At: at}})
+
+	if _, err := svc.Get(ctx(), collection.GetInput{ID: "contacts", Skill: "crm"}); err != nil {
+		t.Fatal(err)
+	}
+	if spy.lastGetKey["skill"] != "crm" {
+		t.Fatalf("Get key = %v, want skill=crm", spy.lastGetKey)
+	}
+
+	if err := svc.Delete(ctx(), collection.DeleteInput{ID: "contacts", Skill: "crm"}); err != nil {
+		t.Fatal(err)
+	}
+	if spy.lastDeleteKey["skill"] != "crm" {
+		t.Fatalf("Delete key = %v, want skill=crm", spy.lastDeleteKey)
+	}
+}
+
+// A workspace-scoped Get or Delete — the common case, and everything before
+// this fix — must not suddenly start sending an empty "skill" key: an empty
+// string in the key is not the same identity as a key that never mentioned
+// skill, and collections.Key.String() would fold it in either way.
+func TestGetAndDeleteOmitSkillFromTheKeyWhenNotGiven(t *testing.T) {
+	spy := &keySpyRepo{fakeRepo: &fakeRepo{items: map[string]collection.Collection{"contacts": {ID: "contacts"}}}}
+	svc := collection.NewService(collection.Deps{Repo: spy, Registry: collections.NewRegistry(), Clock: clockx.Fixed{At: at}})
+
+	if _, err := svc.Get(ctx(), collection.GetInput{ID: "contacts"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := spy.lastGetKey["skill"]; ok {
+		t.Fatalf("Get key = %v, want no \"skill\" entry at all", spy.lastGetKey)
+	}
+}
+
 func mustCreate(t *testing.T, svc *collection.Service, id string) *collection.Collection {
 	t.Helper()
 	got, err := svc.Create(ctx(), collection.CreateInput{

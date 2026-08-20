@@ -543,6 +543,57 @@ func TestDeleteRemovesAView(t *testing.T) {
 	}
 }
 
+// viewKeySpyRepo wraps fakeRepository to capture the collections.Key Get and
+// Delete were actually called with — what proves GetInput.Skill and
+// DeleteInput.Skill reach the repository rather than being accepted and
+// silently dropped.
+type viewKeySpyRepo struct {
+	*fakeRepository
+	lastGetKey    collections.Key
+	lastDeleteKey collections.Key
+}
+
+func (s *viewKeySpyRepo) Get(ctx context.Context, key collections.Key) (*view.View, error) {
+	s.lastGetKey = key
+	return s.fakeRepository.Get(ctx, key)
+}
+
+func (s *viewKeySpyRepo) Delete(ctx context.Context, key collections.Key) error {
+	s.lastDeleteKey = key
+	return s.fakeRepository.Delete(ctx, key)
+}
+
+// A skill-scoped view lives under its own second, skill-qualified pattern
+// (.aos/skills/{skill}/views/{id}.view.json) — {"id": id} alone does not
+// address it. GetInput.Skill and DeleteInput.Skill are how a caller that
+// already knows a view's Skill (List and Get both hand it back on
+// View.Skill) can address it precisely.
+func TestGetAndDeleteBuildAKeyWithSkillWhenGiven(t *testing.T) {
+	spy := &viewKeySpyRepo{fakeRepository: newFakeRepository()}
+	spy.views["contacts-table"] = view.View{ID: "contacts-table", Skill: "crm", Scope: "skill"}
+
+	svc := view.NewService(view.Deps{
+		Repo:        spy,
+		Collections: &fakeCollections{schemas: map[string]collection.Collection{}, records: map[string][]collection.Record{}},
+		Commands:    &fakeCommands{known: map[string]bool{}},
+		Clock:       clockx.Fixed{At: refTime},
+	})
+
+	if _, err := svc.Get(ctx(), view.GetInput{ID: "contacts-table", Skill: "crm"}); err != nil {
+		t.Fatal(err)
+	}
+	if spy.lastGetKey["skill"] != "crm" {
+		t.Fatalf("Get key = %v, want skill=crm", spy.lastGetKey)
+	}
+
+	if err := svc.Delete(ctx(), view.DeleteInput{ID: "contacts-table", Skill: "crm"}); err != nil {
+		t.Fatal(err)
+	}
+	if spy.lastDeleteKey["skill"] != "crm" {
+		t.Fatalf("Delete key = %v, want skill=crm", spy.lastDeleteKey)
+	}
+}
+
 // Create refuses an empty id up front: it is also the view's file name.
 func TestCreateRefusesAnEmptyID(t *testing.T) {
 	svc := newService(t, withCollection(contactsSchema()))

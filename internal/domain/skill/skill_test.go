@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/OWNER/aos/internal/adapters/skillfetch"
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/collections"
@@ -25,13 +23,66 @@ func ctx() context.Context { return context.Background() }
 
 var refTime = time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
 
-// fixtureDir points at the crm-skill fixture built for this task, under
-// internal/app/testdata — not under this package's own testdata, so that
-// Task 11's delivery test, which runs from internal/app, uses the exact same
-// directory rather than a second copy of it.
-func fixtureDir(t *testing.T) string {
-	t.Helper()
-	return filepath.Join("..", "..", "app", "testdata", "crm-skill")
+// crmSource is the InstallInput.Source every test below installs from. It
+// names nothing real: the default Fetcher (see newInstaller) is a stubFetcher
+// returning crmPackage() in memory, regardless of what Source says, so the
+// value only has to be non-empty — Install refuses an empty one before the
+// Fetcher is ever called.
+const crmSource = "crm-skill"
+
+// crmPackage is the in-memory equivalent of the crm-skill fixture built for
+// this task at internal/app/testdata/crm-skill: an agent, a contacts
+// collection and a table view over it, with permissions matching exactly
+// what it brings.
+//
+// Domain tests build this by hand rather than reading the fixture off disk
+// through skillfetch.Local. That adapter has its own test suite
+// (internal/adapters/skillfetch) already exercising it against the same
+// fixture; a domain test that reaches a real filesystem through an injected
+// Fetcher is still doing real IO, and internal/architecture's own IO guard
+// does not catch it — it greps this file for a short list of literal
+// filesystem-call substrings, not for "this package hands the work to an
+// adapter that makes one of those calls on its behalf". See the report for
+// how that gap let this package's tests do exactly that until this fix.
+func crmPackage() skill.Package {
+	return skill.Package{
+		Manifest: skill.Manifest{
+			Name:        "crm",
+			Description: "A minimal CRM — contacts, a table view over them, and an agent to work the pipeline.",
+			Version:     "1.0.0",
+			Permissions: skill.Permissions{
+				Agents:      []string{"closer"},
+				Collections: []string{"contacts"},
+			},
+		},
+		Content: "# CRM\n\nA minimal customer relationship skill: a contacts collection, a table view\nover it, and an agent whose job is to work the pipeline.",
+		Collections: []collection.CreateInput{
+			{
+				ID: "contacts", Name: "Contacts", Description: "People this CRM tracks.",
+				Format: collection.FormatMarkdown,
+				Fields: []collection.Field{
+					{Name: "name", Type: collection.TypeString, Required: true},
+					{Name: "stage", Type: collection.TypeEnum, Required: true, Enum: []string{"lead", "qualified", "won", "lost"}},
+				},
+			},
+		},
+		Views: []view.CreateInput{
+			{
+				ID: "contacts-table", Name: "Contacts", Title: "Contacts",
+				Source: view.Source{Collection: "contacts"},
+				Tree: view.Node{
+					Component: "Table",
+					Props:     map[string]any{"columns": []any{"name", "stage"}, "rows": []any{}},
+				},
+			},
+		},
+		Files: []skill.RawFile{
+			{Path: "agents/closer/AGENT.md", Content: []byte(
+				"---\nname: Closer\ndescription: Works the contacts collection this skill brought.\nrole: Sales\n---\n\n" +
+					"# Closer\n\nYou work the `contacts` collection this skill brought. Qualify leads, log\n" +
+					"notes, and push deals toward close.\n")},
+		},
+	}
 }
 
 func codeOf(t *testing.T, err error) string {
@@ -245,10 +296,9 @@ func newInstaller(t *testing.T, reg *collections.Registry, opts ...func(*skill.D
 	files := newFakeFiles()
 
 	d := skill.Deps{
-		Fetcher:  skillfetch.New(),
+		Fetcher:  stubFetcher{pkg: crmPackage()},
 		Approver: approvingApprover{},
 		Repo:     fakes.NewRepo[skill.Skill]("skills"),
-		Registry: reg,
 		Collections: collection.NewService(collection.Deps{
 			Repo:     fakes.NewRepo[collection.Collection]("collections"),
 			Registry: reg,
@@ -278,6 +328,14 @@ func withApplier(a skill.Applier) func(*skill.Deps) {
 	return func(d *skill.Deps) { d.Applier = a }
 }
 
+func withViews(v skill.Views) func(*skill.Deps) {
+	return func(d *skill.Deps) { d.Views = v }
+}
+
+func withCollections(c skill.Collections) func(*skill.Deps) {
+	return func(d *skill.Deps) { d.Collections = c }
+}
+
 func withHooks(h skill.Hooks) func(*skill.Deps) {
 	return func(d *skill.Deps) { d.Hooks = h }
 }
@@ -298,7 +356,7 @@ func withFetcher(f skill.Fetcher) func(*skill.Deps) {
 // given, failing the test on any error.
 func mustInstall(t *testing.T, inst *skill.Installer) *skill.Skill {
 	t.Helper()
-	installed, err := inst.Install(ctx(), skill.InstallInput{Source: fixtureDir(t), AcceptedAll: acceptAll})
+	installed, err := inst.Install(ctx(), skill.InstallInput{Source: crmSource, AcceptedAll: acceptAll})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,6 +428,13 @@ func (f *fakeViews) Get(_ context.Context, in view.GetInput) (*view.View, error)
 	return &out, nil
 }
 
+func (f *fakeViews) Delete(_ context.Context, in view.DeleteInput) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.views, in.ID)
+	return nil
+}
+
 type noopHooks struct{}
 
 func (noopHooks) Deregister(context.Context, string) error { return nil }
@@ -414,17 +479,22 @@ func (r recordingApplier) Apply(_ context.Context, id string, pkg skill.Package)
 	return &skill.Skill{ID: id, Name: pkg.Manifest.Name}, nil
 }
 
-// failingApplier is a full stand-in for the real write path, used to prove
-// that a failure while applying leaves nothing registered — without needing
-// the real Collections/Views/Files dependencies to fail in a particular,
-// hard-to-arrange way.
-type failingApplier struct{ step string }
-
-func (f failingApplier) Apply(context.Context, string, skill.Package) (*skill.Skill, error) {
-	return nil, fmt.Errorf("applying failed while %s", f.step)
+// failingViews fails every Create, so a test can drive the real
+// defaultApplier into failing partway through — after its collections have
+// already been created and registered — rather than replacing the write
+// path with a stand-in that never touches Collections.Create or
+// Views.Create at all. Get and Delete are unused by the specific test this
+// exists for (the package fails before any view exists to look up or roll
+// back), but are wired to the same underlying fakeViews so the type still
+// satisfies skill.Views in full.
+type failingViews struct {
+	*fakeViews
+	err error
 }
 
-func applierFailingAt(step string) skill.Applier { return failingApplier{step: step} }
+func (f failingViews) Create(context.Context, view.CreateInput) (*view.View, error) {
+	return nil, f.err
+}
 
 type recordingHooks struct{ order *[]string }
 
@@ -491,7 +561,7 @@ func TestInstallingWithoutConsentIsRefusedAndWritesNothing(t *testing.T) {
 	approver := &denyingApprover{}
 	inst, files := newInstaller(t, nil, withApprover(approver))
 
-	_, err := inst.Install(ctx(), skill.InstallInput{Source: fixtureDir(t)})
+	_, err := inst.Install(ctx(), skill.InstallInput{Source: crmSource})
 	if code := codeOf(t, err); code != "AOS_SKILL_INSTALL_NOT_APPROVED" {
 		t.Fatalf("code = %q", code)
 	}
@@ -520,7 +590,7 @@ func TestNothingIsWrittenBeforeVerificationAndConsent(t *testing.T) {
 		withApplier(recordingApplier{&order}),
 	)
 
-	if _, err := inst.Install(ctx(), skill.InstallInput{Source: fixtureDir(t)}); err != nil {
+	if _, err := inst.Install(ctx(), skill.InstallInput{Source: crmSource}); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{"verified", "asked", "applied"}
@@ -536,7 +606,7 @@ func TestAcceptedAllSkipsTheApprovalChannel(t *testing.T) {
 	approver := event.Approver(recordingApproverFunc(func() { asked = true }))
 	inst, _ := newInstaller(t, nil, withApprover(approver))
 
-	if _, err := inst.Install(ctx(), skill.InstallInput{Source: fixtureDir(t), AcceptedAll: acceptAll}); err != nil {
+	if _, err := inst.Install(ctx(), skill.InstallInput{Source: crmSource, AcceptedAll: acceptAll}); err != nil {
 		t.Fatal(err)
 	}
 	if asked {
@@ -552,19 +622,40 @@ func (f recordingApproverFunc) RequestApproval(context.Context, event.ApprovalRe
 }
 
 // Registration is last, so a partial failure leaves an unregistered directory
-// rather than a half-registered skill.
+// rather than a half-registered skill — and Apply itself is all-or-nothing,
+// so a collection created and registered before a later step failed does not
+// survive as an orphan either.
+//
+// This drives the real defaultApplier, not a stand-in: the crm-skill fixture
+// creates its "contacts" collection first and its "contacts-table" view
+// second, so failing Views.Create is what exercises the rollback of a
+// collection that was already created and registered by the time the
+// failure happened. A fake Applier that never called Collections.Create at
+// all would pass this assertion by construction and prove nothing about
+// defaultApplier's own behaviour — see the report for how this was
+// confirmed: the rollback call below was commented out, the test was run
+// and observed to fail, and the call was restored.
 func TestAFailureWhileApplyingLeavesNothingRegistered(t *testing.T) {
 	reg := collections.NewRegistry()
+	collRepo := fakes.NewRepo[collection.Collection]("collections")
+	collSvc := collection.NewService(collection.Deps{
+		Repo: collRepo, Registry: reg, Clock: clockx.Fixed{At: refTime},
+	})
+
 	inst, _ := newInstaller(t, reg,
 		withApprover(approvingApprover{}),
-		withApplier(applierFailingAt("views")),
+		withCollections(collSvc),
+		withViews(failingViews{fakeViews: newFakeViews(), err: errors.New("the view refused to be created")}),
 	)
 
-	if _, err := inst.Install(ctx(), skill.InstallInput{Source: fixtureDir(t)}); err == nil {
+	if _, err := inst.Install(ctx(), skill.InstallInput{Source: crmSource}); err == nil {
 		t.Fatal("a failing apply reported success")
 	}
 	if _, ok := reg.Lookup("contacts"); ok {
 		t.Fatal("the collection stayed registered after the install failed")
+	}
+	if _, err := collSvc.Get(ctx(), collection.GetInput{ID: "contacts", Skill: "crm"}); err == nil {
+		t.Fatal("the collection is still on disk after the install failed")
 	}
 	if _, err := inst.Get(ctx(), "crm"); err == nil {
 		t.Fatal("the skill is listed as installed after a failed install")

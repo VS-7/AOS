@@ -32,38 +32,33 @@ type Repository interface {
 // what makes an installed skill's collection usable in the same session, with
 // no restart.
 //
-// There is no Delete here. collection.Service.Delete resolves a collection by
-// {"id": id} alone, which cannot find a skill-scoped declaration once it is
-// written under its own second, skill-qualified pattern — a gap in the
-// collection domain's own Get, not something this package should paper over
-// by routing through it anyway. Uninstall unregisters the dynamic pattern
-// directly instead — see Registry — and lets the skill's own CascadeDelete
-// take the declaration file with the rest of the directory.
+// Delete is here too, addressed with DeleteInput.Skill: collection.Service.Get
+// and Delete originally resolved a collection by {"id": id} alone, which
+// could not find a skill-scoped declaration once it lived under its own
+// second, skill-qualified pattern. That gap is closed at the source now —
+// GetInput and DeleteInput both take an optional Skill — so routing through
+// collection.Service.Delete is the direct call rather than a workaround: one
+// call removes both the in-memory registration and the declaration file,
+// instead of this package unregistering the pattern by hand and trusting
+// CascadeDelete to catch the file. Apply's own rollback (see defaultApplier)
+// is the other reason Delete has to be here: undoing a collection this
+// package just created, because a later step in the same install failed,
+// needs exactly this method.
 type Collections interface {
 	Create(ctx context.Context, in collection.CreateInput) (*collection.Collection, error)
-}
-
-// Registry is the slice of collections.Registry this package needs on
-// Uninstall: removing the dynamic record-pattern a skill's own collection
-// registered when collection.Service.Create brought it into being. Nothing
-// else in this package touches the registry directly — Collections.Create
-// already registers on the way in.
-type Registry interface {
-	Unregister(name string) error
+	Delete(ctx context.Context, in collection.DeleteInput) error
 }
 
 // Views is the slice of the view domain this package needs, for the same
 // reason Collections is: Create validates a view's tree against its source
 // collection and against the command registry before anything is written, a
-// check this package has no business re-deriving.
-//
-// Uninstall does not call a Delete here, for the same reason it does not call
-// one on Collections: a view has no in-memory registry to desync, so nothing
-// beyond the file itself needs to change, and that file goes with the rest of
-// the skill's directory under CascadeDelete.
+// check this package has no business re-deriving. Delete is here for the
+// same two reasons Collections.Delete is — Uninstall removing what the skill
+// brought, and Apply's rollback undoing what it just created.
 type Views interface {
 	Create(ctx context.Context, in view.CreateInput) (*view.View, error)
 	Get(ctx context.Context, in view.GetInput) (*view.View, error)
+	Delete(ctx context.Context, in view.DeleteInput) error
 }
 
 // RawFile is one piece of a package's content this domain does not itself

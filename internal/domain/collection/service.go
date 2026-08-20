@@ -60,8 +60,18 @@ type ListOutput struct {
 }
 
 // GetInput names one declaration.
+//
+// Skill is optional and only needed for a skill-scoped collection: the
+// engine stores that declaration under a second, skill-qualified pattern
+// (.aos/skills/{skill}/collections/{id}/schema.json), and {"id": id} alone
+// does not resolve it — a Get with the id only, for a collection that turns
+// out to be skill-scoped, is refused as not found rather than silently
+// returning the wrong thing or scanning every skill for a match. A record
+// List returns already carries its own Skill (Collection.Skill), so a caller
+// that got an id from List has what it needs to hand back here.
 type GetInput struct {
-	ID string `json:"id"`
+	ID    string `json:"id"`
+	Skill string `json:"skill,omitempty"`
 }
 
 // CreateInput declares a new collection.
@@ -77,9 +87,11 @@ type CreateInput struct {
 	Hooks  []Hook  `json:"hooks,omitempty"`
 }
 
-// DeleteInput removes a declaration.
+// DeleteInput removes a declaration. Skill is the same optional qualifier
+// GetInput takes, for the same reason.
 type DeleteInput struct {
-	ID string `json:"id"`
+	ID    string `json:"id"`
+	Skill string `json:"skill,omitempty"`
 }
 
 // List returns every declared collection.
@@ -94,11 +106,25 @@ func (s *Service) List(ctx context.Context, _ ListInput) (ListOutput, error) {
 // Get reads one declaration.
 func (s *Service) Get(ctx context.Context, in GetInput) (*Collection, error) {
 	id := strings.TrimSpace(in.ID)
-	found, err := s.repo.Get(ctx, collections.Key{"id": id})
+	found, err := s.repo.Get(ctx, keyOf(id, in.Skill))
 	if err != nil {
 		return nil, errNotFound(id, s.registry.Names())
 	}
 	return found, nil
+}
+
+// keyOf builds the lookup key Get and Delete share: the id alone for a
+// workspace-scoped declaration, or the id plus skill for one that is not —
+// an empty skill is left out of the key entirely rather than sent as "",
+// because collections.Key.String() folds every present field into the
+// identity a repository indexes by, and a key carrying an empty "skill" is
+// not the same key as one that never mentioned skill at all.
+func keyOf(id, skill string) collections.Key {
+	key := collections.Key{"id": id}
+	if skill = strings.TrimSpace(skill); skill != "" {
+		key["skill"] = skill
+	}
+	return key
 }
 
 // Create declares a collection.
@@ -171,11 +197,11 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Collection, erro
 // window even if the removal itself fails partway through.
 func (s *Service) Delete(ctx context.Context, in DeleteInput) error {
 	id := strings.TrimSpace(in.ID)
-	if _, err := s.Get(ctx, GetInput{ID: id}); err != nil {
+	if _, err := s.Get(ctx, GetInput{ID: id, Skill: in.Skill}); err != nil {
 		return err
 	}
 	if err := s.registry.Unregister(id); err != nil {
 		return err
 	}
-	return s.repo.Delete(ctx, collections.Key{"id": id})
+	return s.repo.Delete(ctx, keyOf(id, in.Skill))
 }
