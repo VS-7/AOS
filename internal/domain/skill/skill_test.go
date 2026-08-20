@@ -55,7 +55,15 @@ func crmPackage() skill.Package {
 				Collections: []string{"contacts"},
 			},
 		},
-		Content: "# CRM\n\nA minimal customer relationship skill: a contacts collection, a table view\nover it, and an agent whose job is to work the pipeline.",
+		// Content matches internal/app/testdata/crm-skill/SKILL.md's body
+		// exactly, including the leading blank line splitFrontMatter leaves
+		// (see skillfetch.Local): this stub stands in for that fixture, and a
+		// stand-in that describes a slightly different package is one the
+		// next reader has to diff by hand.
+		Content: "\n# CRM\n\nA minimal customer relationship skill: a `contacts` collection, a table view\n" +
+			"over it, and an agent whose job is to work the pipeline.\n\n" +
+			"Installing this skill brings all three at once — that is the point of a\n" +
+			"skill: it is not documentation, it is a small team plus the place they work.",
 		Collections: []collection.CreateInput{
 			{
 				ID: "contacts", Name: "Contacts", Description: "People this CRM tracks.",
@@ -78,7 +86,7 @@ func crmPackage() skill.Package {
 		},
 		Files: []skill.RawFile{
 			{Path: "agents/closer/AGENT.md", Content: []byte(
-				"---\nname: Closer\ndescription: Works the contacts collection this skill brought.\nrole: Sales\n---\n\n" +
+				"---\nname: Closer\ndescription: Works the contacts collection this skill brought — qualifies leads and pushes deals to close.\nrole: Sales\n---\n\n" +
 					"# Closer\n\nYou work the `contacts` collection this skill brought. Qualify leads, log\n" +
 					"notes, and push deals toward close.\n")},
 		},
@@ -380,6 +388,19 @@ func (f *fakeFiles) Write(_ context.Context, id string, files []skill.RawFile) e
 	return nil
 }
 
+func (f *fakeFiles) Remove(_ context.Context, id, path string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	list := f.written[id]
+	for i, file := range list {
+		if file.Path == path {
+			f.written[id] = append(list[:i], list[i+1:]...)
+			return nil
+		}
+	}
+	return nil // idempotent, like the repositories' own Delete
+}
+
 // paths lists every file this fake was ever asked to write, as
 // "{skillID}/{path}".
 func (f *fakeFiles) paths() []string {
@@ -659,6 +680,77 @@ func TestAFailureWhileApplyingLeavesNothingRegistered(t *testing.T) {
 	}
 	if _, err := inst.Get(ctx(), "crm"); err == nil {
 		t.Fatal("the skill is listed as installed after a failed install")
+	}
+}
+
+// failingRepo makes Create fail, so a test can drive Apply past the point
+// where Files.Write has already succeeded — the case round 1 fixed for
+// collections and views and left open for everything Files places: an agent
+// (with its memories and routines), a template, an instruction, a goal, a
+// reference, a toolset's own declaration. Get, List and Delete are the real
+// fakes.Repo underneath, so the skill record genuinely never exists — Create
+// is the only thing this type overrides.
+type failingRepo struct {
+	inner *fakes.Repo[skill.Skill]
+	err   error
+}
+
+func (r *failingRepo) Get(ctx context.Context, key collections.Key) (*skill.Skill, error) {
+	return r.inner.Get(ctx, key)
+}
+
+func (r *failingRepo) List(ctx context.Context, q collections.Query) ([]skill.Skill, error) {
+	return r.inner.List(ctx, q)
+}
+
+func (r *failingRepo) Create(context.Context, *skill.Skill) error {
+	return r.err
+}
+
+func (r *failingRepo) Delete(ctx context.Context, key collections.Key) error {
+	return r.inner.Delete(ctx, key)
+}
+
+// A failure writing the skill's own record — the very last step, after every
+// collection, view and raw file has already been created — must undo
+// everything Apply did, not just the collections and views. Round 1 closed
+// the orphan for those two kinds and left every agent, memory, routine,
+// template, instruction, goal, reference and toolset file Files.Write had
+// already placed on disk: unregistered, with no SKILL.md that would ever
+// trigger CascadeDelete to take it away. This drives the real
+// defaultApplier's Files rollback specifically — the crm-skill fixture's one
+// raw file (agents/closer/AGENT.md) is what Write places and Remove must
+// take back.
+//
+// Verified per the same discipline as the collections/views rollback: broken
+// (Remove call omitted from the applier's rollback closure) and confirmed to
+// fail with "the file Apply wrote survived the rollback", then restored and
+// confirmed to pass. See the report.
+func TestAFailureWritingTheSkillRecordLeavesNothingApplyWroteBehind(t *testing.T) {
+	reg := collections.NewRegistry()
+	collRepo := fakes.NewRepo[collection.Collection]("collections")
+	collSvc := collection.NewService(collection.Deps{
+		Repo: collRepo, Registry: reg, Clock: clockx.Fixed{At: refTime},
+	})
+
+	inst, files := newInstaller(t, reg,
+		withApprover(approvingApprover{}),
+		withCollections(collSvc),
+		withRepo(&failingRepo{inner: fakes.NewRepo[skill.Skill]("skills"), err: errors.New("the disk is full")}),
+	)
+
+	if _, err := inst.Install(ctx(), skill.InstallInput{Source: crmSource, AcceptedAll: acceptAll}); err == nil {
+		t.Fatal("a failing skill-record write reported success")
+	}
+
+	if _, ok := reg.Lookup("contacts"); ok {
+		t.Fatal("the collection stayed registered after the install failed")
+	}
+	if _, err := collSvc.Get(ctx(), collection.GetInput{ID: "contacts", Skill: "crm"}); err == nil {
+		t.Fatal("the collection is still on disk after the install failed")
+	}
+	if wrote := files.paths(); len(wrote) != 0 {
+		t.Fatalf("the files Apply wrote survived the rollback: %v", wrote)
 	}
 }
 

@@ -78,8 +78,23 @@ type RawFile struct {
 // internal/domain may not import os: this domain decides what belongs under
 // a skill's directory and in what order it is written; an adapter decides how
 // a byte slice becomes a file.
+//
+// Write is expected to be all-or-nothing for the batch it is given: Apply's
+// rollback only records a file as written once Write has already returned
+// success for it, so a Write that fails partway through its own batch and
+// leaves some of it on disk is a contract violation this package has no way
+// to detect or undo.
+//
+// Remove is the undo Apply's rollback needs for everything Write placed —
+// an agent (with its memories and routines nested inside), a template, an
+// instruction, a goal, a reference, a toolset's declaration. It is
+// addressed the same way Write's files are: skillID plus the file's own
+// skill-relative Path, called once per file, in reverse of the order Write
+// received them — the same shape Collections.Delete and Views.Delete undo
+// what Create brought into being with.
 type Files interface {
 	Write(ctx context.Context, skillID string, files []RawFile) error
+	Remove(ctx context.Context, skillID, path string) error
 }
 
 // Hooks deregisters the handlers a skill's own hooks became when it was

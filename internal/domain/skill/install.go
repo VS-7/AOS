@@ -229,13 +229,15 @@ func skillID(m Manifest) (string, error) {
 // for byte through Files. The skill's own record is written last.
 //
 // It tracks what it created as it goes and undoes it, in reverse order, the
-// moment any step fails — views before collections, because a view can name
-// a collection as its source and nothing should be asked to remove a
-// collection while a view still points at it. A rollback failure is not
-// escalated over the original error: the original error is what the caller
-// needs to act on, and a second failure while cleaning up after it is
-// recorded for whoever reads the logs, not layered into the message that
-// already explains what went wrong.
+// moment any step fails — files before views before collections, mirroring
+// the order Apply wrote them in: files were the last thing placed before the
+// skill's own record, views can name a collection as their source and
+// nothing should be asked to remove a collection while a view still points
+// at it, and collections come last because nothing else here depends on
+// them. A rollback failure is not escalated over the original error: the
+// original error is what the caller needs to act on, and a second failure
+// while cleaning up after it is recorded for whoever reads the logs, not
+// layered into the message that already explains what went wrong.
 type defaultApplier struct {
 	repo        Repository
 	collections Collections
@@ -245,8 +247,11 @@ type defaultApplier struct {
 }
 
 func (a *defaultApplier) Apply(ctx context.Context, id string, pkg Package) (*Skill, error) {
-	var createdCollections, createdViews []string
+	var createdCollections, createdViews, writtenFiles []string
 	rollback := func() {
+		for i := len(writtenFiles) - 1; i >= 0; i-- {
+			_ = a.files.Remove(ctx, id, writtenFiles[i])
+		}
 		for i := len(createdViews) - 1; i >= 0; i-- {
 			_ = a.views.Delete(ctx, view.DeleteInput{ID: createdViews[i], Skill: id})
 		}
@@ -284,6 +289,13 @@ func (a *defaultApplier) Apply(ctx context.Context, id string, pkg Package) (*Sk
 		if err := a.files.Write(ctx, id, files); err != nil {
 			rollback()
 			return nil, errApplyFailed(id, "files", err)
+		}
+		// Recorded only now that Write has already returned success: Write
+		// is expected to be all-or-nothing for its own batch (see Files'
+		// doc comment), so nothing here is added to the undo list on a
+		// failed Write, and nothing there is left for rollback to miss.
+		for _, f := range files {
+			writtenFiles = append(writtenFiles, f.Path)
 		}
 	}
 

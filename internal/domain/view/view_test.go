@@ -594,6 +594,31 @@ func TestGetAndDeleteBuildAKeyWithSkillWhenGiven(t *testing.T) {
 	}
 }
 
+// A workspace-scoped Get — the common case, and everything before this fix —
+// must not suddenly start sending an empty "skill" key: an empty string in
+// the key is not the same identity as a key that never mentioned skill, and
+// collections.Key.String() would fold it in either way. Mirrors
+// collection_test.go's TestGetAndDeleteOmitSkillFromTheKeyWhenNotGiven —
+// same fix, same logic, both domains.
+func TestGetAndDeleteOmitSkillFromTheKeyWhenNotGiven(t *testing.T) {
+	spy := &viewKeySpyRepo{fakeRepository: newFakeRepository()}
+	spy.views["contacts-table"] = view.View{ID: "contacts-table"}
+
+	svc := view.NewService(view.Deps{
+		Repo:        spy,
+		Collections: &fakeCollections{schemas: map[string]collection.Collection{}, records: map[string][]collection.Record{}},
+		Commands:    &fakeCommands{known: map[string]bool{}},
+		Clock:       clockx.Fixed{At: refTime},
+	})
+
+	if _, err := svc.Get(ctx(), view.GetInput{ID: "contacts-table"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := spy.lastGetKey["skill"]; ok {
+		t.Fatalf("Get key = %v, want no \"skill\" entry at all", spy.lastGetKey)
+	}
+}
+
 // Create refuses an empty id up front: it is also the view's file name.
 func TestCreateRefusesAnEmptyID(t *testing.T) {
 	svc := newService(t, withCollection(contactsSchema()))
