@@ -192,6 +192,45 @@ func errUnknownCollection(name string) error {
 		})
 }
 
+func errCollectionNameEmpty() error {
+	return apperr.New("COLLECTION_NAME_EMPTY").
+		Causer("collections.Registry.Register").
+		Msgf("a collection must have a name").
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{Label: "give the collection a name; it is what every record path is built from"})
+}
+
+func errCollectionNoPatterns(name string) error {
+	return apperr.New("COLLECTION_NO_PATTERNS").
+		Causer("collections.Registry.Register").
+		Msgf("%q was registered without a pattern, so no record could ever be written", name).
+		Issue("collection", name).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{Label: "declare at least one writable pattern for the collection"})
+}
+
+// errCollectionNameReserved is why the reserved list lives here and not in the
+// domain: the registry is what knows which names are taken, and a copy of the
+// list kept next to the domain goes stale the day a native is added.
+func errCollectionNameReserved(name string) error {
+	return apperr.New("COLLECTION_NAME_RESERVED").
+		Causer("collections.Registry.Register").
+		Msgf("%q is a built-in collection and cannot be redefined", name).
+		Issue("collection", name).
+		Issue("reserved", nativeNames()).
+		Status(apperr.StatusConflict).
+		CTA(apperr.CallToAction{Label: "choose a name that is not one of the built-in collections"})
+}
+
+func errCollectionNativeNotRemovable(name string) error {
+	return apperr.New("COLLECTION_NATIVE_NOT_REMOVABLE").
+		Causer("collections.Registry.Unregister").
+		Msgf("%q is a built-in collection and cannot be removed", name).
+		Issue("collection", name).
+		Status(apperr.StatusForbidden).
+		CTA(apperr.CallToAction{Label: "only collections declared at runtime can be unregistered"})
+}
+
 func nativeNames() []string {
 	out := make([]string, 0, len(natives))
 	for _, d := range natives {

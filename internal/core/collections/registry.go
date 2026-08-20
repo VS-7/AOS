@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/OWNER/aos/internal/core/build"
 )
@@ -104,17 +105,6 @@ var natives = []Descriptor{
 	),
 }
 
-var byName = func() map[string]Descriptor {
-	m := make(map[string]Descriptor, len(natives))
-	for _, desc := range natives {
-		if _, dup := m[desc.Name]; dup {
-			panic(fmt.Sprintf("collections: %q registered twice", desc.Name))
-		}
-		m[desc.Name] = desc
-	}
-	return m
-}()
-
 // Natives returns every native collection descriptor, in a stable order.
 func Natives() []Descriptor {
 	out := make([]Descriptor, len(natives))
@@ -123,17 +113,130 @@ func Natives() []Descriptor {
 	return out
 }
 
-// Lookup returns the descriptor of a native collection.
-func Lookup(name string) (Descriptor, bool) {
-	desc, ok := byName[name]
-	return desc, ok
+// Registry holds what collections exist.
+//
+// The natives are fixed at construction. The dynamic ones come and go while
+// the daemon runs, which is the entire point of a collection an agent can
+// create: the original's watcher loads a schema the moment it appears, and a
+// collection you have to restart to use is a collection the agent cannot use
+// in the turn that created it.
+//
+// It is an instance rather than mutable package state because it is read by
+// whatever is running and written by the watcher — an unguarded package map
+// races on the first turn that creates a collection while a list is in flight.
+type Registry struct {
+	mu      sync.RWMutex
+	natives map[string]Descriptor
+	dynamic map[string]Descriptor
 }
 
-// ModelOf binds an entity type to a native descriptor, producing the typed
-// model the repository works with. It is the single place where "where does a
-// memory live" meets "what is a memory".
+// NewRegistry returns a registry holding the native collections and nothing
+// else.
+func NewRegistry() *Registry {
+	r := &Registry{
+		natives: make(map[string]Descriptor, len(natives)),
+		dynamic: map[string]Descriptor{},
+	}
+	for _, d := range natives {
+		if _, dup := r.natives[d.Name]; dup {
+			panic(fmt.Sprintf("collections: %q registered twice", d.Name))
+		}
+		r.natives[d.Name] = d
+	}
+	return r
+}
+
+// Register adds or replaces a dynamic collection.
+//
+// Replacing rather than refusing a duplicate is deliberate: uninstalling and
+// reinstalling a skill re-registers the collections it ships, and a registry
+// that refused the second registration would leave a workspace unable to
+// reinstall what it had just removed.
+func (r *Registry) Register(d Descriptor) error {
+	if d.Name == "" {
+		return errCollectionNameEmpty()
+	}
+	if len(d.Patterns) == 0 {
+		return errCollectionNoPatterns(d.Name)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, native := r.natives[d.Name]; native {
+		return errCollectionNameReserved(d.Name)
+	}
+	r.dynamic[d.Name] = d
+	return nil
+}
+
+// Unregister removes a dynamic collection. A native name is refused: the
+// engine's own collections are not the caller's to remove, and letting one go
+// would break every domain built on it.
+func (r *Registry) Unregister(name string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, native := r.natives[name]; native {
+		return errCollectionNativeNotRemovable(name)
+	}
+	delete(r.dynamic, name)
+	return nil
+}
+
+// Lookup returns a descriptor by name, native or dynamic.
+func (r *Registry) Lookup(name string) (Descriptor, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if d, ok := r.natives[name]; ok {
+		return d, true
+	}
+	d, ok := r.dynamic[name]
+	return d, ok
+}
+
+// IsNative reports whether a name belongs to the engine rather than to a
+// collection somebody declared.
+func (r *Registry) IsNative(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, ok := r.natives[name]
+	return ok
+}
+
+// Names returns every collection name, natives first, each group sorted, so a
+// listing is stable between calls and between machines.
+func (r *Registry) Names() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]string, 0, len(r.natives)+len(r.dynamic))
+	for name := range r.natives {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	dyn := make([]string, 0, len(r.dynamic))
+	for name := range r.dynamic {
+		dyn = append(dyn, name)
+	}
+	sort.Strings(dyn)
+	return append(out, dyn...)
+}
+
+// defaultRegistry is what the package-level Lookup, Natives and ModelOf read.
+// It exists so the fourteen domains written before this type do not change a
+// line: they ask the package, the package asks the default instance.
+var defaultRegistry = NewRegistry()
+
+// Default returns the process-wide registry. A caller that needs to register a
+// dynamic collection takes this, or is given its own instance — the wiring in
+// internal/app passes one explicitly.
+func Default() *Registry { return defaultRegistry }
+
+// Lookup returns the descriptor of a collection, native or dynamic.
+func Lookup(name string) (Descriptor, bool) { return defaultRegistry.Lookup(name) }
+
+// ModelOf binds an entity type to a descriptor, producing the typed model the
+// repository works with. It is the single place where "where does a memory
+// live" meets "what is a memory".
 func ModelOf[T any](name string) (Model[T], error) {
-	desc, ok := byName[name]
+	desc, ok := defaultRegistry.Lookup(name)
 	if !ok {
 		return Model[T]{}, errUnknownCollection(name)
 	}

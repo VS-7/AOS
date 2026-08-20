@@ -1,9 +1,11 @@
 package collections_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/collections"
 )
@@ -131,4 +133,136 @@ func TestWorkspaceDirsCoversEveryCollection(t *testing.T) {
 			t.Errorf("%q missing from %v", want, dirs)
 		}
 	}
+}
+
+// A collection an agent invents has to be usable in the same session — that is
+// the whole point of the original's autoWatch. The registry is therefore an
+// instance with a lock, not package state computed once at init.
+func TestADynamicCollectionIsVisibleAsSoonAsItIsRegistered(t *testing.T) {
+	reg := collections.NewRegistry()
+
+	if _, ok := reg.Lookup("contacts"); ok {
+		t.Fatal("contacts existed before anybody registered it")
+	}
+	desc := collections.Descriptor{
+		Name:     "contacts",
+		Patterns: []*collections.Pattern{collections.MustCompile(collections.Root + "/collections/contacts/records/{id}.md")},
+		Format:   collections.FormatMarkdown,
+	}
+	if err := reg.Register(desc); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := reg.Lookup("contacts")
+	if !ok {
+		t.Fatal("the collection is not there right after being registered")
+	}
+	if got.Name != "contacts" {
+		t.Fatalf("name = %q", got.Name)
+	}
+}
+
+// A custom collection that shadowed a native one would break the engine's own
+// registry: two things would claim the same name and the loser would be
+// whichever was asked for second.
+func TestARegisteredNameMayNotShadowANative(t *testing.T) {
+	reg := collections.NewRegistry()
+
+	for _, name := range []string{"agents", "skills", "memories", "tasks", "chats", "routines"} {
+		err := reg.Register(collections.Descriptor{
+			Name:     name,
+			Patterns: []*collections.Pattern{collections.MustCompile(collections.Root + "/collections/x/records/{id}.md")},
+		})
+		if err == nil {
+			t.Fatalf("registering %q as a custom collection was allowed", name)
+		}
+		if code := codeOfErr(t, err); code != "AOS_COLLECTION_NAME_RESERVED" {
+			t.Fatalf("%s: code = %q, want AOS_COLLECTION_NAME_RESERVED", name, code)
+		}
+	}
+}
+
+func TestANativeCannotBeUnregistered(t *testing.T) {
+	reg := collections.NewRegistry()
+
+	if err := reg.Unregister("agents"); err == nil {
+		t.Fatal("a native collection was unregistered")
+	}
+	if _, ok := reg.Lookup("agents"); !ok {
+		t.Fatal("the native disappeared anyway")
+	}
+}
+
+func TestUnregisteringADynamicRemovesIt(t *testing.T) {
+	reg := collections.NewRegistry()
+	desc := collections.Descriptor{
+		Name:     "contacts",
+		Patterns: []*collections.Pattern{collections.MustCompile(collections.Root + "/collections/contacts/records/{id}.md")},
+	}
+	if err := reg.Register(desc); err != nil {
+		t.Fatal(err)
+	}
+	if err := reg.Unregister("contacts"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := reg.Lookup("contacts"); ok {
+		t.Fatal("the collection survived being unregistered")
+	}
+}
+
+// Registering the same name twice is the uninstall-then-reinstall path of a
+// skill-scoped collection. It replaces rather than failing, because failing
+// would leave a workspace that cannot reinstall what it just removed.
+func TestRegisteringTheSameNameTwiceReplaces(t *testing.T) {
+	reg := collections.NewRegistry()
+	first := collections.Descriptor{
+		Name:     "contacts",
+		Patterns: []*collections.Pattern{collections.MustCompile(collections.Root + "/collections/contacts/records/{id}.md")},
+		Format:   collections.FormatMarkdown,
+	}
+	second := first
+	second.Format = collections.FormatJSON
+	second.Patterns = []*collections.Pattern{collections.MustCompile(collections.Root + "/collections/contacts/records/{id}.json")}
+
+	if err := reg.Register(first); err != nil {
+		t.Fatal(err)
+	}
+	if err := reg.Register(second); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := reg.Lookup("contacts")
+	if got.Format != collections.FormatJSON {
+		t.Fatalf("format = %v, want the second registration to win", got.Format)
+	}
+}
+
+// The registry is read by whatever is running and written by the watcher and by
+// the create path. An unguarded map races on the first test that exercises one.
+func TestTheRegistryIsSafeUnderConcurrentUse(t *testing.T) {
+	reg := collections.NewRegistry()
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			_ = reg.Register(collections.Descriptor{
+				Name:     "contacts",
+				Patterns: []*collections.Pattern{collections.MustCompile(collections.Root + "/collections/contacts/records/{id}.md")},
+			})
+			_ = reg.Unregister("contacts")
+		}
+	}()
+	for i := 0; i < 200; i++ {
+		reg.Lookup("contacts")
+		reg.Names()
+	}
+	<-done
+}
+
+func codeOfErr(t *testing.T, err error) string {
+	t.Helper()
+	var app *apperr.Error
+	if !errors.As(err, &app) {
+		t.Fatalf("err is %T, not an apperr: %v", err, err)
+	}
+	return app.Code
 }
