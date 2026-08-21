@@ -3,30 +3,85 @@ package instruction_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/OWNER/aos/internal/adapters/fscollections"
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/domain/instruction"
 )
 
-func newService(t *testing.T) (*instruction.Service, string) {
-	t.Helper()
-	root := t.TempDir()
-	model, err := collections.ModelOf[instruction.Instruction]("instructions")
-	if err != nil {
-		t.Fatalf("ModelOf: %v", err)
+// ---- fakeRepository: an in-memory instruction.Repository ----
+
+type fakeRepository struct {
+	mu           sync.Mutex
+	instructions map[string]instruction.Instruction
+}
+
+func newFakeRepository() *fakeRepository {
+	return &fakeRepository{instructions: map[string]instruction.Instruction{}}
+}
+
+func (r *fakeRepository) Get(_ context.Context, key collections.Key) (*instruction.Instruction, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	i, ok := r.instructions[key["id"]]
+	if !ok {
+		return nil, fmt.Errorf("fakeRepository: no instruction %q", key["id"])
 	}
-	repo := fscollections.New(root, model)
-	svc := instruction.NewService(instruction.Deps{
-		Repo:  repo,
+	out := i
+	return &out, nil
+}
+
+func (r *fakeRepository) List(_ context.Context, _ collections.Query) ([]instruction.Instruction, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]instruction.Instruction, 0, len(r.instructions))
+	for _, i := range r.instructions {
+		out = append(out, i)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+func (r *fakeRepository) Create(_ context.Context, v *instruction.Instruction) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.instructions[v.ID]; exists {
+		return fmt.Errorf("fakeRepository: instruction %q already exists", v.ID)
+	}
+	r.instructions[v.ID] = *v
+	return nil
+}
+
+func (r *fakeRepository) Update(_ context.Context, v *instruction.Instruction, _ collections.Version) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.instructions[v.ID]; !exists {
+		return fmt.Errorf("fakeRepository: no instruction %q", v.ID)
+	}
+	r.instructions[v.ID] = *v
+	return nil
+}
+
+func (r *fakeRepository) Delete(_ context.Context, key collections.Key) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.instructions, key["id"])
+	return nil
+}
+
+func newService(t *testing.T) *instruction.Service {
+	t.Helper()
+	return instruction.NewService(instruction.Deps{
+		Repo:  newFakeRepository(),
 		Clock: clockx.Fixed{At: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
 	})
-	return svc, root
 }
 
 func ctx() context.Context { return context.Background() }
@@ -34,7 +89,7 @@ func ctx() context.Context { return context.Background() }
 // --- round trip --------------------------------------------------------
 
 func TestRoundTripCreateGetUpdateDelete(t *testing.T) {
-	svc, _ := newService(t)
+	svc := newService(t)
 
 	created, err := svc.Create(ctx(), instruction.CreateInput{
 		Name: "Feature Protocol", Type: "standards",
@@ -88,7 +143,7 @@ func TestRoundTripCreateGetUpdateDelete(t *testing.T) {
 }
 
 func TestCreateWithoutNameFails(t *testing.T) {
-	svc, _ := newService(t)
+	svc := newService(t)
 	_, err := svc.Create(ctx(), instruction.CreateInput{})
 	var app *apperr.Error
 	if !errors.As(err, &app) {
@@ -100,7 +155,7 @@ func TestCreateWithoutNameFails(t *testing.T) {
 }
 
 func TestCreateRejectsADuplicateID(t *testing.T) {
-	svc, _ := newService(t)
+	svc := newService(t)
 	if _, err := svc.Create(ctx(), instruction.CreateInput{Name: "Feature Protocol"}); err != nil {
 		t.Fatalf("first Create: %v", err)
 	}
@@ -115,7 +170,7 @@ func TestCreateRejectsADuplicateID(t *testing.T) {
 }
 
 func TestGetOfAnUnknownIDIsNotFound(t *testing.T) {
-	svc, _ := newService(t)
+	svc := newService(t)
 	_, err := svc.Get(ctx(), instruction.GetInput{ID: "does-not-exist"})
 	var app *apperr.Error
 	if !errors.As(err, &app) {
@@ -129,7 +184,7 @@ func TestGetOfAnUnknownIDIsNotFound(t *testing.T) {
 // --- Applicable: the query the prompt assembler runs -------------------
 
 func TestApplicableWithNoPathsIsAlwaysWorkspaceWide(t *testing.T) {
-	svc, _ := newService(t)
+	svc := newService(t)
 	if _, err := svc.Create(ctx(), instruction.CreateInput{Name: "Global Rule"}); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -144,7 +199,7 @@ func TestApplicableWithNoPathsIsAlwaysWorkspaceWide(t *testing.T) {
 }
 
 func TestApplicableMatchesGlobPaths(t *testing.T) {
-	svc, _ := newService(t)
+	svc := newService(t)
 	if _, err := svc.Create(ctx(), instruction.CreateInput{
 		Name: "Go Standards", Paths: []string{"internal/domain/**/*.go"},
 	}); err != nil {
@@ -169,7 +224,7 @@ func TestApplicableMatchesGlobPaths(t *testing.T) {
 }
 
 func TestApplicableNeverReturnsAnInactiveInstruction(t *testing.T) {
-	svc, _ := newService(t)
+	svc := newService(t)
 	created, err := svc.Create(ctx(), instruction.CreateInput{Name: "Retired Rule"})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -191,7 +246,7 @@ func TestApplicableNeverReturnsAnInactiveInstruction(t *testing.T) {
 // --- List ----------------------------------------------------------------
 
 func TestListFiltersBySkill(t *testing.T) {
-	svc, _ := newService(t)
+	svc := newService(t)
 	if _, err := svc.Create(ctx(), instruction.CreateInput{Name: "Browser Rule", Skill: "browser"}); err != nil {
 		t.Fatalf("Create: %v", err)
 	}

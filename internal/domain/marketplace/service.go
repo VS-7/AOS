@@ -51,16 +51,16 @@ func NewService(d Deps) *Service {
 // DiscoveryInput filters Discovery's search.
 type DiscoveryInput struct {
 	command.Reasoning
-	Text  string
-	Tag   string
-	Owner string
+	Text  string `json:"text,omitempty" jsonschema:"Free-text search across name, description and tags."`
+	Tag   string `json:"tag,omitempty" jsonschema:"Filter to listings carrying this tag."`
+	Owner string `json:"owner,omitempty" jsonschema:"Filter to listings from this owner (the <owner> half of <owner>/<repo>)."`
 }
 
 // GetInput names one listing by the registry it came from and its source.
 type GetInput struct {
 	command.Reasoning
-	Registry string
-	Source   string
+	Registry string `json:"registry,omitempty" jsonschema:"Which configured registry to read from. Empty tries every configured registry."`
+	Source   string `json:"source" jsonschema:"The listing's source, \"<owner>/<repo>\"." validate:"required,notblank"`
 }
 
 // InstallInput names the package to install.
@@ -72,14 +72,18 @@ type InstallInput struct {
 	// succeeds — the same "search until found" shape Discovery already
 	// gives a caller that found a Listing without recording which registry
 	// it came from.
-	Registry string
-	Source   string
-	Ref      string
+	Registry string `json:"registry,omitempty" jsonschema:"Which configured registry to fetch from. Empty tries every configured registry."`
+	Source   string `json:"source" jsonschema:"The package's source, \"<owner>/<repo>\"." validate:"required,notblank"`
+	Ref      string `json:"ref,omitempty" jsonschema:"Version or ref to fetch. Empty fetches the registry's default."`
 
-	// AcceptedAll is passed straight through to
+	// acceptedAll is passed straight through to
 	// skill.Installer.InstallPackage — see its own doc on why nil means
-	// "ask" (ADR-0007).
-	AcceptedAll func(skill.Permissions) bool
+	// "ask" (ADR-0007). Unexported: a function cannot arrive over MCP, CLI
+	// or HTTP, so it is not part of this command's schema — every call
+	// through the registry gets nil, i.e. "ask", the same default every
+	// other caller of InstallPackage gets. Set only by Go code calling
+	// Service.Install directly, in the same package.
+	acceptedAll func(skill.Permissions) bool
 }
 
 // Discovery searches every configured registry and merges the results.
@@ -184,7 +188,7 @@ func (s *Service) Install(ctx context.Context, in InstallInput) (*skill.Skill, e
 			lastErr = errRegistryUnreachable(id, err)
 			continue
 		}
-		return s.installer.InstallPackage(ctx, source, pkg, in.AcceptedAll)
+		return s.installer.InstallPackage(ctx, source, pkg, in.acceptedAll)
 	}
 	return nil, errFetchFailed(source, lastErr)
 }

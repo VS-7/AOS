@@ -24,19 +24,25 @@ import (
 	"github.com/OWNER/aos/internal/core/ids"
 	"github.com/OWNER/aos/internal/domain/activity"
 	"github.com/OWNER/aos/internal/domain/agent"
+	"github.com/OWNER/aos/internal/domain/artifact"
 	"github.com/OWNER/aos/internal/domain/chat"
 	"github.com/OWNER/aos/internal/domain/collection"
 	"github.com/OWNER/aos/internal/domain/comment"
 	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/domain/gateway"
+	"github.com/OWNER/aos/internal/domain/goal"
+	"github.com/OWNER/aos/internal/domain/instruction"
 	"github.com/OWNER/aos/internal/domain/job"
 	"github.com/OWNER/aos/internal/domain/memory"
+	"github.com/OWNER/aos/internal/domain/project"
 	"github.com/OWNER/aos/internal/domain/routine"
 	"github.com/OWNER/aos/internal/domain/skill"
 	"github.com/OWNER/aos/internal/domain/task"
+	"github.com/OWNER/aos/internal/domain/template"
 	"github.com/OWNER/aos/internal/domain/theme"
 	"github.com/OWNER/aos/internal/domain/todo"
 	"github.com/OWNER/aos/internal/domain/toolset"
+	"github.com/OWNER/aos/internal/domain/tunnel"
 	"github.com/OWNER/aos/internal/domain/view"
 	"github.com/OWNER/aos/internal/domain/workspace"
 	"github.com/OWNER/aos/internal/transport/clix"
@@ -101,6 +107,19 @@ var excluded = map[string]string{
 		"suite, which drives the same Install with AcceptedAll set.",
 	"skills_create": "the same operation as skills_install, under the name a script or an " +
 		"agent assembling a package reaches for — same reason, same exclusion.",
+	"marketplace_discovery": "the parity installation has no registry configured, so this " +
+		"could only exercise the refusal path, not a real search. Covered by the " +
+		"marketplace suite's contract tests over a fake Registry.",
+	"marketplace_get": "same reason as marketplace_discovery — no registry configured here " +
+		"to read a real listing from.",
+	"marketplace_install": "same reason as marketplace_discovery, and it shares " +
+		"skills_install's own exclusion besides: consent has nobody to answer it in this " +
+		"harness. Covered by the marketplace suite.",
+	"tunnel_start": "spawns cloudflared, an operating-system process — running it on four " +
+		"surfaces would start four. The parity installation also has no API token, so " +
+		"even a single run here would only exercise the exposure guard, not a real " +
+		"tunnel. Both the guard and the supervised run are covered by the tunnel suite " +
+		"over a fake Runner.",
 }
 
 // scenario describes one command well enough to run it on every surface.
@@ -584,6 +603,125 @@ var scenarios = map[string]scenario{
 		Payload: skill.DeleteInput{ID: "crm", Reasoning: reason()},
 		Seed:    seedSkill,
 	},
+
+	// The seven Phase 8 domains declared alongside the ecosystem core — see
+	// docs/08 - Entrega/Roteiro de Fases.md's "Fora do núcleo, declarado".
+	"artifacts_list": {
+		Payload: artifact.ListInput{Reasoning: reason()},
+		Seed:    seedArtifact,
+	},
+	"artifacts_get": {
+		Payload: artifact.GetInput{ID: "dashboard", Reasoning: reason()},
+		Seed:    seedArtifact,
+	},
+	"artifacts_create": {
+		Payload: artifact.CreateInput{ID: "report", Name: "Report", Reasoning: reason()},
+	},
+	"artifacts_update": {
+		Payload: artifact.UpdateInput{ID: "dashboard", Name: ptr("Dashboard v2"), Reasoning: reason()},
+		Seed:    seedArtifact,
+	},
+	"artifacts_set-password": {
+		Payload: artifact.SetPasswordInput{ID: "dashboard", Password: "correct-horse-battery-staple", Reasoning: reason()},
+		Seed:    seedArtifact,
+	},
+	"artifacts_delete": {
+		Payload: artifact.DeleteInput{ID: "dashboard", Reasoning: reason()},
+		Seed:    seedArtifact,
+	},
+
+	"goals_list": {
+		Payload: goal.ListInput{Reasoning: reason()},
+		Seed:    seedGoal,
+	},
+	"goals_get": {
+		Payload: goal.GetInput{ID: "grow-revenue", Reasoning: reason()},
+		Seed:    seedGoal,
+	},
+	"goals_create": {
+		Payload: goal.CreateInput{Title: "Ship the Migration", Reasoning: reason()},
+	},
+	"goals_update": {
+		Payload: goal.UpdateInput{ID: "grow-revenue", Title: ptr("Grow Revenue 20%"), Reasoning: reason()},
+		Seed:    seedGoal,
+	},
+	"goals_delete": {
+		Payload: goal.DeleteInput{ID: "grow-revenue", Reasoning: reason()},
+		Seed:    seedGoal,
+	},
+
+	"instructions_list": {
+		Payload: instruction.ListInput{Reasoning: reason()},
+		Seed:    seedInstruction,
+	},
+	"instructions_get": {
+		Payload: instruction.GetInput{ID: "protocol", Reasoning: reason()},
+		Seed:    seedInstruction,
+	},
+	"instructions_create": {
+		Payload: instruction.CreateInput{ID: "style-guide", Name: "Style Guide", Reasoning: reason()},
+	},
+	"instructions_update": {
+		Payload: instruction.UpdateInput{ID: "protocol", Description: ptr("Updated"), Reasoning: reason()},
+		Seed:    seedInstruction,
+	},
+	"instructions_delete": {
+		Payload: instruction.DeleteInput{ID: "protocol", Reasoning: reason()},
+		Seed:    seedInstruction,
+	},
+
+	"projects_list": {
+		Payload: project.ListInput{Reasoning: reason()},
+		Seed:    seedProject,
+	},
+	"projects_get": {
+		Payload: project.GetInput{ID: "launch", Reasoning: reason()},
+		Seed:    seedProject,
+	},
+	"projects_create": {
+		Payload: project.CreateInput{ID: "onboarding", Name: "Onboarding", Reasoning: reason()},
+	},
+	"projects_update": {
+		Payload: project.UpdateInput{ID: "launch", Name: ptr("Launch v2"), Reasoning: reason()},
+		Seed:    seedProject,
+	},
+	"projects_delete": {
+		Payload: project.DeleteInput{ID: "launch", Reasoning: reason()},
+		Seed:    seedProject,
+	},
+
+	"templates_list": {
+		Payload: template.ListInput{Reasoning: reason()},
+		Seed:    seedTemplate,
+	},
+	"templates_get": {
+		Payload: template.GetInput{ID: "welcome-email", Reasoning: reason()},
+		Seed:    seedTemplate,
+	},
+	"templates_create": {
+		Payload: template.CreateInput{
+			ID: "farewell-email", Name: "Farewell Email", Content: "Bye, {{ name }}!", Reasoning: reason(),
+		},
+	},
+	"templates_update": {
+		Payload: template.UpdateInput{ID: "welcome-email", Name: ptr("Welcome Email v2"), Reasoning: reason()},
+		Seed:    seedTemplate,
+	},
+	"templates_render": {
+		Payload: template.RenderInput{ID: "welcome-email", Variables: map[string]any{"name": "Ada"}, Reasoning: reason()},
+		Seed:    seedTemplate,
+	},
+	"templates_delete": {
+		Payload: template.DeleteInput{ID: "welcome-email", Reasoning: reason()},
+		Seed:    seedTemplate,
+	},
+
+	"tunnel_status": {
+		Payload: tunnel.StatusInput{Reasoning: reason()},
+	},
+	"tunnel_stop": {
+		Payload: tunnel.StopInput{Reasoning: reason()},
+	},
 }
 
 func seedTheme(t *testing.T, a *app.App) {
@@ -742,6 +880,51 @@ func seedSkill(t *testing.T, a *app.App) {
 	if _, err := a.Skills.Install(parityCtx(), skill.InstallInput{
 		Source:      "testdata/crm-skill",
 		AcceptedAll: func(skill.Permissions) bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func seedArtifact(t *testing.T, a *app.App) {
+	t.Helper()
+	if _, err := a.Artifacts.Create(parityCtx(), artifact.CreateInput{
+		ID: "dashboard", Name: "Dashboard",
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func seedGoal(t *testing.T, a *app.App) {
+	t.Helper()
+	if _, err := a.Goals.Create(parityCtx(), goal.CreateInput{
+		Title: "Grow Revenue",
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func seedInstruction(t *testing.T, a *app.App) {
+	t.Helper()
+	if _, err := a.Instructions.Create(parityCtx(), instruction.CreateInput{
+		ID: "protocol", Name: "Protocol",
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func seedProject(t *testing.T, a *app.App) {
+	t.Helper()
+	if _, err := a.Projects.Create(parityCtx(), project.CreateInput{
+		ID: "launch", Name: "Launch",
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func seedTemplate(t *testing.T, a *app.App) {
+	t.Helper()
+	if _, err := a.Templates.Create(parityCtx(), template.CreateInput{
+		ID: "welcome-email", Name: "Welcome Email", Content: "Hello, {{ name }}!",
 	}); err != nil {
 		t.Fatal(err)
 	}

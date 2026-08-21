@@ -61,19 +61,27 @@ describe("COMMAND_MAP", () => {
   });
 
   it("declares dormancy with null, never by omitting the key", () => {
-    // task-10 lit `collection` (and `view`/`skill`/`toolset` with it) — see
-    // that entry's own comment. `goal` is still whole-domain dormant, so it
-    // takes over this assertion's job.
-    expect("goal.list" in COMMAND_MAP).toBe(true);
-    expect(COMMAND_MAP["goal.list"]).toBeNull();
+    // task-10 lit `collection` (and `view`/`skill`/`toolset` with it); the
+    // Phase 8 domain pass lit `artifact`/`goal`/`instruction`/`marketplace`/
+    // `project`/`template`/`tunnel` alongside it — see each one's own
+    // comment above. `model` is still whole-domain dormant (only the
+    // pricing table is missing on the Go side, not the domain itself, but
+    // no command group exists yet either way), so it takes over this
+    // assertion's job.
+    expect("model.list" in COMMAND_MAP).toBe(true);
+    expect(COMMAND_MAP["model.list"]).toBeNull();
   });
 
-  it("recognizes the 10 domains without a Go backend", () => {
-    // task-10: `collection`, `view`, `toolset` and `skill` moved out of
-    // this set (14 -> 10) — every path they had is now a real mapping or
-    // an individually `null` one, not whole-domain dormancy.
-    expect(DORMANT_DOMAINS.size).toBe(10);
-    expect(isDormant("goal")).toBe(true);
+  it("recognizes the 3 domains without a Go backend", () => {
+    // task-10 moved collection/view/toolset/skill out (14 -> 10); the
+    // Phase 8 domain pass moved artifact/goal/instruction/marketplace/
+    // project/template/tunnel out in turn (10 -> 3) — every path they had
+    // is now a real mapping or an individually `null` one, not whole-domain
+    // dormancy. `model`, `token` and `user` remain: no command group exists
+    // for any of the three yet.
+    expect(DORMANT_DOMAINS.size).toBe(3);
+    expect(isDormant("model")).toBe(true);
+    expect(isDormant("goal")).toBe(false);
     expect(isDormant("collection")).toBe(false);
     expect(isDormant("task")).toBe(false);
   });

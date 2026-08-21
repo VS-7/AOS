@@ -1,0 +1,267 @@
+# tool: Goals
+
+Before planning or executing significant work, check active goals to align
+your efforts and avoid strategically useless results — technically correct
+work that serves nothing.
+
+## Commands
+- **list** — goals matching a filter
+- **get** — one goal in full
+- **create** — a new goal
+- **update** — change a goal's fields, including its status
+- **delete** — remove a goal; every task that referenced it is disassociated,
+  not removed
+
+## When to use
+- **Before starting significant work:** call goals_list with status active
+  first, so the work chosen actually serves one of them
+
+## When NOT to use
+- Not for tracking a single unit of work — that is [[Task (Go)]]; a goal is
+  the destination several tasks might serve
+
+Composite tool `Goals` with 5 actions: create, delete, get, list, update.
+
+A goal without a measure is aspirational, not checkable. Set one when the
+outcome can be verified, so later work can tell whether it was actually
+served.
+
+## Usage
+Call as `Goals({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### goals_create
+
+Create a new goal.
+
+Create a strategic outcome. Its id is derived from the title.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "What this goal is."
+    },
+    "description": {
+      "type": "string",
+      "description": "One line summarising the outcome."
+    },
+    "status": {
+      "type": "string",
+      "description": "One of: active, achieved, abandoned, paused. Defaults to active."
+    },
+    "project": {
+      "type": "string",
+      "description": "Project this goal belongs to, if any."
+    },
+    "dueAt": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "When this goal is due, if it has a deadline."
+    },
+    "skill": {
+      "type": "string",
+      "description": "Skill installing this goal, if any."
+    },
+    "measure": {
+      "type": "string",
+      "description": "How to tell this goal was actually served."
+    },
+    "content": {
+      "type": "string",
+      "description": "Markdown body."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "title",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### goals_delete
+
+Remove a goal.
+
+Remove a goal. Every task that referenced it is disassociated, not deleted.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the goal to delete."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### goals_get
+
+Read one goal in full.
+
+Read a goal: its status, its measure, and what it is for.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the goal."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### goals_list
+
+List goals matching a filter.
+
+Every goal matching the given status, project or text filter.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "Filter by one or more statuses."
+    },
+    "project": {
+      "type": "string",
+      "description": "Filter goals by project id."
+    },
+    "query": {
+      "type": "string",
+      "description": "Full-text search across a goal's id and title."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### goals_update
+
+Change a goal's fields.
+
+Change the describable parts of a goal, including moving it to achieved or abandoned.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the goal to update."
+    },
+    "title": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New title. Omit to leave unchanged."
+    },
+    "description": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New one-line summary of the outcome. Omit to leave unchanged."
+    },
+    "status": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New lifecycle status: active, achieved, abandoned, or paused. Omit to leave unchanged."
+    },
+    "project": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New project this goal belongs to. Empty string clears it. Omit to leave unchanged."
+    },
+    "dueAt": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New due date. Omit to leave unchanged."
+    },
+    "measure": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New measure that makes this goal checkable rather than aspirational. Omit to leave unchanged."
+    },
+    "content": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New body content, in Markdown. Omit to leave unchanged."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+

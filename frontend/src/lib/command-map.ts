@@ -481,9 +481,6 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "workspace.updateMember": null,
 
   // ── dormant: whole domain absent from Go ────────────────────────────────
-  "artifact.delete": null,
-  "artifact.getById": null,
-  "artifact.list": null,
   // task-10: the `collection` domain is lit — `internal/domain/collection/
   // commands.go` registers all nine. Every `collections_*` field name
   // below comes from that file's own Input structs, not guessed.
@@ -520,33 +517,8 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // `memory.graph`'s own comment above describes.
   "collection.listRecords": "collections_records-list",
   "collection.updateRecord": { key: "collections_records-update", renameIn: { record: "id" } },
-  "goal.create": null,
-  "goal.delete": null,
-  "goal.getById": null,
-  "goal.list": null,
-  "goal.update": null,
-  "instruction.create": null,
-  "instruction.delete": null,
-  // Found by the final-review sweep's corrected pattern — missing
-  // alongside the other four `instruction.*` entries, but previously
-  // shielded from ever throwing by `DormantGate` (the whole `instruction`
-  // domain never renders children), unlike `agent.getById`/`memory.graph`
-  // above, which had no such shield. There is no `instructions_*` command
-  // group in the Go registry at all (`frontend/src/lib/schema.ts` has no
-  // `instructions_get`/`instructions_getById`) — whole domain absent, same
-  // as its four siblings.
-  "instruction.getById": null,
-  "instruction.list": null,
-  "instruction.update": null,
-  "marketplace.getByName": null,
-  "marketplace.list": null,
   "model.list": null,
   "model.set": null,
-  "project.create": null,
-  "project.delete": null,
-  "project.getById": null,
-  "project.list": null,
-  "project.update": null,
   // task-10: the `skill` domain is lit — `internal/domain/skill/
   // commands.go` registers list/install/create/update/delete.
   //
@@ -586,15 +558,6 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "skill.install": "skills_install",
   "skill.list": "skills_list",
   "skill.update": { key: "skills_update", renameIn: { skill: "id" } },
-  "template.create": null,
-  "template.delete": null,
-  // Found by the final-review sweep's corrected pattern — same shape as
-  // `instruction.getById` above: shielded from ever throwing by
-  // `DormantGate`, missing from the map, no `templates_*` command group in
-  // the Go registry at all. Whole domain absent, same as its siblings.
-  "template.getById": null,
-  "template.list": null,
-  "template.update": null,
   "token.regenerate": null,
   // task-10: the `toolset` domain is lit — `internal/domain/toolset/
   // commands.go` registers get/get-config/update-config/delete for the UI
@@ -628,9 +591,6 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
     renameIn: { toolset: "id" },
     coerceIn: { values: (value) => ({ env: value }) },
   },
-  "tunnel.getStatus": null,
-  "tunnel.start": null,
-  "tunnel.stop": null,
   "user.create": null,
   "user.delete": null,
   "user.list": null,
@@ -687,12 +647,73 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "view.getById": { key: "views_get", renameIn: { view: "id" }, wrapOut: "view" },
   "view.list": "views_list",
   "view.render": { key: "views_render", renameIn: { view: "id" } },
+
+  // The seven Phase 8 domains declared alongside the ecosystem core — see
+  // docs/08 - Entrega/Roteiro de Fases.md's "Fora do núcleo, declarado".
+  // The five/six-entry shape (list/getById/create/update/delete, +render for
+  // template) mirrors view.*/toolset.* above; the specific paths kept here
+  // (artifact.delete/getById/list, goal's five, instruction's five,
+  // marketplace.getByName/list, project's five, template's five,
+  // tunnel.getStatus/start/stop) are exactly the call sites the ported
+  // frontend already had declared `null` for — real field names, confirmed
+  // by that dormancy sweep, not guessed from the Go schema. The remaining
+  // entries per domain (artifact's create/update/setPassword, template's
+  // render, marketplace.install) have no live caller yet, the same
+  // "no live caller" status collection.createRecord and skill's unused
+  // fields above already carry.
+  "artifact.list": "artifacts_list",
+  "artifact.getById": { key: "artifacts_get", renameIn: { artifact: "id" } },
+  "artifact.create": "artifacts_create",
+  "artifact.update": { key: "artifacts_update", renameIn: { artifact: "id" } },
+  "artifact.setPassword": { key: "artifacts_set-password", renameIn: { artifact: "id" } },
+  "artifact.delete": { key: "artifacts_delete", renameIn: { artifact: "id" } },
+
+  "goal.list": "goals_list",
+  "goal.getById": { key: "goals_get", renameIn: { goal: "id" }, wrapOut: "goal" },
+  "goal.create": "goals_create",
+  "goal.update": { key: "goals_update", renameIn: { goal: "id" } },
+  "goal.delete": { key: "goals_delete", renameIn: { goal: "id" } },
+
+  "instruction.list": "instructions_list",
+  "instruction.getById": { key: "instructions_get", renameIn: { instruction: "id" } },
+  "instruction.create": "instructions_create",
+  "instruction.update": { key: "instructions_update", renameIn: { instruction: "id" } },
+  "instruction.delete": { key: "instructions_delete", renameIn: { instruction: "id" } },
+
+  // `marketplace.list` is the ported UI's name for a search/browse call —
+  // maps to `marketplace_discovery`, not a literal `marketplace_list` (no
+  // such command; discovery is the list-equivalent). `getByName` maps to
+  // `marketplace_get`, which takes `source` — `renameIn: { name: "source" }`
+  // is a guess at the UI's own param name, not yet confirmed against the
+  // call site; `install` has no live caller yet.
+  "marketplace.list": "marketplace_discovery",
+  "marketplace.getByName": { key: "marketplace_get", renameIn: { name: "source" } },
+  "marketplace.install": "marketplace_install",
+
+  "project.list": "projects_list",
+  "project.getById": { key: "projects_get", renameIn: { project: "id" } },
+  "project.create": "projects_create",
+  "project.update": { key: "projects_update", renameIn: { project: "id" } },
+  "project.delete": { key: "projects_delete", renameIn: { project: "id" } },
+
+  "template.list": "templates_list",
+  "template.getById": { key: "templates_get", renameIn: { template: "id" } },
+  "template.create": "templates_create",
+  "template.update": "templates_update",
+  "template.delete": { key: "templates_delete", renameIn: { template: "id" } },
+  "template.render": { key: "templates_render", renameIn: { template: "id" } },
+
+  // Registry: false keeps these out of the agent's own tool list only — the
+  // HTTP surface a settings panel calls still reaches them (see
+  // internal/domain/tunnel/commands.go's own doc on that distinction).
+  "tunnel.getStatus": "tunnel_status",
+  "tunnel.start": "tunnel_start",
+  "tunnel.stop": "tunnel_stop",
 };
 
 /** The domains the Go backend does not have yet, whole. */
 export const DORMANT_DOMAINS: ReadonlySet<string> = new Set([
-  "artifact", "goal", "instruction", "marketplace", "model",
-  "project", "template", "token", "tunnel", "user",
+  "model", "token", "user",
 ]);
 
 /** Whether the whole domain is dormant — what the route shows as a panel. */

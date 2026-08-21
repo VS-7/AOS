@@ -1,0 +1,256 @@
+# tool: Artifacts
+
+An artifact is a small static site: an entrypoint HTML file and whatever
+else it references, registered in the workspace and served by this daemon at
+/v/{workspace}/artifacts/{id}/*.
+
+## Commands
+- **list** — every artifact registered in the workspace
+- **get** — one artifact's configuration
+- **create** — register a new one, scaffolding a minimal entrypoint if none is given
+- **update** — change its name, description, entrypoint or visibility
+- **set-password** — set the password a by_password artifact is shared behind
+- **delete** — remove it and its files
+
+## When to use
+- **Publishing something for a person to open in a browser:** a dashboard,
+  report or generated page an agent produced — create an artifact rather than
+  describing the content in a message
+- **Sharing outside the workspace:** set visibility to by_password and call
+  set-password, then hand out the URL set-password returns
+
+## When NOT to use
+- Not for anything that should stay inside the conversation — an artifact is
+  reachable by whoever the visibility allows, unlike a chat message
+
+Composite tool `Artifacts` with 6 actions: create, delete, get, list, set-password, update.
+
+Content itself — the HTML, CSS and JS the artifact serves — is written to
+its directory through the file tools, not through this group; these commands
+manage the artifact's registration and access, not its files.
+
+## Usage
+Call as `Artifacts({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### artifacts_create
+
+Register a new artifact.
+
+Registers a new artifact and scaffolds a minimal entrypoint HTML file when
+none is given. Defaults to private visibility.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier for the new artifact. Generated when omitted."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name."
+    },
+    "description": {
+      "type": "string",
+      "description": "What this artifact is."
+    },
+    "entrypoint": {
+      "type": "string",
+      "description": "HTML file served as the artifact's root. A minimal one is scaffolded when omitted."
+    },
+    "visibility": {
+      "type": "string",
+      "description": "One of: private, workspace, by_password. Defaults to private."
+    },
+    "skill": {
+      "type": "string",
+      "description": "Skill that owns this artifact, if any."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "name",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### artifacts_delete
+
+Remove an artifact.
+
+Remove an artifact's registration and its files. Idempotent: deleting what is already gone succeeds rather than erroring.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the artifact to delete."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### artifacts_get
+
+Read one artifact's configuration.
+
+Read an artifact in full: its entrypoint, visibility and metadata.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the artifact."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### artifacts_list
+
+List every artifact registered in the workspace.
+
+Every artifact registered in this workspace, with its visibility and entrypoint.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### artifacts_set-password
+
+Set the password a by_password artifact is shared behind.
+
+Hashes the given password with argon2id and persists the hash, so the
+returned URL keeps working after a restart. Does not change visibility —
+call update first if the artifact is not already by_password.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the artifact."
+    },
+    "password": {
+      "type": "string",
+      "description": "New plaintext password, hashed before it is stored."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "password",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### artifacts_update
+
+Change an artifact's configuration.
+
+Change the describable parts of an artifact. A field left nil is unchanged.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the artifact to update."
+    },
+    "name": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New name. Omit to leave unchanged."
+    },
+    "description": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New description. Omit to leave unchanged."
+    },
+    "entrypoint": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New entrypoint file. Omit to leave unchanged."
+    },
+    "visibility": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New visibility. Omit to leave unchanged."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+

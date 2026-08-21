@@ -200,6 +200,66 @@ export interface CommandMap {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
   }; output: unknown };
+  /** Register a new artifact. */
+  "artifacts_create": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** What this artifact is. */
+    "description"?: string;
+    /** HTML file served as the artifact's root. A minimal one is scaffolded when omitted. */
+    "entrypoint"?: string;
+    /** Identifier for the new artifact. Generated when omitted. */
+    "id"?: string;
+    /** Human-readable name. */
+    "name": string;
+    /** Skill that owns this artifact, if any. */
+    "skill"?: string;
+    /** One of: private, workspace, by_password. Defaults to private. */
+    "visibility"?: string;
+  }; output: unknown };
+  /** Remove an artifact. */
+  "artifacts_delete": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the artifact to delete. */
+    "id": string;
+  }; output: unknown };
+  /** Read one artifact's configuration. */
+  "artifacts_get": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the artifact. */
+    "id": string;
+  }; output: unknown };
+  /** List every artifact registered in the workspace. */
+  "artifacts_list": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+  }; output: unknown };
+  /** Set the password a by_password artifact is shared behind. */
+  "artifacts_set-password": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the artifact. */
+    "id": string;
+    /** New plaintext password, hashed before it is stored. */
+    "password": string;
+  }; output: unknown };
+  /** Change an artifact's configuration. */
+  "artifacts_update": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** New description. Omit to leave unchanged. */
+    "description"?: unknown;
+    /** New entrypoint file. Omit to leave unchanged. */
+    "entrypoint"?: unknown;
+    /** Identifier of the artifact to update. */
+    "id": string;
+    /** New name. Omit to leave unchanged. */
+    "name"?: unknown;
+    /** New visibility. Omit to leave unchanged. */
+    "visibility"?: unknown;
+  }; output: unknown };
   /** Open a conversation. */
   "chats_create": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
@@ -443,6 +503,134 @@ export interface CommandMap {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
   }; output: unknown };
+  /** Create a new goal. */
+  "goals_create": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Markdown body. */
+    "content"?: string;
+    /** One line summarising the outcome. */
+    "description"?: string;
+    /** When this goal is due, if it has a deadline. */
+    "dueAt"?: unknown;
+    /** How to tell this goal was actually served. */
+    "measure"?: string;
+    /** Project this goal belongs to, if any. */
+    "project"?: string;
+    /** Skill installing this goal, if any. */
+    "skill"?: string;
+    /** One of: active, achieved, abandoned, paused. Defaults to active. */
+    "status"?: string;
+    /** What this goal is. */
+    "title": string;
+  }; output: unknown };
+  /** Remove a goal. */
+  "goals_delete": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the goal to delete. */
+    "id": string;
+  }; output: unknown };
+  /** Read one goal in full. */
+  "goals_get": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the goal. */
+    "id": string;
+  }; output: unknown };
+  /** List goals matching a filter. */
+  "goals_list": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Filter goals by project id. */
+    "project"?: string;
+    /** Full-text search across a goal's id and title. */
+    "query"?: string;
+    /** Filter by one or more statuses. */
+    "status"?: unknown;
+  }; output: unknown };
+  /** Change a goal's fields. */
+  "goals_update": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** New body content, in Markdown. Omit to leave unchanged. */
+    "content"?: unknown;
+    /** New one-line summary of the outcome. Omit to leave unchanged. */
+    "description"?: unknown;
+    /** New due date. Omit to leave unchanged. */
+    "dueAt"?: unknown;
+    /** Identifier of the goal to update. */
+    "id": string;
+    /** New measure that makes this goal checkable rather than aspirational. Omit to leave unchanged. */
+    "measure"?: unknown;
+    /** New project this goal belongs to. Empty string clears it. Omit to leave unchanged. */
+    "project"?: unknown;
+    /** New lifecycle status: active, achieved, abandoned, or paused. Omit to leave unchanged. */
+    "status"?: unknown;
+    /** New title. Omit to leave unchanged. */
+    "title"?: unknown;
+  }; output: unknown };
+  /** Declare a new workspace-wide instruction. */
+  "instructions_create": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Markdown body of the instruction. */
+    "content"?: string;
+    /** What this instruction is for. */
+    "description"?: string;
+    /** Identifier for the instruction. Derived from Name when omitted. */
+    "id"?: string;
+    /** Human name of the instruction. Example: "Feature Protocol". */
+    "name": string;
+    /** Glob patterns matching files this instruction applies to. Empty applies to the whole workspace. */
+    "paths"?: unknown;
+    /** The skill this instruction ships with, when it is skill-scoped. */
+    "skill"?: string;
+    /** Categorization for organizational purposes. Example: standards, patterns, workflows. */
+    "type"?: string;
+  }; output: unknown };
+  /** Remove an instruction. */
+  "instructions_delete": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the instruction to delete. */
+    "id": string;
+  }; output: unknown };
+  /** Read one instruction in full. */
+  "instructions_get": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the instruction. */
+    "id": string;
+  }; output: unknown };
+  /** List instructions, optionally filtered. */
+  "instructions_list": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Substring match over name, description and content. */
+    "query"?: string;
+    /** Filter to one skill's own instructions. */
+    "skill"?: string;
+  }; output: unknown };
+  /** Change an existing instruction. */
+  "instructions_update": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** New lifecycle state. Omit to leave unchanged. */
+    "active"?: unknown;
+    /** New body. Omit to leave unchanged. */
+    "content"?: unknown;
+    /** New description. Omit to leave unchanged. */
+    "description"?: unknown;
+    /** Identifier of the instruction to update. */
+    "id": string;
+    /** New name. Omit to leave unchanged. */
+    "name"?: unknown;
+    /** New glob patterns, replacing the old ones wholesale. */
+    "paths"?: unknown;
+    /** New categorization. Omit to leave unchanged. */
+    "type"?: unknown;
+  }; output: unknown };
   /** Read one job. */
   "jobs_get": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
@@ -483,6 +671,37 @@ export interface CommandMap {
     "_reasoning": string;
     /** Only jobs of this workspace. */
     "workspace"?: string;
+  }; output: unknown };
+  /** Search every configured marketplace registry. */
+  "marketplace_discovery": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Filter to listings from this owner (the <owner> half of <owner>/<repo>). */
+    "owner"?: string;
+    /** Filter to listings carrying this tag. */
+    "tag"?: string;
+    /** Free-text search across name, description and tags. */
+    "text"?: string;
+  }; output: unknown };
+  /** Read one listing's full manifest. */
+  "marketplace_get": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Which configured registry to read from. Empty tries every configured registry. */
+    "registry"?: string;
+    /** The listing's source, "<owner>/<repo>". */
+    "source": string;
+  }; output: unknown };
+  /** Fetch and install a skill from a registry. */
+  "marketplace_install": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Version or ref to fetch. Empty fetches the registry's default. */
+    "ref"?: string;
+    /** Which configured registry to fetch from. Empty tries every configured registry. */
+    "registry"?: string;
+    /** The package's source, "<owner>/<repo>". */
+    "source": string;
   }; output: unknown };
   /** Deprecate knowledge that no longer holds. */
   "memories_forget": { input: {
@@ -572,6 +791,73 @@ export interface CommandMap {
     "tags"?: unknown;
     /** Sharp, specific headline. It is what you will scan later. */
     "title": string;
+  }; output: unknown };
+  /** Create a new project. */
+  "projects_create": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Display color. */
+    "color"?: string;
+    /** Markdown body. */
+    "content"?: string;
+    /** Short description. */
+    "description"?: string;
+    /** Lucide icon name, image URL, or data URI. */
+    "icon"?: string;
+    /** Identifier for the new project. A slug derived from name if omitted. */
+    "id": string;
+    /** Human-readable name. */
+    "name": string;
+    /** Globs this project owns, matched with doublestar. */
+    "paths"?: unknown;
+    /** Absolute host directory this project is bound to. Validated: must be absolute, exist, and be a directory. */
+    "source"?: string;
+    /** Lifecycle status: active, paused, done or archived. Defaults to active. */
+    "status"?: string;
+  }; output: unknown };
+  /** Remove a project's own record. */
+  "projects_delete": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the project to delete. */
+    "id": string;
+  }; output: unknown };
+  /** Read one project's full record. */
+  "projects_get": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the project. */
+    "id": string;
+  }; output: unknown };
+  /** List projects, optionally filtered by status. */
+  "projects_list": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Only projects in this status. Omit for every status. */
+    "status"?: string;
+  }; output: unknown };
+  /** Change a project's describable fields. */
+  "projects_update": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** New display color. Omit to leave unchanged. */
+    "color"?: unknown;
+    /** New body content, in Markdown. Omit to leave unchanged. */
+    "content"?: unknown;
+    /** New description. Omit to leave unchanged. */
+    "description"?: unknown;
+    /** New display icon. Omit to leave unchanged. */
+    "icon"?: unknown;
+    /** Identifier of the project to update. */
+    "id": string;
+    /** New name. Omit to leave unchanged. */
+    "name"?: unknown;
+    /** New list of associated paths. Replaces the field wholesale when given. */
+    "paths"?: unknown;
+    /** New source directory — an absolute, existing path. Omit to leave unchanged. */
+    "source"?: unknown;
+    /** New lifecycle status. Omit to leave unchanged. */
+    "status"?: unknown;
   }; output: unknown };
   /** Declare a routine. */
   "routines_create": { input: {
@@ -841,6 +1127,74 @@ export interface CommandMap {
     /** New workspace task type. */
     "type"?: unknown;
   }; output: unknown };
+  /** Author a new template. */
+  "templates_create": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** The Liquid template body. */
+    "content": string;
+    /** What this template produces and when to use it. */
+    "description"?: string;
+    /** Identifier for the template. Also its file name: lowercase, digits, hyphen and underscore only. */
+    "id": string;
+    /** Human name of the template. */
+    "name": string;
+    /** Suggested relative output path for a render of this template. */
+    "output"?: string;
+    /** The skill this template ships with, when Scope is skill. */
+    "skill"?: string;
+    /** The variables this template's body expects. */
+    "variables"?: unknown;
+  }; output: unknown };
+  /** Remove a template. */
+  "templates_delete": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the template to delete. */
+    "id": string;
+  }; output: unknown };
+  /** Read one template's Liquid body and declared variables. */
+  "templates_get": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the template. */
+    "id": string;
+  }; output: unknown };
+  /** List templates, optionally filtered by skill or text. */
+  "templates_list": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Filter by substring match against name and description. */
+    "query"?: string;
+    /** Filter to templates that ship with this skill. */
+    "skill"?: string;
+  }; output: unknown };
+  /** Render a template's body against variables. */
+  "templates_render": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the template to render. */
+    "id": string;
+    /** Values for the template's declared Variables. A missing Required variable with no Default refuses the render. */
+    "variables"?: Record<string, unknown>;
+  }; output: unknown };
+  /** Change an existing template. */
+  "templates_update": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** New Liquid body. Omit to leave unchanged. Re-validated as Liquid when given. */
+    "content"?: unknown;
+    /** New description. Omit to leave unchanged. */
+    "description"?: unknown;
+    /** Identifier of the template to update. */
+    "id": string;
+    /** New name. Omit to leave unchanged. */
+    "name"?: unknown;
+    /** New suggested output path. Omit to leave unchanged. */
+    "output"?: unknown;
+    /** New variable contract, replacing the old one wholesale. */
+    "variables"?: unknown;
+  }; output: unknown };
   /** Remove a theme you installed. */
   "themes_delete": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
@@ -1022,6 +1376,21 @@ export interface CommandMap {
     /** New lifecycle status: enabled or disabled. Omit to leave unchanged. */
     "status"?: unknown;
   }; output: unknown };
+  /** Publish the local daemon on the public internet. */
+  "tunnel_start": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+  }; output: unknown };
+  /** Report whether the tunnel is running. */
+  "tunnel_status": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+  }; output: unknown };
+  /** Tear the tunnel down. */
+  "tunnel_stop": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+  }; output: unknown };
   /** List the catalog of components a view can compose. */
   "views_components": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
@@ -1199,6 +1568,12 @@ export const COMMAND_KEYS = [
   "agents_update",
   "approvals_decide",
   "approvals_list",
+  "artifacts_create",
+  "artifacts_delete",
+  "artifacts_get",
+  "artifacts_list",
+  "artifacts_set-password",
+  "artifacts_update",
   "chats_create",
   "chats_get",
   "chats_list",
@@ -1223,16 +1598,34 @@ export const COMMAND_KEYS = [
   "gateway_start",
   "gateway_status",
   "gateway_stop",
+  "goals_create",
+  "goals_delete",
+  "goals_get",
+  "goals_list",
+  "goals_update",
+  "instructions_create",
+  "instructions_delete",
+  "instructions_get",
+  "instructions_list",
+  "instructions_update",
   "jobs_get",
   "jobs_list",
   "jobs_purge",
   "jobs_recover",
   "jobs_stats",
+  "marketplace_discovery",
+  "marketplace_get",
+  "marketplace_install",
   "memories_forget",
   "memories_graph",
   "memories_recall",
   "memories_reflect",
   "memories_store",
+  "projects_create",
+  "projects_delete",
+  "projects_get",
+  "projects_list",
+  "projects_update",
   "routines_create",
   "routines_delete",
   "routines_fire",
@@ -1253,6 +1646,12 @@ export const COMMAND_KEYS = [
   "tasks_list",
   "tasks_set-status",
   "tasks_update",
+  "templates_create",
+  "templates_delete",
+  "templates_get",
+  "templates_list",
+  "templates_render",
+  "templates_update",
   "themes_delete",
   "themes_get",
   "themes_install",
@@ -1269,6 +1668,9 @@ export const COMMAND_KEYS = [
   "toolsets_get-config",
   "toolsets_list",
   "toolsets_update-config",
+  "tunnel_start",
+  "tunnel_status",
+  "tunnel_stop",
   "views_components",
   "views_create",
   "views_delete",

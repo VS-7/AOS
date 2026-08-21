@@ -14,7 +14,9 @@ import (
 	"path/filepath"
 
 	"github.com/OWNER/aos/internal/adapters/activitylog"
+	"github.com/OWNER/aos/internal/adapters/artifactfiles"
 	"github.com/OWNER/aos/internal/adapters/bleveindex"
+	"github.com/OWNER/aos/internal/adapters/cloudflaredproc"
 	"github.com/OWNER/aos/internal/adapters/eventlog"
 	"github.com/OWNER/aos/internal/adapters/fsauth"
 	"github.com/OWNER/aos/internal/adapters/fscollections"
@@ -22,6 +24,7 @@ import (
 	"github.com/OWNER/aos/internal/adapters/fsthemes"
 	"github.com/OWNER/aos/internal/adapters/fsworkspace"
 	"github.com/OWNER/aos/internal/adapters/gitcli"
+	"github.com/OWNER/aos/internal/adapters/liquidengine"
 	"github.com/OWNER/aos/internal/adapters/mcpclient"
 	"github.com/OWNER/aos/internal/adapters/osfile"
 	"github.com/OWNER/aos/internal/adapters/skillfetch"
@@ -38,6 +41,7 @@ import (
 	"github.com/OWNER/aos/internal/core/logging"
 	"github.com/OWNER/aos/internal/domain/activity"
 	"github.com/OWNER/aos/internal/domain/agent"
+	"github.com/OWNER/aos/internal/domain/artifact"
 	"github.com/OWNER/aos/internal/domain/auth"
 	"github.com/OWNER/aos/internal/domain/chat"
 	"github.com/OWNER/aos/internal/domain/collection"
@@ -46,14 +50,20 @@ import (
 	"github.com/OWNER/aos/internal/domain/event"
 	"github.com/OWNER/aos/internal/domain/file"
 	"github.com/OWNER/aos/internal/domain/gateway"
+	"github.com/OWNER/aos/internal/domain/goal"
+	"github.com/OWNER/aos/internal/domain/instruction"
 	"github.com/OWNER/aos/internal/domain/job"
+	"github.com/OWNER/aos/internal/domain/marketplace"
 	"github.com/OWNER/aos/internal/domain/memory"
+	"github.com/OWNER/aos/internal/domain/project"
 	"github.com/OWNER/aos/internal/domain/routine"
 	"github.com/OWNER/aos/internal/domain/skill"
 	"github.com/OWNER/aos/internal/domain/task"
+	"github.com/OWNER/aos/internal/domain/template"
 	"github.com/OWNER/aos/internal/domain/theme"
 	"github.com/OWNER/aos/internal/domain/todo"
 	"github.com/OWNER/aos/internal/domain/toolset"
+	"github.com/OWNER/aos/internal/domain/tunnel"
 	"github.com/OWNER/aos/internal/domain/view"
 	"github.com/OWNER/aos/internal/domain/workspace"
 	"github.com/OWNER/aos/internal/runtime/agentloop"
@@ -142,6 +152,17 @@ type App struct {
 	Views    *view.Service
 	Toolsets *toolset.Service
 	Skills   *skill.Installer
+
+	// The eight domains Phase 8 declared alongside the ecosystem core, built
+	// in a later slice of the same phase — see docs/08 - Entrega/Roteiro de
+	// Fases.md's "Fora do núcleo, declarado".
+	Artifacts    *artifact.Service
+	Goals        *goal.Service
+	Instructions *instruction.Service
+	Marketplace  *marketplace.Service
+	Projects     *project.Service
+	Templates    *template.Service
+	Tunnel       tunnel.Service
 
 	// Watcher notices a collection or view declaration that reached disk
 	// without going through this system's own Create — a hand edit, a
@@ -476,6 +497,58 @@ func New(opts Options) (*App, error) {
 		Clock:       clock,
 	})
 
+	// The eight domains Phase 8 declared alongside the ecosystem core — see
+	// the App field's own comment. Built here, after skillInstaller and
+	// taskSvc both exist: marketplace installs through the former, and
+	// goal/project both clear their reference off a task through the latter.
+	artifactSvc := artifact.NewService(artifact.Deps{
+		Repo:   repos.artifacts,
+		Files:  artifactfiles.New(root),
+		Hasher: artifact.Argon2Hasher{},
+		Clock:  clock,
+		IDs:    idgen,
+		Log:    logger,
+	})
+	instructionSvc := instruction.NewService(instruction.Deps{
+		Repo: repos.instructions, Clock: clock,
+	})
+	templateSvc := template.NewService(template.Deps{
+		Repo: repos.templates, Engine: liquidengine.New(), Clock: clock,
+	})
+	goalSvc := goal.NewService(goal.Deps{
+		Repo: repos.goals, Tasks: goalTasksAdapter{tasks: taskSvc}, Clock: clock,
+	})
+	projectSvc := project.NewService(project.Deps{
+		Repo: repos.projects,
+		Unlinkers: []project.Unlinker{
+			taskProjectUnlinker{tasks: taskSvc},
+			goalProjectUnlinker{goals: goalSvc},
+		},
+		Clock: clock,
+	})
+	// Read once, at boot: marketplace does not hold a live config.Service
+	// itself, matching every other domain's narrowed dependencies. A config
+	// file that fails to parse here already failed loudly earlier in New,
+	// through configSvc's own construction path — Raw on a working service
+	// with a missing/empty marketplace section just returns no registries,
+	// which the domain already treats as a clean, CTA'd refusal to search.
+	var marketplaceEntries []config.MarketplaceRegistry
+	if cfg, err := configSvc.Raw(context.Background()); err == nil {
+		marketplaceEntries = cfg.Marketplace.Registries
+	}
+	marketplaceRegs, marketplaceOrder := marketplaceRegistries(marketplaceEntries)
+	marketplaceSvc := marketplace.NewService(marketplace.Deps{
+		Registries: marketplaceRegs,
+		Order:      marketplaceOrder,
+		Installer:  skillInstaller,
+	})
+	tunnelSvc := tunnel.NewService(tunnel.Deps{
+		Config: tunnelConfig{svc: configSvc},
+		Runner: cloudflaredproc.New(),
+		Clock:  clock,
+		Log:    logger,
+	})
+
 	// A dynamic collection a prior session created is a schema.json already on
 	// disk when this process starts — not a change the watcher below will ever
 	// see, since its directory walk arms fsnotify, it does not replay what was
@@ -509,6 +582,13 @@ func New(opts Options) (*App, error) {
 	view.Register(reg, viewSvc)
 	toolset.Register(reg, toolsetSvc)
 	skill.Register(reg, skillInstaller)
+	artifact.Register(reg, artifactSvc)
+	instruction.Register(reg, instructionSvc)
+	template.Register(reg, templateSvc)
+	goal.Register(reg, goalSvc)
+	project.Register(reg, projectSvc)
+	marketplace.Register(reg, marketplaceSvc)
+	tunnel.Register(reg, tunnelSvc)
 
 	assembler := prompt.NewAssembler(prompt.Deps{
 		Clock:  promptClock{clock: clock, zone: zoneFrom(configSvc, logger)},
@@ -639,6 +719,14 @@ func New(opts Options) (*App, error) {
 		Skills:             skillInstaller,
 		Watcher:            watcher,
 
+		Artifacts:    artifactSvc,
+		Goals:        goalSvc,
+		Instructions: instructionSvc,
+		Marketplace:  marketplaceSvc,
+		Projects:     projectSvc,
+		Templates:    templateSvc,
+		Tunnel:       tunnelSvc,
+
 		Clock:   clock,
 		env:     resolver,
 		closers: closers,
@@ -694,6 +782,13 @@ type repoSet struct {
 	views       *fscollections.Repo[view.View]
 	toolsets    *fscollections.Repo[toolset.Toolset]
 	skills      *fscollections.Repo[skill.Skill]
+
+	// The Phase 8 declared domains — see the App field's own comment.
+	artifacts    *fscollections.Repo[artifact.Artifact]
+	goals        *fscollections.Repo[goal.Goal]
+	instructions *fscollections.Repo[instruction.Instruction]
+	projects     *fscollections.Repo[project.Project]
+	templates    *fscollections.Repo[template.Template]
 }
 
 func newRepoSet(root string, lock *collections.PathLock, index *fscollections.Index, pub collections.Publisher) (repoSet, error) {
@@ -742,6 +837,26 @@ func newRepoSet(root string, lock *collections.PathLock, index *fscollections.In
 		return repoSet{}, err
 	}
 	skillModel, err := collections.ModelOf[skill.Skill]("skills")
+	if err != nil {
+		return repoSet{}, err
+	}
+	artifactModel, err := collections.ModelOf[artifact.Artifact]("artifacts")
+	if err != nil {
+		return repoSet{}, err
+	}
+	goalModel, err := collections.ModelOf[goal.Goal]("goals")
+	if err != nil {
+		return repoSet{}, err
+	}
+	instructionModel, err := collections.ModelOf[instruction.Instruction]("instructions")
+	if err != nil {
+		return repoSet{}, err
+	}
+	projectModel, err := collections.ModelOf[project.Project]("projects")
+	if err != nil {
+		return repoSet{}, err
+	}
+	templateModel, err := collections.ModelOf[template.Template]("templates")
 	if err != nil {
 		return repoSet{}, err
 	}
@@ -797,6 +912,33 @@ func newRepoSet(root string, lock *collections.PathLock, index *fscollections.In
 			fscollections.WithLock[skill.Skill](lock),
 			fscollections.WithIndex[skill.Skill](index),
 			fscollections.WithPublisher[skill.Skill](pub),
+		),
+		artifacts: fscollections.New(root, artifactModel,
+			fscollections.WithLock[artifact.Artifact](lock),
+			fscollections.WithIndex[artifact.Artifact](index),
+			fscollections.WithPublisher[artifact.Artifact](pub),
+		),
+		goals: fscollections.New(root, goalModel,
+			fscollections.WithLock[goal.Goal](lock),
+			fscollections.WithIndex[goal.Goal](index),
+			fscollections.WithPublisher[goal.Goal](pub),
+		),
+		// Instructions has no WithPublisher: nothing subscribes to instruction
+		// changes over the realtime hub yet, matching agents/tasks/etc., not
+		// the ecosystem four.
+		instructions: fscollections.New(root, instructionModel,
+			fscollections.WithLock[instruction.Instruction](lock),
+			fscollections.WithIndex[instruction.Instruction](index),
+		),
+		projects: fscollections.New(root, projectModel,
+			fscollections.WithLock[project.Project](lock),
+			fscollections.WithIndex[project.Project](index),
+			fscollections.WithPublisher[project.Project](pub),
+		),
+		templates: fscollections.New(root, templateModel,
+			fscollections.WithLock[template.Template](lock),
+			fscollections.WithIndex[template.Template](index),
+			fscollections.WithPublisher[template.Template](pub),
 		),
 	}, nil
 }

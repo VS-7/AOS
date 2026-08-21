@@ -1,0 +1,274 @@
+# tool: Projects
+
+A project structures a long-running effort that spans multiple tasks —
+associate a task or goal with the right project to keep work traceable. The
+hierarchy workspace → project → {goal, task} is not rigid: a task can exist
+with no project and no goal.
+
+## Commands
+- **list** — every project, optionally filtered by status
+- **get** — one project's full record
+- **create** — a new project
+- **update** — change a project's describable fields
+- **delete** — remove a project's own record without touching the tasks or
+  goals that were organized under it
+
+## When to use
+- **Structuring a long-running effort:** create a project before starting a
+  batch of related tasks, so they stay traceable as a group
+- **Filtering by relevance:** list with a status filter before assuming a
+  project is still active
+
+## When NOT to use
+- Not for a single, standalone task — a project is for work that spans
+  several
+
+Composite tool `Projects` with 5 actions: create, delete, get, list, update.
+
+Deleting a project never deletes the work done inside it: tasks and goals
+are unlinked, not removed. paths lets an agent infer the right project from
+the file it is already editing, without asking.
+
+## Usage
+Call as `Projects({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### projects_create
+
+Create a new project.
+
+Start a new organizing boundary for related work. id defaults to a slug of name when omitted.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier for the new project. A slug derived from name if omitted."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name."
+    },
+    "description": {
+      "type": "string",
+      "description": "Short description."
+    },
+    "status": {
+      "type": "string",
+      "description": "Lifecycle status: active, paused, done or archived. Defaults to active."
+    },
+    "color": {
+      "type": "string",
+      "description": "Display color."
+    },
+    "icon": {
+      "type": "string",
+      "description": "Lucide icon name, image URL, or data URI."
+    },
+    "source": {
+      "type": "string",
+      "description": "Absolute host directory this project is bound to. Validated: must be absolute, exist, and be a directory."
+    },
+    "paths": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "Globs this project owns, matched with doublestar."
+    },
+    "content": {
+      "type": "string",
+      "description": "Markdown body."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### projects_delete
+
+Remove a project's own record.
+
+Never cascades: tasks and goals under this project are unlinked, not removed.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the project to delete."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### projects_get
+
+Read one project's full record.
+
+Read a project in full, including its paths and its bound host source, if any.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the project."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### projects_list
+
+List projects, optionally filtered by status.
+
+Every project in the workspace, or only those in one status.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "description": "Only projects in this status. Omit for every status."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### projects_update
+
+Change a project's describable fields.
+
+A field left nil is unchanged; paths, given at all, replaces the field wholesale.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the project to update."
+    },
+    "name": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New name. Omit to leave unchanged."
+    },
+    "description": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New description. Omit to leave unchanged."
+    },
+    "status": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New lifecycle status. Omit to leave unchanged."
+    },
+    "color": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New display color. Omit to leave unchanged."
+    },
+    "icon": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New display icon. Omit to leave unchanged."
+    },
+    "source": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New source directory — an absolute, existing path. Omit to leave unchanged."
+    },
+    "paths": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "New list of associated paths. Replaces the field wholesale when given."
+    },
+    "content": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New body content, in Markdown. Omit to leave unchanged."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+

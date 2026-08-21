@@ -4,10 +4,17 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/OWNER/aos/internal/adapters/marketplacegit"
+	"github.com/OWNER/aos/internal/adapters/marketplacehttp"
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/domain/collection"
+	"github.com/OWNER/aos/internal/domain/config"
+	"github.com/OWNER/aos/internal/domain/goal"
+	"github.com/OWNER/aos/internal/domain/marketplace"
+	"github.com/OWNER/aos/internal/domain/task"
+	"github.com/OWNER/aos/internal/domain/tunnel"
 	"github.com/OWNER/aos/internal/transport/realtime"
 )
 
@@ -129,3 +136,118 @@ func (noopSkillHooks) Deregister(context.Context, string) error { return nil }
 type noopSkillToolsets struct{}
 
 func (noopSkillToolsets) Close(context.Context, string) error { return nil }
+
+// goalTasksAdapter is the goal.Tasks a Goal's Delete needs: clearing the Goal
+// field off every task that referenced it, without touching the tasks
+// themselves. task.Service already has everything this takes — List already
+// filters by Goal, Update already accepts a *string for it — so no change to
+// that package was needed.
+type goalTasksAdapter struct{ tasks *task.Service }
+
+func (a goalTasksAdapter) ClearGoal(ctx context.Context, goalID string) error {
+	found, err := a.tasks.List(ctx, task.ListInput{
+		Goal:      goalID,
+		Reasoning: command.Reasoning{Reasoning: "clearing this goal off every task that referenced it, before the goal itself is removed"},
+	})
+	if err != nil {
+		return err
+	}
+	empty := ""
+	for _, t := range found.Tasks {
+		if _, err := a.tasks.Update(ctx, task.UpdateInput{
+			ID: t.ID, Goal: &empty,
+			Reasoning: command.Reasoning{Reasoning: "unlinking a task from a goal that is being deleted"},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// taskProjectUnlinker is one of project.Service.Delete's Unlinkers: it clears
+// Project off every task that referenced the deleted project, the same
+// clear-not-cascade rule goalTasksAdapter applies for goals.
+type taskProjectUnlinker struct{ tasks *task.Service }
+
+func (u taskProjectUnlinker) UnlinkProject(ctx context.Context, projectID string) error {
+	found, err := u.tasks.List(ctx, task.ListInput{
+		Project:   projectID,
+		Reasoning: command.Reasoning{Reasoning: "clearing this project off every task that referenced it, before the project itself is removed"},
+	})
+	if err != nil {
+		return err
+	}
+	empty := ""
+	for _, t := range found.Tasks {
+		if _, err := u.tasks.Update(ctx, task.UpdateInput{
+			ID: t.ID, Project: &empty,
+			Reasoning: command.Reasoning{Reasoning: "unlinking a task from a project that is being deleted"},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// goalProjectUnlinker is project.Service.Delete's other Unlinker: it clears
+// Project off every goal that referenced the deleted project.
+type goalProjectUnlinker struct{ goals *goal.Service }
+
+func (u goalProjectUnlinker) UnlinkProject(ctx context.Context, projectID string) error {
+	found, err := u.goals.List(ctx, goal.ListInput{
+		Query:     goal.Query{Project: projectID},
+		Reasoning: command.Reasoning{Reasoning: "clearing this project off every goal that referenced it, before the project itself is removed"},
+	})
+	if err != nil {
+		return err
+	}
+	empty := ""
+	for _, g := range found {
+		if _, err := u.goals.Update(ctx, goal.UpdateInput{
+			ID: g.ID, Project: &empty,
+			Reasoning: command.Reasoning{Reasoning: "unlinking a goal from a project that is being deleted"},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// tunnelConfig adapts config.Service to tunnel.Config: the two substructures
+// Start's guard reads, kept separate so tunnel does not import config's full
+// surface just to name a type.
+type tunnelConfig struct{ svc config.Service }
+
+func (c tunnelConfig) Raw(ctx context.Context) (tunnel.RawConfig, error) {
+	cfg, err := c.svc.Raw(ctx)
+	if err != nil {
+		return tunnel.RawConfig{}, err
+	}
+	return tunnel.RawConfig{
+		SecurityEnabled: cfg.Security.Enabled,
+		APIToken:        cfg.Security.APIToken,
+		Hostname:        cfg.Tunnel.Hostname,
+		Token:           cfg.Tunnel.Token,
+	}, nil
+}
+
+// marketplaceRegistries builds one marketplace.Registry per configured
+// entry. A type this package does not recognise is skipped rather than
+// refused — a config file written by a newer version naming a registry type
+// this build does not know yet should not fail boot over it.
+func marketplaceRegistries(entries []config.MarketplaceRegistry) (map[string]marketplace.Registry, []string) {
+	regs := make(map[string]marketplace.Registry, len(entries))
+	order := make([]string, 0, len(entries))
+	for _, e := range entries {
+		switch e.Type {
+		case "git":
+			regs[e.ID] = marketplacegit.New(e.URL)
+		case "http":
+			regs[e.ID] = marketplacehttp.New(e.URL)
+		default:
+			continue
+		}
+		order = append(order, e.ID)
+	}
+	return regs, order
+}

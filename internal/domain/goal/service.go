@@ -169,13 +169,13 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Goal, error) {
 type UpdateInput struct {
 	ID string `json:"id" jsonschema:"Identifier of the goal to update." validate:"required,notblank"`
 
-	Title       *string    `json:"title,omitempty"`
-	Description *string    `json:"description,omitempty"`
-	Status      *Status    `json:"status,omitempty"`
-	Project     *string    `json:"project,omitempty"`
-	DueAt       *time.Time `json:"dueAt,omitempty"`
-	Measure     *string    `json:"measure,omitempty"`
-	Content     *string    `json:"content,omitempty"`
+	Title       *string    `json:"title,omitempty" jsonschema:"New title. Omit to leave unchanged."`
+	Description *string    `json:"description,omitempty" jsonschema:"New one-line summary of the outcome. Omit to leave unchanged."`
+	Status      *Status    `json:"status,omitempty" jsonschema:"New lifecycle status: active, achieved, abandoned, or paused. Omit to leave unchanged."`
+	Project     *string    `json:"project,omitempty" jsonschema:"New project this goal belongs to. Empty string clears it. Omit to leave unchanged."`
+	DueAt       *time.Time `json:"dueAt,omitempty" jsonschema:"New due date. Omit to leave unchanged."`
+	Measure     *string    `json:"measure,omitempty" jsonschema:"New measure that makes this goal checkable rather than aspirational. Omit to leave unchanged."`
+	Content     *string    `json:"content,omitempty" jsonschema:"New body content, in Markdown. Omit to leave unchanged."`
 
 	command.Reasoning
 }

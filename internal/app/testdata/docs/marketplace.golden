@@ -1,0 +1,140 @@
+# tool: Marketplace
+
+A skill's own domain (skills_install) installs from a local package already
+on disk. marketplace is the layer above it: a registry of packages that are
+not on disk yet, configured once (Git-based by default, HTTP for a hosted
+index) and searched or fetched by "<owner>/<repo>".
+
+## Commands
+- **discovery** — search every configured registry
+- **get** — read one listing's full manifest before installing it
+- **install** — fetch and install, going through the same verify/consent
+  path skills_install does
+
+## When to use
+- **Before installing something you have not seen configured locally:**
+  discovery first — a listing's Permissions are visible before any bytes are
+  fetched, per ADR-0015
+
+## When NOT to use
+- Not for a package already on disk — that is skills_install directly
+
+Composite tool `Marketplace` with 3 actions: discovery, get, install.
+
+install still asks for consent unless the caller already has it — the same
+ADR-0007 boundary skills_install obeys. A registry that does not answer is
+skipped, not fatal: discovery returns whatever the reachable registries
+found.
+
+## Usage
+Call as `Marketplace({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### marketplace_discovery
+
+Search every configured marketplace registry.
+
+Search across every configured registry, merging results. A registry that does not answer is skipped, not fatal.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": "string",
+      "description": "Free-text search across name, description and tags."
+    },
+    "tag": {
+      "type": "string",
+      "description": "Filter to listings carrying this tag."
+    },
+    "owner": {
+      "type": "string",
+      "description": "Filter to listings from this owner (the \u003cowner\u003e half of \u003cowner\u003e/\u003crepo\u003e)."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### marketplace_get
+
+Read one listing's full manifest.
+
+Read a listing in full — its manifest and the permissions it declares — before installing it.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "registry": {
+      "type": "string",
+      "description": "Which configured registry to read from. Empty tries every configured registry."
+    },
+    "source": {
+      "type": "string",
+      "description": "The listing's source, \"\u003cowner\u003e/\u003crepo\u003e\"."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "source",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### marketplace_install
+
+Fetch and install a skill from a registry.
+
+Fetches "<owner>/<repo>" from the named registry, or every configured
+registry until one answers, then verifies and installs it exactly as
+skills_install does — including asking for consent unless the caller
+already has it (ADR-0007).
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "registry": {
+      "type": "string",
+      "description": "Which configured registry to fetch from. Empty tries every configured registry."
+    },
+    "source": {
+      "type": "string",
+      "description": "The package's source, \"\u003cowner\u003e/\u003crepo\u003e\"."
+    },
+    "ref": {
+      "type": "string",
+      "description": "Version or ref to fetch. Empty fetches the registry's default."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "source",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+

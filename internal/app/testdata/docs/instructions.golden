@@ -1,0 +1,262 @@
+# tool: Instructions
+
+An instruction is workspace-wide policy: it shapes every agent, and its own
+memories and preferences never override it. Use instructions for a
+correction the user wants to apply to the whole workspace; use memory
+(memories_store) for a correction about your own personal behavior. See
+memories_store's own doc for the other half of that split.
+
+## Commands
+- **list** — every instruction, optionally filtered by skill or a text query
+- **get** — one instruction's full content
+- **create** — declare a new instruction
+- **update** — change an existing instruction's fields
+- **delete** — remove an instruction
+
+## When to use
+- **The user establishes a policy that should apply to every agent:** create
+  an instruction, not a memory
+- **Before assuming a behavior is already covered:** list first — an
+  instruction with overlapping Paths may already say what you were about to
+  create again
+
+## When NOT to use
+- Not for something true only of your own behavior — that is memories_store
+- Not to bypass a workspace-wide rule you disagree with: an instruction is
+  policy, and changing it is a shared-state action other agents will also be
+  bound by
+
+Composite tool `Instructions` with 5 actions: create, delete, get, list, update.
+
+create and update are shared-state changes — they route through the same
+approval a destructive tool call would, when the caller is an agent rather
+than a person, per ADR-0007. An inactive instruction (active: false) is kept,
+not deleted, so disabling a rule that turned out wrong does not lose the work
+of writing it.
+
+## Usage
+Call as `Instructions({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### instructions_create
+
+Declare a new workspace-wide instruction.
+
+A shared-state change: the instruction created here shapes every agent in
+the workspace, not just the one that called this. id is derived from name
+when not given explicitly.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier for the instruction. Derived from Name when omitted."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human name of the instruction. Example: \"Feature Protocol\"."
+    },
+    "type": {
+      "type": "string",
+      "description": "Categorization for organizational purposes. Example: standards, patterns, workflows."
+    },
+    "description": {
+      "type": "string",
+      "description": "What this instruction is for."
+    },
+    "skill": {
+      "type": "string",
+      "description": "The skill this instruction ships with, when it is skill-scoped."
+    },
+    "paths": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "Glob patterns matching files this instruction applies to. Empty applies to the whole workspace."
+    },
+    "content": {
+      "type": "string",
+      "description": "Markdown body of the instruction."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "name",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### instructions_delete
+
+Remove an instruction.
+
+Remove an instruction's declaration. Idempotent: deleting what is already gone succeeds rather than erroring.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the instruction to delete."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### instructions_get
+
+Read one instruction in full.
+
+Read an instruction's complete content, the part instructions_list omits by name only.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the instruction."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### instructions_list
+
+List instructions, optionally filtered.
+
+Every instruction in the workspace, or the subset matching a skill or a text query.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "skill": {
+      "type": "string",
+      "description": "Filter to one skill's own instructions."
+    },
+    "query": {
+      "type": "string",
+      "description": "Substring match over name, description and content."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### instructions_update
+
+Change an existing instruction.
+
+A field left nil is unchanged; Paths, given at all, replaces the field wholesale.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the instruction to update."
+    },
+    "name": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New name. Omit to leave unchanged."
+    },
+    "type": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New categorization. Omit to leave unchanged."
+    },
+    "description": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New description. Omit to leave unchanged."
+    },
+    "paths": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "New glob patterns, replacing the old ones wholesale."
+    },
+    "content": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New body. Omit to leave unchanged."
+    },
+    "active": {
+      "type": [
+        "null",
+        "boolean"
+      ],
+      "description": "New lifecycle state. Omit to leave unchanged."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+

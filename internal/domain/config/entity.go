@@ -101,6 +101,24 @@ type Tunnel struct {
 
 type Marketplace struct {
 	Registry string `json:"registry"`
+
+	// Registries is every configured marketplace source, Git or HTTP-hosted —
+	// see internal/domain/marketplace. A fresh install has none; discovery and
+	// install both refuse cleanly with a CTA until at least one is added.
+	Registries []MarketplaceRegistry `json:"registries,omitempty"`
+
+	// RequireSignature is read by internal/domain/marketplace once package
+	// signing exists (see that domain's design doc, "Sem publicação nesta
+	// fase") — accepted here so a config file that already sets it round-trips
+	// unchanged, not yet enforced anywhere.
+	RequireSignature bool `json:"requireSignature,omitempty"`
+}
+
+// MarketplaceRegistry is one configured marketplace source.
+type MarketplaceRegistry struct {
+	ID   string `json:"id"`
+	Type string `json:"type"` // "git" | "http"
+	URL  string `json:"url"`
 }
 
 // MCP selects the shape of the published tool surface (ADR-0011).

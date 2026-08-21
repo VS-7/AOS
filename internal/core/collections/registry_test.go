@@ -10,18 +10,18 @@ import (
 	"github.com/OWNER/aos/internal/core/collections"
 )
 
-// TestSixteenNativeCollections pins the set. The original has fourteen
-// collection files; artifacts is the one missing here and arrives in phase 8,
-// and workspaces is not a collection there either — it is a hand-written store
-// over ~/.fractal/workspaces. collections, views and toolsets have no
-// equivalent file in the original: they are the engine's own meta-collections,
-// added in phase 8 for declarations an agent writes at runtime rather than a
-// programmer.
-func TestSixteenNativeCollections(t *testing.T) {
+// TestSeventeenNativeCollections pins the set. The original has fourteen
+// collection files; workspaces is not a collection there either — it is a
+// hand-written store over ~/.fractal/workspaces. collections, views and
+// toolsets have no equivalent file in the original: they are the engine's own
+// meta-collections, added in phase 8 for declarations an agent writes at
+// runtime rather than a programmer. artifacts is the last of the fourteen to
+// land, also in phase 8.
+func TestSeventeenNativeCollections(t *testing.T) {
 	want := []string{
-		"agents", "chats", "collections", "comments", "goals", "instructions",
-		"memories", "projects", "routines", "runs", "skills", "tasks",
-		"templates", "todos", "toolsets", "views",
+		"agents", "artifacts", "chats", "collections", "comments", "goals",
+		"instructions", "memories", "projects", "routines", "runs", "skills",
+		"tasks", "templates", "todos", "toolsets", "views",
 	}
 	got := collections.Natives()
 	if len(got) != len(want) {
@@ -89,6 +89,10 @@ func TestCascadeIsDeclaredForDirectoryBackedCollections(t *testing.T) {
 		// under records/ — deleting the declaration without the directory
 		// would leave the records of a collection that no longer exists.
 		"collections": true,
+		// An artifact's directory holds the served files alongside its own
+		// record — deleting the declaration without the directory would leave
+		// orphaned, unreachable-but-undeletable web content behind.
+		"artifacts": true,
 	}
 	for _, desc := range collections.Natives() {
 		if desc.CascadeDelete != cascading[desc.Name] {

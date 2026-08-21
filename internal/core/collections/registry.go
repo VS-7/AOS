@@ -103,6 +103,12 @@ var natives = []Descriptor{
 		Root+"/goals/{id}/GOAL.md",
 		Root+"/skills/{skill}/goals/{id}/GOAL.md",
 	),
+	// The directory this record indexes also holds the artifact's own served
+	// files — see internal/adapters/artifactfiles, which places them at the
+	// identical Root+"/artifacts/{id}/" path. Cascade removes both together.
+	d("artifacts", FormatMarkdown, true,
+		Root+"/artifacts/{id}/ARTIFACT.md",
+	),
 	// A collection definition is JSON rather than Markdown because it is
 	// schema, not prose — there is no body to write, and every field of it is
 	// structured. The records it describes may be either; that is the

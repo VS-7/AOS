@@ -1,0 +1,349 @@
+# tool: Template
+
+A template combines a stable Liquid body with a declared set of variables.
+Inspect a template's variables before rendering it, the same inspect-before-
+execute pattern every composite tool in this system follows.
+
+## Commands
+- **list** — every template, optionally filtered by skill or a text query
+- **get** — one template's full Liquid body and declared variables
+- **create** — author a new template
+- **update** — change an existing template's body, variables or metadata
+- **delete** — remove a template
+- **render** — run a template's body against variables, bounded by a
+  timeout and an output size cap
+
+## When to use
+- **Work has a recognizable, repeatable shape:** a task brief, a plan, a
+  report — list or get before writing one from scratch
+- **Before render:** get the template first to learn what variables it
+  expects; a missing required one refuses with that same instruction
+
+## When NOT to use
+- Not for one-off text with no reuse value — a template is worth the
+  round-trip only when the shape repeats
+
+Composite tool `Template` with 6 actions: create, delete, get, list, render, update.
+
+render is the one place this system runs user-authored Liquid. It never sees
+config, secrets or the process environment — only the variables given, plus
+whatever the template's own declared defaults fill in.
+
+A template that does not parse as Liquid is refused by create or update
+before it is ever saved — it cannot become a render failure discovered
+later.
+
+## Usage
+Call as `Template({ action: "<action>", input: { ... }, _reasoning: "..." })`.
+Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
+
+## actions
+
+### templates_create
+
+Author a new template.
+
+Create a template. Content is validated as Liquid before anything is written; a broken template is refused here, not discovered at render.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier for the template. Also its file name: lowercase, digits, hyphen and underscore only."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human name of the template."
+    },
+    "description": {
+      "type": "string",
+      "description": "What this template produces and when to use it."
+    },
+    "skill": {
+      "type": "string",
+      "description": "The skill this template ships with, when Scope is skill."
+    },
+    "variables": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the variable, as it appears in the template body: {{ name }}."
+          },
+          "type": {
+            "type": "string",
+            "description": "Descriptive type: string, number, boolean, list or object. Not enforced at render time — documentation for the caller, not validation."
+          },
+          "description": {
+            "type": "string",
+            "description": "What this variable is for."
+          },
+          "required": {
+            "type": "boolean",
+            "description": "Whether Render refuses without this variable."
+          },
+          "default": {
+            "description": "Value substituted when the caller omits this variable and it is not Required."
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "description",
+          "required"
+        ],
+        "additionalProperties": false
+      },
+      "description": "The variables this template's body expects."
+    },
+    "output": {
+      "type": "string",
+      "description": "Suggested relative output path for a render of this template."
+    },
+    "content": {
+      "type": "string",
+      "description": "The Liquid template body."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "content",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### templates_delete
+
+Remove a template.
+
+Remove a template. Idempotent: deleting what is already gone succeeds rather than erroring.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the template to delete."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### templates_get
+
+Read one template's Liquid body and declared variables.
+
+Read a template in full — call this before render to learn what variables it expects.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the template."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### templates_list
+
+List templates, optionally filtered by skill or text.
+
+Every template matching the filter, without their Liquid content — get one by id to read its body.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "skill": {
+      "type": "string",
+      "description": "Filter to templates that ship with this skill."
+    },
+    "query": {
+      "type": "string",
+      "description": "Filter by substring match against name and description."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### templates_render
+
+Render a template's body against variables.
+
+Runs a template's Liquid body against the variables given, bounded by a
+timeout and an output size cap. A required variable with no default and no
+value given refuses the render, naming which one and pointing at
+templates_get.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the template to render."
+    },
+    "variables": {
+      "type": "object",
+      "description": "Values for the template's declared Variables. A missing Required variable with no Default refuses the render.",
+      "additionalProperties": true
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### templates_update
+
+Change an existing template.
+
+Change the describable parts of a template. A field left nil is
+unchanged; Variables, given at all, replaces the field wholesale — there is
+no per-entry merge. New Content, if given, is re-validated as Liquid before
+anything is written.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identifier of the template to update."
+    },
+    "name": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New name. Omit to leave unchanged."
+    },
+    "description": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New description. Omit to leave unchanged."
+    },
+    "variables": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the variable, as it appears in the template body: {{ name }}."
+          },
+          "type": {
+            "type": "string",
+            "description": "Descriptive type: string, number, boolean, list or object. Not enforced at render time — documentation for the caller, not validation."
+          },
+          "description": {
+            "type": "string",
+            "description": "What this variable is for."
+          },
+          "required": {
+            "type": "boolean",
+            "description": "Whether Render refuses without this variable."
+          },
+          "default": {
+            "description": "Value substituted when the caller omits this variable and it is not Required."
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "description",
+          "required"
+        ],
+        "additionalProperties": false
+      },
+      "description": "New variable contract, replacing the old one wholesale."
+    },
+    "output": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New suggested output path. Omit to leave unchanged."
+    },
+    "content": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New Liquid body. Omit to leave unchanged. Re-validated as Liquid when given."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+

@@ -2,7 +2,6 @@ package project
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -16,6 +15,7 @@ type Service struct {
 	repo      Repository
 	unlinkers []Unlinker
 	clock     Clock
+	stat      PathStat
 }
 
 // Deps is what the service is built from.
@@ -28,11 +28,19 @@ type Deps struct {
 	Unlinkers []Unlinker
 
 	Clock Clock
+
+	// Stat validates Source. Nil uses the real filesystem — see PathStat's
+	// own doc.
+	Stat PathStat
 }
 
 // NewService wires the service over its ports.
 func NewService(d Deps) *Service {
-	return &Service{repo: d.Repo, unlinkers: d.Unlinkers, clock: d.Clock}
+	stat := d.Stat
+	if stat == nil {
+		stat = osStat{}
+	}
+	return &Service{repo: d.Repo, unlinkers: d.Unlinkers, clock: d.Clock, stat: stat}
 }
 
 // Query filters List.
@@ -111,7 +119,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Project, error) 
 		return nil, errNameRequired()
 	}
 	if in.Source != "" {
-		if err := validateSource(in.Source); err != nil {
+		if err := s.validateSource(in.Source); err != nil {
 			return nil, err
 		}
 	}
@@ -147,14 +155,14 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Project, error) 
 type UpdateInput struct {
 	ID string `json:"id" jsonschema:"Identifier of the project to update." validate:"required,notblank"`
 
-	Name        *string  `json:"name,omitempty"`
-	Description *string  `json:"description,omitempty"`
-	Status      *Status  `json:"status,omitempty"`
-	Color       *string  `json:"color,omitempty"`
-	Icon        *string  `json:"icon,omitempty"`
-	Source      *string  `json:"source,omitempty"`
-	Paths       []string `json:"paths,omitempty"`
-	Content     *string  `json:"content,omitempty"`
+	Name        *string  `json:"name,omitempty" jsonschema:"New name. Omit to leave unchanged."`
+	Description *string  `json:"description,omitempty" jsonschema:"New description. Omit to leave unchanged."`
+	Status      *Status  `json:"status,omitempty" jsonschema:"New lifecycle status. Omit to leave unchanged."`
+	Color       *string  `json:"color,omitempty" jsonschema:"New display color. Omit to leave unchanged."`
+	Icon        *string  `json:"icon,omitempty" jsonschema:"New display icon. Omit to leave unchanged."`
+	Source      *string  `json:"source,omitempty" jsonschema:"New source directory — an absolute, existing path. Omit to leave unchanged."`
+	Paths       []string `json:"paths,omitempty" jsonschema:"New list of associated paths. Replaces the field wholesale when given."`
+	Content     *string  `json:"content,omitempty" jsonschema:"New body content, in Markdown. Omit to leave unchanged."`
 
 	command.Reasoning
 }
@@ -184,7 +192,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Project, error) 
 	}
 	if in.Source != nil {
 		if *in.Source != "" {
-			if err := validateSource(*in.Source); err != nil {
+			if err := s.validateSource(*in.Source); err != nil {
 				return nil, err
 			}
 		}
@@ -238,11 +246,11 @@ func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, err
 // validateSource enforces the original's three checks: absolute, exists, is
 // a directory — a source that fails silently would bind a project to a path
 // an agent can never actually reach.
-func validateSource(source string) error {
+func (s *Service) validateSource(source string) error {
 	if !filepath.IsAbs(source) {
 		return errSourceInvalid(source, "not_absolute")
 	}
-	info, err := os.Stat(source)
+	info, err := s.stat.Stat(source)
 	if err != nil {
 		return errSourceInvalid(source, "not_found")
 	}

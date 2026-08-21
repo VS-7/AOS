@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -20,9 +19,42 @@ func newService(t *testing.T) (*project.Service, *fakes.Repo[project.Project]) {
 	svc := project.NewService(project.Deps{
 		Repo:  repo,
 		Clock: clockx.Fixed{At: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+		Stat:  fakePathStat{},
 	})
 	return svc, repo
 }
+
+// fakePathStat is an in-memory project.PathStat: dirs and files are declared
+// by name, nothing else exists. It lets TestSourceMust* pin the three
+// validateSource outcomes (not found, not a directory, a real directory)
+// without a real filesystem, per internal/architecture's
+// TestDomainTestsDoNotTouchIO.
+type fakePathStat struct {
+	dirs  map[string]bool
+	files map[string]bool
+}
+
+func (f fakePathStat) Stat(path string) (os.FileInfo, error) {
+	if f.dirs[path] {
+		return fakeFileInfo{name: path, dir: true}, nil
+	}
+	if f.files[path] {
+		return fakeFileInfo{name: path, dir: false}, nil
+	}
+	return nil, os.ErrNotExist
+}
+
+type fakeFileInfo struct {
+	name string
+	dir  bool
+}
+
+func (f fakeFileInfo) Name() string     { return f.name }
+func (fakeFileInfo) Size() int64        { return 0 }
+func (fakeFileInfo) Mode() os.FileMode  { return 0 }
+func (fakeFileInfo) ModTime() time.Time { return time.Time{} }
+func (f fakeFileInfo) IsDir() bool      { return f.dir }
+func (f fakeFileInfo) Sys() any         { return nil }
 
 func TestRoundTrip(t *testing.T) {
 	svc, _ := newService(t)
@@ -120,24 +152,29 @@ func TestSourceMustBeAbsolute(t *testing.T) {
 func TestSourceMustExist(t *testing.T) {
 	svc, _ := newService(t)
 	_, err := svc.Create(context.Background(), project.CreateInput{
-		Name: "x", Source: filepath.Join(t.TempDir(), "does-not-exist"),
+		Name: "x", Source: "/does/not/exist",
 	})
 	requireCode(t, err, "PROJECT_SOURCE_INVALID")
 }
 
 func TestSourceMustBeADirectory(t *testing.T) {
-	svc, _ := newService(t)
-	file := filepath.Join(t.TempDir(), "afile")
-	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	file := "/some/afile"
+	svc := project.NewService(project.Deps{
+		Repo:  fakes.NewRepo[project.Project]("projects"),
+		Clock: clockx.Fixed{At: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+		Stat:  fakePathStat{files: map[string]bool{file: true}},
+	})
 	_, err := svc.Create(context.Background(), project.CreateInput{Name: "x", Source: file})
 	requireCode(t, err, "PROJECT_SOURCE_INVALID")
 }
 
 func TestSourceThatIsAnExistingDirectoryIsAccepted(t *testing.T) {
-	svc, _ := newService(t)
-	dir := t.TempDir()
+	dir := "/some/dir"
+	svc := project.NewService(project.Deps{
+		Repo:  fakes.NewRepo[project.Project]("projects"),
+		Clock: clockx.Fixed{At: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+		Stat:  fakePathStat{dirs: map[string]bool{dir: true}},
+	})
 	created, err := svc.Create(context.Background(), project.CreateInput{Name: "x", Source: dir})
 	if err != nil {
 		t.Fatal(err)
