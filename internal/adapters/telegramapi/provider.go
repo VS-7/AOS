@@ -21,16 +21,17 @@ import (
 
 const defaultBaseURL = "https://api.telegram.org"
 
-// maxChars and maxBlocks are the design doc's own limits on one logical
-// message before Send must split it — see split.go.
-const (
-	maxChars  = 32768
-	maxBlocks = 500
-)
+// maxChars is the design doc's own character limit on one logical message
+// before Send must split it — see split.go. The design doc also names a
+// 500-block cap; this build enforces only the character limit, since
+// nothing in the split algorithm currently needs a block count independent
+// of the characters those blocks already carry — see split.go's own doc.
+const maxChars = 32768
 
-// secretHeader is the header Telegram echoes back the secret_token
-// setWebhook was given on — see https://core.telegram.org/bots/api#setwebhook.
-const secretHeader = "X-Telegram-Bot-Api-Secret-Token"
+// SecretHeader is the header Telegram carries the secret_token on, and the
+// header the integrator's HTTP handler must read before calling Parse — see
+// https://core.telegram.org/bots/api#setwebhook.
+const SecretHeader = "X-Telegram-Bot-Api-Secret-Token"
 
 // Provider is the Telegram bot.Provider. One instance serves every agent's
 // channel — see bot.Provider's own doc on why Send/SetTyping take a token
@@ -121,18 +122,13 @@ type update struct {
 // Parse verifies secret in constant time before reading anything Telegram
 // sent — a request whose secret does not match is refused unconditionally,
 // even for a body that would otherwise parse fine.
-func (p *Provider) Parse(ctx context.Context, r *http.Request, secret string) (bot.Inbound, error) {
-	got := r.Header.Get(secretHeader)
-	if subtle.ConstantTimeCompare([]byte(got), []byte(secret)) != 1 {
+func (p *Provider) Parse(ctx context.Context, gotSecret, wantSecret string, body []byte) (bot.Inbound, error) {
+	if subtle.ConstantTimeCompare([]byte(gotSecret), []byte(wantSecret)) != 1 {
 		return bot.Inbound{}, errWebhookSecretMismatch()
 	}
 
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		return bot.Inbound{}, errRequestFailed("parse update", err)
-	}
 	var u update
-	if err := json.Unmarshal(raw, &u); err != nil {
+	if err := json.Unmarshal(body, &u); err != nil {
 		return bot.Inbound{}, errDecodeFailed(err)
 	}
 	if u.Message == nil {

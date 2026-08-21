@@ -2,7 +2,6 @@ package bot_test
 
 import (
 	"context"
-	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -37,7 +36,7 @@ func (f *fakeProvider) RegisterWebhook(_ context.Context, url, _ string, _ map[s
 
 func (f *fakeProvider) UnregisterWebhook(context.Context, map[string]any) error { return nil }
 
-func (f *fakeProvider) Parse(context.Context, *http.Request, string) (bot.Inbound, error) {
+func (f *fakeProvider) Parse(context.Context, string, string, []byte) (bot.Inbound, error) {
 	return f.parseResult, f.parseErr
 }
 
@@ -218,8 +217,7 @@ func TestHandleWebhookResolvesToTheDeterministicChat(t *testing.T) {
 		{AgentID: "atlas", Provider: "telegram", Data: map[string]any{"token": "tok"}},
 	})
 
-	req, _ := http.NewRequest(http.MethodPost, "/webhook", nil)
-	if err := reg.HandleWebhook(context.Background(), "telegram", "atlas", req); err != nil {
+	if err := reg.HandleWebhook(context.Background(), "telegram", "atlas", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(chats.sent) != 1 || chats.sent[0].text != "hi" || chats.sent[0].agentID != "atlas" {
@@ -228,7 +226,7 @@ func TestHandleWebhookResolvesToTheDeterministicChat(t *testing.T) {
 
 	// A second inbound message from the same Telegram chat must land in the
 	// same conversation, not open a second one.
-	if err := reg.HandleWebhook(context.Background(), "telegram", "atlas", req); err != nil {
+	if err := reg.HandleWebhook(context.Background(), "telegram", "atlas", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(chats.sent) != 2 || chats.sent[0].chatID != chats.sent[1].chatID {
@@ -271,8 +269,7 @@ func TestHandleWebhookOfAnUnregisteredAgentIsRefused(t *testing.T) {
 	provider := &fakeProvider{}
 	reg := newRegistry(provider, newFakeChats(), fakePublicURL{up: false}, fakeEnv{}, &fakeLogger{})
 
-	req, _ := http.NewRequest(http.MethodPost, "/webhook", nil)
-	err := reg.HandleWebhook(context.Background(), "telegram", "nobody", req)
+	err := reg.HandleWebhook(context.Background(), "telegram", "nobody", "", nil)
 	got, ok := apperr.As(err)
 	if !ok || got.Code != apperr.New("BOT_REGISTRATION_NOT_FOUND").Code {
 		t.Fatalf("want BOT_REGISTRATION_NOT_FOUND, got %v", err)

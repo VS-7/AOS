@@ -141,10 +141,7 @@ func TestSetTypingOffMakesNoCall(t *testing.T) {
 
 func TestParseRejectsAWrongWebhookSecret(t *testing.T) {
 	p := New()
-	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(`{"message":{"text":"hi"}}`))
-	req.Header.Set(secretHeader, "wrong")
-
-	_, err := p.Parse(context.Background(), req, "right")
+	_, err := p.Parse(context.Background(), "wrong", "right", []byte(`{"message":{"text":"hi"}}`))
 	got, ok := apperr.As(err)
 	if !ok || got.Code != apperr.New("TELEGRAMAPI_WEBHOOK_SECRET_MISMATCH").Code {
 		t.Fatalf("want TELEGRAMAPI_WEBHOOK_SECRET_MISMATCH, got %v", err)
@@ -154,10 +151,8 @@ func TestParseRejectsAWrongWebhookSecret(t *testing.T) {
 func TestParseAcceptsTheRightSecretAndDecodesTheMessage(t *testing.T) {
 	p := New()
 	body := `{"message":{"chat":{"id":555},"from":{"id":42},"text":"hello there"}}`
-	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(body))
-	req.Header.Set(secretHeader, "right")
 
-	in, err := p.Parse(context.Background(), req, "right")
+	in, err := p.Parse(context.Background(), "right", "right", []byte(body))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,10 +163,7 @@ func TestParseAcceptsTheRightSecretAndDecodesTheMessage(t *testing.T) {
 
 func TestParseRejectsAnUpdateWithNoMessage(t *testing.T) {
 	p := New()
-	req := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(`{}`))
-	req.Header.Set(secretHeader, "s")
-
-	_, err := p.Parse(context.Background(), req, "s")
+	_, err := p.Parse(context.Background(), "s", "s", []byte(`{}`))
 	got, ok := apperr.As(err)
 	if !ok || got.Code != apperr.New("TELEGRAMAPI_UPDATE_UNSUPPORTED").Code {
 		t.Fatalf("want TELEGRAMAPI_UPDATE_UNSUPPORTED, got %v", err)

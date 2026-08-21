@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -199,14 +198,19 @@ func (r *Registry) lookup(provider, agentID string) (Registration, bool) {
 }
 
 // HandleWebhook is the one HTTP-facing entrypoint this package has. provider
-// and agentID come from the request path the integrator mounts (see
-// INTEGRATION.md); the registration named by both carries the secret Parse
-// verifies before anything else in the request is trusted.
+// and agentID come from the request path the integrator mounts; gotSecret is
+// whatever the provider's own verification header carried and body is the
+// request body, both already read by the integrator's HTTP handler — net/http
+// is forbidden under internal/domain (internal/architecture's dependency
+// rule), so nothing here touches the request itself. See INTEGRATION.md for
+// the exact route and header this comes from.
 //
-// A verified message resolves to its Chat (created on first contact) and is
-// handed to Chats.Send, which persists it and, on the other side of the
-// agent runtime, produces the reply Deliver later pushes back out.
-func (r *Registry) HandleWebhook(ctx context.Context, provider, agentID string, req *http.Request) error {
+// The registration named by provider+agentID carries the secret Parse
+// verifies before anything else in the request is trusted. A verified
+// message resolves to its Chat (created on first contact) and is handed to
+// Chats.Send, which persists it and, on the other side of the agent runtime,
+// produces the reply Deliver later pushes back out.
+func (r *Registry) HandleWebhook(ctx context.Context, provider, agentID, gotSecret string, body []byte) error {
 	reg, ok := r.lookup(provider, agentID)
 	if !ok {
 		return errRegistrationNotFound(provider, agentID)
@@ -216,7 +220,7 @@ func (r *Registry) HandleWebhook(ctx context.Context, provider, agentID string, 
 		return errProviderNotAvailable(provider)
 	}
 
-	in, err := p.Parse(ctx, req, reg.WebhookSecret)
+	in, err := p.Parse(ctx, gotSecret, reg.WebhookSecret, body)
 	if err != nil {
 		return err
 	}

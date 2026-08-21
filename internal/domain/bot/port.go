@@ -2,7 +2,6 @@ package bot
 
 import (
 	"context"
-	"net/http"
 	"time"
 )
 
@@ -22,11 +21,18 @@ type Provider interface {
 	// e.g. when an agent's channel is removed or the tunnel goes down.
 	UnregisterWebhook(ctx context.Context, cfg map[string]any) error
 
-	// Parse converts an inbound HTTP request into a normalized message,
+	// Parse converts an inbound webhook body into a normalized message,
 	// verifying the webhook secret first — in constant time, so a caller
 	// timing the comparison learns nothing about the real secret. A request
-	// whose secret does not match is refused before its body is even read.
-	Parse(ctx context.Context, r *http.Request, secret string) (Inbound, error)
+	// whose secret does not match is refused before body is even decoded.
+	//
+	// gotSecret is whatever the provider's own webhook-verification header
+	// carried (Telegram: X-Telegram-Bot-Api-Secret-Token); reading the HTTP
+	// request itself is the transport's job, not this package's — net/http
+	// is forbidden under internal/domain (internal/architecture's dependency
+	// rule) — so the integrator's HTTP handler extracts both before calling
+	// this. See INTEGRATION.md for the exact route.
+	Parse(ctx context.Context, gotSecret, wantSecret string, body []byte) (Inbound, error)
 
 	// Send delivers text to chatID, splitting at the provider's own limits
 	// on a block boundary when the message is too long for one call. Token
