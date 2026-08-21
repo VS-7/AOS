@@ -6,7 +6,11 @@ import (
 	"time"
 )
 
-const (
+// renderTimeout and maxOutputBytes are package vars, not consts, so a
+// same-package test can shrink them rather than waiting out a real 5s
+// timeout or generating real megabytes of output — see render_test.go.
+// Production code never assigns to them.
+var (
 	// renderTimeout bounds one Render call. The original applies no such
 	// limit; a template with a pathological loop must not be able to hang
 	// the daemon that renders it (docs/04 - Domínio/Template (Go).md).
