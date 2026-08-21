@@ -9,18 +9,9 @@ import (
 	"github.com/OWNER/aos/internal/core/command"
 )
 
-// defaultEntrypoint is what Create scaffolds when none is given.
+// defaultEntrypoint is what Create scaffolds when none is given — Files.Ensure
+// is the one that actually writes the placeholder page there.
 const defaultEntrypoint = "index.html"
-
-// scaffoldHTML is the minimal page written at the entrypoint on Create when
-// the caller supplies no files of its own — enough to prove the artifact is
-// reachable before anything real is written into it.
-const scaffoldHTML = `<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>New artifact</title></head>
-<body><p>This artifact has no content yet.</p></body>
-</html>
-`
 
 // Service is the artifact aggregate: configuration in Repository, files on
 // disk through Files, and the password an artifact's by_password visibility
