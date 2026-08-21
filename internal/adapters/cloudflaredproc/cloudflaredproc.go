@@ -39,10 +39,14 @@ func (r Runner) Spawn(ctx context.Context, hostname, token string, timeout time.
 		binary = "cloudflared"
 	}
 	if _, err := exec.LookPath(binary); err != nil {
-		return nil, fmt.Errorf("%w: %v", tunnel.ErrBinaryMissing, err)
+		return nil, fmt.Errorf("%w: %w", tunnel.ErrBinaryMissing, err)
 	}
 
-	cmd := exec.Command(binary, "tunnel", "--hostname", hostname, "run", "--token", token)
+	// Not exec.CommandContext(ctx, ...): ctx bounds only the readiness wait
+	// below, and cloudflared must keep running long after this call returns —
+	// tying it to ctx would kill the tunnel the moment the request that
+	// started it completes.
+	cmd := exec.Command(binary, "tunnel", "--hostname", hostname, "run", "--token", token) //nolint:noctx // process outlives ctx by design, see above
 	detach(cmd)
 
 	stderr, err := cmd.StderrPipe()
@@ -74,7 +78,7 @@ func (r Runner) Spawn(ctx context.Context, hostname, token string, timeout time.
 		if err == nil {
 			err = fmt.Errorf("cloudflared exited before reporting a connection")
 		}
-		return nil, fmt.Errorf("%w: %v", tunnel.ErrReadinessTimeout, err)
+		return nil, fmt.Errorf("%w: %w", tunnel.ErrReadinessTimeout, err)
 	case <-time.After(timeout):
 		_ = terminate(cmd.Process)
 		<-exited

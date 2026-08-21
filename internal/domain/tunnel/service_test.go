@@ -28,9 +28,8 @@ func (p *fakeProcess) Stop() error { p.exit <- nil; return nil }
 // fakeRunner lets a test script exactly what Spawn does on each call, so the
 // supervisor's restart path is testable without a real cloudflared.
 type fakeRunner struct {
-	calls   int32
-	spawn   func(call int) (Process, error)
-	lastPID int32
+	calls int32
+	spawn func(call int) (Process, error)
 }
 
 func (r *fakeRunner) Spawn(ctx context.Context, hostname, token string, timeout time.Duration) (Process, error) {
@@ -71,7 +70,7 @@ func TestStartRefusesWhenAPITokenMissingEvenIfEnabled(t *testing.T) {
 		Clock:  clockx.System{},
 	})
 	_, err := svc.Start(context.Background())
-	mustAppErr(t, err, "TUNNEL_INSECURE_EXPOSURE")
+	_ = mustAppErr(t, err, "TUNNEL_INSECURE_EXPOSURE")
 }
 
 func TestStartRefusesWhenHostnameOrTokenMissing_DistinctFromInsecureExposure(t *testing.T) {
@@ -81,7 +80,7 @@ func TestStartRefusesWhenHostnameOrTokenMissing_DistinctFromInsecureExposure(t *
 		Clock:  clockx.System{},
 	})
 	_, err := svc.Start(context.Background())
-	mustAppErr(t, err, "TUNNEL_CONFIG_INCOMPLETE")
+	_ = mustAppErr(t, err, "TUNNEL_CONFIG_INCOMPLETE")
 }
 
 func TestStartMapsBinaryMissing(t *testing.T) {
@@ -110,7 +109,7 @@ func TestStartMapsReadinessTimeout(t *testing.T) {
 		Clock:  clockx.System{},
 	})
 	_, err := svc.Start(context.Background())
-	mustAppErr(t, err, "TUNNEL_READINESS_TIMEOUT")
+	_ = mustAppErr(t, err, "TUNNEL_READINESS_TIMEOUT")
 }
 
 func TestStartSucceedsAndReportsURL(t *testing.T) {

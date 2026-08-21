@@ -53,18 +53,6 @@ func errUnauthorized(id string) error {
 		CTA(apperr.CallToAction{Label: "authenticate, join the workspace, or supply the correct password"})
 }
 
-// errPathTraversal fires when a requested file path resolves outside the
-// artifact's own directory.
-func errPathTraversal(id, path string) error {
-	return apperr.New("ARTIFACT_PATH_TRAVERSAL").
-		Causer("artifact.Service.Resolve").
-		Msgf("path %q escapes artifact %q", path, id).
-		Issue("id", id).
-		Issue("path", path).
-		Status(apperr.StatusBadRequest).
-		CTA(apperr.CallToAction{Label: "request a path inside the artifact's own directory"})
-}
-
 // errScaffoldFailed wraps a failure writing the entrypoint file Create
 // scaffolds when none is given.
 func errScaffoldFailed(id string, cause error) error {

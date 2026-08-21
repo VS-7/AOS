@@ -39,7 +39,7 @@ sleep 5
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer proc.Stop()
+	defer func() { _ = proc.Stop() }()
 	if proc.PID() == 0 {
 		t.Fatal("expected a nonzero PID")
 	}
