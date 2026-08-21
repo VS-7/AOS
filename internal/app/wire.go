@@ -31,6 +31,7 @@ import (
 	"github.com/OWNER/aos/internal/adapters/skillfiles"
 	"github.com/OWNER/aos/internal/adapters/sqlitequeue"
 	"github.com/OWNER/aos/internal/adapters/supervise"
+	"github.com/OWNER/aos/internal/adapters/telegramapi"
 	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/collections"
@@ -43,6 +44,7 @@ import (
 	"github.com/OWNER/aos/internal/domain/agent"
 	"github.com/OWNER/aos/internal/domain/artifact"
 	"github.com/OWNER/aos/internal/domain/auth"
+	"github.com/OWNER/aos/internal/domain/bot"
 	"github.com/OWNER/aos/internal/domain/chat"
 	"github.com/OWNER/aos/internal/domain/collection"
 	"github.com/OWNER/aos/internal/domain/comment"
@@ -163,6 +165,11 @@ type App struct {
 	Projects     *project.Service
 	Templates    *template.Service
 	Tunnel       tunnel.Service
+
+	// Bots has no command-registry surface — configuring an external channel
+	// is a human action, not an agent capability — so it is reached only
+	// through Serve's webhook route and its own boot-time RegisterAll.
+	Bots *bot.Registry
 
 	// Watcher notices a collection or view declaration that reached disk
 	// without going through this system's own Create — a hand edit, a
@@ -549,6 +556,19 @@ func New(opts Options) (*App, error) {
 		Log:    logger,
 	})
 
+	// Last of the eight: bot needs chatSvc, agentSvc and tunnelSvc, all
+	// already built above. RegisterAll runs at boot in Serve, not here — see
+	// serve.go's own comment on why, the same one-shot-CLI reason the
+	// watcher and the worker are already split that way.
+	botRegistry := bot.NewRegistry(bot.Deps{
+		Providers: map[string]bot.Provider{"telegram": telegramapi.New()},
+		Chats:     chatsForBot{svc: chatSvc},
+		PublicURL: tunnelPublicURL{svc: tunnelSvc},
+		Env:       resolver,
+		Clock:     clock,
+		Log:       logger,
+	})
+
 	// A dynamic collection a prior session created is a schema.json already on
 	// disk when this process starts — not a change the watcher below will ever
 	// see, since its directory walk arms fsnotify, it does not replay what was
@@ -726,6 +746,7 @@ func New(opts Options) (*App, error) {
 		Projects:     projectSvc,
 		Templates:    templateSvc,
 		Tunnel:       tunnelSvc,
+		Bots:         botRegistry,
 
 		Clock:   clock,
 		env:     resolver,

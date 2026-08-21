@@ -13,8 +13,11 @@ import (
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/env"
+	"github.com/OWNER/aos/internal/domain/agent"
+	"github.com/OWNER/aos/internal/domain/bot"
 	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/transport/authapi"
+	"github.com/OWNER/aos/internal/transport/botapi"
 	"github.com/OWNER/aos/internal/transport/fileapi"
 	"github.com/OWNER/aos/internal/transport/httpapi"
 	"github.com/OWNER/aos/internal/transport/realtime"
@@ -74,6 +77,7 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 		Auth:       a.Auth,
 		Files:      fileapi.New(fileapi.Config{Service: a.Files, Log: log}),
 		AuthRoutes: authapi.New(authapi.Config{Service: a.Auth, Log: log, Clock: a.Clock}),
+		Bot:        botapi.New(botapi.Config{Registry: a.Bots, Log: log}),
 		Realtime: realtime.Upgrade(realtime.Config{
 			Hub:     a.Events,
 			Auth:    a.Workspaces,
@@ -106,6 +110,29 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 				log.Warn("collection watcher stopped", "err", err)
 			}
 		}()
+	}
+
+	// Registering channels before the tunnel is up is safe (RegisterAll
+	// leaves them Pending) but pointless — this still runs unconditionally,
+	// since a tunnel already running from a prior boot is the common case and
+	// a fresh one is a small window this daemon does not wait out. Only the
+	// daemon does this, same reason as the watcher above.
+	if a.Bots != nil {
+		activeWorkspace := resolver.String(env.KeyWorkspaceID, "")
+		var channels []bot.AgentChannel
+		if found, err := a.Agents.List(ctx, agent.ListInput{}); err != nil {
+			log.Warn("could not list agents for bot registration", "err", err)
+		} else {
+			for _, ag := range found.Agents {
+				for _, ch := range ag.Channels {
+					data, _ := ch.Data.(map[string]any)
+					channels = append(channels, bot.AgentChannel{
+						AgentID: ag.ID, WorkspaceID: activeWorkspace, Provider: ch.Provider, Data: data,
+					})
+				}
+			}
+		}
+		a.Bots.RegisterAll(ctx, channels)
 	}
 
 	addr := net.JoinHostPort(host, strconv.Itoa(port))

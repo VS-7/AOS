@@ -9,6 +9,8 @@ import (
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/command"
+	"github.com/OWNER/aos/internal/domain/bot"
+	"github.com/OWNER/aos/internal/domain/chat"
 	"github.com/OWNER/aos/internal/domain/collection"
 	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/domain/goal"
@@ -229,6 +231,50 @@ func (c tunnelConfig) Raw(ctx context.Context) (tunnel.RawConfig, error) {
 		Hostname:        cfg.Tunnel.Hostname,
 		Token:           cfg.Tunnel.Token,
 	}, nil
+}
+
+// chatsForBot adapts chat.Service to bot.Chats: finding the conversation an
+// inbound message belongs to, opening one when there is none yet, and
+// relaying the message in as if a person sent it — which is what makes the
+// agent actually answer it, through the same Send/Dispatcher path every
+// other message in this system already takes.
+type chatsForBot struct{ svc *chat.Service }
+
+func (c chatsForBot) GetByChannel(ctx context.Context, provider, chatID string) (bot.ChatRef, error) {
+	got, err := c.svc.GetByChannel(ctx, provider, chatID)
+	if err != nil {
+		return bot.ChatRef{}, err
+	}
+	return bot.ChatRef{ID: got.ID}, nil
+}
+
+func (c chatsForBot) CreateForChannel(ctx context.Context, provider, chatID, agentID, title string) (bot.ChatRef, error) {
+	got, err := c.svc.Create(ctx, chat.CreateInput{
+		Title: title, Kind: chat.KindExternal, Agent: agentID,
+		Channel: &chat.ChannelMeta{Provider: provider, ChatID: chatID},
+	})
+	if err != nil {
+		return bot.ChatRef{}, err
+	}
+	return bot.ChatRef{ID: got.ID}, nil
+}
+
+func (c chatsForBot) Send(ctx context.Context, chatID, text, agentID string) error {
+	_, err := c.svc.Send(ctx, chat.SendInput{Chat: chatID, Text: text, Agent: agentID})
+	return err
+}
+
+// tunnelPublicURL adapts tunnel.Service to bot.PublicURL: the one fact a
+// webhook registration needs from it, and the boot-order enforcement point —
+// see the design doc's "tunnel -> bots" and RegisterAll's own doc comment.
+type tunnelPublicURL struct{ svc tunnel.Service }
+
+func (t tunnelPublicURL) URL(ctx context.Context) (string, bool) {
+	state, err := t.svc.Status(ctx)
+	if err != nil || state.Status != tunnel.Running || state.URL == "" {
+		return "", false
+	}
+	return state.URL, true
 }
 
 // marketplaceRegistries builds one marketplace.Registry per configured

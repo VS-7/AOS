@@ -81,6 +81,13 @@ type Config struct {
 	// like Files, is not a command.Registry surface. Nil leaves it unmounted.
 	AuthRoutes http.Handler
 
+	// Bot is the external-messaging webhook router — Telegram today — mounted
+	// at /api/bot outside the authenticated group for the same reason
+	// AuthRoutes is: a provider's server proves itself with its own webhook
+	// secret, not a session this system issued. See botapi's package doc.
+	// Nil leaves it unmounted.
+	Bot http.Handler
+
 	Log   *slog.Logger
 	Now   func() time.Time
 	NewID func() string
@@ -126,6 +133,9 @@ func New(cfg Config) *Server {
 
 		if cfg.AuthRoutes != nil {
 			api.Mount("/auth", cfg.AuthRoutes)
+		}
+		if cfg.Bot != nil {
+			api.Mount("/bot", cfg.Bot)
 		}
 
 		api.Group(func(guarded chi.Router) {
