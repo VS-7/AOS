@@ -33,6 +33,14 @@ type Registration struct {
 	WebhookURL    string `json:"webhookUrl,omitempty"`
 	WebhookSecret string `json:"-" secret:"true"`
 
+	// token is the provider credential — already resolved through
+	// interpolate, never the raw ${env.*} placeholder — kept unexported
+	// because it is read back only by this package's own Deliver, never
+	// serialized anywhere a caller of a future bot_* introspection command
+	// could reach (this domain has none today, but Registration's other
+	// fields are already tagged the way a future one would expect).
+	token string
+
 	Status       Status    `json:"status"`
 	Error        string    `json:"error,omitempty"`
 	RegisteredAt time.Time `json:"registeredAt,omitempty"`
@@ -41,3 +49,5 @@ type Registration struct {
 // key identifies one registration: an agent has at most one binding per
 // provider.
 func (r Registration) key() string { return r.Provider + ":" + r.AgentID }
+
+func (r Registration) tok() string { return r.token }

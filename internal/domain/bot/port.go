@@ -29,10 +29,12 @@ type Provider interface {
 	Parse(ctx context.Context, r *http.Request, secret string) (Inbound, error)
 
 	// Send delivers text to chatID, splitting at the provider's own limits
-	// on a block boundary when the message is too long for one call.
-	Send(ctx context.Context, out Outbound) error
+	// on a block boundary when the message is too long for one call. Token
+	// is the registration's own — a shared *telegramapi.Provider serves
+	// every agent's channel, so it cannot hold just one.
+	Send(ctx context.Context, token string, out Outbound) error
 
-	SetTyping(ctx context.Context, chatID string, on bool) error
+	SetTyping(ctx context.Context, token, chatID string, on bool) error
 }
 
 // Inbound is one normalized message a Provider parsed from a webhook.

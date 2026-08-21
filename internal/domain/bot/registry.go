@@ -170,6 +170,7 @@ func (r *Registry) RegisterAll(ctx context.Context, channels []AgentChannel) []R
 		reg.Status = Registered
 		reg.WebhookURL = url
 		reg.WebhookSecret = secret
+		reg.token = token
 		reg.RegisteredAt = r.clock.Now()
 		out = append(out, r.store(reg))
 	}
@@ -233,9 +234,15 @@ func (r *Registry) HandleWebhook(ctx context.Context, provider, agentID string, 
 
 // Deliver pushes text out to the channel a chat is bound to, rate-limited
 // per chat so one verbose agent cannot exhaust the provider's own limit for
-// everyone. The integrator calls this from wherever a channel-bound chat's
-// new assistant message is observed — see INTEGRATION.md.
-func (r *Registry) Deliver(ctx context.Context, provider, chatID, text string) error {
+// everyone. agentID names the registration whose token sends it — the
+// integrator reads this off the originating Chat's own Agent field when a
+// channel-bound conversation gets a new assistant message; see
+// INTEGRATION.md.
+func (r *Registry) Deliver(ctx context.Context, provider, agentID, chatID, text string) error {
+	reg, ok := r.lookup(provider, agentID)
+	if !ok {
+		return errRegistrationNotFound(provider, agentID)
+	}
 	if !r.allow(chatID) {
 		return errRateLimited(chatID)
 	}
@@ -243,7 +250,7 @@ func (r *Registry) Deliver(ctx context.Context, provider, chatID, text string) e
 	if !ok {
 		return errProviderNotAvailable(provider)
 	}
-	if err := p.Send(ctx, Outbound{ChatID: chatID, Text: text}); err != nil {
+	if err := p.Send(ctx, reg.tok(), Outbound{ChatID: chatID, Text: text}); err != nil {
 		return errSendFailed(provider, chatID, err)
 	}
 	return nil
