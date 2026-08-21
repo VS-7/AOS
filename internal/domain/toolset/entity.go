@@ -91,18 +91,19 @@ func (s Status) Valid() bool { return s == StatusEnabled || s == StatusDisabled 
 // Toolset is one external connection, configured once and called by ID
 // thereafter.
 //
-// The fields below cover all five Types even though only MCPStdio is
-// implemented in this slice: a toolset of an unimplemented type still decodes
-// and lists, it just refuses Call with a "not available in this build" error —
-// see errTypeNotAvailable. That is what lets the other four types be added
-// later by writing an adapter, not by widening this struct.
+// The fields below cover all five Types even though only MCPStdio and
+// MCPHTTP are implemented in this slice: a toolset of an unimplemented type
+// still decodes and lists, it just refuses Call with a "not available in
+// this build" error — see errTypeNotAvailable. That is what lets the
+// remaining three types be added later by writing an adapter, not by
+// widening this struct.
 type Toolset struct {
 	// ID identifies this toolset. It lives in the path, exactly like every
 	// other native collection record:
 	// .aos/toolsets/{id}.toolset.md.
 	ID string `yaml:"-" json:"id" collection:"path" jsonschema:"Identifier of this toolset, used to address it in toolsets_call."`
 
-	Type        Type   `yaml:"type" json:"type" jsonschema:"One of: mcp-server::stdio, mcp-server::http, rest-api, cli, custom. Only mcp-server::stdio is connectable in this build."`
+	Type        Type   `yaml:"type" json:"type" jsonschema:"One of: mcp-server::stdio, mcp-server::http, rest-api, cli, custom. rest-api, cli and custom decode and list but are not connectable in this build."`
 	Description string `yaml:"description,omitempty" json:"description,omitempty" jsonschema:"What this toolset is for, read by whoever decides whether to call it."`
 	Status      Status `yaml:"status" json:"status" jsonschema:"enabled or disabled. A disabled toolset refuses Call without losing its configuration."`
 

@@ -482,10 +482,14 @@ func New(opts Options) (*App, error) {
 	toolsetSvc := toolset.NewService(toolset.Deps{
 		Repo: repos.toolsets,
 		Adapters: toolset.Adapters{
-			// Only mcp-server::stdio connects in this build; the other four
-			// Types decode and list but refuse Call as not yet available —
-			// see toolset.Service.Call and mcpclient's own doc.
+			// rest-api and cli decode and list but refuse Call as not yet
+			// available — see toolset.Service.Call and mcpclient's own doc.
+			// Both need a way to declare per-operation tool shape the
+			// Toolset entity does not carry yet; adding one is real design
+			// work the roadmap left out of Phase 8's core on purpose, not an
+			// oversight to paper over here.
 			toolset.MCPStdio: mcpclient.NewStdio,
+			toolset.MCPHTTP:  mcpclient.NewHTTP,
 		},
 		Activities: activitySvc,
 		Env:        resolver,

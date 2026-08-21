@@ -10,14 +10,14 @@ import (
 )
 
 // Adapter is the one boundary where this system executes something outside
-// its own process. Every connection type — MCP over stdio today; MCP over
-// HTTP, a REST API, a CLI and a custom kind tomorrow — implements exactly
+// its own process. Every connection type — MCP over stdio and MCP over HTTP
+// today; a REST API, a CLI and a custom kind tomorrow — implements exactly
 // this, and Service.Call never distinguishes between them: it connects, lists
 // or calls, and closes, without knowing which wire protocol is underneath.
 //
-// It lives in this package, not the four packages that will implement the
-// other Types, precisely so those four can be written against it without
-// touching Service — internal/domain/testsuite.RunAdapterContract is what
+// It lives in this package, not the packages that implement each Type,
+// precisely so those can be written against it without touching Service —
+// internal/domain/testsuite.RunAdapterContract is what
 // proves a new implementation actually satisfies it.
 type Adapter interface {
 	// Connect establishes the connection ts describes. ts arrives with every
@@ -54,9 +54,10 @@ type Adapter interface {
 type Factory func() Adapter
 
 // Adapters maps a connection Type to the Factory that implements it. Only
-// MCPStdio has an entry in this slice's wiring; Service.Call reports the
-// other four as errTypeNotAvailable rather than as a decode error — the
-// configuration is fine, the binary is only missing the connector.
+// MCPStdio and MCPHTTP have an entry in this slice's wiring; Service.Call
+// reports the remaining three as errTypeNotAvailable rather than as a decode
+// error — the configuration is fine, the binary is only missing the
+// connector.
 type Adapters map[Type]Factory
 
 // EnvResolver is what ${env.VAR} interpolation reads a value from — the slice
