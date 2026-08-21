@@ -135,6 +135,23 @@ func (i *Installer) Install(ctx context.Context, in InstallInput) (*Skill, error
 		return nil, err
 	}
 
+	return i.InstallPackage(ctx, source, pkg, in.AcceptedAll)
+}
+
+// InstallPackage runs the verify/consent/apply half of Install against a
+// package the caller already fetched itself.
+//
+// It exists for marketplace.Service: a registry search and fetch it drives
+// over its own Registry port, which this package has no reason to know
+// about — Installer is built with exactly one Fetcher (see Deps), and giving
+// it a second slot to choose between at construction time would be the
+// wrong place to decide which registry a given install came from. Exporting
+// the half of Install after Fetch instead lets marketplace.Service fetch
+// however it likes and still go through the one verify/consent/apply path
+// every install obeys, source named explicitly rather than read back off
+// the manifest, because a package's own Manifest.Source is whatever its
+// front matter declared, not necessarily what the caller fetched it from.
+func (i *Installer) InstallPackage(ctx context.Context, source string, pkg Package, acceptedAll func(Permissions) bool) (*Skill, error) {
 	diff, err := i.verifier.VerifyManifest(pkg)
 	if err != nil {
 		return nil, err
@@ -153,7 +170,7 @@ func (i *Installer) Install(ctx context.Context, in InstallInput) (*Skill, error
 		}
 	}
 
-	if in.AcceptedAll == nil || !in.AcceptedAll(diff.Permissions) {
+	if acceptedAll == nil || !acceptedAll(diff.Permissions) {
 		res, err := i.approver.RequestApproval(ctx, event.ApprovalRequest{
 			ToolName: "skills_install",
 			Risk:     event.RiskHigh,
