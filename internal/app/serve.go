@@ -96,6 +96,18 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 		Log:            log,
 	})
 
+	// Only the daemon runs the watcher: a one-shot CLI process exits before a
+	// long-lived goroutine could ever do anything, and starting one anyway
+	// would just be a leaked fsnotify handle. Tied to ctx, it stops itself on
+	// the same shutdown Serve already waits for.
+	if a.Watcher != nil {
+		go func() {
+			if err := a.Watcher.Watch(ctx); err != nil {
+				log.Warn("collection watcher stopped", "err", err)
+			}
+		}()
+	}
+
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	// Through a ListenConfig so the context governs the bind too: a daemon
 	// asked to stop while it is still opening its socket should stop.

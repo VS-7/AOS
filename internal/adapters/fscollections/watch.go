@@ -272,11 +272,17 @@ func (w *Watcher) flush(ctx context.Context) {
 	}
 }
 
+// schemaKind matches the schema file itself — "collections/{id}/schema.json"
+// — not everything under the collection it declares. A naive prefix check
+// also matches "collections/{id}/records/{id}.md": every write to a dynamic
+// collection's own records would misroute here as a schema reload instead of
+// the record-change publish flush already gives every other native, so a
+// dynamic collection's records would look inert on the realtime channel.
 func (w *Watcher) schemaKind(rel string) (string, bool) {
 	switch {
-	case w.patterns.Collections != "" && strings.Contains(rel, "/"+w.patterns.Collections):
+	case w.patterns.Collections != "" && strings.Contains(rel, "/"+w.patterns.Collections) && strings.HasSuffix(rel, "/schema.json"):
 		return "collection", true
-	case w.patterns.Views != "" && strings.Contains(rel, "/"+w.patterns.Views):
+	case w.patterns.Views != "" && strings.Contains(rel, "/"+w.patterns.Views) && strings.HasSuffix(rel, ".view.json"):
 		return "view", true
 	}
 	return "", false

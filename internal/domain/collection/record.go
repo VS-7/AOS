@@ -90,13 +90,30 @@ type recordService struct {
 // that becomes a schema. Any error the Repository port reports — a wrong id
 // is by far the likely one — becomes the same refusal, matching how
 // Service.Get already treats a lookup miss.
+//
+// RecordService, unlike Service.Get, takes no Skill — a record's own
+// identity is (collection, id), never (collection, skill, id), and every
+// caller from the command surface down to view rendering addresses one that
+// way. A skill-scoped collection's declaration lives only under its skill's
+// own path, though, so the direct by-id Get below — which is exactly
+// Service.Get's own id-alone case, refused for the same reason — falls back
+// to a scan. IDs are unique across every scope, enforced by the registry
+// Service.Create registers into, so the scan can only ever find the one
+// declaration that matches.
 func (s *recordService) declaration(ctx context.Context, collectionID string) (Collection, error) {
 	id := strings.TrimSpace(collectionID)
-	c, err := s.decls.Get(ctx, collections.Key{"id": id})
-	if err != nil {
-		return Collection{}, errNotFound(id, nil)
+	if c, err := s.decls.Get(ctx, collections.Key{"id": id}); err == nil {
+		return *c, nil
 	}
-	return *c, nil
+	all, err := s.decls.List(ctx, collections.Query{})
+	if err == nil {
+		for _, c := range all {
+			if c.ID == id {
+				return c, nil
+			}
+		}
+	}
+	return Collection{}, errNotFound(id, nil)
 }
 
 // List returns the records of one collection matching q.

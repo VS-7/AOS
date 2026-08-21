@@ -143,6 +143,13 @@ type App struct {
 	Toolsets *toolset.Service
 	Skills   *skill.Installer
 
+	// Watcher notices a collection or view declaration that reached disk
+	// without going through this system's own Create — a hand edit, a
+	// restored backup, a checked-out branch — and registers or re-publishes
+	// it live. Serve starts it; a one-shot CLI process must not run a
+	// long-lived watch loop, so New only builds it.
+	Watcher *fscollections.Watcher
+
 	// Queue is the durable store behind the worker. It is exported so a test
 	// can enqueue and drain deterministically rather than waiting on a tick.
 	Queue job.Queue
@@ -469,6 +476,22 @@ func New(opts Options) (*App, error) {
 		Clock:       clock,
 	})
 
+	// A dynamic collection a prior session created is a schema.json already on
+	// disk when this process starts — not a change the watcher below will ever
+	// see, since its directory walk arms fsnotify, it does not replay what was
+	// already there. Reconciling once at boot is what makes it usable without
+	// touching the file again.
+	reconcileCollections(context.Background(), collectionSvc, collReg, logger)
+
+	// The watcher: the schema.json case, for everything that reaches disk a
+	// way other than the domain's own Create — see watch.go's own comment on
+	// why Create itself needs none of this.
+	watchPub := collectionPublisher{hub: events, workspace: active}
+	watcher := fscollections.NewWatcher(root,
+		fscollections.WithWatchPublisher(watchPub),
+		fscollections.OnSchema(onSchemaChanged(collectionSvc, collReg, watchPub, logger)),
+	)
+
 	config.Register(reg, configSvc)
 	registerApprovals(reg, broker)
 	gateway.Register(reg, gatewaySvc)
@@ -614,6 +637,7 @@ func New(opts Options) (*App, error) {
 		Views:              viewSvc,
 		Toolsets:           toolsetSvc,
 		Skills:             skillInstaller,
+		Watcher:            watcher,
 
 		Clock:   clock,
 		env:     resolver,

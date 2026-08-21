@@ -252,6 +252,38 @@ func TestWatcherInvalidatesTheSharedIndex(t *testing.T) {
 	})
 }
 
+// TestWatcherDoesNotMisreadADynamicRecordAsASchemaChange is the regression
+// for a schema-path check that used to match any path containing
+// "collections/", including a dynamic collection's own records — a write to
+// "collections/{id}/records/{id}.md" would misfire onSchema and reload a
+// schema that never changed, on every record write to every dynamic
+// collection.
+func TestWatcherDoesNotMisreadADynamicRecordAsASchemaChange(t *testing.T) {
+	root := t.TempDir()
+	var mu sync.Mutex
+	var kinds []string
+	startWatcher(t, root, fscollections.OnSchema(func(kind, _ string) {
+		mu.Lock()
+		defer mu.Unlock()
+		kinds = append(kinds, kind)
+	}))
+
+	path := filepath.Join(root, ".aos", "collections", "pull_requests", "records", "r1.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("---\ntitle: t\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, k := range kinds {
+		t.Errorf("a record write inside a dynamic collection fired onSchema(%q, ...); it is not a schema.json", k)
+	}
+}
+
 func (b *recordingBus) snapshot() []collections.Changed {
 	b.mu.Lock()
 	defer b.mu.Unlock()
