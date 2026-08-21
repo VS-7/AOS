@@ -80,9 +80,11 @@ func (r *Registry) Search(ctx context.Context, q marketplace.SearchQuery) ([]mar
 }
 
 // Fetch asks GET {baseURL}/packages/{source}?ref= and decodes a JSON
-// skill.Package.
+// skill.Package. source is "<owner>/<repo>" and stays two path segments —
+// escaping the whole string would turn its "/" into "%2F", which net/http's
+// own ServeMux does not decode back before routing.
 func (r *Registry) Fetch(ctx context.Context, source, ref string) (skill.Package, error) {
-	u := r.BaseURL + "/packages/" + url.PathEscape(source)
+	u := r.BaseURL + "/packages/" + escapeSourcePath(source)
 	if strings.TrimSpace(ref) != "" {
 		u += "?ref=" + url.QueryEscape(ref)
 	}
@@ -92,6 +94,17 @@ func (r *Registry) Fetch(ctx context.Context, source, ref string) (skill.Package
 		return skill.Package{}, err
 	}
 	return pkg, nil
+}
+
+// escapeSourcePath escapes each "/"-separated segment of source on its own,
+// so an owner or repo name with a reserved character stays safe without the
+// separating slash itself being escaped.
+func escapeSourcePath(source string) string {
+	parts := strings.Split(source, "/")
+	for i, p := range parts {
+		parts[i] = url.PathEscape(p)
+	}
+	return strings.Join(parts, "/")
 }
 
 func (r *Registry) getJSON(ctx context.Context, u string, out any) error {
