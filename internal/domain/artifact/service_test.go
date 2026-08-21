@@ -2,12 +2,14 @@ package artifact_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/clockx"
+	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/ids"
 	"github.com/OWNER/aos/internal/domain/artifact"
 	"github.com/OWNER/aos/internal/domain/fakes"
@@ -255,5 +257,186 @@ func TestInvalidVisibilityIsRefused(t *testing.T) {
 	_, err := svc.Create(ctx(), artifact.CreateInput{Name: "Bad visibility", Visibility: artifact.Visibility("public")})
 	if err == nil {
 		t.Fatal("an unknown visibility was accepted")
+	}
+}
+
+// failRepo wraps a real Repository and forces one named method to fail, so a
+// test can exercise the write/read-failure wrapping (errReadFailed,
+// errWriteFailed) without a real filesystem error to provoke it.
+type failRepo struct {
+	artifact.Repository
+	fail string
+	err  error
+}
+
+func (f failRepo) List(ctx context.Context, q collections.Query) ([]artifact.Artifact, error) {
+	if f.fail == "List" {
+		return nil, f.err
+	}
+	return f.Repository.List(ctx, q)
+}
+
+func (f failRepo) Update(ctx context.Context, v *artifact.Artifact, expect collections.Version) error {
+	if f.fail == "Update" {
+		return f.err
+	}
+	return f.Repository.Update(ctx, v, expect)
+}
+
+func (f failRepo) Delete(ctx context.Context, key collections.Key) error {
+	if f.fail == "Delete" {
+		return f.err
+	}
+	return f.Repository.Delete(ctx, key)
+}
+
+func TestListWrapsARepositoryFailure(t *testing.T) {
+	repo := failRepo{Repository: fakes.NewRepo[artifact.Artifact]("artifacts"), fail: "List", err: errors.New("disk gone")}
+	svc := artifact.NewService(artifact.Deps{Repo: repo, Files: newFakeFiles(), Hasher: artifact.Argon2Hasher{}, Clock: clockx.Fixed{At: at}, IDs: &ids.Sequence{Prefix: "a"}})
+	_, err := svc.List(ctx(), artifact.ListInput{})
+	got, ok := apperr.As(err)
+	if !ok || got.Code != apperr.New("ARTIFACT_READ_FAILED").Code {
+		t.Fatalf("want ARTIFACT_READ_FAILED, got %v", err)
+	}
+}
+
+func TestUpdateWrapsARepositoryFailure(t *testing.T) {
+	real := fakes.NewRepo[artifact.Artifact]("artifacts")
+	svc := artifact.NewService(artifact.Deps{Repo: real, Files: newFakeFiles(), Hasher: artifact.Argon2Hasher{}, Clock: clockx.Fixed{At: at}, IDs: &ids.Sequence{Prefix: "a"}})
+	created, err := svc.Create(ctx(), artifact.CreateInput{Name: "Doomed update"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	failing := artifact.NewService(artifact.Deps{
+		Repo:  failRepo{Repository: real, fail: "Update", err: errors.New("disk gone")},
+		Files: newFakeFiles(), Hasher: artifact.Argon2Hasher{}, Clock: clockx.Fixed{At: at}, IDs: &ids.Sequence{Prefix: "a"},
+	})
+	newName := "won't stick"
+	_, err = failing.Update(ctx(), artifact.UpdateInput{ID: created.ID, Name: &newName})
+	got, ok := apperr.As(err)
+	if !ok || got.Code != apperr.New("ARTIFACT_WRITE_FAILED").Code {
+		t.Fatalf("want ARTIFACT_WRITE_FAILED, got %v", err)
+	}
+}
+
+func TestDeleteWrapsARepositoryFailure(t *testing.T) {
+	real := fakes.NewRepo[artifact.Artifact]("artifacts")
+	svc := artifact.NewService(artifact.Deps{Repo: real, Files: newFakeFiles(), Hasher: artifact.Argon2Hasher{}, Clock: clockx.Fixed{At: at}, IDs: &ids.Sequence{Prefix: "a"}})
+	created, err := svc.Create(ctx(), artifact.CreateInput{Name: "Doomed delete"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	failing := artifact.NewService(artifact.Deps{
+		Repo:  failRepo{Repository: real, fail: "Delete", err: errors.New("disk gone")},
+		Files: newFakeFiles(), Hasher: artifact.Argon2Hasher{}, Clock: clockx.Fixed{At: at}, IDs: &ids.Sequence{Prefix: "a"},
+	})
+	_, err = failing.Delete(ctx(), artifact.DeleteInput{ID: created.ID})
+	got, ok := apperr.As(err)
+	if !ok || got.Code != apperr.New("ARTIFACT_WRITE_FAILED").Code {
+		t.Fatalf("want ARTIFACT_WRITE_FAILED, got %v", err)
+	}
+}
+
+func TestUpdateChangesEveryOptionalField(t *testing.T) {
+	svc, _, _ := newService(t)
+	created, err := svc.Create(ctx(), artifact.CreateInput{Name: "Original", Entrypoint: "index.html", Visibility: artifact.Private})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	newDesc := "a new description"
+	newEntry := "landing.html"
+	newVis := artifact.Workspace
+	updated, err := svc.Update(ctx(), artifact.UpdateInput{
+		ID: created.ID, Description: &newDesc, Entrypoint: &newEntry, Visibility: &newVis,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Description != newDesc || updated.Entrypoint != newEntry || updated.Visibility != newVis {
+		t.Fatalf("got %+v", updated)
+	}
+}
+
+// failFiles is an artifact.Files whose Ensure always fails, to exercise
+// Create's errScaffoldFailed wrapping.
+type failFiles struct{ err error }
+
+func (f failFiles) Ensure(context.Context, string, string) (string, error) { return "", f.err }
+func (f failFiles) Remove(context.Context, string) error                   { return nil }
+
+func TestCreateWrapsAScaffoldFailure(t *testing.T) {
+	svc := artifact.NewService(artifact.Deps{
+		Repo: fakes.NewRepo[artifact.Artifact]("artifacts"), Files: failFiles{err: errors.New("disk full")},
+		Hasher: artifact.Argon2Hasher{}, Clock: clockx.Fixed{At: at}, IDs: &ids.Sequence{Prefix: "a"},
+	})
+	_, err := svc.Create(ctx(), artifact.CreateInput{Name: "Doomed scaffold"})
+	got, ok := apperr.As(err)
+	if !ok || got.Code != apperr.New("ARTIFACT_SCAFFOLD_FAILED").Code {
+		t.Fatalf("want ARTIFACT_SCAFFOLD_FAILED, got %v", err)
+	}
+}
+
+// failHasher is an artifact.PasswordHasher whose Hash always fails, to
+// exercise SetPassword's errHashFailed wrapping.
+type failHasher struct{ err error }
+
+func (f failHasher) Hash(string) (string, error)         { return "", f.err }
+func (f failHasher) Verify(string, string) (bool, error) { return false, nil }
+
+func TestSetPasswordWrapsAHashFailure(t *testing.T) {
+	repo := fakes.NewRepo[artifact.Artifact]("artifacts")
+	svc := artifact.NewService(artifact.Deps{
+		Repo: repo, Files: newFakeFiles(), Hasher: artifact.Argon2Hasher{},
+		Clock: clockx.Fixed{At: at}, IDs: &ids.Sequence{Prefix: "a"},
+	})
+	created, err := svc.Create(ctx(), artifact.CreateInput{Name: "Doomed password", Visibility: artifact.ByPassword})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	failing := artifact.NewService(artifact.Deps{
+		Repo: repo, Files: newFakeFiles(), Hasher: failHasher{err: errors.New("kdf exploded")},
+		Clock: clockx.Fixed{At: at}, IDs: &ids.Sequence{Prefix: "a"},
+	})
+	_, err = failing.SetPassword(ctx(), artifact.SetPasswordInput{ID: created.ID, Password: "whatever"})
+	got, ok := apperr.As(err)
+	if !ok || got.Code != apperr.New("ARTIFACT_HASH_FAILED").Code {
+		t.Fatalf("want ARTIFACT_HASH_FAILED, got %v", err)
+	}
+}
+
+func TestVerifyRejectsMalformedStoredHashes(t *testing.T) {
+	for name, stored := range map[string]string{
+		"empty":              "",
+		"wrong field count":  "$argon2id$v=19$m=1,t=1,p=1$onlyfivefields",
+		"wrong algorithm":    "$bcrypt$v=19$m=65536,t=2,p=1$c2FsdA$a2V5",
+		"wrong version":      "$argon2id$v=1$m=65536,t=2,p=1$c2FsdA$a2V5",
+		"unparseable params": "$argon2id$v=19$not-params$c2FsdA$a2V5",
+	} {
+		t.Run(name, func(t *testing.T) {
+			ok, err := artifact.Argon2Hasher{}.Verify("anything", stored)
+			if err != nil {
+				t.Fatalf("Verify returned an error for a malformed hash, want (false, nil): %v", err)
+			}
+			if ok {
+				t.Fatal("a malformed stored hash verified successfully")
+			}
+		})
+	}
+}
+
+func TestUpdateRejectsAnInvalidVisibility(t *testing.T) {
+	svc, _, _ := newService(t)
+	created, err := svc.Create(ctx(), artifact.CreateInput{Name: "Original"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad := artifact.Visibility("public")
+	_, err = svc.Update(ctx(), artifact.UpdateInput{ID: created.ID, Visibility: &bad})
+	if err == nil {
+		t.Fatal("an unknown visibility was accepted on update")
 	}
 }

@@ -280,3 +280,127 @@ func TestListFiltersByProjectAndText(t *testing.T) {
 		t.Fatalf("List = %+v, want just Launch V1", found)
 	}
 }
+
+// failRepository wraps a real Repository and forces one named method to
+// fail, so a test can exercise errReadFailed/errWriteFailed without a real
+// storage error to provoke it.
+type failRepository struct {
+	*fakeRepository
+	fail string
+	err  error
+}
+
+func (r failRepository) List(ctx context.Context, q collections.Query) ([]goal.Goal, error) {
+	if r.fail == "List" {
+		return nil, r.err
+	}
+	return r.fakeRepository.List(ctx, q)
+}
+
+func (r failRepository) Update(ctx context.Context, g *goal.Goal, expect collections.Version) error {
+	if r.fail == "Update" {
+		return r.err
+	}
+	return r.fakeRepository.Update(ctx, g, expect)
+}
+
+func (r failRepository) Delete(ctx context.Context, key collections.Key) error {
+	if r.fail == "Delete" {
+		return r.err
+	}
+	return r.fakeRepository.Delete(ctx, key)
+}
+
+func TestListWrapsARepositoryFailure(t *testing.T) {
+	repo := failRepository{fakeRepository: newFakeRepository(), fail: "List", err: errors.New("disk gone")}
+	svc := goal.NewService(goal.Deps{Repo: repo, Tasks: &fakeTasks{}, Clock: clockx.Fixed{At: refTime}})
+	_, err := svc.List(ctx(), goal.ListInput{})
+	if code := codeOf(t, err); code != "AOS_GOAL_READ_FAILED" {
+		t.Fatalf("code = %q, want GOAL_READ_FAILED", code)
+	}
+}
+
+func TestUpdateWrapsARepositoryFailure(t *testing.T) {
+	real := newFakeRepository()
+	svc := newService(real, &fakeTasks{})
+	created, err := svc.Create(ctx(), goal.CreateInput{Title: "Doomed update"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failing := goal.NewService(goal.Deps{
+		Repo:  failRepository{fakeRepository: real, fail: "Update", err: errors.New("disk gone")},
+		Tasks: &fakeTasks{}, Clock: clockx.Fixed{At: refTime},
+	})
+	newTitle := "won't stick"
+	_, err = failing.Update(ctx(), goal.UpdateInput{ID: created.ID, Title: &newTitle})
+	if code := codeOf(t, err); code != "AOS_GOAL_WRITE_FAILED" {
+		t.Fatalf("code = %q, want GOAL_WRITE_FAILED", code)
+	}
+}
+
+func TestDeleteWrapsARepositoryFailure(t *testing.T) {
+	real := newFakeRepository()
+	svc := newService(real, &fakeTasks{})
+	created, err := svc.Create(ctx(), goal.CreateInput{Title: "Doomed delete"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failing := goal.NewService(goal.Deps{
+		Repo:  failRepository{fakeRepository: real, fail: "Delete", err: errors.New("disk gone")},
+		Tasks: &fakeTasks{}, Clock: clockx.Fixed{At: refTime},
+	})
+	_, err = failing.Delete(ctx(), goal.DeleteInput{ID: created.ID})
+	if code := codeOf(t, err); code != "AOS_GOAL_WRITE_FAILED" {
+		t.Fatalf("code = %q, want GOAL_WRITE_FAILED", code)
+	}
+}
+
+// failTasks is a goal.Tasks whose ClearGoal always fails, to exercise
+// Delete's other errWriteFailed call site.
+type failTasks struct{ err error }
+
+func (f failTasks) ClearGoal(context.Context, string) error { return f.err }
+
+func TestDeleteWrapsATasksUnlinkFailure(t *testing.T) {
+	repo := newFakeRepository()
+	svc := newService(repo, &fakeTasks{})
+	created, err := svc.Create(ctx(), goal.CreateInput{Title: "Doomed unlink"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failing := goal.NewService(goal.Deps{
+		Repo: repo, Tasks: failTasks{err: errors.New("task service down")}, Clock: clockx.Fixed{At: refTime},
+	})
+	_, err = failing.Delete(ctx(), goal.DeleteInput{ID: created.ID})
+	if code := codeOf(t, err); code != "AOS_GOAL_WRITE_FAILED" {
+		t.Fatalf("code = %q, want GOAL_WRITE_FAILED", code)
+	}
+}
+
+func TestUpdateChangesEveryOptionalField(t *testing.T) {
+	repo := newFakeRepository()
+	svc := newService(repo, &fakeTasks{})
+	created, err := svc.Create(ctx(), goal.CreateInput{Title: "Original"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	newDesc := "a new description"
+	newProject := "new-project"
+	newDue := refTime.Add(48 * time.Hour)
+	newMeasure := "shipped to prod"
+	newContent := "# Notes\nUpdated."
+	updated, err := svc.Update(ctx(), goal.UpdateInput{
+		ID: created.ID, Description: &newDesc, Project: &newProject,
+		DueAt: &newDue, Measure: &newMeasure, Content: &newContent,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Description != newDesc || updated.Project != newProject || updated.Measure != newMeasure || updated.Content != newContent {
+		t.Fatalf("got %+v", updated)
+	}
+	if updated.DueAt == nil || !updated.DueAt.Equal(newDue) {
+		t.Fatalf("DueAt = %v, want %v", updated.DueAt, newDue)
+	}
+}

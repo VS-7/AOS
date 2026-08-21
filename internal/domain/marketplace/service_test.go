@@ -193,3 +193,64 @@ func TestGetOfAnUnknownSourceIsRefused(t *testing.T) {
 		t.Fatal("Get of an unlisted source succeeded, want a clear error")
 	}
 }
+
+func TestGetNamingAnUnknownRegistryIsRefused(t *testing.T) {
+	a := &fakeRegistry{listings: []marketplace.Listing{{Source: "acme/crm"}}}
+	svc := marketplace.NewService(marketplace.Deps{
+		Registries: map[string]marketplace.Registry{"a": a},
+		Order:      []string{"a"},
+		Installer:  &fakeInstaller{},
+	})
+
+	_, err := svc.Get(context.Background(), marketplace.GetInput{Reasoning: reasoning(), Registry: "nope", Source: "acme/crm"})
+	if err == nil {
+		t.Fatal("Get naming an unconfigured registry succeeded, want a clear error")
+	}
+}
+
+func TestGetSkipsAnUnreachableRegistryAndReportsItsError(t *testing.T) {
+	broken := &fakeRegistry{searchErr: errors.New("network down")}
+	svc := marketplace.NewService(marketplace.Deps{
+		Registries: map[string]marketplace.Registry{"a": broken},
+		Order:      []string{"a"},
+		Installer:  &fakeInstaller{},
+	})
+
+	_, err := svc.Get(context.Background(), marketplace.GetInput{Reasoning: reasoning(), Source: "acme/crm"})
+	if err == nil {
+		t.Fatal("Get against an unreachable registry succeeded, want its error surfaced")
+	}
+}
+
+func TestGetOnlySearchesTheNamedRegistry(t *testing.T) {
+	named := &fakeRegistry{listings: []marketplace.Listing{{Source: "acme/crm", Name: "Named"}}}
+	other := &fakeRegistry{listings: []marketplace.Listing{{Source: "acme/crm", Name: "Other"}}}
+	svc := marketplace.NewService(marketplace.Deps{
+		Registries: map[string]marketplace.Registry{"a": named, "b": other},
+		Order:      []string{"a", "b"},
+		Installer:  &fakeInstaller{},
+	})
+
+	got, err := svc.Get(context.Background(), marketplace.GetInput{Reasoning: reasoning(), Registry: "b", Source: "acme/crm"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "Other" {
+		t.Fatalf("Get with Registry set searched the wrong registry: got %+v", got)
+	}
+}
+
+func TestInstallExhaustsEveryRegistryThenWrapsTheFailure(t *testing.T) {
+	a := &fakeRegistry{fetchErr: errors.New("a is down")}
+	b := &fakeRegistry{fetchErr: errors.New("b is down")}
+	svc := marketplace.NewService(marketplace.Deps{
+		Registries: map[string]marketplace.Registry{"a": a, "b": b},
+		Order:      []string{"a", "b"},
+		Installer:  &fakeInstaller{},
+	})
+
+	_, err := svc.Install(context.Background(), marketplace.InstallInput{Reasoning: reasoning(), Source: "acme/crm"})
+	if err == nil {
+		t.Fatal("Install with every registry failing succeeded, want MARKETPLACE_FETCH_FAILED")
+	}
+}

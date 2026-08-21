@@ -262,3 +262,126 @@ func TestListFiltersBySkill(t *testing.T) {
 		t.Fatalf("got %+v, want only the browser-scoped instruction", out)
 	}
 }
+
+func TestListFiltersByQueryAcrossNameDescriptionAndContent(t *testing.T) {
+	svc := newService(t)
+	if _, err := svc.Create(ctx(), instruction.CreateInput{
+		Name: "Alpha", Description: "nothing special", Content: "mentions a secret keyword: banana",
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := svc.Create(ctx(), instruction.CreateInput{Name: "Beta", Description: "unrelated"}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	out, err := svc.List(ctx(), instruction.ListInput{Query: "banana"})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if out.Total != 1 || out.Instructions[0].Name != "Alpha" {
+		t.Fatalf("got %+v, want only the instruction whose content matches", out)
+	}
+}
+
+// --- repository failures --------------------------------------------------
+
+// failRepository wraps a real Repository and forces one named method to
+// fail, so a test can exercise errReadFailed/errWriteFailed without a real
+// storage error to provoke it.
+type failRepository struct {
+	*fakeRepository
+	fail string
+	err  error
+}
+
+func (r failRepository) List(ctx context.Context, q collections.Query) ([]instruction.Instruction, error) {
+	if r.fail == "List" {
+		return nil, r.err
+	}
+	return r.fakeRepository.List(ctx, q)
+}
+
+func (r failRepository) Update(ctx context.Context, v *instruction.Instruction, expect collections.Version) error {
+	if r.fail == "Update" {
+		return r.err
+	}
+	return r.fakeRepository.Update(ctx, v, expect)
+}
+
+func (r failRepository) Delete(ctx context.Context, key collections.Key) error {
+	if r.fail == "Delete" {
+		return r.err
+	}
+	return r.fakeRepository.Delete(ctx, key)
+}
+
+func newServiceOver(repo instruction.Repository) *instruction.Service {
+	return instruction.NewService(instruction.Deps{
+		Repo: repo, Clock: clockx.Fixed{At: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+	})
+}
+
+func TestListWrapsARepositoryFailure(t *testing.T) {
+	svc := newServiceOver(failRepository{fakeRepository: newFakeRepository(), fail: "List", err: errors.New("disk gone")})
+	_, err := svc.List(ctx(), instruction.ListInput{})
+	var app *apperr.Error
+	if !errors.As(err, &app) || app.Code != "AOS_INSTRUCTION_READ_FAILED" {
+		t.Fatalf("want AOS_INSTRUCTION_READ_FAILED, got %v", err)
+	}
+}
+
+func TestUpdateWrapsARepositoryFailure(t *testing.T) {
+	real := newFakeRepository()
+	svc := newServiceOver(real)
+	created, err := svc.Create(ctx(), instruction.CreateInput{Name: "Doomed update"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failing := newServiceOver(failRepository{fakeRepository: real, fail: "Update", err: errors.New("disk gone")})
+	newName := "won't stick"
+	_, err = failing.Update(ctx(), instruction.UpdateInput{ID: created.ID, Name: &newName})
+	var app *apperr.Error
+	if !errors.As(err, &app) || app.Code != "AOS_INSTRUCTION_WRITE_FAILED" {
+		t.Fatalf("want AOS_INSTRUCTION_WRITE_FAILED, got %v", err)
+	}
+}
+
+func TestDeleteWrapsARepositoryFailure(t *testing.T) {
+	real := newFakeRepository()
+	svc := newServiceOver(real)
+	created, err := svc.Create(ctx(), instruction.CreateInput{Name: "Doomed delete"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failing := newServiceOver(failRepository{fakeRepository: real, fail: "Delete", err: errors.New("disk gone")})
+	_, err = failing.Delete(ctx(), instruction.DeleteInput{ID: created.ID})
+	var app *apperr.Error
+	if !errors.As(err, &app) || app.Code != "AOS_INSTRUCTION_WRITE_FAILED" {
+		t.Fatalf("want AOS_INSTRUCTION_WRITE_FAILED, got %v", err)
+	}
+}
+
+func TestUpdateChangesEveryOptionalField(t *testing.T) {
+	svc := newService(t)
+	created, err := svc.Create(ctx(), instruction.CreateInput{Name: "Original", Type: "standards"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	newName := "Renamed"
+	newType := "patterns"
+	newDesc := "a new description"
+	updated, err := svc.Update(ctx(), instruction.UpdateInput{
+		ID: created.ID, Name: &newName, Type: &newType, Description: &newDesc,
+		Paths: []string{"internal/**/*.go"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Name != newName || updated.Type != newType || updated.Description != newDesc {
+		t.Fatalf("got %+v", updated)
+	}
+	if len(updated.Paths) != 1 || updated.Paths[0] != "internal/**/*.go" {
+		t.Fatalf("Paths = %v", updated.Paths)
+	}
+}

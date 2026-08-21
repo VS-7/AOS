@@ -9,6 +9,7 @@ import (
 
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/clockx"
+	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/domain/fakes"
 	"github.com/OWNER/aos/internal/domain/project"
 )
@@ -215,6 +216,147 @@ func TestGetNotFound(t *testing.T) {
 	svc, _ := newService(t)
 	_, err := svc.Get(context.Background(), project.GetInput{ID: "missing"})
 	requireCode(t, err, "PROJECT_NOT_FOUND")
+}
+
+// failRepository wraps a real Repository and forces one named method to
+// fail, so a test can exercise errReadFailed/errWriteFailed without a real
+// storage error to provoke it.
+type failRepository struct {
+	*fakes.Repo[project.Project]
+	fail string
+	err  error
+}
+
+func (r failRepository) List(ctx context.Context, q collections.Query) ([]project.Project, error) {
+	if r.fail == "List" {
+		return nil, r.err
+	}
+	return r.Repo.List(ctx, q)
+}
+
+func (r failRepository) Update(ctx context.Context, v *project.Project, expect collections.Version) error {
+	if r.fail == "Update" {
+		return r.err
+	}
+	return r.Repo.Update(ctx, v, expect)
+}
+
+func (r failRepository) Delete(ctx context.Context, key collections.Key) error {
+	if r.fail == "Delete" {
+		return r.err
+	}
+	return r.Repo.Delete(ctx, key)
+}
+
+func TestListWrapsARepositoryFailure(t *testing.T) {
+	repo := failRepository{Repo: fakes.NewRepo[project.Project]("projects"), fail: "List", err: errors.New("disk gone")}
+	svc := project.NewService(project.Deps{Repo: repo, Clock: clockx.Fixed{At: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}, Stat: fakePathStat{}})
+	_, err := svc.List(context.Background(), project.ListInput{})
+	requireCode(t, err, "PROJECT_READ_FAILED")
+}
+
+func TestUpdateWrapsARepositoryFailure(t *testing.T) {
+	real := fakes.NewRepo[project.Project]("projects")
+	svc := project.NewService(project.Deps{Repo: real, Clock: clockx.Fixed{At: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}, Stat: fakePathStat{}})
+	created, err := svc.Create(context.Background(), project.CreateInput{Name: "Doomed update"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failing := project.NewService(project.Deps{
+		Repo:  failRepository{Repo: real, fail: "Update", err: errors.New("disk gone")},
+		Clock: clockx.Fixed{At: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}, Stat: fakePathStat{},
+	})
+	newName := "won't stick"
+	_, err = failing.Update(context.Background(), project.UpdateInput{ID: created.ID, Name: &newName})
+	requireCode(t, err, "PROJECT_WRITE_FAILED")
+}
+
+func TestDeleteWrapsARepositoryFailure(t *testing.T) {
+	real := fakes.NewRepo[project.Project]("projects")
+	svc := project.NewService(project.Deps{Repo: real, Clock: clockx.Fixed{At: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}, Stat: fakePathStat{}})
+	created, err := svc.Create(context.Background(), project.CreateInput{Name: "Doomed delete"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failing := project.NewService(project.Deps{
+		Repo:  failRepository{Repo: real, fail: "Delete", err: errors.New("disk gone")},
+		Clock: clockx.Fixed{At: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}, Stat: fakePathStat{},
+	})
+	_, err = failing.Delete(context.Background(), project.DeleteInput{ID: created.ID})
+	requireCode(t, err, "PROJECT_WRITE_FAILED")
+}
+
+func TestDeleteWrapsAnUnlinkerFailure(t *testing.T) {
+	repo := fakes.NewRepo[project.Project]("projects")
+	svc := project.NewService(project.Deps{Repo: repo, Clock: clockx.Fixed{At: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}, Stat: fakePathStat{}})
+	created, err := svc.Create(context.Background(), project.CreateInput{Name: "Doomed unlink"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	failing := project.NewService(project.Deps{
+		Repo:      repo,
+		Unlinkers: []project.Unlinker{&fakeUnlinker{}, failUnlinker{err: errors.New("tasks down")}},
+		Clock:     clockx.Fixed{At: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}, Stat: fakePathStat{},
+	})
+	_, err = failing.Delete(context.Background(), project.DeleteInput{ID: created.ID})
+	requireCode(t, err, "PROJECT_WRITE_FAILED")
+}
+
+type failUnlinker struct{ err error }
+
+func (f failUnlinker) UnlinkProject(context.Context, string) error { return f.err }
+
+func TestUpdateChangesEveryOptionalField(t *testing.T) {
+	svc, _ := newService(t)
+	created, err := svc.Create(context.Background(), project.CreateInput{Name: "Original"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	newDesc := "a new description"
+	newColor := "#ff0000"
+	newIcon := "rocket"
+	updated, err := svc.Update(context.Background(), project.UpdateInput{
+		ID: created.ID, Description: &newDesc, Color: &newColor, Icon: &newIcon,
+		Paths: []string{"src/**/*.ts"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Description != newDesc || updated.Color != newColor || updated.Icon != newIcon {
+		t.Fatalf("got %+v", updated)
+	}
+	if len(updated.Paths) != 1 || updated.Paths[0] != "src/**/*.ts" {
+		t.Fatalf("Paths = %v", updated.Paths)
+	}
+}
+
+func TestUpdateWithAnInvalidStatusLeavesItUnchanged(t *testing.T) {
+	svc, _ := newService(t)
+	created, err := svc.Create(context.Background(), project.CreateInput{Name: "Original", Status: project.Active})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bogus := project.Status("bogus")
+	updated, err := svc.Update(context.Background(), project.UpdateInput{ID: created.ID, Status: &bogus})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Status != project.Active {
+		t.Fatalf("Status = %q, an invalid status should leave it unchanged", updated.Status)
+	}
+}
+
+func TestStatusValidRejectsAnUnknownValue(t *testing.T) {
+	if project.Status("bogus").Valid() {
+		t.Fatal("an unknown status validated")
+	}
+	for _, s := range project.Statuses {
+		if !s.Valid() {
+			t.Fatalf("%q, a declared status, did not validate", s)
+		}
+	}
 }
 
 func requireCode(t *testing.T, err error, code string) {

@@ -33,9 +33,10 @@ var floors = map[string]float64{
 	// Test infrastructure is proven by the tests that use it. A coverage
 	// number on a fake or a fixture measures nothing: the contract suite is
 	// what says whether the fake is right.
-	"github.com/OWNER/aos/internal/domain/fakes":     0,
-	"github.com/OWNER/aos/internal/domain/testsuite": 0,
-	"github.com/OWNER/aos/internal/testx":            0,
+	"github.com/OWNER/aos/internal/domain/fakes":                    0,
+	"github.com/OWNER/aos/internal/domain/testsuite":                0,
+	"github.com/OWNER/aos/internal/domain/marketplace/registrytest": 0,
+	"github.com/OWNER/aos/internal/testx":                           0,
 	// The composition root is wiring: what it must prove is that the surfaces
 	// agree, and that is the parity suite, not a percentage.
 	"github.com/OWNER/aos/internal/app": 0,
