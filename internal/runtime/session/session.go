@@ -24,6 +24,7 @@ import (
 	"github.com/OWNER/aos/internal/domain/event"
 	"github.com/OWNER/aos/internal/runtime/agentloop"
 	"github.com/OWNER/aos/internal/runtime/prompt"
+	"github.com/OWNER/aos/internal/runtime/providers"
 	"github.com/OWNER/aos/internal/runtime/sandbox"
 	"github.com/OWNER/aos/internal/runtime/subconscious"
 	"github.com/OWNER/aos/internal/runtime/toolexec"
@@ -220,6 +221,10 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (*agentloop.Result, erro
 		r.recordFailure(ctx, in, worker.ID, started, runErr)
 		return nil, runErr
 	}
+	// Priced here, not inside agentloop: the loop talks to LLMProvider, not to
+	// the pricing table, and internal/runtime/providers already imports
+	// agentloop for the interface it builds — the reverse import would cycle.
+	result.Usage.CostUSD = providers.CostUSD(model.Provider, model.Model, result.Usage)
 
 	if err := r.persist(ctx, in, worker.ID, started, result); err != nil {
 		return result, err
