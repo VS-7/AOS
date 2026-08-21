@@ -47,7 +47,7 @@ func newHandler(t *testing.T) http.Handler {
 // on — see botapi's own doc comment on why.
 func TestWebhookAlwaysAnswers200(t *testing.T) {
 	h := newHandler(t)
-	req := httptest.NewRequest(http.MethodPost, "/telegram/webhook/no-such-agent", strings.NewReader(`{}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/telegram/webhook/no-such-agent", strings.NewReader(`{}`))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -60,7 +60,7 @@ func TestWebhookAlwaysAnswers200(t *testing.T) {
 // failure to swallow into a 200.
 func TestWebhookRejectsAnUnreadableBody(t *testing.T) {
 	h := newHandler(t)
-	req := httptest.NewRequest(http.MethodPost, "/telegram/webhook/some-agent", errReader{})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/telegram/webhook/some-agent", errReader{})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
