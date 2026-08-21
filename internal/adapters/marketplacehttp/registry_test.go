@@ -9,8 +9,16 @@ import (
 	"time"
 
 	"github.com/OWNER/aos/internal/domain/marketplace"
+	"github.com/OWNER/aos/internal/domain/marketplace/registrytest"
 	"github.com/OWNER/aos/internal/domain/skill"
 )
+
+// TestRegistryObeysTheContract runs the fixture-independent port contract
+// (docs/07 "Testes de Contrato de Port") against a real HTTP registry — see
+// newTestServer's own fixture: one listing at "acme/crm".
+func TestRegistryObeysTheContract(t *testing.T) {
+	registrytest.Contract(t, New(newTestServer(t).URL))
+}
 
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()

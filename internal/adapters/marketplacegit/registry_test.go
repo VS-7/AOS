@@ -9,7 +9,15 @@ import (
 	"testing"
 
 	"github.com/OWNER/aos/internal/domain/marketplace"
+	"github.com/OWNER/aos/internal/domain/marketplace/registrytest"
 )
+
+// TestRegistryObeysTheContract runs the fixture-independent port contract
+// (docs/07 "Testes de Contrato de Port") against a real Git registry — see
+// newTestRegistry's own doc for the fixture it seeds.
+func TestRegistryObeysTheContract(t *testing.T) {
+	registrytest.Contract(t, newTestRegistry(t))
+}
 
 const testSkillMD = `---
 name: crm
