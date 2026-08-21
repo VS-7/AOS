@@ -149,6 +149,44 @@ func TestAnExternalChatGetsAStableLookupKey(t *testing.T) {
 	}
 }
 
+func TestGetByChannelFindsTheConversationBoundToThatChannel(t *testing.T) {
+	h := newHarness(t)
+	created := h.create(t, chat.CreateInput{
+		Title: "Telegram", Kind: chat.KindExternal,
+		Channel: &chat.ChannelMeta{Provider: "telegram", ChatID: "123456789"},
+	})
+
+	got, err := h.svc.GetByChannel(userCtx(), "telegram", "123456789")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != created.ID {
+		t.Fatalf("GetByChannel found %q, want %q", got.ID, created.ID)
+	}
+}
+
+func TestGetByChannelOfAnUnboundChatIsNotFound(t *testing.T) {
+	h := newHarness(t)
+	_, err := h.svc.GetByChannel(userCtx(), "telegram", "does-not-exist")
+	var app *apperr.Error
+	if !errors.As(err, &app) || app.Code != "AOS_CHAT_CHANNEL_NOT_FOUND" {
+		t.Fatalf("code = %v, want AOS_CHAT_CHANNEL_NOT_FOUND", err)
+	}
+}
+
+func TestGetByChannelDistinguishesProviders(t *testing.T) {
+	h := newHarness(t)
+	h.create(t, chat.CreateInput{
+		Title: "Telegram", Kind: chat.KindExternal,
+		Channel: &chat.ChannelMeta{Provider: "telegram", ChatID: "1"},
+	})
+	// Same chat id, different provider: must not match.
+	_, err := h.svc.GetByChannel(userCtx(), "whatsapp", "1")
+	if err == nil {
+		t.Fatal("GetByChannel matched across providers on the same chat id")
+	}
+}
+
 // TestSendPersistsBeforeItDispatches is the ordering the whole method exists
 // to guarantee: a runtime that dies in between loses the answer, not the
 // question.

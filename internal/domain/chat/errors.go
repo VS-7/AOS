@@ -20,6 +20,16 @@ func errNotFound(id string) error {
 		})
 }
 
+func errChannelNotFound(provider, chatID string) error {
+	return apperr.New("CHAT_CHANNEL_NOT_FOUND").
+		Causer("chat.Service.GetByChannel").
+		Msgf("no conversation bound to %s chat %q", provider, chatID).
+		Issue("provider", provider).
+		Issue("chatId", chatID).
+		Status(apperr.StatusNotFound).
+		CTA(apperr.CallToAction{Label: "create one first, with Channel set to this provider and chat id"})
+}
+
 func errInvalidKind(got string) error {
 	names := make([]string, len(Kinds))
 	for i, k := range Kinds {

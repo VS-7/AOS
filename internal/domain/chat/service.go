@@ -117,6 +117,27 @@ func (s *Service) Get(ctx context.Context, in GetInput) (*Chat, error) {
 	return got, nil
 }
 
+// GetByChannel finds the conversation bound to an external messenger's own
+// chat, by the same Key Create derives from Channel — so a second inbound
+// message from the same Telegram chat lands in the same conversation as the
+// first, rather than opening a new one every time. Added for
+// internal/domain/bot, which needs to resolve an inbound webhook to a Chat
+// before Send can write to it; nothing else in this package needed a lookup
+// by anything other than ID until now.
+func (s *Service) GetByChannel(ctx context.Context, provider, chatID string) (*Chat, error) {
+	key := externalKey(provider, chatID)
+	found, err := s.repo.List(ctx, collections.Query{})
+	if err != nil {
+		return nil, errReadFailed("GetByChannel", err)
+	}
+	for i := range found {
+		if found[i].Key == key {
+			return &found[i], nil
+		}
+	}
+	return nil, errChannelNotFound(provider, chatID)
+}
+
 // Create opens a conversation.
 func (s *Service) Create(ctx context.Context, in CreateInput) (*Chat, error) {
 	kind := in.Kind
