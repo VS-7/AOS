@@ -42,19 +42,16 @@ func errBinaryMissing(cause error) error {
 }
 
 // errReadinessTimeout fires when cloudflared was spawned but never reported
-// itself connected within the bounded wait. The process this attempt started
-// is killed before this returns — a caller retrying does not accumulate
-// orphaned processes.
+// itself connected within the bounded wait. The runner has already cleaned
+// up the process it started — a caller retrying does not accumulate orphaned
+// processes.
 func errReadinessTimeout(cause error) error {
-	e := apperr.New("TUNNEL_READINESS_TIMEOUT").
+	return apperr.New("TUNNEL_READINESS_TIMEOUT").
 		Causer("tunnel.Service.Start").
-		Msgf("cloudflared did not report a connected tunnel within the wait").
+		Msgf("cloudflared did not report a connected tunnel within the wait: %v", cause).
 		Status(apperr.StatusGatewayTimeout).
+		Wrap(cause).
 		CTA(apperr.CallToAction{Label: "check the hostname and token are valid, then retry"})
-	if cause != nil {
-		e = e.Wrap(cause)
-	}
-	return e
 }
 
 // errSpawnFailed wraps any other failure to start the process.
