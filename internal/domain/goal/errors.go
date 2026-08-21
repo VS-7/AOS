@@ -40,7 +40,7 @@ func errStatusInvalid(raw string) error {
 // errReadFailed wraps a repository failure that is not "not found".
 func errReadFailed(op string, cause error) error {
 	return apperr.New("GOAL_READ_FAILED").
-		Causer("goal.Service." + op).
+		Causer("goal.Service."+op).
 		Msgf("could not read goals: %v", cause).
 		Issue("operation", op).
 		Status(apperr.StatusInternalServerError).
@@ -51,7 +51,7 @@ func errReadFailed(op string, cause error) error {
 // errWriteFailed wraps a repository failure while writing.
 func errWriteFailed(op string, cause error) error {
 	return apperr.New("GOAL_WRITE_FAILED").
-		Causer("goal.Service." + op).
+		Causer("goal.Service."+op).
 		Msgf("could not save the goal: %v", cause).
 		Issue("operation", op).
 		Status(apperr.StatusInternalServerError).
