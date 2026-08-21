@@ -14,12 +14,12 @@ import (
 // connected tunnel before giving up.
 const readinessTimeout = 15 * time.Second
 
-// backoffStart and backoffMax bound the supervisor's restart delay after an
-// unexpected death — starting fast, capped so a persistently broken tunnel
-// does not spin the CPU.
+// defaultBackoffStart and defaultBackoffMax bound the supervisor's restart
+// delay after an unexpected death — starting fast, capped so a persistently
+// broken tunnel does not spin the CPU.
 const (
-	backoffStart = time.Second
-	backoffMax   = 30 * time.Second
+	defaultBackoffStart = time.Second
+	defaultBackoffMax   = 30 * time.Second
 )
 
 // Deps are what Service needs, narrowed to exactly what it reads.
@@ -28,6 +28,14 @@ type Deps struct {
 	Runner Runner
 	Clock  clockx.Clock
 	Log    *slog.Logger
+
+	// BackoffStart and BackoffMax override the supervisor's restart delay.
+	// Zero means the defaults above — overridden by service_test.go so the
+	// restart-after-crash test does not take 30+ seconds, and instance
+	// fields (not package vars) so tests running in parallel never race on
+	// them the way a shared package var would.
+	BackoffStart time.Duration
+	BackoffMax   time.Duration
 }
 
 // service is the default Service.
@@ -36,6 +44,9 @@ type service struct {
 	runner Runner
 	clock  clockx.Clock
 	log    *slog.Logger
+
+	backoffStart time.Duration
+	backoffMax   time.Duration
 
 	mu       sync.Mutex
 	state    State
@@ -54,12 +65,22 @@ func NewService(deps Deps) Service {
 	if log == nil {
 		log = slog.Default()
 	}
+	backoffStart := deps.BackoffStart
+	if backoffStart <= 0 {
+		backoffStart = defaultBackoffStart
+	}
+	backoffMax := deps.BackoffMax
+	if backoffMax <= 0 {
+		backoffMax = defaultBackoffMax
+	}
 	return &service{
-		cfg:    deps.Config,
-		runner: deps.Runner,
-		clock:  clock,
-		log:    log,
-		state:  State{Status: Stopped},
+		cfg:          deps.Config,
+		runner:       deps.Runner,
+		clock:        clock,
+		log:          log,
+		backoffStart: backoffStart,
+		backoffMax:   backoffMax,
+		state:        State{Status: Stopped},
 	}
 }
 
@@ -142,7 +163,7 @@ func translateSpawnErr(err error) error {
 // this, a webhook channel or a remote session dies in silence and nobody is
 // told, which is exactly the gap the design doc calls out over the original.
 func (s *service) supervise(hostname, token string) {
-	backoff := backoffStart
+	backoff := s.backoffStart
 	for {
 		s.mu.Lock()
 		proc := s.proc
@@ -170,8 +191,8 @@ func (s *service) supervise(hostname, token string) {
 		for {
 			time.Sleep(backoff)
 			backoff *= 2
-			if backoff > backoffMax {
-				backoff = backoffMax
+			if backoff > s.backoffMax {
+				backoff = s.backoffMax
 			}
 
 			s.mu.Lock()
@@ -199,7 +220,7 @@ func (s *service) supervise(hostname, token string) {
 		s.proc = next
 		s.state = State{Status: Running, URL: "https://" + hostname, PID: next.PID(), StartedAt: &started}
 		s.mu.Unlock()
-		backoff = backoffStart
+		backoff = s.backoffStart
 	}
 }
 
