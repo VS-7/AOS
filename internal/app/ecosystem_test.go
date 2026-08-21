@@ -38,7 +38,7 @@ func TestTheDeliveryOfPhaseEight(t *testing.T) {
 	if !a.Collections.Exists("contacts") {
 		t.Fatal("installing crm did not register its contacts collection")
 	}
-	if _, err := a.Views.Get(ctx, view.GetInput{ID: "contacts-table"}); err != nil {
+	if _, err := a.Views.Get(ctx, view.GetInput{ID: "contacts-table", Skill: "crm"}); err != nil {
 		t.Fatalf("the skill's view is not reachable right after install: %v", err)
 	}
 
@@ -56,7 +56,7 @@ func TestTheDeliveryOfPhaseEight(t *testing.T) {
 
 	// Render the view and see the record — what the frontend's renderer
 	// would consume, with no build and no deploy.
-	rendered, err := a.Views.Render(ctx, view.RenderInput{ID: "contacts-table"})
+	rendered, err := a.Views.Render(ctx, view.RenderInput{ID: "contacts-table", Skill: "crm"})
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestTheDeliveryOfPhaseEight(t *testing.T) {
 	if a.Collections.Exists("contacts") {
 		t.Fatal("the contacts collection outlived the skill that brought it")
 	}
-	if _, err := a.Views.Get(ctx, view.GetInput{ID: "contacts-table"}); err == nil {
+	if _, err := a.Views.Get(ctx, view.GetInput{ID: "contacts-table", Skill: "crm"}); err == nil {
 		t.Fatal("the contacts-table view outlived the skill that brought it")
 	}
 }
