@@ -89,7 +89,7 @@ func errOutputTooLarge(id string, n int) error {
 // operation name is dynamic because it fires from several call sites.
 func errReadFailed(op string, cause error) error {
 	return apperr.New("TEMPLATE_READ_FAILED").
-		Causer("template.Service." + op).
+		Causer("template.Service."+op).
 		Msgf("could not read templates: %v", cause).
 		Issue("operation", op).
 		Status(apperr.StatusInternalServerError).
@@ -100,7 +100,7 @@ func errReadFailed(op string, cause error) error {
 // errWriteFailed wraps a repository failure while writing.
 func errWriteFailed(op string, cause error) error {
 	return apperr.New("TEMPLATE_WRITE_FAILED").
-		Causer("template.Service." + op).
+		Causer("template.Service."+op).
 		Msgf("could not save the template: %v", cause).
 		Issue("operation", op).
 		Status(apperr.StatusInternalServerError).
