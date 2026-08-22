@@ -167,7 +167,7 @@ func (g *Gateway) waitHealthy(ctx context.Context, p *os.Process) (Meta, error)
 - [x] `aos gateway start|stop|restart|status` operando o daemon — `TestTheDeliveryOfPhaseFour`, com os dois binários compilados
 - [x] Lockfile impedindo corrida — `TestTwoConcurrentStartsProduceOneDaemon` e `TestTheLockIsHeldAcrossProcesses`
 - [x] Health check antes de declarar sucesso — `TestADaemonThatNeverServesIsAFailure`
-- [ ] Desktop e CLI usando a mesma supervisão — a CLI usa; o desktop é da **Fase 7**, e vai usar o mesmo `gateway.Service`
+- [x] Desktop e CLI usando a mesma supervisão — `cmd/aos-desktop/main.go` constrói o mesmo `gateway.Service` e chama `ensureDaemon` na subida, igual ao que a Fase 4 já tinha para a CLI
 
 ## Saída dos testes — Fase 4
 

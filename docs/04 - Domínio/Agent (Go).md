@@ -144,7 +144,7 @@ type Service interface {
 - [x] CRUD completo com cascata — a cascata é declaração do modelo (`CascadeDelete`), verificada em [[Collections Engine]]
 - [x] `agents me` resolvendo identidade nas três origens — `TestMeResolvesTheCallingAgent`, `TestMeFromATerminalResolvesTheOrchestrator`
 - [x] Invariante de orquestrador único — `TestPromotingASecondOrchestratorDemotesTheFirst`
-- [ ] Política de sandbox lida e aplicada por [[Sandbox (Go)]] — **Fase 5**
+- [x] Política de sandbox lida e aplicada por [[Sandbox (Go)]] — `internal/runtime/session.sandboxFor` lê `Agent.Sandbox` do frontmatter a cada turno; `TestTheAgentsFileDecidesWhatItMayReach`, `TestAnAgentWithNoPolicyGetsTheStrictOne`
 
 ## Saída dos testes — Fase 3
 
