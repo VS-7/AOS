@@ -104,6 +104,38 @@ func errDisabled(id string) error {
 		})
 }
 
+// errNetworkGuardUnavailable fires when a skill-installed rest-api or
+// mcp-server::http toolset is called in a build with no SkillNetwork wired.
+// Running the call unguarded would make the install-time
+// permissions.network check decorative rather than load-bearing — the same
+// reasoning errConnectionLocked already applies to Command and BaseURL — so
+// this refuses instead, the same fail-closed choice cliclient makes when no
+// sandbox is attached to ctx.
+func errNetworkGuardUnavailable(id string) error {
+	return apperr.New("TOOLSET_NETWORK_GUARD_UNAVAILABLE").
+		Causer("toolset.Service.Call").
+		Msgf("toolset %q was installed by a skill; this build cannot verify its permissions.network allowlist", id).
+		Issue("id", id).
+		Status(apperr.StatusInternalServerError).
+		CTA(apperr.CallToAction{Label: "this is a build configuration bug, not something a retry fixes"})
+}
+
+// errNetworkLookupFailed fires when SkillNetwork itself errors — the owning
+// skill is gone, or its record failed to read — rather than answering with
+// zero or more hosts. The call refuses rather than treating a failed lookup
+// as "no restriction", for the same reason a failed permission check should
+// never resolve to "allow".
+func errNetworkLookupFailed(id, skillID string, cause error) error {
+	return apperr.New("TOOLSET_NETWORK_LOOKUP_FAILED").
+		Causer("toolset.Service.Call").
+		Msgf("could not resolve toolset %q's permissions.network allowlist from skill %q: %v", id, skillID, cause).
+		Issue("id", id).
+		Issue("skill", skillID).
+		Status(apperr.StatusInternalServerError).
+		Wrap(cause).
+		CTA(apperr.CallToAction{Label: "retry; if it persists, the skill may need reinstalling"})
+}
+
 // errCallIncomplete fires when Call is asked to run without naming both the
 // toolset and the tool on it.
 func errCallIncomplete(id, tool string) error {

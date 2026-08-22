@@ -2,7 +2,7 @@
 tags: [dominio, toolset, integracao, mcp]
 aliases: [Toolset Go, Ferramentas Externas]
 fase: 8
-status: especificado
+status: pronto
 origem: "[[Toolset]]"
 ---
 
@@ -39,11 +39,22 @@ coisa, recusando quando não há sandbox anexado (uma chamada fora de um turno
 de agente).
 
 A allowlist de rede por `permissions.network` que a decisão abaixo declara
-para `rest-api` e `mcp-server::http` continua sem um cliente HTTP que a
-aplique por host — o que existe hoje é a mesma trava de `UpdateConfig` acima,
-que impede o `BaseURL` de um toolset instalado por skill de mudar depois da
-checagem de instalação, mas não impede um toolset configurado diretamente
-por uma pessoa de apontar para qualquer host.
+para `rest-api` e `mcp-server::http` agora tem o cliente HTTP que a aplica
+por host, em toda chamada — não só na instalação. `Service.Call`, para um
+toolset com `Skill != ""` desses dois tipos, resolve `permissions.network`
+da skill (`toolset.SkillNetwork`, adaptado em `wire.go` a partir de
+`skill.Installer.Get`) e anexa a lista ao `context.Context`
+(`toolset.WithAllowedHosts`). `internal/adapters/netguard` — um pacote à
+parte, pela mesma razão de `execguard`: `internal/domain/toolset` não pode
+importar `net/http` — expõe `netguard.Transport(ctx, next)`, que
+`openapiclient` e o lado HTTP de `mcpclient` usam para construir o
+`*http.Client` de `Connect`. A checagem roda por requisição, não só contra o
+`BaseURL` declarado: fecha o caso em que um documento OpenAPI declara seu
+próprio `servers[]` apontando para outro host. Sem `SkillNetwork` wireado, ou
+se a busca da skill falhar, a chamada é recusada — falha fechada, o mesmo
+padrão de `cliclient` recusando sem sandbox no `ctx`. Um toolset sem `Skill`
+continua sem restrição, a mesma regra de "nada promete manter fé" que
+`UpdateConfig` já aplica a `Command`/`BaseURL`.
 
 ## Comportamento do original
 
@@ -175,8 +186,8 @@ Toda chamada registra em [[Activity (Go)]]: toolset, tool, duração, sucesso ou
 
 ## Critério de pronto
 
-- [ ] Cinco tipos implementados
-- [ ] Interpolação de segredos com falha explícita
-- [ ] Restrições de exec e de rede aplicadas
-- [ ] Auditoria em ponto único
-- [ ] Suíte de contrato verde
+- [x] Cinco tipos implementados — `TestTheFiveTypesDecodeAndAnUnknownOneIsRefused`; quatro conectam, `custom` recusa `Call` como `TOOLSET_TYPE_NOT_AVAILABLE`
+- [x] Interpolação de segredos com falha explícita — `TestInterpolationFailsLoudOnAMissingVariable`, `TestAnInterpolatedValueIsNeverEchoedInAnError`
+- [x] Restrições de exec e de rede aplicadas — exec: `TestUpdateConfigLocksCommandAndBaseURLForASkillOwnedToolset` (instalação) + `internal/runtime/execguard` (por chamada, `cli`); rede: `TestGuardedTransportRefusesAHostNotDeclared`/`TestCallFailsClosedWhenTheNetworkLookupErrors` (`internal/domain/toolset`), `TestTransportRefusesAHostNotDeclared` (`internal/adapters/netguard`), `TestRESTConnectRefusesAHostNotInTheAttachedAllowlist`, `TestHTTPConnectNeverReachesAHostOutsideTheAttachedAllowlist`
+- [x] Auditoria em ponto único — `TestACallIsRecordedInActivityWithoutThePayload`, `TestAFailedCallIsRecordedAsAFailure`
+- [x] Suíte de contrato verde — `testsuite.RunAdapterContract` contra os quatro adaptadores conectáveis

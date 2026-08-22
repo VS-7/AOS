@@ -21,6 +21,7 @@ type Service struct {
 	adapters   Adapters
 	activities Activities
 	env        EnvResolver
+	network    SkillNetwork
 	clock      Clock
 	log        *slog.Logger
 }
@@ -34,6 +35,11 @@ type Deps struct {
 	// Env resolves ${env.VAR} placeholders in a Toolset's configuration.
 	Env EnvResolver
 
+	// Network resolves a skill's permissions.network — the allowlist Call
+	// enforces on every rest-api or mcp-server::http toolset that skill
+	// installed. See SkillNetwork's own doc for what a nil value means.
+	Network SkillNetwork
+
 	Clock Clock
 	Log   *slog.Logger
 }
@@ -46,7 +52,7 @@ func NewService(d Deps) *Service {
 	}
 	return &Service{
 		repo: d.Repo, adapters: d.Adapters, activities: d.Activities,
-		env: d.Env, clock: d.Clock, log: log,
+		env: d.Env, network: d.Network, clock: d.Clock, log: log,
 	}
 }
 
@@ -183,6 +189,28 @@ func (s *Service) Call(ctx context.Context, in CallInput) (CallOutput, error) {
 	if ierr != nil {
 		callErr = ierr
 		return CallOutput{}, callErr
+	}
+
+	// A rest-api or mcp-server::http toolset a skill installed only ever
+	// reaches the hosts that skill's manifest declared under
+	// permissions.network — see netguard.go. A toolset with no Skill carries
+	// no such restriction, the same "nothing promises to keep faith with"
+	// rule UpdateConfig's own lock uses. This mirrors cli's own dual-gate
+	// design one level down: the manifest is checked once at install
+	// (VerifyManifest), and this is the per-call gate that keeps drift from
+	// making that check decorative — the same reason cliclient refuses to
+	// run without a sandbox attached to ctx.
+	if ts.Skill != "" && (ts.Type == RESTAPI || ts.Type == MCPHTTP) {
+		if s.network == nil {
+			callErr = errNetworkGuardUnavailable(id)
+			return CallOutput{}, callErr
+		}
+		hosts, nerr := s.network.NetworkHosts(ctx, ts.Skill)
+		if nerr != nil {
+			callErr = errNetworkLookupFailed(id, ts.Skill, nerr)
+			return CallOutput{}, callErr
+		}
+		ctx = WithAllowedHosts(ctx, hosts)
 	}
 
 	adapter := factory()

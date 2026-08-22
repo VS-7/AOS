@@ -489,3 +489,28 @@ func TestRESTConnectRejectsAnEmptyBaseURL(t *testing.T) {
 		t.Fatal("expected Connect to reject a toolset with no baseUrl")
 	}
 }
+
+// TestRESTConnectRefusesAHostNotInTheAttachedAllowlist proves the guard
+// toolset.Service.Call attaches to ctx (see toolset.WithAllowedHosts) is
+// actually wired into this adapter's client, not only unit-tested in
+// isolation — even the initial OpenAPI document fetch is refused, before any
+// operation the document might declare is ever reached.
+func TestRESTConnectRefusesAHostNotInTheAttachedAllowlist(t *testing.T) {
+	ts := newFixtureServer(t, nil)
+	a := openapiclient.New()
+	restricted := toolset.WithAllowedHosts(context.Background(), []string{"some-other-host.example.com"})
+
+	if err := a.Connect(restricted, fixtureToolset(ts.URL)); err == nil {
+		t.Fatal("Connect must refuse a host outside the attached allowlist")
+	}
+}
+
+func TestRESTConnectSucceedsWhenTheHostIsInTheAttachedAllowlist(t *testing.T) {
+	ts := newFixtureServer(t, nil)
+	a := openapiclient.New()
+	restricted := toolset.WithAllowedHosts(context.Background(), []string{"127.0.0.1"})
+
+	if err := a.Connect(restricted, fixtureToolset(ts.URL)); err != nil {
+		t.Fatalf("Connect refused a host the allowlist actually declares: %v", err)
+	}
+}

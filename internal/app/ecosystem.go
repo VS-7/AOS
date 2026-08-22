@@ -168,6 +168,20 @@ type noopSkillToolsets struct{}
 
 func (noopSkillToolsets) Close(context.Context, string) error { return nil }
 
+// skillNetwork adapts skill.Installer to toolset.SkillNetwork: the hosts a
+// skill's manifest declared under permissions.network, read fresh on every
+// call rather than cached at install, so a skill update that narrows its
+// network permissions takes effect on the very next toolsets_call.
+type skillNetwork struct{ svc *skill.Installer }
+
+func (n skillNetwork) NetworkHosts(ctx context.Context, skillID string) ([]string, error) {
+	s, err := n.svc.Get(ctx, skillID)
+	if err != nil {
+		return nil, err
+	}
+	return s.Permissions.Network, nil
+}
+
 // goalTasksAdapter is the goal.Tasks a Goal's Delete needs: clearing the Goal
 // field off every task that referenced it, without touching the tasks
 // themselves. task.Service already has everything this takes — List already

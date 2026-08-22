@@ -8,6 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/OWNER/aos/internal/adapters/netguard"
 	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/domain/toolset"
@@ -44,9 +45,13 @@ func (h *streamableHTTP) Connect(ctx context.Context, ts toolset.Toolset) error 
 		Version: build.Current().Version,
 	}, nil)
 
+	// netguard.Transport enforces the installing skill's permissions.network
+	// allowlist, when Service.Call attached one to ctx, on every request this
+	// session's client ever sends — headerRoundTripper delegates to it rather
+	// than to http.DefaultTransport directly.
 	transport := &mcp.StreamableClientTransport{
 		Endpoint:   ts.BaseURL,
-		HTTPClient: &http.Client{Transport: headerRoundTripper{headers: ts.Headers}},
+		HTTPClient: &http.Client{Transport: headerRoundTripper{headers: ts.Headers, next: netguard.Transport(ctx, nil)}},
 	}
 	sess, err := client.Connect(ctx, transport, nil)
 	if err != nil {
@@ -58,9 +63,11 @@ func (h *streamableHTTP) Connect(ctx context.Context, ts toolset.Toolset) error 
 
 // headerRoundTripper adds a toolset's own headers to every request — its
 // declared Authorization or API key, never anything this daemon's process
-// otherwise carries.
+// otherwise carries — then hands the request to next, which is where a
+// permissions.network allowlist, when one applies, is enforced.
 type headerRoundTripper struct {
 	headers map[string]string
+	next    http.RoundTripper
 }
 
 func (h headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -68,7 +75,11 @@ func (h headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	for k, v := range h.headers {
 		req.Header.Set(k, v)
 	}
-	return http.DefaultTransport.RoundTrip(req)
+	next := h.next
+	if next == nil {
+		next = http.DefaultTransport
+	}
+	return next.RoundTrip(req)
 }
 
 // session is the transport-independent half of an mcpclient adapter: once

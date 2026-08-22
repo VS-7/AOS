@@ -115,3 +115,45 @@ func TestHTTPHeadersReachTheServer(t *testing.T) {
 		t.Fatalf("Authorization seen by the server = %q, want %q", gotAuth, "Bearer test-token")
 	}
 }
+
+// TestHTTPConnectNeverReachesAHostOutsideTheAttachedAllowlist proves the
+// guard toolset.Service.Call attaches to ctx (see toolset.WithAllowedHosts)
+// is actually wired into this adapter's client — headerRoundTripper's next
+// — not only unit-tested in isolation. Like TestHTTPHeadersReachTheServer,
+// it does not need Connect to succeed against a server that speaks no MCP;
+// the request never arriving at all is the assertion.
+func TestHTTPConnectNeverReachesAHostOutsideTheAttachedAllowlist(t *testing.T) {
+	reached := false
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		w.WriteHeader(http.StatusNotImplemented)
+	}))
+	defer fake.Close()
+
+	a := mcpclient.NewHTTP()
+	restricted := toolset.WithAllowedHosts(context.Background(), []string{"some-other-host.example.com"})
+	_ = a.Connect(restricted, testHTTPToolset(fake.URL))
+	_ = a.Close()
+
+	if reached {
+		t.Fatal("a request reached a host outside the attached allowlist")
+	}
+}
+
+func TestHTTPConnectReachesAHostInTheAttachedAllowlist(t *testing.T) {
+	reached := false
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		w.WriteHeader(http.StatusNotImplemented)
+	}))
+	defer fake.Close()
+
+	a := mcpclient.NewHTTP()
+	restricted := toolset.WithAllowedHosts(context.Background(), []string{"127.0.0.1"})
+	_ = a.Connect(restricted, testHTTPToolset(fake.URL))
+	_ = a.Close()
+
+	if !reached {
+		t.Fatal("a request to a host the allowlist actually declares never arrived")
+	}
+}

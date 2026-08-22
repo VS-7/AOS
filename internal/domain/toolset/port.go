@@ -89,3 +89,13 @@ type Activities interface {
 
 // Clock is the only source of time in this package.
 type Clock interface{ Now() time.Time }
+
+// SkillNetwork resolves the hosts a skill's manifest declared under
+// permissions.network — Call's source of truth for the allowlist a rest-api
+// or mcp-server::http toolset that skill installed is held to at every call,
+// not only at install. Nil is a valid Deps value for a build with no
+// skill.Service wired at all; Call refuses such a toolset's calls outright
+// rather than running them unguarded — see errNetworkGuardUnavailable.
+type SkillNetwork interface {
+	NetworkHosts(ctx context.Context, skillID string) ([]string, error)
+}

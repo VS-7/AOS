@@ -18,6 +18,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 
+	"github.com/OWNER/aos/internal/adapters/netguard"
 	"github.com/OWNER/aos/internal/domain/toolset"
 )
 
@@ -68,7 +69,11 @@ func (a *Adapter) Connect(ctx context.Context, ts toolset.Toolset) error {
 		return fmt.Errorf("rest-api toolset %q: baseUrl is not a valid URL: %w", ts.ID, err)
 	}
 
-	client := &http.Client{}
+	// netguard.Transport enforces the installing skill's permissions.network
+	// allowlist, when Service.Call attached one to ctx — on this fetch and on
+	// every subsequent Call this client makes, including a request an
+	// OpenAPI document's own servers[] points somewhere other than BaseURL.
+	client := &http.Client{Transport: netguard.Transport(ctx, nil)}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.BaseURL, nil)
 	if err != nil {
 		return fmt.Errorf("rest-api toolset %q: building the request for its OpenAPI document: %w", ts.ID, err)

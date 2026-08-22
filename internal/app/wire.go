@@ -482,27 +482,6 @@ func New(opts Options) (*App, error) {
 		Commands:    registryCommands{reg: reg},
 		Clock:       clock,
 	})
-	toolsetSvc := toolset.NewService(toolset.Deps{
-		Repo: repos.toolsets,
-		Adapters: toolset.Adapters{
-			// custom decodes and lists but refuses Call as not yet available
-			// — see toolset.Service.Call and toolset.Adapters' own doc: it
-			// has no single adapter to write by definition. cli's own
-			// adapter, cliclient, additionally requires the calling agent's
-			// sandbox on ctx — internal/runtime/session attaches it once per
-			// turn via internal/runtime/execguard, which is why a cli
-			// toolset called any other way refuses rather than running
-			// unguarded.
-			toolset.MCPStdio: mcpclient.NewStdio,
-			toolset.MCPHTTP:  mcpclient.NewHTTP,
-			toolset.RESTAPI:  openapiclient.New,
-			toolset.CLI:      cliclient.New,
-		},
-		Activities: activitySvc,
-		Env:        resolver,
-		Clock:      clock,
-		Log:        logger,
-	})
 	// hooksAdapter turns a skill's declared hooks into live handlers on
 	// hookBus — see internal/adapters/skillhooks. It is built here, before
 	// skillInstaller, so the same instance is both the Hooks port below and
@@ -525,6 +504,33 @@ func New(opts Options) (*App, error) {
 	// hooksAdapter's own bookkeeping — see reconcileHooks' own doc comment
 	// for why this cannot wait.
 	reconcileHooks(context.Background(), skillInstaller, hooksAdapter, skillfetch.New(), root, logger)
+
+	// Built after skillInstaller, not before: Network needs it to resolve a
+	// skill's permissions.network at every rest-api/mcp-server::http call,
+	// not only at install (see toolset's own "Estado atual" note on why the
+	// install-time check alone was not enough).
+	toolsetSvc := toolset.NewService(toolset.Deps{
+		Repo: repos.toolsets,
+		Adapters: toolset.Adapters{
+			// custom decodes and lists but refuses Call as not yet available
+			// — see toolset.Service.Call and toolset.Adapters' own doc: it
+			// has no single adapter to write by definition. cli's own
+			// adapter, cliclient, additionally requires the calling agent's
+			// sandbox on ctx — internal/runtime/session attaches it once per
+			// turn via internal/runtime/execguard, which is why a cli
+			// toolset called any other way refuses rather than running
+			// unguarded.
+			toolset.MCPStdio: mcpclient.NewStdio,
+			toolset.MCPHTTP:  mcpclient.NewHTTP,
+			toolset.RESTAPI:  openapiclient.New,
+			toolset.CLI:      cliclient.New,
+		},
+		Activities: activitySvc,
+		Env:        resolver,
+		Network:    skillNetwork{svc: skillInstaller},
+		Clock:      clock,
+		Log:        logger,
+	})
 
 	// The eight domains Phase 8 declared alongside the ecosystem core — see
 	// the App field's own comment. Built here, after skillInstaller and

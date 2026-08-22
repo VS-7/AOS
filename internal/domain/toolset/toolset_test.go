@@ -351,6 +351,113 @@ func TestDeleteIsIdempotentAndThenNotFound(t *testing.T) {
 	}
 }
 
+// --- the runtime network allowlist -------------------------------------------
+//
+// netguard_test.go proves GuardedTransport itself; these prove Call decides
+// correctly *whether* to attach a restriction at all, and fails closed
+// rather than open when it cannot find out.
+
+// fakeSkillNetwork answers NetworkHosts from a fixed map, or fails every
+// lookup when told to.
+type fakeSkillNetwork struct {
+	hosts map[string][]string
+	fail  error
+}
+
+func (f fakeSkillNetwork) NetworkHosts(_ context.Context, skillID string) ([]string, error) {
+	if f.fail != nil {
+		return nil, f.fail
+	}
+	return f.hosts[skillID], nil
+}
+
+func TestCallOnASkillOwnedRESTAPIToolsetRefusesWithNoNetworkGuardWired(t *testing.T) {
+	ts := toolset.Toolset{ID: "gh", Skill: "github-tools", Type: toolset.RESTAPI, Status: toolset.StatusEnabled, BaseURL: "https://api.example.com/openapi.json"}
+	svc := newService(t, withToolset(ts), withAdapter("gh", okAdapter{})) // no withNetwork: Deps.Network stays nil
+
+	_, err := svc.Call(ctx(), toolset.CallInput{ID: "gh", Tool: "x"})
+	if code := codeOf(t, err); code != "AOS_TOOLSET_NETWORK_GUARD_UNAVAILABLE" {
+		t.Fatalf("code = %q, want AOS_TOOLSET_NETWORK_GUARD_UNAVAILABLE", code)
+	}
+}
+
+func TestCallOnASkillOwnedMCPHTTPToolsetRefusesWithNoNetworkGuardWired(t *testing.T) {
+	ts := toolset.Toolset{ID: "gh", Skill: "github-tools", Type: toolset.MCPHTTP, Status: toolset.StatusEnabled, BaseURL: "https://mcp.example.com"}
+	svc := newService(t, withToolset(ts), withAdapter("gh", okAdapter{}))
+
+	_, err := svc.Call(ctx(), toolset.CallInput{ID: "gh", Tool: "x"})
+	if code := codeOf(t, err); code != "AOS_TOOLSET_NETWORK_GUARD_UNAVAILABLE" {
+		t.Fatalf("code = %q, want AOS_TOOLSET_NETWORK_GUARD_UNAVAILABLE", code)
+	}
+}
+
+// TestCallOnAHumanConfiguredRESTAPIToolsetNeedsNoNetworkGuard: a toolset
+// with no Skill carries no manifest and so no permissions.network promise to
+// enforce — the same "unrestricted" rule UpdateConfig's own lock already
+// applies to Command and BaseURL.
+func TestCallOnAHumanConfiguredRESTAPIToolsetNeedsNoNetworkGuard(t *testing.T) {
+	ts := toolset.Toolset{ID: "gh", Type: toolset.RESTAPI, Status: toolset.StatusEnabled, BaseURL: "https://api.example.com/openapi.json"}
+	svc := newService(t, withToolset(ts), withAdapter("gh", okAdapter{})) // still no withNetwork
+
+	if _, err := svc.Call(ctx(), toolset.CallInput{ID: "gh", Tool: "x"}); err != nil {
+		t.Fatalf("a toolset with no Skill must not need a network guard: %v", err)
+	}
+}
+
+// TestCallOnASkillOwnedCLIToolsetNeedsNoNetworkGuard: the allowlist only
+// applies to the two types that reach the network at all.
+func TestCallOnASkillOwnedCLIToolsetNeedsNoNetworkGuard(t *testing.T) {
+	ts := toolset.Toolset{ID: "vault", Skill: "lockbox", Type: toolset.CLI, Status: toolset.StatusEnabled, Command: "true"}
+	svc := newService(t, withToolset(ts), withAdapter("vault", okAdapter{}))
+
+	if _, err := svc.Call(ctx(), toolset.CallInput{ID: "vault", Tool: "run"}); err != nil {
+		t.Fatalf("a cli toolset must not need the network guard: %v", err)
+	}
+}
+
+func TestCallFailsClosedWhenTheNetworkLookupErrors(t *testing.T) {
+	ts := toolset.Toolset{ID: "gh", Skill: "github-tools", Type: toolset.RESTAPI, Status: toolset.StatusEnabled, BaseURL: "https://api.example.com/openapi.json"}
+	svc := newService(t, withToolset(ts), withAdapter("gh", okAdapter{}),
+		withNetwork(fakeSkillNetwork{fail: errors.New("skill repository is down")}))
+
+	_, err := svc.Call(ctx(), toolset.CallInput{ID: "gh", Tool: "x"})
+	if code := codeOf(t, err); code != "AOS_TOOLSET_NETWORK_LOOKUP_FAILED" {
+		t.Fatalf("code = %q, want AOS_TOOLSET_NETWORK_LOOKUP_FAILED", code)
+	}
+}
+
+// probeAdapter records whether the allowlist GuardedTransport would enforce
+// was actually attached to the ctx Call passed to Connect — proving Call
+// wires the two together, not just that it resolves the hosts.
+type probeAdapter struct {
+	gotHosts      []string
+	gotRestricted bool
+}
+
+func (p *probeAdapter) Connect(ctx context.Context, _ toolset.Toolset) error {
+	p.gotHosts, p.gotRestricted = toolset.AllowedHostsFrom(ctx)
+	return nil
+}
+func (p *probeAdapter) ListTools(context.Context) ([]toolset.ToolSpec, error) { return nil, nil }
+func (p *probeAdapter) Call(context.Context, string, json.RawMessage) (json.RawMessage, error) {
+	return json.RawMessage(`{}`), nil
+}
+func (p *probeAdapter) Close() error { return nil }
+
+func TestCallAttachesTheSkillsDeclaredHostsToTheAdaptersContext(t *testing.T) {
+	probe := &probeAdapter{}
+	ts := toolset.Toolset{ID: "gh", Skill: "github-tools", Type: toolset.RESTAPI, Status: toolset.StatusEnabled, BaseURL: "https://api.example.com/openapi.json"}
+	svc := newService(t, withToolset(ts), withAdapter("gh", probe),
+		withNetwork(fakeSkillNetwork{hosts: map[string][]string{"github-tools": {"api.example.com"}}}))
+
+	if _, err := svc.Call(ctx(), toolset.CallInput{ID: "gh", Tool: "x"}); err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	if !probe.gotRestricted || len(probe.gotHosts) != 1 || probe.gotHosts[0] != "api.example.com" {
+		t.Fatalf("adapter saw hosts = %v, restricted = %v", probe.gotHosts, probe.gotRestricted)
+	}
+}
+
 // --- the remaining branches: validation, wrapped repository failures --------
 
 func TestTypeAndStatusValid(t *testing.T) {
@@ -611,6 +718,7 @@ type serviceBuild struct {
 	adapterIDs map[string]toolset.Adapter
 	activities *fakeActivities
 	env        toolset.EnvResolver
+	network    toolset.SkillNetwork
 }
 
 type serviceOption func(*serviceBuild)
@@ -635,6 +743,10 @@ func withActivities(acts *fakeActivities) serviceOption {
 
 func withEnv(e toolset.EnvResolver) serviceOption {
 	return func(b *serviceBuild) { b.env = e }
+}
+
+func withNetwork(n toolset.SkillNetwork) serviceOption {
+	return func(b *serviceBuild) { b.network = n }
 }
 
 func defaultToolsets() map[string]toolset.Toolset {
@@ -686,6 +798,7 @@ func newService(t *testing.T, opts ...serviceOption) *toolset.Service {
 		Adapters:   adapters,
 		Activities: acts,
 		Env:        envResolver,
+		Network:    b.network,
 		Clock:      &fixedClock{at: time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)},
 	})
 }
