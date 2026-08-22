@@ -14,6 +14,26 @@ origem: "[[Instruction]]"
 
 Regras comportamentais **duráveis e de escopo workspace**, que moldam TODOS os agentes.
 
+## Estado atual
+
+CRUD completo, `Applicable` por globs, e bloco no prompt com `trust="trusted"`
+já estavam prontos (este último ganhou dados reais só quando o inventário do
+[[Prompt Assembly]] passou a ler `instructions`, junto com as outras oito
+categorias). A aprovação por agente (`instructions_create` e
+`instructions_update`) **não** estava — o comentário original em
+`CreateInput` afirmava que "o caminho genérico de PreToolUse (ADR-0007) trata
+uma mutação sem anotação como RiskMedium e roteia por um humano quando quem
+chama é um agente", mas nada no sistema converte `RiskMedium` num `ask`
+automaticamente: `agentloop.EventHooks.ApproveTool` só alcança um humano
+quando um hook de `PreToolUse` devolve `PermissionAsk` explicitamente, e
+nenhum hook faz essa conversão por padrão. `Service.requestApprovalIfAgent`
+fecha isso com uma chamada própria — a mesma forma que a aprovação de
+instalação de `skill.Installer` já tem — condicionada a
+`identity.IsAgent(ctx)`: um humano chamando `instructions_create` direto
+nunca é interrompido, um agente sempre é. Construir a conversão genérica de
+risco em `ask` ficaria maior que este domínio — mudaria o que toda mutação
+sem anotação no registry faz — e por isso não foi feito aqui.
+
 ## Comportamento do original
 
 A distinção com [[Memory (Go)]] é o ponto central, e o prompt-mestre a martela ([[Instruction]]):
@@ -93,7 +113,7 @@ O conteúdo é buscado sob demanda, como todo o resto ([[Prompt Assembly]]).
 
 ## Critério de pronto
 
-- [ ] CRUD completo
-- [ ] `Applicable` por globs funcionando
-- [ ] Bloco no prompt com autoridade máxima
-- [ ] Criação por agente sob aprovação
+- [x] CRUD completo — `TestRoundTripCreateGetUpdateDelete`
+- [x] `Applicable` por globs funcionando — `TestApplicableMatchesGlobPaths`
+- [x] Bloco no prompt com autoridade máxima — `TestTheAssembledPromptCarriesEveryInventoryCategory` (`internal/app`)
+- [x] Criação por agente sob aprovação — `TestCreateByAnAgentRequestsApprovalAndSucceedsWhenApproved`, `TestCreateByAnAgentDeniedIsRefusedAndWritesNothing`, `TestCreateByAHumanNeverAsksAnybody`

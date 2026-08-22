@@ -40,6 +40,22 @@ func errAlreadyExists(id string) error {
 		})
 }
 
+// errNotApproved fires when Create or Update is called by an agent and a
+// human either refused, or nothing was there to ask — a timeout is a
+// denial, never an approval (event.Broker's own invariant), so this is the
+// one path out of a missing "yes".
+func errNotApproved(op, id, reason string) error {
+	return apperr.New("INSTRUCTION_NOT_APPROVED").
+		Causer("instruction.Service."+op).
+		Msgf("%s of instruction %q was not approved: %s", op, id, reason).
+		Issue("id", id).
+		Issue("reason", reason).
+		Status(apperr.StatusForbidden).
+		CTA(apperr.CallToAction{
+			Label: "a human must approve a workspace-wide instruction change before it is written; retry once approved",
+		})
+}
+
 // errReadFailed wraps a repository failure that is not "not found".
 func errReadFailed(op string, cause error) error {
 	return apperr.New("INSTRUCTION_READ_FAILED").

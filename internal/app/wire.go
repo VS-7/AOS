@@ -539,7 +539,7 @@ func New(opts Options) (*App, error) {
 		Log:    logger,
 	})
 	instructionSvc := instruction.NewService(instruction.Deps{
-		Repo: repos.instructions, Clock: clock,
+		Repo: repos.instructions, Clock: clock, Approver: broker,
 	})
 	templateSvc := template.NewService(template.Deps{
 		Repo:   repos.templates,

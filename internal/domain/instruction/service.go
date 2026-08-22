@@ -2,32 +2,80 @@ package instruction
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
 
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/command"
+	"github.com/OWNER/aos/internal/core/identity"
 	"github.com/OWNER/aos/internal/core/slug"
+	"github.com/OWNER/aos/internal/domain/event"
 )
 
 // Service is the instruction aggregate: CRUD over Repository, plus Applicable
 // — the query the prompt assembler runs to decide which instructions belong
 // in the trusted block of a given turn.
 type Service struct {
-	repo  Repository
-	clock Clock
+	repo     Repository
+	clock    Clock
+	approver event.Approver
 }
 
 // Deps is what the service is built from.
 type Deps struct {
 	Repo  Repository
 	Clock Clock
+
+	// Approver is who Create and Update ask before writing anything, when
+	// the caller is an agent — see requestApprovalIfAgent's own doc comment.
+	Approver event.Approver
 }
 
 // NewService wires the service over its ports.
 func NewService(d Deps) *Service {
-	return &Service{repo: d.Repo, clock: d.Clock}
+	return &Service{repo: d.Repo, clock: d.Clock, approver: d.Approver}
+}
+
+// requestApprovalIfAgent gates a workspace-wide policy change behind a
+// human's real-time approval, when the caller is an agent — never when a
+// human calls Create or Update directly, which is already that human's own
+// decision and needs nobody else's.
+//
+// This is a bespoke call, the same shape skill.Installer's own install
+// approval already is, and for the same reason: nothing in this system
+// today turns a plain RiskMedium classification into an actual "ask" on its
+// own. agentloop.EventHooks.ApproveTool only reaches a human when a
+// PreToolUse hook explicitly returns PermissionAsk, and no hook that
+// converts risk into ask is registered by default — Risk is informational,
+// read only once a hook has already decided to ask, to label how serious
+// the pending request is. A prior version of this comment claimed the
+// generic path already handled this; it does not, and instructions_create
+// and instructions_update are consequential enough — workspace-wide policy,
+// per ADR-0007's own "consultive" classification — not to wait for a
+// system-wide mechanism that would change what every other unannotated
+// mutation in the registry does, a decision this package has no business
+// making on its own.
+func (s *Service) requestApprovalIfAgent(ctx context.Context, op, id, reason string) error {
+	if !identity.IsAgent(ctx) {
+		return nil
+	}
+	if s.approver == nil {
+		return errNotApproved(op, id, "no approval channel is available in this run mode")
+	}
+	res, err := s.approver.RequestApproval(ctx, event.ApprovalRequest{
+		ToolName: "instructions_" + strings.ToLower(op),
+		Risk:     event.RiskMedium,
+		Reason:   reason,
+	})
+	if err != nil {
+		return errNotApproved(op, id, "the approval channel failed: "+err.Error())
+	}
+	if !res.Approved {
+		return errNotApproved(op, id, res.Reason)
+	}
+	return nil
 }
 
 // ListInput selects the instructions List returns. Skill, given, narrows to
@@ -111,12 +159,10 @@ func (s *Service) get(ctx context.Context, id string) (*Instruction, error) {
 // derived from Name the way the original derives its own slug — see Create.
 //
 // Creating an instruction is a workspace-wide policy change, not a private
-// one, so instructions_create carries no ReadOnlyHint — the generic
-// PreToolUse approval path (ADR-0007) treats an unannotated mutation as
-// RiskMedium and routes it through a human when the caller is an agent,
-// exactly the "consultive" classification the design doc calls for. Nothing
-// in this package requests approval itself; that would duplicate a
-// cross-cutting mechanism this system already has one of.
+// one — exactly the "consultive" classification the design doc calls for
+// (ADR-0007) — so an agent calling Create needs a human's real-time
+// approval first; see requestApprovalIfAgent's own doc comment for why that
+// check lives in this package rather than in a generic hook.
 type CreateInput struct {
 	ID          string   `json:"id,omitempty" jsonschema:"Identifier for the instruction. Derived from Name when omitted."`
 	Name        string   `json:"name" jsonschema:"Human name of the instruction. Example: \"Feature Protocol\"." validate:"required,notblank"`
@@ -147,6 +193,11 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Instruction, err
 
 	if _, err := s.get(ctx, id); err == nil {
 		return nil, errAlreadyExists(id)
+	}
+
+	reason := fmt.Sprintf("declare the workspace-wide instruction %q, which shapes every agent's behavior", name)
+	if err := s.requestApprovalIfAgent(ctx, "Create", id, reason); err != nil {
+		return nil, err
 	}
 
 	now := s.clock.Now()
@@ -184,8 +235,9 @@ type UpdateInput struct {
 	command.Reasoning
 }
 
-// Update changes the describable parts of an instruction. See CreateInput's
-// own doc for why this, like Create, requests no approval itself.
+// Update changes the describable parts of an instruction. Like Create, it
+// asks a human before writing when the caller is an agent — see
+// requestApprovalIfAgent's own doc comment.
 func (s *Service) Update(ctx context.Context, in UpdateInput) (*Instruction, error) {
 	id := strings.TrimSpace(in.ID)
 	current, err := s.get(ctx, id)
@@ -212,6 +264,11 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Instruction, err
 		current.Active = *in.Active
 	}
 	current.UpdatedAt = s.clock.Now()
+
+	reason := fmt.Sprintf("change the workspace-wide instruction %q, which shapes every agent's behavior", id)
+	if err := s.requestApprovalIfAgent(ctx, "Update", id, reason); err != nil {
+		return nil, err
+	}
 
 	toWrite := current.Clone()
 	if err := s.repo.Update(ctx, &toWrite, collections.Version{}); err != nil {

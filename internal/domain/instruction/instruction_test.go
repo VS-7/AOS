@@ -13,6 +13,8 @@ import (
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/collections"
+	"github.com/OWNER/aos/internal/core/identity"
+	"github.com/OWNER/aos/internal/domain/event"
 	"github.com/OWNER/aos/internal/domain/instruction"
 )
 
@@ -383,5 +385,158 @@ func TestUpdateChangesEveryOptionalField(t *testing.T) {
 	}
 	if len(updated.Paths) != 1 || updated.Paths[0] != "internal/**/*.go" {
 		t.Fatalf("Paths = %v", updated.Paths)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Approval: Create and Update are a workspace-wide policy change, so an
+// agent calling either needs a human's real-time approval first — never a
+// human calling directly, which is already that human's own decision.
+// ---------------------------------------------------------------------------
+
+// fakeApprover is event.Approver in memory, recording every request it was
+// asked to decide.
+type fakeApprover struct {
+	approved bool
+	reason   string
+	err      error
+	calls    []event.ApprovalRequest
+}
+
+func (f *fakeApprover) RequestApproval(_ context.Context, req event.ApprovalRequest) (event.ApprovalResult, error) {
+	f.calls = append(f.calls, req)
+	if f.err != nil {
+		return event.ApprovalResult{}, f.err
+	}
+	return event.ApprovalResult{Approved: f.approved, Reason: f.reason}, nil
+}
+
+func newServiceWithApprover(a event.Approver) *instruction.Service {
+	return instruction.NewService(instruction.Deps{
+		Repo: newFakeRepository(), Clock: clockx.Fixed{At: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+		Approver: a,
+	})
+}
+
+// agentCtx is what an agent's own turn calls this package with — the same
+// ambient identity session.Runner.Run attaches before an agent can reach
+// any tool (internal/runtime/session).
+func agentCtx() context.Context {
+	return identity.With(context.Background(), identity.Identity{AgentID: "atlas"})
+}
+
+func TestCreateByAnAgentRequestsApprovalAndSucceedsWhenApproved(t *testing.T) {
+	approver := &fakeApprover{approved: true}
+	svc := newServiceWithApprover(approver)
+
+	created, err := svc.Create(agentCtx(), instruction.CreateInput{Name: "Feature Protocol"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if created.ID != "feature-protocol" {
+		t.Fatalf("id = %q", created.ID)
+	}
+	if len(approver.calls) != 1 {
+		t.Fatalf("RequestApproval was called %d times, want 1", len(approver.calls))
+	}
+	if approver.calls[0].Risk != event.RiskMedium {
+		t.Fatalf("Risk = %q, want %q", approver.calls[0].Risk, event.RiskMedium)
+	}
+	if approver.calls[0].ToolName != "instructions_create" {
+		t.Fatalf("ToolName = %q", approver.calls[0].ToolName)
+	}
+}
+
+func TestCreateByAnAgentDeniedIsRefusedAndWritesNothing(t *testing.T) {
+	approver := &fakeApprover{approved: false, reason: "not now"}
+	svc := newServiceWithApprover(approver)
+
+	_, err := svc.Create(agentCtx(), instruction.CreateInput{Name: "Feature Protocol"})
+	var app *apperr.Error
+	if !errors.As(err, &app) || app.Code != "AOS_INSTRUCTION_NOT_APPROVED" {
+		t.Fatalf("want AOS_INSTRUCTION_NOT_APPROVED, got %v", err)
+	}
+	if _, err := svc.Get(ctx(), instruction.GetInput{ID: "feature-protocol"}); err == nil {
+		t.Fatal("a denied create still wrote the instruction")
+	}
+}
+
+func TestCreateByAHumanNeverAsksAnybody(t *testing.T) {
+	approver := &fakeApprover{approved: false} // would refuse if ever asked
+	svc := newServiceWithApprover(approver)
+
+	if _, err := svc.Create(ctx(), instruction.CreateInput{Name: "Feature Protocol"}); err != nil {
+		t.Fatalf("a human's own direct create was refused: %v", err)
+	}
+	if len(approver.calls) != 0 {
+		t.Fatalf("RequestApproval was called %d times for a human caller, want 0", len(approver.calls))
+	}
+}
+
+func TestCreateByAnAgentWithNoApprovalChannelIsRefused(t *testing.T) {
+	svc := newServiceWithApprover(nil)
+	_, err := svc.Create(agentCtx(), instruction.CreateInput{Name: "Feature Protocol"})
+	var app *apperr.Error
+	if !errors.As(err, &app) || app.Code != "AOS_INSTRUCTION_NOT_APPROVED" {
+		t.Fatalf("want AOS_INSTRUCTION_NOT_APPROVED, got %v", err)
+	}
+}
+
+func TestUpdateByAnAgentRequestsApproval(t *testing.T) {
+	approver := &fakeApprover{approved: true}
+	svc := newServiceWithApprover(approver)
+	created, err := svc.Create(ctx(), instruction.CreateInput{Name: "Feature Protocol"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	approver.calls = nil // Create as a human above must not count toward Update's own check
+
+	newDesc := "revised"
+	if _, err := svc.Update(agentCtx(), instruction.UpdateInput{ID: created.ID, Description: &newDesc}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if len(approver.calls) != 1 || approver.calls[0].ToolName != "instructions_update" {
+		t.Fatalf("calls = %+v", approver.calls)
+	}
+}
+
+func TestUpdateByAnAgentDeniedLeavesTheInstructionUnchanged(t *testing.T) {
+	approver := &fakeApprover{approved: true}
+	svc := newServiceWithApprover(approver)
+	created, err := svc.Create(ctx(), instruction.CreateInput{Name: "Feature Protocol", Description: "original"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	approver.approved = false
+
+	newDesc := "attempted change"
+	_, err = svc.Update(agentCtx(), instruction.UpdateInput{ID: created.ID, Description: &newDesc})
+	if err == nil {
+		t.Fatal("a denied update reported success")
+	}
+	again, err := svc.Get(ctx(), instruction.GetInput{ID: created.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Description != "original" {
+		t.Fatalf("Description = %q, want the denied update to leave it unchanged", again.Description)
+	}
+}
+
+// Delete carries no approval gate — deliberately: neither the design doc's
+// own decision note nor its checklist mention it, only create and update.
+func TestDeleteByAnAgentIsNotGated(t *testing.T) {
+	approver := &fakeApprover{approved: false} // would refuse if ever asked
+	svc := newServiceWithApprover(approver)
+	created, err := svc.Create(ctx(), instruction.CreateInput{Name: "Feature Protocol"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.Delete(agentCtx(), instruction.DeleteInput{ID: created.ID}); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if len(approver.calls) != 0 {
+		t.Fatalf("RequestApproval was called %d times for Delete, want 0", len(approver.calls))
 	}
 }

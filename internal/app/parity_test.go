@@ -107,6 +107,12 @@ var excluded = map[string]string{
 		"suite, which drives the same Install with AcceptedAll set.",
 	"skills_create": "the same operation as skills_install, under the name a script or an " +
 		"agent assembling a package reaches for — same reason, same exclusion.",
+	"instructions_create": "asks a person for approval before writing, the same as " +
+		"skills_install — parityCtx sets an agent identity on every surface here, so " +
+		"every one of them would hit the same unanswered channel. Covered by the " +
+		"instruction suite's own approval tests.",
+	"instructions_update": "the same operation reaches the same approval gate — " +
+		"instructions_create's own exclusion besides.",
 	"marketplace_discovery": "the parity installation has no registry configured, so this " +
 		"could only exercise the refusal path, not a real search. Covered by the " +
 		"marketplace suite's contract tests over a fake Registry.",
@@ -658,13 +664,6 @@ var scenarios = map[string]scenario{
 		Payload: instruction.GetInput{ID: "protocol", Reasoning: reason()},
 		Seed:    seedInstruction,
 	},
-	"instructions_create": {
-		Payload: instruction.CreateInput{ID: "style-guide", Name: "Style Guide", Reasoning: reason()},
-	},
-	"instructions_update": {
-		Payload: instruction.UpdateInput{ID: "protocol", Description: ptr("Updated"), Reasoning: reason()},
-		Seed:    seedInstruction,
-	},
 	"instructions_delete": {
 		Payload: instruction.DeleteInput{ID: "protocol", Reasoning: reason()},
 		Seed:    seedInstruction,
@@ -903,9 +902,18 @@ func seedGoal(t *testing.T, a *app.App) {
 	}
 }
 
+// seedInstruction creates the record a scenario expects already there before
+// it runs — not context.Background() as an oversight, but why the seed
+// scenarios are still worth running at all: parityCtx() (Create's own
+// approval gate) is what the excluded "instructions_create" and
+// "instructions_update" scenarios cannot get past in this harness, and
+// seeding here would hit exactly the same unanswered channel for the
+// commands that do not even need it — instructions_list, instructions_get
+// and instructions_delete undergo no approval themselves. This is the
+// state, not the behaviour under test.
 func seedInstruction(t *testing.T, a *app.App) {
 	t.Helper()
-	if _, err := a.Instructions.Create(parityCtx(), instruction.CreateInput{
+	if _, err := a.Instructions.Create(context.Background(), instruction.CreateInput{
 		ID: "protocol", Name: "Protocol",
 	}); err != nil {
 		t.Fatal(err)
