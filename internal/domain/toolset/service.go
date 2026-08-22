@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/domain/activity"
@@ -77,19 +78,49 @@ func (s *Service) Get(ctx context.Context, in GetInput) (*Toolset, error) {
 
 // get is the shared lookup List, Get, Call, UpdateConfig and Delete all
 // resolve a toolset through, so a not-found toolset reads the same everywhere.
+//
+// The id-only key only ever resolves a workspace-flat toolset directly: one
+// a skill installed lives at .aos/skills/{skill}/toolsets/{id}.toolset.md,
+// and the key the repository actually stored it under also carries "skill" —
+// see Toolset.Skill's own doc for why that is a field on the entity at all.
+// List decodes every toolset regardless of which of the two it lives under,
+// so a scan over it is what a plain id still reaches one through.
 func (s *Service) get(ctx context.Context, id string) (*Toolset, error) {
 	if id == "" {
 		return nil, errNotFound(id)
 	}
 	found, err := s.repo.Get(ctx, collections.Key{"id": id})
-	if err != nil {
-		// A repository failure and a missing record are both "cannot use
-		// this toolset" from the caller's side; the repository's own logs
-		// carry the distinction if it matters later.
-		return nil, errNotFound(id)
+	if err == nil {
+		clone := found.Clone()
+		return &clone, nil
 	}
-	clone := found.Clone()
-	return &clone, nil
+	if !isNotFound(err) {
+		// A genuine repository failure, not a missing record — Delete
+		// depends on being able to tell the two apart (see its own doc), so
+		// this propagates the real error rather than collapsing it.
+		return nil, err
+	}
+	all, err := s.repo.List(ctx, collections.Query{})
+	if err != nil {
+		return nil, err
+	}
+	for i := range all {
+		if all[i].ID == id {
+			clone := all[i].Clone()
+			return &clone, nil
+		}
+	}
+	return nil, errNotFound(id)
+}
+
+// isNotFound reports whether err is specifically "no such record" rather
+// than some other repository failure — the distinction get needs to decide
+// whether a plain id-only key deserves the List-based fallback above it, and
+// Delete needs to decide whether a resolution failure means "already gone"
+// or "something is actually wrong".
+func isNotFound(err error) bool {
+	e, ok := apperr.As(err)
+	return ok && e.HTTPStatus == apperr.StatusNotFound
 }
 
 // CallInput names a tool call: which toolset, which tool, and its argument
@@ -216,11 +247,31 @@ type UpdateConfigInput struct {
 }
 
 // UpdateConfig changes the describable parts of a toolset's configuration.
+//
+// Command and BaseURL are the two fields VerifyManifest checked against the
+// installing skill's permissions.exec and permissions.network before this
+// toolset was ever written to disk (see internal/domain/skill/verify.go). A
+// toolset with a Skill refuses to change either one — see errConnectionLocked
+// — because nothing downstream re-runs that check, and a value free to drift
+// after install would make the install-time check decorative rather than
+// load-bearing. Description, Status, Args, Env and Headers carry no such
+// promise and stay freely editable; a toolset with no Skill has no manifest
+// to keep faith with and is unrestricted, exactly as before this method
+// existed.
 func (s *Service) UpdateConfig(ctx context.Context, in UpdateConfigInput) (*Toolset, error) {
 	id := strings.TrimSpace(in.ID)
 	current, err := s.get(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+
+	if current.Skill != "" {
+		if in.Command != nil && strings.TrimSpace(*in.Command) != current.Command {
+			return nil, errConnectionLocked(id, "command")
+		}
+		if in.BaseURL != nil && strings.TrimSpace(*in.BaseURL) != current.BaseURL {
+			return nil, errConnectionLocked(id, "baseUrl")
+		}
 	}
 
 	if in.Description != nil {
@@ -273,9 +324,23 @@ type DeleteOutput struct {
 // Delete removes a toolset's configuration. It is idempotent, like the
 // repository underneath it: deleting what is already gone succeeds rather
 // than erroring, so a retried delete after a dropped response is safe.
+//
+// It resolves the toolset through get first, rather than building
+// collections.Key{"id": id} directly the way Get once did — a skill-owned
+// toolset's real key also carries "skill" (see Toolset.Skill's own doc), and
+// collections.KeyOf reads that straight off the resolved value instead of
+// this method having to know it in advance.
 func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, error) {
 	id := strings.TrimSpace(in.ID)
-	if err := s.repo.Delete(ctx, collections.Key{"id": id}); err != nil {
+	current, err := s.get(ctx, id)
+	if err != nil {
+		if isNotFound(err) {
+			// Already gone — idempotent, per this method's own doc above.
+			return DeleteOutput{ID: id}, nil
+		}
+		return DeleteOutput{}, errWriteFailed("Delete", err)
+	}
+	if err := s.repo.Delete(ctx, collections.KeyOf(current)); err != nil {
 		return DeleteOutput{}, errWriteFailed("Delete", err)
 	}
 	return DeleteOutput{ID: id}, nil

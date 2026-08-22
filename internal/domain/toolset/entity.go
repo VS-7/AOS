@@ -101,9 +101,25 @@ func (s Status) Valid() bool { return s == StatusEnabled || s == StatusDisabled 
 // not by widening this struct.
 type Toolset struct {
 	// ID identifies this toolset. It lives in the path, exactly like every
-	// other native collection record:
-	// .aos/toolsets/{id}.toolset.md.
+	// other native collection record — .aos/toolsets/{id}.toolset.md, or
+	// .aos/skills/{skill}/toolsets/{id}.toolset.md for one a skill brought,
+	// see Skill — and it alone from the caller's side: toolsets_call and
+	// every method on Service address a toolset by ID only, never
+	// ID-plus-skill the way Collection and View require Skill alongside
+	// their own ID. Service.get is what makes that promise true regardless
+	// of which of the two paths a toolset actually lives under — its own
+	// comment explains why an id-only Repository.Get cannot always find one.
 	ID string `yaml:"-" json:"id" collection:"path" jsonschema:"Identifier of this toolset, used to address it in toolsets_call."`
+
+	// Skill is which skill's manifest declared this toolset, read from the
+	// path exactly like Collection.Skill and View.Skill — empty for one a
+	// human configured directly. It exists so Repository.Update and
+	// Repository.Delete resolve the correct one of the two paths ID alone
+	// does not disambiguate on its own — collections.KeyOf reads it off a
+	// decoded value the same way it reads ID — and so
+	// Service.UpdateConfig's lock (see its own comment) can tell a
+	// skill-owned toolset from one nothing promises to keep faith with.
+	Skill string `json:"skill,omitempty" collection:"path=skill" jsonschema:"The skill this toolset ships with, if any."`
 
 	Type        Type   `yaml:"type" json:"type" jsonschema:"One of: mcp-server::stdio, mcp-server::http, rest-api, cli, custom. cli and custom decode and list but are not connectable in this build."`
 	Description string `yaml:"description,omitempty" json:"description,omitempty" jsonschema:"What this toolset is for, read by whoever decides whether to call it."`

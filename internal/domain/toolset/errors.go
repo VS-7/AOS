@@ -69,6 +69,25 @@ func errNotFound(id string) error {
 		})
 }
 
+// errConnectionLocked fires when UpdateConfig is asked to change Command or
+// BaseURL on a toolset a skill's manifest declared. VerifyManifest checked
+// that value against the manifest's own permissions.exec or
+// permissions.network exactly once, at install — allowing either field to
+// drift afterward would make that check provable and false in the same
+// breath: a manifest that says "reaches only api.example.com" while the
+// toolset it declared quietly now reaches something else.
+func errConnectionLocked(id, field string) error {
+	return apperr.New("TOOLSET_CONNECTION_LOCKED").
+		Causer("toolset.Service.UpdateConfig").
+		Msgf("toolset %q was installed by a skill; its %s cannot be changed without reinstalling that skill", id, field).
+		Issue("id", id).
+		Issue("field", field).
+		Status(apperr.StatusForbidden).
+		CTA(apperr.CallToAction{
+			Label: "install a new version of the skill that declares the value you need",
+		})
+}
+
 // errDisabled fires when Call targets a toolset whose Status is
 // StatusDisabled. Disabling keeps the configuration — deleting a misbehaving
 // toolset would lose work someone spent time getting right — while refusing

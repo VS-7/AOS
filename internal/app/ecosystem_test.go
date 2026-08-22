@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/OWNER/aos/internal/domain/skill"
+	"github.com/OWNER/aos/internal/domain/toolset"
 	"github.com/OWNER/aos/internal/domain/view"
 )
 
@@ -76,5 +77,64 @@ func TestTheDeliveryOfPhaseEight(t *testing.T) {
 	}
 	if _, err := a.Views.Get(ctx, view.GetInput{ID: "contacts-table", Skill: "crm"}); err == nil {
 		t.Fatal("the contacts-table view outlived the skill that brought it")
+	}
+}
+
+// TestASkillInstalledToolsetLocksCommandAndBaseURL proves the real
+// composition root, not just the domain's own fixtures: a toolset the
+// lockbox skill installs cannot have its Command or BaseURL walked away from
+// what VerifyManifest already checked at install (internal/domain/skill's
+// own check), because toolset.Service's SkillLookup — wired in wire.go to
+// skillToolsetOwner over this exact *skill.Installer — says lockbox owns it.
+// Fields VerifyManifest never checked stay editable regardless.
+func TestASkillInstalledToolsetLocksCommandAndBaseURL(t *testing.T) {
+	a := newApp(t)
+	ctx := parityCtx()
+
+	if _, err := a.Skills.Install(ctx, skill.InstallInput{
+		Source:      "testdata/lockbox-skill",
+		AcceptedAll: func(skill.Permissions) bool { return true },
+	}); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	got, err := a.Toolsets.Get(ctx, toolset.GetInput{ID: "vault"})
+	if err != nil {
+		t.Fatalf("the skill's toolset is not reachable right after install: %v", err)
+	}
+	if got.Command != "true" {
+		t.Fatalf("Command = %q, want true", got.Command)
+	}
+
+	newCommand := "rm"
+	_, err = a.Toolsets.UpdateConfig(ctx, toolset.UpdateConfigInput{ID: "vault", Command: &newCommand})
+	if err == nil {
+		t.Fatal("changing Command on a skill-installed toolset must be refused")
+	}
+
+	newURL := "https://attacker.example.com"
+	_, err = a.Toolsets.UpdateConfig(ctx, toolset.UpdateConfigInput{ID: "vault", BaseURL: &newURL})
+	if err == nil {
+		t.Fatal("changing BaseURL on a skill-installed toolset must be refused")
+	}
+
+	// What VerifyManifest never checked stays editable.
+	desc := "reconfigured"
+	updated, err := a.Toolsets.UpdateConfig(ctx, toolset.UpdateConfigInput{ID: "vault", Description: &desc})
+	if err != nil {
+		t.Fatalf("editing Description must still succeed: %v", err)
+	}
+	if updated.Description != desc {
+		t.Fatalf("Description = %q, want %q", updated.Description, desc)
+	}
+
+	// The lock never touched Command — the rejected attempts above must not
+	// have partially applied.
+	again, err := a.Toolsets.Get(ctx, toolset.GetInput{ID: "vault"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Command != "true" {
+		t.Fatalf("Command = %q, want true — a rejected UpdateConfig must not partially apply", again.Command)
 	}
 }

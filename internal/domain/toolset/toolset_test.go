@@ -238,6 +238,103 @@ func TestUpdateConfigReplacesFieldsWholesaleAndPersists(t *testing.T) {
 	}
 }
 
+// --- the install-time check staying true after install ---------------------
+
+// TestUpdateConfigLocksCommandAndBaseURLForASkillOwnedToolset is the defect
+// this locks shut: VerifyManifest checks a skill-declared toolset's Command
+// against permissions.exec and its BaseURL against permissions.network
+// exactly once, at install (internal/domain/skill/verify.go). Before this,
+// nothing stopped UpdateConfig from repointing either afterward — a toolset
+// that passed the check at api.example.com could be walked to any host, or
+// any binary, with the install-time promise never re-verified against it.
+func TestUpdateConfigLocksCommandAndBaseURLForASkillOwnedToolset(t *testing.T) {
+	svc := newService(t, withToolset(toolset.Toolset{
+		ID: "gh", Skill: "github-tools", Type: toolset.MCPStdio, Status: toolset.StatusEnabled,
+		Command: "gh-mcp-server",
+	}))
+
+	newCommand := "curl"
+	_, err := svc.UpdateConfig(ctx(), toolset.UpdateConfigInput{ID: "gh", Command: &newCommand})
+	if code := codeOf(t, err); code != "AOS_TOOLSET_CONNECTION_LOCKED" {
+		t.Fatalf("changing Command: code = %q", code)
+	}
+
+	newURL := "https://attacker.example.com"
+	_, err = svc.UpdateConfig(ctx(), toolset.UpdateConfigInput{ID: "gh", BaseURL: &newURL})
+	if code := codeOf(t, err); code != "AOS_TOOLSET_CONNECTION_LOCKED" {
+		t.Fatalf("changing BaseURL: code = %q", code)
+	}
+
+	// The toolset must be exactly as it was — a rejected UpdateConfig must
+	// not have partially applied.
+	again, err := svc.Get(ctx(), toolset.GetInput{ID: "gh"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Command != "gh-mcp-server" {
+		t.Fatalf("Command changed despite the rejection: %q", again.Command)
+	}
+}
+
+// TestUpdateConfigStillFreelyEditsWhatVerifyManifestNeverChecked proves the
+// lock is exactly Command and BaseURL, not a blanket freeze of a skill-owned
+// toolset: Description, Status and Env carry no install-time promise and stay
+// editable.
+func TestUpdateConfigStillFreelyEditsWhatVerifyManifestNeverChecked(t *testing.T) {
+	svc := newService(t, withToolset(toolset.Toolset{
+		ID: "gh", Skill: "github-tools", Type: toolset.MCPStdio, Status: toolset.StatusEnabled,
+		Command: "gh-mcp-server",
+	}))
+
+	disabled := toolset.StatusDisabled
+	desc := "reconfigured description"
+	updated, err := svc.UpdateConfig(ctx(), toolset.UpdateConfigInput{
+		ID: "gh", Status: &disabled, Description: &desc, Env: map[string]string{"A": "1"},
+	})
+	if err != nil {
+		t.Fatalf("editing fields VerifyManifest never checked: %v", err)
+	}
+	if updated.Status != toolset.StatusDisabled || updated.Description != desc || updated.Env["A"] != "1" {
+		t.Fatalf("update did not apply: %+v", updated)
+	}
+}
+
+// TestUpdateConfigAllowsSettingCommandOrBaseURLToTheirCurrentValue proves the
+// lock compares values, not presence: a caller resending the same Command
+// alongside an unrelated field it does want to change is not refused for a
+// field it never actually changed.
+func TestUpdateConfigAllowsSettingCommandOrBaseURLToTheirCurrentValue(t *testing.T) {
+	svc := newService(t, withToolset(toolset.Toolset{
+		ID: "gh", Skill: "github-tools", Type: toolset.MCPStdio, Status: toolset.StatusEnabled,
+		Command: "gh-mcp-server",
+	}))
+
+	sameCommand := "gh-mcp-server"
+	if _, err := svc.UpdateConfig(ctx(), toolset.UpdateConfigInput{ID: "gh", Command: &sameCommand}); err != nil {
+		t.Fatalf("resending the unchanged Command was refused: %v", err)
+	}
+}
+
+// TestUpdateConfigLeavesAToolsetWithNoSkillUnrestricted proves the lock is
+// conditioned on Skill: a toolset a human configured directly makes no
+// manifest promise for UpdateConfig to keep, and behaves exactly as before
+// this lock existed.
+func TestUpdateConfigLeavesAToolsetWithNoSkillUnrestricted(t *testing.T) {
+	svc := newService(t, withToolset(toolset.Toolset{
+		ID: "gh", Type: toolset.MCPStdio, Status: toolset.StatusEnabled,
+		Command: "gh-mcp-server",
+	}))
+
+	newCommand := "curl"
+	updated, err := svc.UpdateConfig(ctx(), toolset.UpdateConfigInput{ID: "gh", Command: &newCommand})
+	if err != nil {
+		t.Fatalf("a toolset with no Skill must stay unrestricted: %v", err)
+	}
+	if updated.Command != "curl" {
+		t.Fatalf("Command = %q, want curl", updated.Command)
+	}
+}
+
 func TestDeleteIsIdempotentAndThenNotFound(t *testing.T) {
 	svc := newService(t, withToolset(toolset.Toolset{ID: "gh", Type: toolset.MCPStdio}))
 
