@@ -49,6 +49,14 @@ type Models interface {
 	For(ctx context.Context, a *agent.Agent) (agentloop.LLMProvider, agentloop.ModelRef, error)
 }
 
+// Bots pushes a turn's answer back out to the external channel its
+// conversation is bound to. Nil means this build has no channel provider
+// wired at all — legitimate, not a Deliver call skipped by accident; see
+// deliverToChannel's own doc comment.
+type Bots interface {
+	Deliver(ctx context.Context, provider, agentID, chatID, text string) error
+}
+
 // Deps is what the runner is built from.
 type Deps struct {
 	Agents   Agents
@@ -60,6 +68,7 @@ type Deps struct {
 	Prompt   *prompt.Assembler
 	Spiller  *toolexec.Spiller
 	Events   Publisher
+	Bots     Bots
 	Clock    clockx.Clock
 	IDs      interface{ New() string }
 	Log      *slog.Logger
@@ -242,8 +251,34 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (*agentloop.Result, erro
 	if r.deps.Events != nil {
 		r.deps.Events.ChatDone(ctx, r.deps.WorkspaceID, conversation.ID, usageOf(result.Usage))
 	}
+	r.deliverToChannel(ctx, conversation, worker.ID, result)
 	r.observe(ctx, worker, conversation.ID, state)
 	return result, nil
+}
+
+// deliverToChannel pushes a turn's answer back out to the external channel
+// its conversation is bound to, when it has one — the Telegram side of a
+// conversation a person can otherwise only see get answered from the
+// desktop app. r.deps.Bots is nil in a build with no channel provider wired
+// (bot.Registry.Deliver otherwise), conversation.Channel is nil for every
+// chat that is not bound to one, and a turn that produced no text has
+// nothing to send — any of the three is a normal reason to do nothing here,
+// not an error.
+//
+// A delivery failure is logged and not returned: persist above already
+// wrote the answer to the chat record, which is the fact this turn actually
+// promises. Telegram not hearing back is a degraded experience for whoever
+// is on that side of the conversation, not a failed turn — the same
+// reasoning observe's own doc comment gives for not letting a slow
+// subconscious delay or fail the answer.
+func (r *Runner) deliverToChannel(ctx context.Context, conversation *chat.Chat, agentID string, result *agentloop.Result) {
+	if r.deps.Bots == nil || conversation.Channel == nil || result.Text == "" {
+		return
+	}
+	if err := r.deps.Bots.Deliver(ctx, conversation.Channel.Provider, agentID, conversation.Channel.ChatID, result.Text); err != nil {
+		r.log.Warn("could not deliver the turn's answer to its external channel",
+			"chat", conversation.ID, "provider", conversation.Channel.Provider, "err", err)
+	}
 }
 
 // observe hands the finished turn to the background layer.

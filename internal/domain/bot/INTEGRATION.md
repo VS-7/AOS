@@ -1,5 +1,12 @@
 # Integrating `bot`
 
+**Done**, all four sections below — `wire.go` builds `botRegistry` before
+`session.New`, `httpapi.Config.Bot` mounts the webhook route, `config.Service`
+needed nothing extra, and §3's outbound loop is closed: `session.Runner`
+calls `Bots.Deliver` once a channel-bound conversation's turn is persisted
+(`internal/runtime/session.deliverToChannel`) — the "Narrower" option this
+note itself offered, not the generic-event one; see §3's own note for why.
+
 Not wired into `internal/app/wire.go`, `internal/transport/httpapi`, or
 `frontend/src/lib/command-map.ts` by this branch — every domain this Phase 8
 round left those to a single central pass, to avoid an N-way merge conflict.
@@ -153,36 +160,43 @@ that doesn't answer 200, and a registration-not-found or a downstream
 dispatch failure is not something re-delivery fixes. Log the error; don't
 surface it to Telegram as a reason to keep retrying.
 
-## 3. Outbound delivery — the one loop this branch did not close
+## 3. Outbound delivery — closed
 
 `Registry.Deliver(ctx, provider, agentID, chatID, text)` sends a reply back
-out, rate-limited — but nothing calls it yet. The trigger is "a chat bound
-to an external channel got a new assistant message," which this branch does
-not have a hook into: `chat.Service.Send` publishes nothing today that a
-subscriber could listen for (unlike `collection`/`view`/`toolset`/`skill`,
-which publish a `Changed` event on every write — see `collectionPublisher`
-in `ecosystem.go`).
+out, rate-limited. Closed the **narrower** of the two ways this note used to
+offer: `session.Runner` — which already holds the conversation it fetched at
+the top of `Run` and the turn's own final text once the loop returns — calls
+`Bots.Deliver` itself, right after `persist` writes the answer to the chat
+record and before the (also fire-and-forget) subconscious observation:
 
-Two ways to close this, for the integrator to choose:
+```go
+// internal/runtime/session/session.go
 
-- **Cheapest**: give `chat.Service` the same `Publisher` pattern the
-  ecosystem four already have, publish on `Send`'s reply path specifically
-  (not the inbound leg — sending the answer back to the same channel that
-  sent the question is what `Deliver` is for), and have `wire.go` construct
-  a small subscriber that checks `msg.Channel != nil` before calling
-  `botRegistry.Deliver`.
-- **Narrower**: skip the generic event and have the `Dispatcher`
-  implementation `wire.go` already builds (the one that hands a turn to
-  `session.Runner`) call `Deliver` directly once the turn produces a reply,
-  for exactly the chats that have a `Channel` set. This avoids touching
-  `chat.Service` again but couples the runtime's own turn-completion path to
-  bot, which the current wiring keeps chat-agnostic.
+type Bots interface {
+	Deliver(ctx context.Context, provider, agentID, chatID, text string) error
+}
 
-Not resolved here because it is a design choice about where a cross-cutting
-concern (chat → external delivery) belongs, not a fact this branch could
-verify against a doc or a test — the design doc names the mechanism
-(`Prompt Assembly` injects Telegram's formatting section when a chat is
-channel-bound) but not the plumbing that decides when to call `Send`.
+func (r *Runner) deliverToChannel(ctx context.Context, conversation *chat.Chat, agentID string, result *agentloop.Result) {
+	if r.deps.Bots == nil || conversation.Channel == nil || result.Text == "" {
+		return
+	}
+	if err := r.deps.Bots.Deliver(ctx, conversation.Channel.Provider, agentID, conversation.Channel.ChatID, result.Text); err != nil {
+		r.log.Warn("could not deliver the turn's answer to its external channel", ...)
+	}
+}
+```
+
+Chosen over the "cheapest" (generic `Publisher` on `chat.Service`) option
+because `session.Runner` already had every piece this needs — the
+conversation, its `Channel`, and the finished turn's text — at exactly the
+point the answer becomes durable, with nothing new to plumb through
+`chat.Service`. A delivery failure is logged, not propagated: `persist`
+already succeeded, so the turn itself did not fail, only reaching Telegram
+did. `wire.go` passes `Bots: botRegistry` into `session.Deps` — `botRegistry`
+is already built earlier in `New`, so no reordering was needed. Tested at
+`internal/runtime/session/session_test.go`'s `TestDeliverToChannel*` battery
+against a fake `Bots`, the same level the file's own doc comment says this
+kind of logic (not wiring) belongs at.
 
 ## 4. `config.Service` — nothing needed
 

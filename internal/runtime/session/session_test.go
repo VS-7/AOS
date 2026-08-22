@@ -1,7 +1,11 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -138,5 +142,91 @@ func TestTheLastUserMessageIsWhenTheAgentThinksItWasAsked(t *testing.T) {
 	}
 	if got := lastUserAt(&chat.Chat{}); !got.IsZero() {
 		t.Fatalf("a conversation nobody has written to reports %s", got)
+	}
+}
+
+// fakeBots records every Deliver call, or fails it once if told to.
+type fakeBots struct {
+	calls []deliverCall
+	fail  error
+}
+
+type deliverCall struct{ provider, agentID, chatID, text string }
+
+func (f *fakeBots) Deliver(_ context.Context, provider, agentID, chatID, text string) error {
+	f.calls = append(f.calls, deliverCall{provider, agentID, chatID, text})
+	return f.fail
+}
+
+func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+
+// TestDeliverToChannelPushesTheAnswerOut is the property bot.Registry.Deliver
+// existed for and nothing called: a conversation bound to an external
+// channel gets its turn's answer pushed back out, addressed by the
+// channel's own provider and chat id, not this system's own.
+func TestDeliverToChannelPushesTheAnswerOut(t *testing.T) {
+	bots := &fakeBots{}
+	r := &Runner{deps: Deps{Bots: bots}, log: discardLogger()}
+	conversation := &chat.Chat{
+		ID:      "c1",
+		Channel: &chat.ChannelMeta{Provider: "telegram", ChatID: "12345"},
+	}
+
+	r.deliverToChannel(context.Background(), conversation, "atlas", &agentloop.Result{Text: "the answer"})
+
+	if len(bots.calls) != 1 {
+		t.Fatalf("Deliver was called %d times, want 1", len(bots.calls))
+	}
+	got := bots.calls[0]
+	if got.provider != "telegram" || got.agentID != "atlas" || got.chatID != "12345" || got.text != "the answer" {
+		t.Fatalf("Deliver call = %+v", got)
+	}
+}
+
+func TestDeliverToChannelSkipsAConversationWithNoChannel(t *testing.T) {
+	bots := &fakeBots{}
+	r := &Runner{deps: Deps{Bots: bots}, log: discardLogger()}
+
+	r.deliverToChannel(context.Background(), &chat.Chat{ID: "c1"}, "atlas", &agentloop.Result{Text: "the answer"})
+
+	if len(bots.calls) != 0 {
+		t.Fatalf("Deliver was called for a conversation with no channel: %+v", bots.calls)
+	}
+}
+
+func TestDeliverToChannelSkipsWhenNoBotsAreWired(t *testing.T) {
+	r := &Runner{deps: Deps{}, log: discardLogger()} // Bots left nil, the state a build with no channel provider is in
+	conversation := &chat.Chat{ID: "c1", Channel: &chat.ChannelMeta{Provider: "telegram", ChatID: "12345"}}
+
+	// Must not panic on a nil Bots.
+	r.deliverToChannel(context.Background(), conversation, "atlas", &agentloop.Result{Text: "the answer"})
+}
+
+func TestDeliverToChannelSkipsATurnWithNoText(t *testing.T) {
+	bots := &fakeBots{}
+	r := &Runner{deps: Deps{Bots: bots}, log: discardLogger()}
+	conversation := &chat.Chat{ID: "c1", Channel: &chat.ChannelMeta{Provider: "telegram", ChatID: "12345"}}
+
+	r.deliverToChannel(context.Background(), conversation, "atlas", &agentloop.Result{Text: ""})
+
+	if len(bots.calls) != 0 {
+		t.Fatalf("Deliver was called for a turn with no text: %+v", bots.calls)
+	}
+}
+
+// TestDeliverToChannelFailureIsNotPropagated: the answer is already on the
+// chat record by the time this runs (persist happens first in Run) — a
+// delivery failure is a degraded experience for whoever is on the other
+// side of the channel, not a reason to fail a turn that already succeeded.
+func TestDeliverToChannelFailureIsNotPropagated(t *testing.T) {
+	bots := &fakeBots{fail: errors.New("telegram is down")}
+	r := &Runner{deps: Deps{Bots: bots}, log: discardLogger()}
+	conversation := &chat.Chat{ID: "c1", Channel: &chat.ChannelMeta{Provider: "telegram", ChatID: "12345"}}
+
+	// Must not panic, and there is nothing to assert on the return value —
+	// deliverToChannel returns nothing, which is itself the point.
+	r.deliverToChannel(context.Background(), conversation, "atlas", &agentloop.Result{Text: "the answer"})
+	if len(bots.calls) != 1 {
+		t.Fatalf("Deliver was called %d times, want 1 (attempted once, regardless of the outcome)", len(bots.calls))
 	}
 }

@@ -2,7 +2,7 @@
 tags: [dominio, bot, telegram, canais]
 aliases: [Bot Go, Canais]
 fase: 8
-status: especificado
+status: pronto
 origem: "[[Bot]]"
 ---
 
@@ -13,6 +13,16 @@ origem: "[[Bot]]"
 ## Objetivo
 
 Canais de mensageria externos. Um agente ganha presença fora da UI — hoje, Telegram.
+
+## Estado atual
+
+A entrega estava só de ida: webhook recebido, mensagem vira um `chat.Send`,
+o agente responde — mas nada levava a resposta de volta ao Telegram.
+`Registry.Deliver` já existia, com rate limit, mas ninguém o chamava (ver
+`internal/domain/bot/INTEGRATION.md`, seção 3). `session.Runner.Run` agora
+chama `Bots.Deliver` assim que `persist` grava a resposta, quando a conversa
+tem `Channel` e o turno produziu texto — a mesma conversa do Telegram e da UI
+volta a ser, de fato, o mesmo objeto nas duas direções.
 
 ## Comportamento do original
 
@@ -116,7 +126,7 @@ O [[Prompt Assembly]] injeta a seção de formatação Telegram quando o chat es
 
 ## Critério de pronto
 
-- [ ] Conversa de Telegram e conversa na UI são o mesmo chat
-- [ ] Webhook verificado por segredo
-- [ ] Token via variável de ambiente
-- [ ] Divisão de mensagens longas respeitando os limites da plataforma
+- [x] Conversa de Telegram e conversa na UI são o mesmo chat — `TestHandleWebhookResolvesToTheDeterministicChat` para a ida; `TestDeliverToChannelPushesTheAnswerOut` (`internal/runtime/session`) para a volta
+- [x] Webhook verificado por segredo — `TestParseRejectsAWrongWebhookSecret`, `TestParseAcceptsTheRightSecretAndDecodesTheMessage`
+- [x] Token via variável de ambiente — `TestRegisterAllInterpolatesAnEnvToken`, `TestRegisterAllWarnsOnALiteralToken`
+- [x] Divisão de mensagens longas respeitando os limites da plataforma — `TestSplitOfA40000CharacterMessage`, `TestSendSplitsALongMessageAcrossMultipleCalls`

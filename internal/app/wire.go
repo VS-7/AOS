@@ -664,6 +664,7 @@ func New(opts Options) (*App, error) {
 		Prompt:        assembler,
 		Spiller:       toolexec.NewSpiller(paths.Outputs(), logger),
 		Events:        publisher{hub: events},
+		Bots:          botRegistry,
 		Clock:         clock,
 		IDs:           idgen,
 		Log:           logger,
