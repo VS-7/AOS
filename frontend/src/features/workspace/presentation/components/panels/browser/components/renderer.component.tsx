@@ -2,244 +2,96 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { ViewportTabState } from "@/features/workspace/presentation/stores/viewport.store";
 
-export interface BrowserWebViewElement extends HTMLElement {
-  src: string;
-  canGoBack: () => boolean;
-  canGoForward: () => boolean;
-  goBack: () => void;
-  goForward: () => void;
-  reload: () => void;
-  isLoading: () => boolean;
-  getURL: () => string;
-  getTitle: () => string;
-  executeJavaScript: (code: string) => Promise<any>;
-}
-
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      webview: React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
-        allowpopups?: boolean;
-        partition?: string;
-        src?: string;
-        useragent?: string;
-        webpreferences?: string;
-      };
-    }
-  }
-}
-
-const DESKTOP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
-
+/**
+ * The browser tab's content, rendered in a plain iframe.
+ *
+ * This used to be an Electron `<webview>` element — `did-start-loading`,
+ * `dom-ready`, `partition`, `executeJavaScript`, the works — ported from the
+ * original's Electron shell along with a whole agent-automation bridge
+ * (`window.aos.browser.{navigate,goBack,goForward,reload}`, plus
+ * click/type/scroll/read-content) that expected it. Wails has no equivalent
+ * embedded webview element, and no such bridge exists — window.d.ts already
+ * documents `window.aos.browser` as permanently `undefined` here ("AOS has
+ * no Wails bridge for either yet"). The `<webview>` tag itself was dead code:
+ * an unrecognized custom element renders nothing, so every browser tab —
+ * including every artifact opened from the sidebar — showed a blank pane
+ * regardless of platform.
+ *
+ * An iframe needs no bridge at all for same-origin content, which is what
+ * every artifact this daemon serves is (`/v/artifacts/{id}/*`, same origin
+ * as the app itself — see internal/transport/artifactapi's own CSP,
+ * `frame-ancestors 'self'`, which exists for exactly this). It is a real,
+ * working rendering path, not a stub: general web browsing to an arbitrary
+ * external URL may still fail to display if the target site refuses to be
+ * framed (`X-Frame-Options`/its own `frame-ancestors`) — an honest iframe
+ * limitation, not something this component can detect or work around, and
+ * strictly no worse than the total blank this replaces. Back/forward history
+ * and the agent-automation bridge remain unimplemented — see tabs.trigger.ts
+ * and browser/index.tsx's own comments on what still depends on the bridge
+ * that does not exist.
+ */
 export function BrowserRenderer({
   tab,
   active,
   onStateChange,
-  onRefChange,
 }: {
   tab: ViewportTabState;
   active: boolean;
   onStateChange: (tabId: string, patch: Partial<ViewportTabState>) => void;
-  onRefChange: (tabId: string, node: BrowserWebViewElement | null) => void;
 }) {
-  const ref = React.useRef<BrowserWebViewElement | null>(null);
-  const isReadyRef = React.useRef(false);
-  const pendingUrlRef = React.useRef<string | null>(null);
-  const latestTabRef = React.useRef(tab);
-
-  React.useEffect(() => {
-    latestTabRef.current = tab;
-  }, [tab]);
-
-  React.useEffect(() => {
-    onRefChange(tab.id, ref.current);
-    return () => onRefChange(tab.id, null);
-  }, [onRefChange, tab.id]);
-
-  React.useEffect(() => {
-    const webview = ref.current;
-    if (!webview) return;
-
-    // Apply desktop user agent immediately
-    webview.setAttribute("useragent", DESKTOP_USER_AGENT);
-
-    isReadyRef.current = false;
-    pendingUrlRef.current = tab.url || null;
-    webview.setAttribute("data-dom-ready", "false");
-    webview.setAttribute("data-pending-url", tab.url || "");
-
-    const syncState = (patch?: Partial<ViewportTabState>, options?: { preserveUrl?: boolean; preserveTitle?: boolean }) => {
-      const currentTab = latestTabRef.current;
-      const isReady = isReadyRef.current || webview.getAttribute("data-dom-ready") === "true";
-
-      if (!isReady) {
-        onStateChange(tab.id, {
-          url: currentTab.url,
-          title: currentTab.title,
-          status: patch?.status ?? currentTab.status,
-          canGoBack: false,
-          canGoForward: false,
-          error: patch?.error ?? null,
-          ...patch,
-        });
-        return;
-      }
-
-      let nextUrl = currentTab.url;
-      let nextTitle = currentTab.title;
-      let nextIsLoading = currentTab.status === 'loading'
-      let nextCanGoBack = currentTab.canGoBack;
-      let nextCanGoForward = currentTab.canGoForward;
-
+  const handleLoad = React.useCallback(
+    (event: React.SyntheticEvent<HTMLIFrameElement>) => {
+      let title = tab.title;
       try {
-        nextUrl = options?.preserveUrl ? currentTab.url : webview.getURL?.() || currentTab.url;
-        nextTitle = options?.preserveTitle ? currentTab.title : webview.getTitle?.() || currentTab.title;
-        nextIsLoading = webview.isLoading?.() ?? currentTab.status === 'loading'
-        nextCanGoBack = webview.canGoBack?.() ?? currentTab.canGoBack;
-        nextCanGoForward = webview.canGoForward?.() ?? currentTab.canGoForward;
+        // Only readable for same-origin content (every artifact); a
+        // cross-origin external page throws here, left as the tab's
+        // existing title rather than surfaced as an error — the page did
+        // load, this is just cosmetic.
+        const doc = event.currentTarget.contentDocument;
+        if (doc?.title) title = doc.title;
       } catch {
-        nextUrl = currentTab.url;
-        nextTitle = currentTab.title;
-        nextIsLoading = patch ? patch.status === 'loading' : currentTab.status === 'loading'
-        nextCanGoBack = currentTab.canGoBack;
-        nextCanGoForward = currentTab.canGoForward;
+        // Cross-origin: nothing more to read.
       }
+      onStateChange(tab.id, { status: "idle", title, error: null });
+    },
+    [onStateChange, tab.id, tab.title],
+  );
 
-      onStateChange(tab.id, {
-        url: nextUrl,
-        title: nextTitle,
-        status: patch?.status ?? currentTab.status,
-        canGoBack: nextCanGoBack,
-        canGoForward: nextCanGoForward,
-        error: null,
-        ...patch,
-      });
-    };
-
-    const handleStart = () => {
-      syncState({ status: 'loading', error: null }, { preserveUrl: true, preserveTitle: true });
-    };
-    const handleStop = () => {
-      syncState({ status: 'idle' });
-    };
-    const handleNavigate = () => {
-      syncState();
-    };
-    const handleTitle = () => syncState();
-    const handleFavicon = (event: any) => {
-      const favicons = event.favicons;
-      if (favicons && favicons.length > 0) {
-        syncState({ favicon: favicons[0] });
-      }
-    };
-    const handleDomReady = () => {
-      isReadyRef.current = true;
-      webview.setAttribute("data-dom-ready", "true");
-
-      const pendingUrl = pendingUrlRef.current;
-      const attributePendingUrl = webview.getAttribute("data-pending-url");
-      const nextUrl = attributePendingUrl || pendingUrl;
-
-      if (!nextUrl) {
-        syncState();
-        return;
-      }
-
-      const currentUrl = webview.getURL?.() || "";
-      pendingUrlRef.current = null;
-      webview.removeAttribute("data-pending-url");
-
-      if (currentUrl && currentUrl === nextUrl) {
-        syncState();
-        return;
-      }
-
-      if (webview.getAttribute("src") !== nextUrl) {
-        webview.setAttribute("src", nextUrl);
-      }
-    };
-    const handleFail = (event: Event) => {
-      const detail = event as Event & { errorCode?: number; errorDescription?: string };
-
-      if (detail.errorCode === -3 || detail.errorDescription === "ERR_ABORTED") {
-        syncState({
-          status: 'idle',
-          error: null,
-        });
-        return;
-      }
-
-      syncState({
-        status: 'idle',
-        error: detail.errorDescription || "Navigation failed.",
-      });
-    };
-
-    webview.addEventListener("did-start-loading", handleStart as EventListener);
-    webview.addEventListener("did-stop-loading", handleStop as EventListener);
-    webview.addEventListener("did-navigate", handleNavigate as EventListener);
-    webview.addEventListener("did-navigate-in-page", handleNavigate as EventListener);
-    webview.addEventListener("page-title-updated", handleTitle as EventListener);
-    webview.addEventListener("page-favicon-updated", handleFavicon as EventListener);
-    webview.addEventListener("dom-ready", handleDomReady as EventListener);
-    webview.addEventListener("did-fail-load", handleFail as EventListener);
-
-    return () => {
-      isReadyRef.current = false;
-      webview.removeAttribute("data-dom-ready");
-      webview.removeAttribute("data-pending-url");
-      webview.removeEventListener("did-start-loading", handleStart as EventListener);
-      webview.removeEventListener("did-stop-loading", handleStop as EventListener);
-      webview.removeEventListener("did-navigate", handleNavigate as EventListener);
-      webview.removeEventListener("did-navigate-in-page", handleNavigate as EventListener);
-      webview.removeEventListener("page-title-updated", handleTitle as EventListener);
-      webview.removeEventListener("page-favicon-updated", handleFavicon as EventListener);
-      webview.removeEventListener("dom-ready", handleDomReady as EventListener);
-      webview.removeEventListener("did-fail-load", handleFail as EventListener);
-    };
+  const handleError = React.useCallback(() => {
+    onStateChange(tab.id, { status: "idle", error: "Navigation failed." });
   }, [onStateChange, tab.id]);
 
   React.useEffect(() => {
-    const webview = ref.current;
-    if (!webview || !tab.url) return;
-
-    if (!isReadyRef.current) {
-      pendingUrlRef.current = tab.url;
-      webview.setAttribute("data-pending-url", tab.url);
-      if (webview.getAttribute("src") !== tab.url) {
-        webview.setAttribute("src", tab.url);
-      }
-      return;
-    }
-
-    const currentUrl = webview.getURL?.() || "";
-    if (currentUrl !== tab.url) {
-      pendingUrlRef.current = null;
-      webview.removeAttribute("data-pending-url");
-      if (webview.getAttribute("src") !== tab.url) {
-        webview.setAttribute("src", tab.url);
-      }
-    }
-  }, [tab.url]);
+    if (!tab.url) return;
+    onStateChange(tab.id, { status: "loading", error: null });
+    // Only tab.url and tab.reloadNonce should restart the loading indicator —
+    // a title/status patch from handleLoad must not re-trigger this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab.url, tab.reloadNonce]);
 
   return (
     <div
       className={cn(
         "absolute inset-0 h-full w-full flex flex-col",
-        !active && "pointer-events-none opacity-0"
+        !active && "pointer-events-none opacity-0",
       )}
     >
-      <webview
-        ref={(node) => {
-          ref.current = node as BrowserWebViewElement | null;
-        }}
-        src={tab.url}
-        partition="persist:aos-browser"
-        useragent={DESKTOP_USER_AGENT}
-        webpreferences="contextIsolation=yes,nodeIntegration=no,allowRunningInsecureContent=yes"
-        allowpopups
-        className="flex-1 w-full"
-      />
+      {tab.url ? (
+        <iframe
+          key={`${tab.id}:${tab.reloadNonce ?? 0}`}
+          src={tab.url}
+          title={tab.title}
+          className="flex-1 w-full border-0 bg-background"
+          onLoad={handleLoad}
+          onError={handleError}
+          // Same posture as the artifact CSP this most often points at:
+          // same-origin, no popups, no top-level navigation out from inside
+          // the frame. A general external site that needs more than this
+          // to function will not fully work in-frame — see this file's own
+          // top comment.
+          sandbox="allow-scripts allow-same-origin allow-forms"
+        />
+      ) : null}
     </div>
   );
 }

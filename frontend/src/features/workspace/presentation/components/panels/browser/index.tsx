@@ -5,15 +5,21 @@ import type { ViewportTabState } from "@/features/workspace/presentation/stores/
 import { BROWSER_HOME_URL } from "@/features/workspace/presentation/stores/browser.store";
 import { BrowserToolbar } from "./components/toolbar.component";
 import { BrowserViewport } from "./components/viewport.component";
-import type { BrowserWebViewElement } from "./components/renderer.component";
 import { cn } from "@/lib/utils";
 
-type BrowserCommandPayload = { tabId?: string; url?: string };
-type BrowserRequestPayload = { requestId: string; tabId?: string };
-type BrowserClickPayload = BrowserRequestPayload & { selector: string };
-type BrowserTypePayload = BrowserRequestPayload & { selector: string; text: string };
-type BrowserScrollPayload = BrowserRequestPayload & { direction: "up" | "down"; amount?: number };
-
+/**
+ * The browser panel: one address bar plus every open "browser"-type tab,
+ * rendered by BrowserViewport/BrowserRenderer (a plain iframe — see that
+ * file's own comment on why, and on what still doesn't work without a
+ * native embed this app doesn't have: back/forward history, and the
+ * agent-automation bridge (`window.aos.browser`'s read-content/click/type/
+ * scroll) the original's Electron shell exposed. Both were previously
+ * "wired" here against that bridge, which window.d.ts already documents as
+ * permanently undefined — dead code, removed rather than left pretending to
+ * work. `tabs.back`/`tabs.forward` (tabs.trigger.ts) are the same
+ * documented gap; `tabs.reload`/`tabs.navigate` do work now, through the
+ * viewport store instead of the bridge.
+ */
 export const BrowserPanel = () => {
   const tabs = aos.stores.viewport.useState((state) => state.tabs.items.filter(t => t.type === 'browser'));
   const activeId = aos.stores.viewport.useState((state) => state.tabs.current);
@@ -22,49 +28,6 @@ export const BrowserPanel = () => {
   const shouldFocusAddressBar = aos.stores.browser.useState((state) => state.ui.isAddressBarFocused);
 
   const addressBarRef = React.useRef<HTMLInputElement | null>(null);
-  const webviewsRef = React.useRef<Record<string, BrowserWebViewElement | null>>({});
-  const isNative = typeof window !== "undefined" && !!window.aos?.browser;
-
-  const navigateWebview = React.useCallback((tabId: string, url: string) => {
-    const webview = webviewsRef.current[tabId];
-    if (!webview) return;
-
-    const isReady = webview.getAttribute("data-dom-ready") === "true";
-
-    if (!isReady) {
-      webview.setAttribute("data-pending-url", url);
-    } else {
-      webview.removeAttribute("data-pending-url");
-    }
-
-    if (webview.getAttribute("src") !== url) {
-      webview.setAttribute("src", url);
-    }
-  }, []);
-
-  const resolveTargetWebview = React.useCallback(
-    (tabId?: string) => {
-      const resolvedTabId = tabId || aos.stores.viewport.state.tabs.current;
-
-      if (!resolvedTabId) {
-        return { error: "No browser tab is available for this action." } as const;
-      }
-
-      const tab = aos.stores.viewport.state.tabs.items.find((candidate) => candidate.id === resolvedTabId);
-
-      if (tab?.type !== "browser") {
-        return { error: `Tab '${resolvedTabId}' is not an open browser tab.` } as const;
-      }
-
-      const webview = webviewsRef.current[resolvedTabId];
-      if (!webview) {
-        return { error: `Browser tab '${resolvedTabId}' is not ready or was already closed.` } as const;
-      }
-
-      return { resolvedTabId, webview } as const;
-    },
-    []
-  );
 
   React.useEffect(() => {
     if (!activeTab || activeTab.type !== 'browser') return;
@@ -77,131 +40,6 @@ export const BrowserPanel = () => {
     addressBarRef.current?.select();
     aos.stores.browser.actions.setAddressBarFocused(false);
   }, [shouldFocusAddressBar]);
-
-  React.useEffect(() => {
-    if (!window.aos?.browser) return;
-    const browser = window.aos.browser;
-
-    const unsubscribers = [
-      browser.on("navigate", (payload?: BrowserCommandPayload) => {
-        const tabId = payload?.tabId || aos.stores.viewport.state.tabs.current;
-        if (!tabId || !payload?.url) return;
-        navigateWebview(tabId, payload.url);
-      }),
-
-      browser.on("goBack", (payload?: BrowserCommandPayload) => {
-        const tabId = payload?.tabId || aos.stores.viewport.state.tabs.current;
-        if (!tabId) return;
-        const webview = webviewsRef.current[tabId];
-        if (webview?.canGoBack?.()) {
-          webview.goBack();
-        }
-      }),
-
-      browser.on("goForward", (payload?: BrowserCommandPayload) => {
-        const tabId = payload?.tabId || aos.stores.viewport.state.tabs.current;
-        if (!tabId) return;
-        const webview = webviewsRef.current[tabId];
-        if (webview?.canGoForward?.()) {
-          webview.goForward();
-        }
-      }),
-
-      browser.on("reload", (payload?: BrowserCommandPayload) => {
-        const tabId = payload?.tabId || aos.stores.viewport.state.tabs.current;
-        if (!tabId) return;
-        const webview = webviewsRef.current[tabId];
-        webview?.reload?.();
-      }),
-
-      browser.on("focus-address-bar", () => {
-        aos.stores.browser.actions.focusAddressBar();
-      }),
-
-      // [Agent Tools]: Listen for automation requests from the BrowserService
-      browser.on("browser:request:read-content", async (payload: BrowserRequestPayload) => {
-        const target = resolveTargetWebview(payload.tabId);
-        if ("error" in target) {
-          browser.emit(`browser:response:${payload.requestId}`, { error: target.error });
-          return;
-        }
-
-        try {
-          const data = await target.webview.executeJavaScript("document.body.innerText");
-          browser.emit(`browser:response:${payload.requestId}`, { data });
-        } catch (error) {
-          browser.emit(`browser:response:${payload.requestId}`, { error: String(error) });
-        }
-      }),
-
-      browser.on("browser:request:click", async (payload: BrowserClickPayload) => {
-        const target = resolveTargetWebview(payload.tabId);
-        if ("error" in target) {
-          browser.emit(`browser:response:${payload.requestId}`, { error: target.error });
-          return;
-        }
-
-        try {
-          const selector = JSON.stringify(payload.selector);
-          await target.webview.executeJavaScript(`
-            const element = document.querySelector(${selector});
-            if (!element) {
-              throw new Error("No element matched the provided selector.");
-            }
-            element.click();
-          `);
-          browser.emit(`browser:response:${payload.requestId}`, { data: true });
-        } catch (error) {
-          browser.emit(`browser:response:${payload.requestId}`, { error: String(error) });
-        }
-      }),
-
-      browser.on("browser:request:type", async (payload: BrowserTypePayload) => {
-        const target = resolveTargetWebview(payload.tabId);
-        if ("error" in target) {
-          browser.emit(`browser:response:${payload.requestId}`, { error: target.error });
-          return;
-        }
-
-        try {
-          const selector = JSON.stringify(payload.selector);
-          const text = JSON.stringify(payload.text);
-          await target.webview.executeJavaScript(`
-            const element = document.querySelector(${selector});
-            if (!element) {
-              throw new Error("No element matched the provided selector.");
-            }
-            element.value = ${text};
-            element.dispatchEvent(new Event("input", { bubbles: true }));
-            element.dispatchEvent(new Event("change", { bubbles: true }));
-          `);
-          browser.emit(`browser:response:${payload.requestId}`, { data: true });
-        } catch (error) {
-          browser.emit(`browser:response:${payload.requestId}`, { error: String(error) });
-        }
-      }),
-
-      browser.on("browser:request:scroll", async (payload: BrowserScrollPayload) => {
-        const target = resolveTargetWebview(payload.tabId);
-        if ("error" in target) {
-          browser.emit(`browser:response:${payload.requestId}`, { error: target.error });
-          return;
-        }
-
-        try {
-          const amount = payload.amount || (payload.direction === "down" ? 500 : -500);
-          await target.webview.executeJavaScript(`window.scrollBy(0, ${amount})`);
-          browser.emit(`browser:response:${payload.requestId}`, { data: true });
-        } catch (error) {
-          browser.emit(`browser:response:${payload.requestId}`, { error: String(error) });
-        }
-      }),
-    ];
-
-    return () => {
-      unsubscribers.forEach((unsubscribe) => unsubscribe());
-    };
-  }, [navigateWebview, resolveTargetWebview]);
 
   aos.triggers.use({
     trigger: "tabs.newTab",
@@ -234,10 +72,6 @@ export const BrowserPanel = () => {
     aos.stores.viewport.actions.updateTab(tabId, patch);
   }, []);
 
-  const handleSetWebviewRef = React.useCallback((tabId: string, node: BrowserWebViewElement | null) => {
-    webviewsRef.current[tabId] = node;
-  }, []);
-
   return (
     <Page className={cn([
       "flex-1 h-full min-w-0 overflow-hidden relative",
@@ -261,12 +95,10 @@ export const BrowserPanel = () => {
       </PageSecondaryHeader>
 
       <BrowserViewport
-        isNative={isNative}
         tabs={tabs}
         activeId={activeId}
         activeTab={activeTab}
         onUpdateTab={handleUpdateTab}
-        onSetWebviewRef={handleSetWebviewRef}
       />
     </Page>
   );

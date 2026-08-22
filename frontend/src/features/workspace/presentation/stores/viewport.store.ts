@@ -30,6 +30,13 @@ export interface ViewportTabState {
   error?: string | null;
   closable?: boolean;
   metadata?: Record<string, string | number | boolean>;
+  /**
+   * Bumped by the `tabs.reload` trigger to force the iframe-based browser
+   * renderer to remount — an unchanged `src` does not re-fetch on its own,
+   * and there is no native embed (see window.d.ts's own doc on why) to ask
+   * for a reload instead.
+   */
+  reloadNonce?: number;
 }
 
 export interface ViewportVisibilityState {

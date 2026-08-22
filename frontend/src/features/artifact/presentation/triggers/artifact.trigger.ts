@@ -20,7 +20,7 @@ export const artifactGroup = AosTriggerGroup.create("Artifacts")
     const triggerItems = items.map((artifact) => ({
       id: `artifact.open.${artifact.id}`,
       label: String.capitalizeFirst(artifact.name),
-      icon: ArtifactHelper.getIcon(artifact.icon) as "AppWindow",
+      icon: ArtifactHelper.getIcon() as "AppWindow",
       group: "Artifacts",
       handler: () => {
         ArtifactHelper.openInBrowserTab(artifact);

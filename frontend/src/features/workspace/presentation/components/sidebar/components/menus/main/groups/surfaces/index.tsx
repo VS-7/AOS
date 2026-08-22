@@ -64,7 +64,7 @@ export function WorkspaceSidebarSurfacesGroupMenu() {
       kind: "artifact" as const,
       key: `artifact:${artifact.id}`,
       label: artifact.name,
-      icon: ArtifactHelper.getIcon(artifact.icon),
+      icon: ArtifactHelper.getIcon(),
       isActive: currentArtifact === artifact.id,
       onOpen: () => openArtifact(artifact),
     }));

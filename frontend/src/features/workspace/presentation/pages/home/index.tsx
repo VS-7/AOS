@@ -354,7 +354,7 @@ export const HomePage = aos
                       >
                         <div className="mb-6 flex items-start justify-between gap-3">
                           <Icon
-                            value={ArtifactHelper.getIcon(artifact.icon)}
+                            value={ArtifactHelper.getIcon()}
                             fallback="AppWindow"
                             className="size-4"
                           />
