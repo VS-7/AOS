@@ -26,14 +26,16 @@ import (
 type Type string
 
 const (
-	// MCPStdio spawns a local process and speaks MCP over its stdin/stdout.
-	// It is the only type this slice implements — see internal/adapters/mcpclient.
+	// MCPStdio spawns a local process and speaks MCP over its stdin/stdout —
+	// see internal/adapters/mcpclient.
 	MCPStdio Type = "mcp-server::stdio"
 
-	// MCPHTTP speaks MCP over Streamable HTTP to a remote server.
+	// MCPHTTP speaks MCP over Streamable HTTP to a remote server — see
+	// internal/adapters/mcpclient.
 	MCPHTTP Type = "mcp-server::http"
 
-	// RESTAPI wraps a plain REST API behind a declared set of tools.
+	// RESTAPI reads a target's OpenAPI document and turns every operation it
+	// declares into a callable tool — see internal/adapters/openapiclient.
 	RESTAPI Type = "rest-api"
 
 	// CLI wraps a command-line program, one tool per subcommand.
@@ -91,19 +93,19 @@ func (s Status) Valid() bool { return s == StatusEnabled || s == StatusDisabled 
 // Toolset is one external connection, configured once and called by ID
 // thereafter.
 //
-// The fields below cover all five Types even though only MCPStdio and
-// MCPHTTP are implemented in this slice: a toolset of an unimplemented type
-// still decodes and lists, it just refuses Call with a "not available in
-// this build" error — see errTypeNotAvailable. That is what lets the
-// remaining three types be added later by writing an adapter, not by
-// widening this struct.
+// The fields below cover all five Types even though only three —
+// MCPStdio, MCPHTTP and RESTAPI — are implemented in this slice: a toolset of
+// an unimplemented type still decodes and lists, it just refuses Call with a
+// "not available in this build" error — see errTypeNotAvailable. That is
+// what lets the remaining two types be added later by writing an adapter,
+// not by widening this struct.
 type Toolset struct {
 	// ID identifies this toolset. It lives in the path, exactly like every
 	// other native collection record:
 	// .aos/toolsets/{id}.toolset.md.
 	ID string `yaml:"-" json:"id" collection:"path" jsonschema:"Identifier of this toolset, used to address it in toolsets_call."`
 
-	Type        Type   `yaml:"type" json:"type" jsonschema:"One of: mcp-server::stdio, mcp-server::http, rest-api, cli, custom. rest-api, cli and custom decode and list but are not connectable in this build."`
+	Type        Type   `yaml:"type" json:"type" jsonschema:"One of: mcp-server::stdio, mcp-server::http, rest-api, cli, custom. cli and custom decode and list but are not connectable in this build."`
 	Description string `yaml:"description,omitempty" json:"description,omitempty" jsonschema:"What this toolset is for, read by whoever decides whether to call it."`
 	Status      Status `yaml:"status" json:"status" jsonschema:"enabled or disabled. A disabled toolset refuses Call without losing its configuration."`
 
@@ -119,11 +121,11 @@ type Toolset struct {
 	// gets to a toolset without being written into its configuration file.
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty" jsonschema:"Environment passed to the spawned process. Values may reference \\${env.VAR}."`
 
-	// BaseURL and Headers are unused by mcp-server::stdio; they exist for the
-	// four types this slice does not implement, mcp-server::http and
-	// rest-api chief among them.
-	BaseURL string            `yaml:"baseUrl,omitempty" json:"baseUrl,omitempty" jsonschema:"Base URL for mcp-server::http and rest-api. May reference \\${env.VAR}."`
-	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty" jsonschema:"HTTP headers for mcp-server::http and rest-api. Values may reference \\${env.VAR}."`
+	// BaseURL and Headers are unused by mcp-server::stdio. mcp-server::http
+	// points BaseURL at the server itself; rest-api points it at the
+	// target's OpenAPI document instead — see internal/adapters/openapiclient.
+	BaseURL string            `yaml:"baseUrl,omitempty" json:"baseUrl,omitempty" jsonschema:"Base URL for mcp-server::http. For rest-api, the URL of the target's OpenAPI document. May reference \\${env.VAR}."`
+	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty" jsonschema:"HTTP headers for mcp-server::http and rest-api — sent with every request, including the rest-api document fetch. Values may reference \\${env.VAR}."`
 
 	CreatedAt time.Time `yaml:"createdAt" json:"createdAt" jsonschema:"When this toolset was configured."`
 	UpdatedAt time.Time `yaml:"updatedAt" json:"updatedAt" jsonschema:"When it was last changed."`

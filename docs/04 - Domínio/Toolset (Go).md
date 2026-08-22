@@ -14,6 +14,17 @@ origem: "[[Toolset]]"
 
 Conectar ferramentas **externas** ao agente. Uma [[Skill (Go)]] declara toolsets; o agente os alcança por uma indireção deliberada.
 
+## Estado atual
+
+Três dos cinco tipos conectam: `mcp-server::stdio`, `mcp-server::http` e
+`rest-api` (`internal/adapters/mcpclient` e `internal/adapters/openapiclient`).
+`rest-api` segue o design abaixo — lê o documento OpenAPI de `baseUrl` via
+`kin-openapi` e gera um tool por operação, sem alargar a entidade `Toolset`.
+`cli` e `custom` decodificam e listam mas recusam `Call` como
+`TOOLSET_TYPE_NOT_AVAILABLE`. Faltam, ainda: a allowlist de rede por
+`permissions.network` que a decisão abaixo declara mas nenhum adaptador HTTP
+aplica hoje, e o adaptador `cli`.
+
 ## Comportamento do original
 
 Cinco tipos de conexão, união discriminada por `type` ([[Toolset]]):

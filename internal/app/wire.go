@@ -26,6 +26,7 @@ import (
 	"github.com/OWNER/aos/internal/adapters/gitcli"
 	"github.com/OWNER/aos/internal/adapters/liquidengine"
 	"github.com/OWNER/aos/internal/adapters/mcpclient"
+	"github.com/OWNER/aos/internal/adapters/openapiclient"
 	"github.com/OWNER/aos/internal/adapters/osfile"
 	"github.com/OWNER/aos/internal/adapters/skillfetch"
 	"github.com/OWNER/aos/internal/adapters/skillfiles"
@@ -482,14 +483,14 @@ func New(opts Options) (*App, error) {
 	toolsetSvc := toolset.NewService(toolset.Deps{
 		Repo: repos.toolsets,
 		Adapters: toolset.Adapters{
-			// rest-api and cli decode and list but refuse Call as not yet
-			// available — see toolset.Service.Call and mcpclient's own doc.
-			// Both need a way to declare per-operation tool shape the
-			// Toolset entity does not carry yet; adding one is real design
-			// work the roadmap left out of Phase 8's core on purpose, not an
-			// oversight to paper over here.
+			// cli and custom decode and list but refuse Call as not yet
+			// available — see toolset.Service.Call and toolset.Adapters' own
+			// doc. cli needs the sandbox allowlist wired through it
+			// (internal/domain/toolset's own decision doc); custom has no
+			// single adapter to write by definition.
 			toolset.MCPStdio: mcpclient.NewStdio,
 			toolset.MCPHTTP:  mcpclient.NewHTTP,
+			toolset.RESTAPI:  openapiclient.New,
 		},
 		Activities: activitySvc,
 		Env:        resolver,

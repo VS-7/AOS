@@ -86,9 +86,9 @@ func TestAnInterpolatedValueIsNeverEchoedInAnError(t *testing.T) {
 // --- the discriminated union -----------------------------------------------
 
 // The five types decode; an unknown one is refused rather than defaulting to
-// one of them. Only stdio is implemented in this slice, and the other four
-// have to fail with "not available in this build" rather than with a decode
-// error — the difference matters to whoever reads it.
+// one of them. Only stdio, http and rest-api are implemented in this slice,
+// and the other two have to fail with "not available in this build" rather
+// than with a decode error — the difference matters to whoever reads it.
 func TestTheFiveTypesDecodeAndAnUnknownOneIsRefused(t *testing.T) {
 	for _, raw := range []string{
 		"mcp-server::stdio", "mcp-server::http", "rest-api", "cli", "custom",
@@ -108,7 +108,7 @@ func TestTheFiveTypesDecodeAndAnUnknownOneIsRefused(t *testing.T) {
 
 func TestATypeThisSliceDoesNotImplementSaysSo(t *testing.T) {
 	svc := newService(t)
-	_, err := svc.Call(ctx(), toolset.CallInput{ID: "rest-thing", Tool: "x"})
+	_, err := svc.Call(ctx(), toolset.CallInput{ID: "cli-thing", Tool: "x"})
 	if code := codeOf(t, err); code != "AOS_TOOLSET_TYPE_NOT_AVAILABLE" {
 		t.Fatalf("code = %q", code)
 	}
@@ -507,7 +507,7 @@ func (c *fixedClock) Now() time.Time {
 
 // serviceBuild collects what newService assembles a *toolset.Service from.
 // Defaults are seeded so the tests the brief describes — which reference
-// toolset "gh" and "rest-thing" without always configuring them explicitly —
+// toolset "gh" and "cli-thing" without always configuring them explicitly —
 // have something to resolve against.
 type serviceBuild struct {
 	toolsets   map[string]toolset.Toolset
@@ -542,8 +542,8 @@ func withEnv(e toolset.EnvResolver) serviceOption {
 
 func defaultToolsets() map[string]toolset.Toolset {
 	return map[string]toolset.Toolset{
-		"gh":         {ID: "gh", Type: toolset.MCPStdio, Status: toolset.StatusEnabled, Command: "true"},
-		"rest-thing": {ID: "rest-thing", Type: toolset.RESTAPI, Status: toolset.StatusEnabled},
+		"gh":        {ID: "gh", Type: toolset.MCPStdio, Status: toolset.StatusEnabled, Command: "true"},
+		"cli-thing": {ID: "cli-thing", Type: toolset.CLI, Status: toolset.StatusEnabled},
 	}
 }
 

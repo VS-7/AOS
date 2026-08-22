@@ -37,7 +37,7 @@ func errTypeNotAvailable(t Type) error {
 		Issue("type", string(t)).
 		Status(apperr.StatusNotImplemented).
 		CTA(apperr.CallToAction{
-			Label: "mcp-server::stdio is the only connectable type in this build",
+			Label: "mcp-server::stdio, mcp-server::http and rest-api are connectable in this build",
 		})
 }
 
