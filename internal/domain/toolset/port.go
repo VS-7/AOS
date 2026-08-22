@@ -10,8 +10,8 @@ import (
 )
 
 // Adapter is the one boundary where this system executes something outside
-// its own process. Every connection type — MCP over stdio, MCP over HTTP and
-// a REST API today; a CLI and a custom kind tomorrow — implements exactly
+// its own process. Every connection type — MCP over stdio, MCP over HTTP, a
+// REST API and a CLI today; a custom kind tomorrow — implements exactly
 // this, and Service.Call never distinguishes between them: it connects, lists
 // or calls, and closes, without knowing which wire protocol is underneath.
 //
@@ -54,10 +54,10 @@ type Adapter interface {
 type Factory func() Adapter
 
 // Adapters maps a connection Type to the Factory that implements it. Only
-// MCPStdio, MCPHTTP and RESTAPI have an entry in this slice's wiring;
-// Service.Call reports the remaining two as errTypeNotAvailable rather than
-// as a decode error — the configuration is fine, the binary is only missing
-// the connector.
+// MCPStdio, MCPHTTP, RESTAPI and CLI have an entry in this slice's wiring;
+// Service.Call reports the remaining one, Custom, as errTypeNotAvailable
+// rather than as a decode error — the configuration is fine, the binary is
+// only missing the connector.
 type Adapters map[Type]Factory
 
 // EnvResolver is what ${env.VAR} interpolation reads a value from — the slice

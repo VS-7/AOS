@@ -16,6 +16,7 @@ import (
 	"github.com/OWNER/aos/internal/adapters/activitylog"
 	"github.com/OWNER/aos/internal/adapters/artifactfiles"
 	"github.com/OWNER/aos/internal/adapters/bleveindex"
+	"github.com/OWNER/aos/internal/adapters/cliclient"
 	"github.com/OWNER/aos/internal/adapters/cloudflaredproc"
 	"github.com/OWNER/aos/internal/adapters/eventlog"
 	"github.com/OWNER/aos/internal/adapters/fsauth"
@@ -483,14 +484,18 @@ func New(opts Options) (*App, error) {
 	toolsetSvc := toolset.NewService(toolset.Deps{
 		Repo: repos.toolsets,
 		Adapters: toolset.Adapters{
-			// cli and custom decode and list but refuse Call as not yet
-			// available — see toolset.Service.Call and toolset.Adapters' own
-			// doc. cli needs the sandbox allowlist wired through it
-			// (internal/domain/toolset's own decision doc); custom has no
-			// single adapter to write by definition.
+			// custom decodes and lists but refuses Call as not yet available
+			// — see toolset.Service.Call and toolset.Adapters' own doc: it
+			// has no single adapter to write by definition. cli's own
+			// adapter, cliclient, additionally requires the calling agent's
+			// sandbox on ctx — internal/runtime/session attaches it once per
+			// turn via internal/runtime/execguard, which is why a cli
+			// toolset called any other way refuses rather than running
+			// unguarded.
 			toolset.MCPStdio: mcpclient.NewStdio,
 			toolset.MCPHTTP:  mcpclient.NewHTTP,
 			toolset.RESTAPI:  openapiclient.New,
+			toolset.CLI:      cliclient.New,
 		},
 		Activities: activitySvc,
 		Env:        resolver,

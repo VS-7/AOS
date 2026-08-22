@@ -61,6 +61,7 @@ var Catalog = []Entry{
 	{Code: "AOS_CHAT_NOT_FOUND", Package: "internal/domain/chat", File: "internal/domain/chat/errors.go", Line: 11, Status: 404, Causer: "chat.Service.Get", CTA: true, Issues: []string{"chat"}},
 	{Code: "AOS_CHAT_READ_FAILED", Package: "internal/domain/chat", File: "internal/domain/chat/errors.go", Line: 72, Status: 500, Causer: "<dynamic>", CTA: false},
 	{Code: "AOS_CHAT_WRITE_FAILED", Package: "internal/domain/chat", File: "internal/domain/chat/errors.go", Line: 64, Status: 500, Causer: "<dynamic>", CTA: false},
+	{Code: "AOS_CLICLIENT_NO_SANDBOX", Package: "internal/adapters/cliclient", File: "internal/adapters/cliclient/errors.go", Line: 34, Status: 403, Causer: "cliclient.Adapter.Call", CTA: true, Issues: []string{"toolset"}},
 	{Code: "AOS_COLLECTION_ALREADY_EXISTS", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 114, Status: 409, Causer: "collections.Repo.Create", CTA: true, Issues: []string{"collection", "record"}},
 	{Code: "AOS_COLLECTION_CONFLICT", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 128, Status: 409, Causer: "collections.Repo.Update", CTA: true, Issues: []string{"actualSize", "collection", "expectedSize", "path"}},
 	{Code: "AOS_COLLECTION_DECODE_FAILED", Package: "internal/core/collections", File: "internal/core/collections/errors.go", Line: 142, Status: 500, Causer: "collections.Decode", CTA: true, Issues: []string{"collection", "path"}},

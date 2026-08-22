@@ -38,7 +38,10 @@ const (
 	// declares into a callable tool — see internal/adapters/openapiclient.
 	RESTAPI Type = "rest-api"
 
-	// CLI wraps a command-line program, one tool per subcommand.
+	// CLI wraps a command-line program as a single "run" tool — see
+	// internal/adapters/cliclient. Unlike every other type, Call also
+	// requires the calling agent's own sandbox to clear the command, on top
+	// of what the installing skill's manifest already declared.
 	CLI Type = "cli"
 
 	// Custom is an escape hatch for a connection this vocabulary has no name
@@ -93,12 +96,12 @@ func (s Status) Valid() bool { return s == StatusEnabled || s == StatusDisabled 
 // Toolset is one external connection, configured once and called by ID
 // thereafter.
 //
-// The fields below cover all five Types even though only three —
-// MCPStdio, MCPHTTP and RESTAPI — are implemented in this slice: a toolset of
-// an unimplemented type still decodes and lists, it just refuses Call with a
+// The fields below cover all five Types even though only four — MCPStdio,
+// MCPHTTP, RESTAPI and CLI — are implemented in this slice: a toolset of an
+// unimplemented type still decodes and lists, it just refuses Call with a
 // "not available in this build" error — see errTypeNotAvailable. That is
-// what lets the remaining two types be added later by writing an adapter,
-// not by widening this struct.
+// what lets the remaining type be added later by writing an adapter, not by
+// widening this struct.
 type Toolset struct {
 	// ID identifies this toolset. It lives in the path, exactly like every
 	// other native collection record — .aos/toolsets/{id}.toolset.md, or
@@ -121,7 +124,7 @@ type Toolset struct {
 	// skill-owned toolset from one nothing promises to keep faith with.
 	Skill string `json:"skill,omitempty" collection:"path=skill" jsonschema:"The skill this toolset ships with, if any."`
 
-	Type        Type   `yaml:"type" json:"type" jsonschema:"One of: mcp-server::stdio, mcp-server::http, rest-api, cli, custom. cli and custom decode and list but are not connectable in this build."`
+	Type        Type   `yaml:"type" json:"type" jsonschema:"One of: mcp-server::stdio, mcp-server::http, rest-api, cli, custom. custom decodes and lists but is not connectable in this build."`
 	Description string `yaml:"description,omitempty" json:"description,omitempty" jsonschema:"What this toolset is for, read by whoever decides whether to call it."`
 	Status      Status `yaml:"status" json:"status" jsonschema:"enabled or disabled. A disabled toolset refuses Call without losing its configuration."`
 

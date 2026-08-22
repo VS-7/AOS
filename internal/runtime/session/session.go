@@ -23,6 +23,7 @@ import (
 	"github.com/OWNER/aos/internal/domain/chat"
 	"github.com/OWNER/aos/internal/domain/event"
 	"github.com/OWNER/aos/internal/runtime/agentloop"
+	"github.com/OWNER/aos/internal/runtime/execguard"
 	"github.com/OWNER/aos/internal/runtime/prompt"
 	"github.com/OWNER/aos/internal/runtime/providers"
 	"github.com/OWNER/aos/internal/runtime/sandbox"
@@ -175,6 +176,15 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (*agentloop.Result, erro
 		return nil, err
 	}
 	registry := r.toolsFor(box)
+
+	// A cli toolset's Call needs the calling agent's own sandbox to clear
+	// before it runs anything — the second of the two doors
+	// internal/domain/toolset's decision doc requires closed. box is built
+	// fresh per turn, above, so it is attached here rather than at
+	// composition root: internal/adapters/cliclient reads it back off ctx
+	// through internal/runtime/execguard, three layers away, without either
+	// package importing the other.
+	ctx = execguard.With(ctx, box)
 
 	instructions, err := r.deps.Prompt.Assemble(ctx, prompt.AssembleInput{
 		Agent: prompt.AgentRef{

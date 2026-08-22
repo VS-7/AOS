@@ -16,14 +16,34 @@ Conectar ferramentas **externas** ao agente. Uma [[Skill (Go)]] declara toolsets
 
 ## Estado atual
 
-Três dos cinco tipos conectam: `mcp-server::stdio`, `mcp-server::http` e
-`rest-api` (`internal/adapters/mcpclient` e `internal/adapters/openapiclient`).
-`rest-api` segue o design abaixo — lê o documento OpenAPI de `baseUrl` via
-`kin-openapi` e gera um tool por operação, sem alargar a entidade `Toolset`.
-`cli` e `custom` decodificam e listam mas recusam `Call` como
-`TOOLSET_TYPE_NOT_AVAILABLE`. Faltam, ainda: a allowlist de rede por
-`permissions.network` que a decisão abaixo declara mas nenhum adaptador HTTP
-aplica hoje, e o adaptador `cli`.
+Quatro dos cinco tipos conectam: `mcp-server::stdio`, `mcp-server::http`,
+`rest-api` e `cli` (`internal/adapters/mcpclient`, `internal/adapters/openapiclient`
+e `internal/adapters/cliclient`). `rest-api` segue o design abaixo — lê o
+documento OpenAPI de `baseUrl` via `kin-openapi` e gera um tool por operação,
+sem alargar a entidade `Toolset`. `custom` decodifica e lista mas recusa
+`Call` como `TOOLSET_TYPE_NOT_AVAILABLE` — não tem um único adaptador por
+definição.
+
+`cli` publica um único tool, `run`, que executa `Command`+`Args` com
+argumentos e stdin adicionais vindos da chamada. A decisão abaixo — duas
+portas fechadas por padrão — está implementada assim: a porta do manifesto
+(o `Command` declarado bate contra `permissions.exec` da skill) é checada uma
+vez, na instalação (`internal/domain/skill.VerifyManifest`), e protegida
+contra deriva depois disso — `toolset.Service.UpdateConfig` recusa mudar
+`Command`/`BaseURL` num toolset que uma skill instalou. A porta do sandbox do
+agente é checada em toda `Call`: `internal/runtime/session` anexa o sandbox
+do turno ao `context.Context` via `internal/runtime/execguard` — um pacote à
+parte, porque `internal/domain/toolset` não pode importar
+`internal/runtime/sandbox` — e `cliclient` lê de lá antes de rodar qualquer
+coisa, recusando quando não há sandbox anexado (uma chamada fora de um turno
+de agente).
+
+A allowlist de rede por `permissions.network` que a decisão abaixo declara
+para `rest-api` e `mcp-server::http` continua sem um cliente HTTP que a
+aplique por host — o que existe hoje é a mesma trava de `UpdateConfig` acima,
+que impede o `BaseURL` de um toolset instalado por skill de mudar depois da
+checagem de instalação, mas não impede um toolset configurado diretamente
+por uma pessoa de apontar para qualquer host.
 
 ## Comportamento do original
 
