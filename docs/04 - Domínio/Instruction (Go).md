@@ -2,7 +2,7 @@
 tags: [dominio, instruction, politica]
 aliases: [Instruction Go, Instrução]
 fase: 8
-status: especificado
+status: pronto
 origem: "[[Instruction]]"
 ---
 

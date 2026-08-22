@@ -2,7 +2,7 @@
 tags: [dominio, collection, dados, schema-dinamico]
 aliases: [Collection Go, Coleção Customizada]
 fase: 8
-status: especificado
+status: pronto
 origem: "[[Collection]]"
 ---
 
@@ -139,7 +139,7 @@ var reserved = []string{
 
 ## Critério de pronto
 
-- [ ] Coleção criada por agente utilizável na mesma sessão
-- [ ] Validação dinâmica completa
-- [ ] Hooks declarativos, sem execução de código
-- [ ] Referências entre coleções funcionando
+- [x] Coleção criada por agente utilizável na mesma sessão — watcher de `schema.json` em `internal/app/watch.go` (`onSchemaChanged`/`reconcileCollections`); ponta a ponta em `TestTheDeliveryOfPhaseEight`
+- [x] Validação dinâmica completa — `TestAMissingRequiredFieldIsRefusedNamingIt`, `TestAValueOutsideTheEnumIsRefused`, `TestAValueOfTheWrongTypeIsRefused`, `TestADuplicateUniqueValueIsRefused`, `TestAFieldNotDeclaredIsRefused`
+- [x] Hooks declarativos, sem execução de código — `TestDeclarativeHooksNormaliseAndStamp`, `TestAnUnknownHookActionIsRefused`, `TestComputeFromHookCopiesAFieldsValue`
+- [x] Referências entre coleções funcionando — `TestARefToAnUnknownCollectionIsRefusedAtDeclaration`, `TestARefFieldWithoutARefTargetIsRefused`

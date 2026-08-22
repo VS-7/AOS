@@ -2,7 +2,7 @@
 tags: [dominio, project, organizacao]
 aliases: [Project Go, Projeto]
 fase: 8
-status: especificado
+status: pronto
 origem: "[[Project]]"
 ---
 

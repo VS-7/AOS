@@ -1,10 +1,13 @@
 # Integrating the artifact domain
 
-Everything below is what a separate integration pass needs to do to wire this
-package into the running app. Nothing in this list was done by this branch —
-`internal/app/wire.go` and `frontend/src/lib/command-map.ts` were deliberately
-left untouched to avoid a merge conflict with parallel domain work landing the
-same round.
+**`wire.go` and `command-map.ts` are done** — `artifactSvc` is built,
+registered, and on `App.Artifacts`; `frontend/src/lib/command-map.ts` has
+`artifact.list`/`.getById`/`.create`/`.update`/`.setPassword`/`.delete`
+(`artifact` is not in `DORMANT_DOMAINS`). The sections below documenting
+that wiring are kept for reference but are no longer the open item.
+
+**HTTP serving (`/v/*`) is the remaining gap** — see "What's missing" below,
+still accurate as of this note.
 
 ## `internal/app/wire.go`
 

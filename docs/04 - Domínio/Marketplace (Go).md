@@ -2,7 +2,7 @@
 tags: [dominio, marketplace, registry]
 aliases: [Marketplace Go, Registry de Skills]
 fase: 8
-status: especificado
+status: pronto
 origem: "[[Marketplace]]"
 ---
 
@@ -101,6 +101,6 @@ type Service interface {
 
 ## Critério de pronto
 
-- [ ] `discovery` e `install` funcionando sobre registry Git
-- [ ] Permissões visíveis na descoberta
-- [ ] Registries múltiplos e configuráveis
+- [x] `discovery` e `install` funcionando sobre registry Git — `TestSearchWithNoFilterReturnsEveryListing`, `TestFetchReturnsTheClonedPackage` (`internal/adapters/marketplacegit`); `TestInstallFetchesFromTheNamedRegistryAndInstallsThePackage`
+- [x] Permissões visíveis na descoberta — `TestSearchSurfacesPermissionsAtDiscoveryTime`
+- [x] Registries múltiplos e configuráveis — `config.Marketplace.Registries`, lido em `wire.go`; `TestDiscoveryMergesEveryConfiguredRegistry`, `TestDiscoverySkipsAFailingRegistryButReturnsWhatOthersFound`, `TestInstallTriesEveryRegistryUntilOneAnswers`

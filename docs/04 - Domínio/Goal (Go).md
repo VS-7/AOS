@@ -2,7 +2,7 @@
 tags: [dominio, goal, estrategia]
 aliases: [Goal Go, Meta]
 fase: 8
-status: especificado
+status: pronto
 origem: "[[Goal]]"
 ---
 

@@ -2,7 +2,7 @@
 tags: [dominio, template, liquid]
 aliases: [Template Go]
 fase: 8
-status: especificado
+status: pronto
 origem: "[[Template]]"
 ---
 
@@ -146,7 +146,7 @@ func (s *service) Render(ctx context.Context, in RenderInput) (RenderResult, err
 
 ## Critério de pronto
 
-- [ ] CRUD + render funcionando
-- [ ] Contrato de variáveis validado antes de renderizar
-- [ ] Timeout e teto de saída aplicados
-- [ ] Divergências de filtro documentadas com golden
+- [x] CRUD + render funcionando — `TestRenderWithWriteWritesTheRenderedOutputAtTheLiquidRenderedOutputPath`
+- [x] Contrato de variáveis validado antes de renderizar — `validateVariables` (`render.go`); erro nomeia a variável e aponta para `templates get`
+- [x] Timeout e teto de saída aplicados — `renderTimeout`/`maxOutputBytes` (`render.go`)
+- [x] Divergências de filtro documentadas com golden — `TestFilterGoldens`

@@ -2,7 +2,7 @@
 tags: [dominio, tunnel, rede, cloudflare]
 aliases: [Tunnel Go, Cloudflare Tunnel]
 fase: 8
-status: especificado
+status: pronto
 origem: "[[Tunnel (feature)]]"
 ---
 
@@ -130,7 +130,9 @@ func (s *service) spawn(ctx context.Context, cfg config.Tunnel) (State, error)
 
 ## Critério de pronto
 
-- [ ] Tunnel subindo e devolvendo URL pública
-- [ ] Guard de exposição impedindo API aberta
-- [ ] Supervisão com reinício automático
-- [ ] Segredos redigidos em toda superfície
+- [x] Tunnel subindo e devolvendo URL pública — `TestStartSucceedsAndReportsURL`
+- [x] Guard de exposição impedindo API aberta — `TestStartRefusesWhenAPIIsNotAuthenticated`, `TestStartRefusesWhenAPITokenMissingEvenIfEnabled`, `TestStartRefusesWhenHostnameOrTokenMissing_DistinctFromInsecureExposure`
+- [x] Supervisão com reinício automático — `TestSupervisorRestartsAfterUnexpectedDeath`
+- [x] Segredos redigidos em toda superfície — token marcado `secret:"true"` ([[ADR-0010 Segredos com permissão restrita]]); `TestStopTerminatesTheRunningProcessAndPreservesConfig`
+
+Pendência conhecida, fora deste critério: `frontend/src/features/tunnel/` tem só 1 arquivo (interfaces, sem painel). O backend está completo e os três comandos (`tunnel_start`/`tunnel_stop`/`tunnel_status`) já estão em `command-map.ts`; falta só a superfície visual.

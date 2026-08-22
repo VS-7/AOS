@@ -2,7 +2,7 @@
 tags: [dominio, view, ui, declarativo]
 aliases: [View Go, Interface Adaptativa]
 fase: 8
-status: especificado
+status: pronto
 origem: "[[View]]"
 ---
 
@@ -148,7 +148,7 @@ func (s *service) Validate(ctx context.Context, v *View) error
 
 ## Critério de pronto
 
-- [ ] View criada por agente renderizando na UI sem restart
-- [ ] Validação na escrita contra o registry
-- [ ] Catálogo de componentes sincronizado com o frontend por geração
-- [ ] Ações operando sobre comandos do registry
+- [x] View criada por agente renderizando na UI sem restart — o watcher de `schema.json`/coleções dinâmicas fecha a mesma lacuna para `view` (`internal/app/watch.go`); `TestRenderAttachesTheCollectionsRecords`
+- [x] Validação na escrita contra o registry — `TestAnUnknownComponentIsRefusedNamingIt`, `TestAMissingRequiredPropIsRefusedNamingIt`, `TestAPropOfTheWrongTypeIsRefusedNamingIt`, `TestABindToAFieldTheCollectionDoesNotHaveIsRefused`, `TestAnInvalidNodeDeepInTheTreeIsStillRefused`
+- [x] Catálogo de componentes sincronizado com o frontend por geração — `task gen-components`; `TestComponentsServesTheGeneratedCatalog`, `TestTheCatalogCarriesTheDesignSystem`
+- [x] Ações operando sobre comandos do registry — `TestExecuteActionDispatchesThroughTheRegistry`, `TestExecuteActionRefusesAnActionTheViewDoesNotDeclare`, `TestAnActionNamingAnUnregisteredCommandIsRefused`

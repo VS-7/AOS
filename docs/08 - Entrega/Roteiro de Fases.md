@@ -78,11 +78,17 @@ O branch `feat/port-fractal-frontend` fechou isso: os 120 componentes e as 26 fe
 **Notas:** [[Skill (Go)]] · [[Toolset (Go)]] · [[Collection (Go)]] · [[View (Go)]] · [[Views Declarativas]] · [[Artifact (Go)]] · [[Artifacts e Estáticos]] · [[Template (Go)]] · [[Instruction (Go)]] · [[Project (Go)]] · [[Goal (Go)]] · [[Bot (Go)]] · [[Tunnel (Go)]] · [[Marketplace (Go)]] · [[ADR-0014 Liquid para templates]] · [[ADR-0015 Skills com permissões declaradas]]
 **Entrega:** instalar uma skill que traz agente, coleção e view próprios.
 
-**Núcleo parcialmente entregue.** A fatia vertical de `collection`, `view`,
-`toolset` e `skill` está construída, registrada em `wire.go` e acesa na
-interface: os quatro saíram de `DORMANT_DOMAINS` e os 21 caminhos que a UI
-chama foram exercitados por HTTP real, autenticados, todos despachando ao
-domínio. `task check` verde com 92 pacotes acima do piso de cobertura.
+**Núcleo entregue.** A fatia vertical de `collection`, `view`, `toolset` e
+`skill` está construída, registrada em `wire.go` e acesa na interface: os
+quatro saíram de `DORMANT_DOMAINS` e os caminhos que a UI chama foram
+exercitados por HTTP real, autenticados, todos despachando ao domínio. O
+watcher que registra uma coleção quando um `schema.json` aparece em disco
+existe (`internal/app/watch.go`, `onSchemaChanged`/`reconcileCollections`),
+resolvendo também o resíduo A2 — `files:changed`/`collection.changed`
+propaga para a árvore de arquivos sem restart. `TestTheDeliveryOfPhaseEight`
+(`internal/app/ecosystem_test.go`) é verde, afirmando o percurso completo —
+instalar, criar registro na mesma sessão, renderizar, desinstalar — ponta a
+ponta.
 
 Ao construí-la, a fase encontrou um defeito de motor da Fase 1 que ninguém
 tinha alcançado: `Model.WritePatternFor` devolvia o primeiro padrão gravável
@@ -92,16 +98,19 @@ diretório da skill mesmo quando a chave trazia `skill`. A tese "instalar uma
 skill instala uma equipe" não funcionava. Corrigido no motor, com table-test
 por nativo multi-padrão.
 
-**Falta para fechar o núcleo:** o watcher que registra uma coleção quando um
-`schema.json` aparece em disco (e com ele o resíduo A2, a árvore de arquivos
-que não se atualiza sozinha), e `TestTheDeliveryOfPhaseEight`, que é a
-afirmação sobre a qual a fase é julgada. Sem ele, o percurso completo —
-instalar, criar registro na mesma sessão, renderizar, desinstalar — não tem
-teste automatizado que o afirme ponta a ponta.
+Os oito domínios inicialmente declarados como fora do núcleo
+(`artifact`, `template`, `instruction`, `project`, `goal`, `bot`, `tunnel`,
+`marketplace`) estão todos wireados em `wire.go` e expostos em
+`command-map.ts`; a maioria tem `status: pronto` na sua própria nota
+(ver `docs/04 - Domínio/`). O que resta, rastreado por domínio:
 
-**Fora do núcleo, declarado:** os outros quatro tipos de toolset, fetch remoto
-de skill, e os oito domínios restantes (`artifact`, `template`, `instruction`,
-`project`, `goal`, `bot`, `tunnel`, `marketplace`).
+- **Artifact** — CRUD, senha persistida e as três visibilidades estão
+  prontos; o transporte HTTP que serve `/v/{workspace}/artifacts/{id}/*`
+  (contenção, CSP, tipo por extensão) não foi construído — ver
+  `internal/domain/artifact/INTEGRATION.md`.
+- **Model Providers** (Fase 5, não Fase 8, mas ainda `em-construção`) —
+  falta a tabela de preços (`CostUSD` sempre zero) e nenhum adaptador foi
+  exercitado contra a API real de um provider.
 
 ### Fase 9 — Distribuição
 Cross-compile, empacotamento, auto-update, `SKILL.md` publicada, completions.

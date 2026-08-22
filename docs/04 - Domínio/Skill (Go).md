@@ -2,7 +2,7 @@
 tags: [dominio, skill, capacidade, extensibilidade]
 aliases: [Skill Go, Capability Package]
 fase: 8
-status: especificado
+status: pronto
 origem: "[[Skill]]"
 ---
 
@@ -171,8 +171,8 @@ func (i *Installer) Install(ctx context.Context, in InstallInput) (*Skill, error
 
 ## Critério de pronto
 
-- [ ] Instalar uma skill que traz agente, coleção e view próprios
-- [ ] Manifesto verificado contra o conteúdo
-- [ ] Consentimento humano exigido
-- [ ] Desinstalação limpa, com desregistro de hooks
-- [ ] Sem colisão de nome com builtins
+- [x] Instalar uma skill que traz agente, coleção e view próprios — `TestInstallBringsTheAgentCollectionAndView`; ponta a ponta contra a composição real em `TestTheDeliveryOfPhaseEight` (`internal/app/ecosystem_test.go`)
+- [x] Manifesto verificado contra o conteúdo — `TestContentExceedingTheManifestIsRefusedNamingTheExcess`, `TestContentFullyDeclaredByTheManifestIsAccepted`
+- [x] Consentimento humano exigido — `TestInstallingWithoutConsentIsRefusedAndWritesNothing`, `TestNothingIsWrittenBeforeVerificationAndConsent`
+- [x] Desinstalação limpa, com desregistro de hooks — `TestUninstallDeregistersHooksAndToolsetsBeforeRemovingFiles`, `TestUninstallUnregistersTheCollectionTheSkillBrought`, `TestUninstallFailureDeregisteringHooksLeavesTheSkillRegistered`
+- [x] Sem colisão de nome com builtins — builtins vivem sob `aos self skills` ([[ADR-0016 Compatibilidade de nomes com o original]])
