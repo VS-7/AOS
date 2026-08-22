@@ -114,6 +114,15 @@ export function openChatTab(params: OpenChatTabParams): string {
 /**
  * Finds or creates a private user↔agent DM, then opens it as a viewport tab.
  *
+ * There is no `chat.findOrCreateDm` command on the Go side — the backend
+ * has `chats_list`/`chats_create` only (internal/domain/chat/commands.go),
+ * no dedicated find-or-create. This used to call `chat.findOrCreateDm`
+ * anyway; `command-map.ts` declares that path `null` (no Go counterpart),
+ * so every call fell straight to the dormant-domain error path and threw
+ * "Unable to open agent DM." on every attempt — this is why the DM
+ * button never worked. `findAgentDmChatId` right above already existed for
+ * exactly this search and had no caller.
+ *
  * @param params - Agent slug and optional title.
  * @returns The focused or newly created tab id.
  */
@@ -121,17 +130,30 @@ export async function openAgentDmTab(params: {
   agentId: string;
   title?: string;
 }): Promise<string> {
-  const response = await aos.client.chat.findOrCreateDm.mutate({
+  const listResponse = await aos.client.chat.list.query({
+    query: { kind: "dm" },
+  });
+  const chats = (listResponse?.data?.chats ?? []) as Chat[];
+  const existingId = findAgentDmChatId(chats, params.agentId);
+  if (existingId) {
+    const existing = chats.find((chat) => chat.id === existingId);
+    return openChatTab({
+      chatId: existingId,
+      title: params.title ?? existing?.title ?? params.agentId,
+    });
+  }
+
+  const createResponse = await aos.client.chat.create.mutate({
     body: {
-      agent: params.agentId,
-      ...(params.title ? { title: params.title } : {}),
+      title: params.title ?? params.agentId,
+      kind: "dm",
+      participants: [{ type: "agent", id: params.agentId }],
     },
   });
-  // Frontend mutate returns Igniter envelope `{ data, error }` — never read `.chat` on the root.
   const chat = (
-    response as { data?: { chat?: Chat }; error?: unknown } | null | undefined
+    createResponse as { data?: { chat?: Chat }; error?: unknown } | null | undefined
   )?.data?.chat;
-  if ((response as { error?: unknown } | null)?.error || !chat?.id) {
+  if ((createResponse as { error?: unknown } | null)?.error || !chat?.id) {
     throw new Error("Unable to open agent DM.");
   }
   return openChatTab({
@@ -177,6 +199,14 @@ export function findUserDmChatId(
 /**
  * Finds or creates a private user↔user DM, then opens it as a viewport tab.
  *
+ * Same fix as `openAgentDmTab` just above, for the same reason: there is no
+ * `chat.findOrCreateDm` command, so this always threw. The caller
+ * (`chat-team-list.tsx`) already does its own `findUserDmChatId` check
+ * before falling back to this — this only needs to build the create call
+ * correctly, with both participants (the peer and this workspace's own
+ * signed-in user, read from the auth store since callers only ever had a
+ * peer id to give this).
+ *
  * @param params - Peer user id and optional title.
  * @returns The focused or newly created tab id.
  */
@@ -184,17 +214,39 @@ export async function openUserDmTab(params: {
   userId: string;
   title?: string;
 }): Promise<string> {
-  const response = await aos.client.chat.findOrCreateDm.mutate({
+  const listResponse = await aos.client.chat.list.query({
+    query: { kind: "dm" },
+  });
+  const chats = (listResponse?.data?.chats ?? []) as Chat[];
+  const selfUserId = aos.stores.auth.state.user?.id;
+  const existingId = selfUserId
+    ? findUserDmChatId(chats, params.userId, selfUserId)
+    : undefined;
+  if (existingId) {
+    const existing = chats.find((chat) => chat.id === existingId);
+    return openChatTab({
+      chatId: existingId,
+      title: params.title ?? existing?.title ?? params.userId,
+    });
+  }
+
+  const participants: Array<{ type: "user"; id: string }> = [
+    { type: "user", id: params.userId },
+  ];
+  if (selfUserId) {
+    participants.push({ type: "user", id: selfUserId });
+  }
+  const createResponse = await aos.client.chat.create.mutate({
     body: {
-      user: params.userId,
-      ...(params.title ? { title: params.title } : {}),
+      title: params.title ?? params.userId,
+      kind: "dm",
+      participants,
     },
   });
-  // Frontend mutate returns Igniter envelope `{ data, error }` — never read `.chat` on the root.
   const chat = (
-    response as { data?: { chat?: Chat }; error?: unknown } | null | undefined
+    createResponse as { data?: { chat?: Chat }; error?: unknown } | null | undefined
   )?.data?.chat;
-  if ((response as { error?: unknown } | null)?.error || !chat?.id) {
+  if ((createResponse as { error?: unknown } | null)?.error || !chat?.id) {
     throw new Error("Unable to open user DM.");
   }
   return openChatTab({
