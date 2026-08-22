@@ -18,13 +18,13 @@ func NewVerifier() ManifestVerifier { return ManifestVerifier{} }
 
 // VerifyManifest checks pkg's content against pkg.Manifest.Permissions.
 //
-// Three categories are checked because they are the ones a package can use to
+// Four categories are checked because they are the ones a package can use to
 // reach outside itself: a collection that was not declared, a toolset that
-// runs a binary the manifest never named under exec, and a toolset that
-// reaches a host absent from network. Views carry no such check — a view
-// renders declared data, it does not run anything — and neither does an
-// agent beyond the identifier itself, which is checked against
-// Permissions.Agents.
+// runs a binary the manifest never named under exec, a toolset that reaches a
+// host absent from network, and a hook that wants an event type the manifest
+// never declared under hooks. Views carry no such check — a view renders
+// declared data, it does not run anything — and neither does an agent beyond
+// the identifier itself, which is checked against Permissions.Agents.
 func (ManifestVerifier) VerifyManifest(pkg Package) (Diff, error) {
 	perm := pkg.Manifest.Permissions
 	var excess []string
@@ -45,6 +45,15 @@ func (ManifestVerifier) VerifyManifest(pkg Package) (Diff, error) {
 		if ts.BaseURL != "" {
 			if host := hostOf(ts.BaseURL); host != "" && !declaredHosts[host] {
 				excess = append(excess, "network "+host)
+			}
+		}
+	}
+
+	declaredHooks := toSet(perm.Hooks)
+	for _, h := range pkg.Hooks {
+		for _, ev := range h.Events {
+			if !declaredHooks[string(ev)] {
+				excess = append(excess, "hook "+string(ev))
 			}
 		}
 	}

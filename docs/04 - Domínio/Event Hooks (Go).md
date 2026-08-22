@@ -82,6 +82,17 @@ type Outcome struct {
 }
 ```
 
+### Adição da Fase 8: `Deregister`
+
+`Service.Register` já podia ser chamado a qualquer momento (o mutex já
+existia), mas nada desfazia um registro. `Service.Deregister(ids ...string)`
+fecha isso — remove um handler de todo `event.Type` em que estava registrado,
+idempotente para um id nunca registrado. Existe para os hooks de uma skill
+([[Skill (Go)]]): `internal/adapters/skillhooks` rastreia quais ids
+pertencem a qual skill e chama isto no Uninstall, namespacing cada id como
+`{skillID}/{hookID}` para que duas skills com um hook de mesmo nome não
+colidam no espaço global de ids do bus.
+
 ### O barramento
 
 ```go

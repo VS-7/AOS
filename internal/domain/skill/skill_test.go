@@ -147,6 +147,12 @@ func withAgent(id string) func(*skill.Package) {
 	}
 }
 
+func withHookDecl(id string, events ...event.Type) func(*skill.Package) {
+	return func(p *skill.Package) {
+		p.Hooks = append(p.Hooks, skill.HookDecl{ID: id, Events: events})
+	}
+}
+
 // The manifest is not documentation: content that exceeds it is refused, and
 // the refusal names the excess. A package that declared no exec permission
 // and ships a toolset that runs a binary is exactly the case this closes.
@@ -271,6 +277,37 @@ func TestDiffRenderIncludesRoutinesAndToolsets(t *testing.T) {
 	}
 	if !strings.Contains(out, "toolsets: cli(gh)") {
 		t.Fatalf("render = %q, missing toolsets", out)
+	}
+}
+
+// The fourth door ADR-0015 closes: a hook that wants an event type the
+// manifest never declared under hooks is excess, the same as an undeclared
+// exec or network reach.
+func TestAHookWantingAnUndeclaredEventIsRefused(t *testing.T) {
+	pkg := packageWith(
+		skill.Permissions{Hooks: []string{"PreToolUse"}},
+		withHookDecl("guard", event.PreToolUse, event.PostToolUse),
+	)
+	_, err := skill.NewVerifier().VerifyManifest(pkg)
+	var app *apperr.Error
+	if !errors.As(err, &app) {
+		t.Fatalf("err is %T", err)
+	}
+	if app.Code != "AOS_SKILL_MANIFEST_EXCEEDED" {
+		t.Fatalf("code = %q", app.Code)
+	}
+	if !strings.Contains(fmt.Sprint(app.Issues["excess"]), "PostToolUse") {
+		t.Fatalf("the refusal does not name the undeclared event: %v", app.Issues)
+	}
+}
+
+func TestAHookWithEveryEventDeclaredIsAccepted(t *testing.T) {
+	pkg := packageWith(
+		skill.Permissions{Hooks: []string{"PreToolUse", "PostToolUse"}},
+		withHookDecl("guard", event.PreToolUse, event.PostToolUse),
+	)
+	if _, err := skill.NewVerifier().VerifyManifest(pkg); err != nil {
+		t.Fatalf("a fully declared hook should be accepted: %v", err)
 	}
 }
 
@@ -458,7 +495,21 @@ func (f *fakeViews) Delete(_ context.Context, in view.DeleteInput) error {
 
 type noopHooks struct{}
 
-func (noopHooks) Deregister(context.Context, string) error { return nil }
+func (noopHooks) Register(context.Context, string, []skill.HookDecl) error { return nil }
+func (noopHooks) Deregister(context.Context, string) error                 { return nil }
+
+// capturingHooks records exactly what Apply hands Register, so a test can
+// assert on the decls themselves rather than only on whether Apply's ordering
+// called it.
+type capturingHooks struct {
+	register func(ctx context.Context, skillID string, decls []skill.HookDecl) error
+}
+
+func (c capturingHooks) Register(ctx context.Context, skillID string, decls []skill.HookDecl) error {
+	return c.register(ctx, skillID, decls)
+}
+
+func (capturingHooks) Deregister(context.Context, string) error { return nil }
 
 type noopToolsets struct{}
 
@@ -519,6 +570,11 @@ func (f failingViews) Create(context.Context, view.CreateInput) (*view.View, err
 
 type recordingHooks struct{ order *[]string }
 
+func (r recordingHooks) Register(context.Context, string, []skill.HookDecl) error {
+	*r.order = append(*r.order, "hooks registered")
+	return nil
+}
+
 func (r recordingHooks) Deregister(context.Context, string) error {
 	*r.order = append(*r.order, "hooks deregistered")
 	return nil
@@ -561,9 +617,16 @@ func (r *recordingRepo) Delete(ctx context.Context, key collections.Key) error {
 	return r.inner.Delete(ctx, key)
 }
 
-type failingHooks struct{ err error }
+// failingHooks fails Register, Deregister, or neither, independently — one
+// fake covers both the Apply-time rollback test and the Uninstall-failure
+// test below, rather than two near-identical types.
+type failingHooks struct {
+	registerErr error
+	err         error // Deregister's own failure
+}
 
-func (f failingHooks) Deregister(context.Context, string) error { return f.err }
+func (f failingHooks) Register(context.Context, string, []skill.HookDecl) error { return f.registerErr }
+func (f failingHooks) Deregister(context.Context, string) error                 { return f.err }
 
 type stubFetcher struct{ pkg skill.Package }
 
@@ -811,6 +874,84 @@ func TestAFailureWritingTheSkillRecordLeavesNothingApplyWroteBehind(t *testing.T
 	}
 	if _, err := collSvc.Get(ctx(), collection.GetInput{ID: "contacts", Skill: "crm"}); err == nil {
 		t.Fatal("the collection is still on disk after the install failed")
+	}
+	if wrote := files.paths(); len(wrote) != 0 {
+		t.Fatalf("the files Apply wrote survived the rollback: %v", wrote)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Install: hooks go live once their own declaration files are already on
+// disk, and a failure registering them rolls back everything Apply already
+// wrote — the same guarantee the collections/views/files rollback tests
+// exercise for their own steps.
+// ---------------------------------------------------------------------------
+
+func TestInstallRegistersTheHooksThePackageDeclares(t *testing.T) {
+	var registeredSkill string
+	var registered []skill.HookDecl
+	hooks := capturingHooks{register: func(_ context.Context, skillID string, decls []skill.HookDecl) error {
+		registeredSkill, registered = skillID, decls
+		return nil
+	}}
+
+	pkg := crmPackage()
+	pkg.Manifest.Permissions.Hooks = []string{"PreToolUse"}
+	pkg.Hooks = []skill.HookDecl{{
+		ID: "guard", Events: []event.Type{event.PreToolUse}, Command: "guard.sh",
+		RawFile: skill.RawFile{Path: "hooks/guard.hook.md", Content: []byte("---\nevents: [PreToolUse]\ncommand: guard.sh\n---\n")},
+	}}
+	inst, files := newInstaller(t, nil, withFetcher(stubFetcher{pkg: pkg}), withHooks(hooks))
+
+	installed := mustInstall(t, inst)
+
+	if registeredSkill != "crm" {
+		t.Fatalf("Register was called for skill %q, want \"crm\"", registeredSkill)
+	}
+	if len(registered) != 1 || registered[0].ID != "guard" {
+		t.Fatalf("Register was called with %+v, want the one declared hook", registered)
+	}
+	if len(installed.Metadata.Hooks) != 1 || installed.Metadata.Hooks[0].ID != "guard" {
+		t.Fatalf("Metadata.Hooks = %+v, want [{guard}]", installed.Metadata.Hooks)
+	}
+	wrote := files.paths()
+	found := false
+	for _, p := range wrote {
+		if p == "crm/hooks/guard.hook.md" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("the hook's own declaration file was not written: %v", wrote)
+	}
+}
+
+// A failure registering hooks is Apply's last possible failure — everything
+// else it wrote (collections, views, files, including the hook's own
+// declaration file) must not survive it, the same as a failure creating the
+// skill's own record must not leave them behind either.
+func TestAFailureRegisteringHooksRollsBackEverythingApplyAlreadyWrote(t *testing.T) {
+	reg := collections.NewRegistry()
+	collRepo := fakes.NewRepo[collection.Collection]("collections")
+	collSvc := collection.NewService(collection.Deps{
+		Repo: collRepo, Registry: reg, Clock: clockx.Fixed{At: refTime},
+	})
+
+	pkg := crmPackage()
+	pkg.Manifest.Permissions.Hooks = []string{"PreToolUse"}
+	pkg.Hooks = []skill.HookDecl{{ID: "guard", Events: []event.Type{event.PreToolUse}, Command: "guard.sh"}}
+
+	inst, files := newInstaller(t, reg,
+		withCollections(collSvc),
+		withFetcher(stubFetcher{pkg: pkg}),
+		withHooks(failingHooks{registerErr: errors.New("the bus is down")}),
+	)
+
+	if _, err := inst.Install(ctx(), skill.InstallInput{Source: crmSource, AcceptedAll: acceptAll}); err == nil {
+		t.Fatal("a failing hook registration reported success")
+	}
+	if _, ok := reg.Lookup("contacts"); ok {
+		t.Fatal("the collection stayed registered after the install failed")
 	}
 	if wrote := files.paths(); len(wrote) != 0 {
 		t.Fatalf("the files Apply wrote survived the rollback: %v", wrote)

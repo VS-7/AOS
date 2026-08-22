@@ -9,6 +9,7 @@ import (
 
 	"github.com/OWNER/aos/internal/adapters/skillfetch"
 	"github.com/OWNER/aos/internal/core/apperr"
+	"github.com/OWNER/aos/internal/domain/event"
 )
 
 func ctx() context.Context { return context.Background() }
@@ -124,6 +125,45 @@ func TestFetchDecodesAToolsetsCommandAndHost(t *testing.T) {
 	}
 	if ts.RawFile.Path != "toolsets/gh.toolset.md" || len(ts.RawFile.Content) == 0 {
 		t.Fatalf("toolset raw file = %+v", ts.RawFile)
+	}
+}
+
+func TestFetchDecodesAHooksEventsCommandAndArgs(t *testing.T) {
+	front := "name: with-hooks\n"
+	dir := writePackage(t, front, map[string]string{
+		"hooks/guard.hook.md": "---\nevents: [PreToolUse, PostToolUse]\ncommand: guard.sh\nargs: [--strict]\n---\n",
+	})
+
+	pkg, err := skillfetch.New().Fetch(ctx(), dir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pkg.Hooks) != 1 {
+		t.Fatalf("hooks = %+v", pkg.Hooks)
+	}
+	h := pkg.Hooks[0]
+	if h.ID != "guard" || h.Command != "guard.sh" {
+		t.Fatalf("hook decoded as %+v", h)
+	}
+	if len(h.Events) != 2 || h.Events[0] != event.PreToolUse || h.Events[1] != event.PostToolUse {
+		t.Fatalf("hook events = %v", h.Events)
+	}
+	if len(h.Args) != 1 || h.Args[0] != "--strict" {
+		t.Fatalf("hook args = %v", h.Args)
+	}
+	if h.RawFile.Path != "hooks/guard.hook.md" || len(h.RawFile.Content) == 0 {
+		t.Fatalf("hook raw file = %+v", h.RawFile)
+	}
+}
+
+func TestFetchWithNoHooksDirectoryBringsNone(t *testing.T) {
+	dir := writePackage(t, "name: bare\n", nil)
+	pkg, err := skillfetch.New().Fetch(ctx(), dir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pkg.Hooks != nil {
+		t.Fatalf("hooks = %v, want none", pkg.Hooks)
 	}
 }
 

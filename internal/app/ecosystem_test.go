@@ -3,6 +3,7 @@ package app_test
 import (
 	"testing"
 
+	"github.com/OWNER/aos/internal/domain/event"
 	"github.com/OWNER/aos/internal/domain/skill"
 	"github.com/OWNER/aos/internal/domain/toolset"
 	"github.com/OWNER/aos/internal/domain/view"
@@ -84,9 +85,9 @@ func TestTheDeliveryOfPhaseEight(t *testing.T) {
 // composition root, not just the domain's own fixtures: a toolset the
 // lockbox skill installs cannot have its Command or BaseURL walked away from
 // what VerifyManifest already checked at install (internal/domain/skill's
-// own check), because toolset.Service's SkillLookup — wired in wire.go to
-// skillToolsetOwner over this exact *skill.Installer — says lockbox owns it.
-// Fields VerifyManifest never checked stay editable regardless.
+// own check) — toolset.Service.UpdateConfig's own lock refuses either field
+// once a toolset's Skill is non-empty, see that method's doc comment. Fields
+// VerifyManifest never checked stay editable regardless.
 func TestASkillInstalledToolsetLocksCommandAndBaseURL(t *testing.T) {
 	a := newApp(t)
 	ctx := parityCtx()
@@ -136,5 +137,59 @@ func TestASkillInstalledToolsetLocksCommandAndBaseURL(t *testing.T) {
 	}
 	if again.Command != "true" {
 		t.Fatalf("Command = %q, want true — a rejected UpdateConfig must not partially apply", again.Command)
+	}
+}
+
+// TestASkillsHookActuallyInterceptsThroughTheRealCompositionRoot proves the
+// other half of dynamic hook registration end to end: not internal/adapters/
+// skillhooks' own unit tests, which cover Register/Deregister in isolation
+// over a fake bus, but a.Skills.Install wiring a real skill's hook onto
+// a.Hooks — the very *event.Service an agent's turn emits against — with
+// nothing else touched by hand.
+func TestASkillsHookActuallyInterceptsThroughTheRealCompositionRoot(t *testing.T) {
+	a := newApp(t)
+	ctx := parityCtx()
+
+	// No skill installed yet: a PreToolUse goes through with no opinion.
+	before, err := a.Hooks.Emit(ctx, event.Event{Type: event.PreToolUse, Tool: "toolsets_call"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Blocked() {
+		t.Fatal("something blocked PreToolUse before any hook was installed")
+	}
+
+	installed, err := a.Skills.Install(ctx, skill.InstallInput{
+		Source:      "testdata/hookish-skill",
+		AcceptedAll: func(skill.Permissions) bool { return true },
+	})
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if len(installed.Metadata.Hooks) != 1 || installed.Metadata.Hooks[0].ID != "guard" {
+		t.Fatalf("Metadata.Hooks = %+v, want [{guard}]", installed.Metadata.Hooks)
+	}
+
+	out, err := a.Hooks.Emit(ctx, event.Event{Type: event.PreToolUse, Tool: "toolsets_call"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Blocked() {
+		t.Fatal("the installed skill's hook did not intercept a real Emit")
+	}
+	if out.HookID != installed.ID+"/guard" {
+		t.Fatalf("HookID = %q, want %q", out.HookID, installed.ID+"/guard")
+	}
+
+	if err := a.Skills.Uninstall(ctx, skill.UninstallInput{ID: installed.ID}); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+
+	after, err := a.Hooks.Emit(ctx, event.Event{Type: event.PreToolUse, Tool: "toolsets_call"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Blocked() {
+		t.Fatal("the uninstalled skill's hook still intercepted Emit")
 	}
 }

@@ -90,6 +90,41 @@ func (s *Service) Register(h Handler) {
 	}
 }
 
+// Deregister removes every handler named in ids, from every event type it was
+// registered against.
+//
+// It exists for a skill's own hooks: Register was already safe to call at any
+// time, not only at boot (the mutex above predates this method), but nothing
+// could undo a registration until now — a skill's Uninstall had a Deregister
+// call to make and nothing under it to make it with. Calling it with an id
+// nothing registered is a no-op, not an error: a skill's own uninstall path
+// depends on that the same way Repository.Delete's idempotence does.
+func (s *Service) Deregister(ids ...string) {
+	if len(ids) == 0 {
+		return
+	}
+	remove := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		remove[id] = true
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for t, handlers := range s.handlers {
+		kept := handlers[:0]
+		for _, h := range handlers {
+			if !remove[h.ID()] {
+				kept = append(kept, h)
+			}
+		}
+		if len(kept) == 0 {
+			delete(s.handlers, t)
+		} else {
+			s.handlers[t] = kept
+		}
+	}
+}
+
 // Handlers reports the ids registered for one event, in dispatch order. It
 // exists so a person can find out what is going to run before it runs.
 func (s *Service) Handlers(t Type) []string {

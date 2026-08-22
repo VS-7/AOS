@@ -51,6 +51,39 @@ func TestWritePlacesEveryFileOfTheBatch(t *testing.T) {
 	}
 }
 
+// TestWriteWithTwoNewFilesSharingOneNewSubdirectoryOverAnUnresolvedRoot is
+// the regression Write's own doc comment describes: root is passed here
+// exactly as the real composition root hands it to skillfiles.New — not
+// pre-resolved through EvalSymlinks the way resolvedRoot deliberately does
+// for every other test in this file. On a platform where the workspace root
+// sits behind a symlink (macOS's /var → /private/var), the second of two new
+// files sharing one brand-new subdirectory used to fail containment: the
+// first file resolved against root's unresolved form (its own parent did not
+// exist yet either), the second resolved against the now-fully-resolved
+// form once the first file's write had created that subdirectory for real.
+func TestWriteWithTwoNewFilesSharingOneNewSubdirectoryOverAnUnresolvedRoot(t *testing.T) {
+	root := t.TempDir() // deliberately not resolvedRoot(t) — see doc comment above
+	f := skillfiles.New(root)
+
+	files := []skill.RawFile{
+		{Path: "hooks/guard.hook.md", Content: []byte("declaration")},
+		{Path: "hooks/guard.sh", Content: []byte("#!/bin/sh\n")},
+	}
+	if err := f.Write(ctx(), "hookish", files); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range files {
+		abs := filepath.Join(root, collections.Root, "skills", "hookish", want.Path)
+		got, err := os.ReadFile(abs) //nolint:gosec // test-controlled path
+		if err != nil {
+			t.Fatalf("reading %q: %v", abs, err)
+		}
+		if string(got) != string(want.Content) {
+			t.Fatalf("content of %q = %q, want %q", want.Path, got, want.Content)
+		}
+	}
+}
+
 func TestRemoveTakesBackWhatWriteWrote(t *testing.T) {
 	root := resolvedRoot(t)
 	f := skillfiles.New(root)

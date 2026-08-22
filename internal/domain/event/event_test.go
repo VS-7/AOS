@@ -546,6 +546,71 @@ func TestAHandlerThatWantsNothingIsHarmless(t *testing.T) {
 	}
 }
 
+func TestDeregisterRemovesAHandlerFromEveryEventItWasRegisteredAgainst(t *testing.T) {
+	bus := newBus(t, &recorder{}, false)
+	bus.Register(event.FuncHandler{
+		Name:   "multi",
+		Events: []event.Type{event.PreToolUse, event.PostToolUse},
+	})
+	bus.Register(event.FuncHandler{Name: "stays", Events: []event.Type{event.PreToolUse}})
+
+	bus.Deregister("multi")
+
+	if got := bus.Handlers(event.PreToolUse); len(got) != 1 || got[0] != "stays" {
+		t.Fatalf("Handlers(PreToolUse) = %v, want only \"stays\"", got)
+	}
+	if got := bus.Handlers(event.PostToolUse); len(got) != 0 {
+		t.Fatalf("Handlers(PostToolUse) = %v, want none", got)
+	}
+}
+
+func TestDeregisterOfAnUnknownIDIsANoOp(t *testing.T) {
+	bus := newBus(t, &recorder{}, false)
+	bus.Register(event.FuncHandler{Name: "stays", Events: []event.Type{event.PreToolUse}})
+
+	bus.Deregister("never-registered")
+
+	if got := bus.Handlers(event.PreToolUse); len(got) != 1 || got[0] != "stays" {
+		t.Fatalf("Handlers(PreToolUse) = %v, want \"stays\" untouched", got)
+	}
+}
+
+func TestDeregisterWithNoIDsTouchesNothing(t *testing.T) {
+	bus := newBus(t, &recorder{}, false)
+	bus.Register(event.FuncHandler{Name: "stays", Events: []event.Type{event.PreToolUse}})
+
+	bus.Deregister()
+
+	if got := bus.Handlers(event.PreToolUse); len(got) != 1 {
+		t.Fatalf("Handlers(PreToolUse) = %v", got)
+	}
+}
+
+// A deregistered handler's own opinion must never reach Emit again — proving
+// this end to end, rather than only via Handlers' own listing, is what would
+// catch a Deregister that updated the listing but left the dispatch slice
+// stale.
+func TestADeregisteredHandlerNoLongerRunsOnEmit(t *testing.T) {
+	bus := newBus(t, &recorder{}, false)
+	var ran bool
+	bus.Register(event.FuncHandler{
+		Name:   "watcher",
+		Events: []event.Type{event.PreToolUse},
+		Fn: func(context.Context, event.Event) (event.Outcome, error) {
+			ran = true
+			return event.Outcome{}, nil
+		},
+	})
+	bus.Deregister("watcher")
+
+	if _, err := bus.Emit(context.Background(), event.Event{Type: event.PreToolUse}); err != nil {
+		t.Fatal(err)
+	}
+	if ran {
+		t.Fatal("a deregistered handler still ran")
+	}
+}
+
 type notifier struct{ requested chan event.ApprovalRequest }
 
 func (n notifier) ApprovalRequested(_ context.Context, req event.ApprovalRequest) {

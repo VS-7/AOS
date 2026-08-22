@@ -14,6 +14,22 @@ origem: "[[Skill]]"
 
 Pacote instalável de capacidade. Uma skill não é documentação: ela traz **agentes, memórias, rotinas, coleções, views, hooks, artifacts, goals, templates, instruções e toolsets** juntos. Instalar uma skill instala uma equipe.
 
+## Estado atual
+
+Hooks de skill são dinâmicos: `hooks/{id}.hook.md` declara `events`, `command`
+e `args`; `VerifyManifest` recusa um evento não declarado em
+`permissions.hooks` (a mesma porta que `exec`/`network` já fecham para
+toolsets); `Apply` liga o hook de verdade em `internal/adapters/skillhooks`,
+que envolve `internal/adapters/hookexec` e o `event.Service` real — não mais
+o `noopSkillHooks` que só existia para satisfazer a interface. `Command` que
+contém `/` é tratado como script do próprio pacote (resolvido e confinado ao
+diretório instalado da skill, tornado executável); um nome nu é resolvido via
+PATH, igual a `mcp-server::stdio`. Como o bus e o rastreamento de ids são só
+memória, um restart do daemon perde as duas coisas — `internal/app`
+reconcilia lendo o disco de novo uma vez, na inicialização
+(`reconcileHooks`), o mesmo problema e o mesmo remédio que `reconcileCollections`
+já tem para um `schema.json` de coleção dinâmica.
+
 ## Comportamento do original
 
 Persistida em `.fractal/skills/{id}/SKILL.md`, com `references/*.md` e subdiretórios `agents/{id}/` que são o **segundo padrão** das coleções de agente, memória e rotina ([[Skill]]). `onDeleted` remove o diretório inteiro.

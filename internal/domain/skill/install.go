@@ -76,7 +76,7 @@ func NewInstaller(d Deps) *Installer {
 	applier := d.Applier
 	if applier == nil {
 		applier = &defaultApplier{
-			repo: d.Repo, collections: d.Collections, views: d.Views, files: d.Files, clock: d.Clock,
+			repo: d.Repo, collections: d.Collections, views: d.Views, files: d.Files, hooks: d.Hooks, clock: d.Clock,
 		}
 	}
 	return &Installer{
@@ -277,12 +277,20 @@ type defaultApplier struct {
 	collections Collections
 	views       Views
 	files       Files
+	hooks       Hooks
 	clock       Clock
 }
 
 func (a *defaultApplier) Apply(ctx context.Context, id string, pkg Package) (*Skill, error) {
 	var createdCollections, createdViews, writtenFiles []string
+	var hooksRegistered bool
 	rollback := func() {
+		// Hooks first, same order Uninstall tears down in: nothing should be
+		// left intercepting a tool call on behalf of a directory this same
+		// rollback is about to remove the rest of.
+		if hooksRegistered {
+			_ = a.hooks.Deregister(ctx, id)
+		}
 		for i := len(writtenFiles) - 1; i >= 0; i-- {
 			_ = a.files.Remove(ctx, id, writtenFiles[i])
 		}
@@ -314,10 +322,13 @@ func (a *defaultApplier) Apply(ctx context.Context, id string, pkg Package) (*Sk
 		createdViews = append(createdViews, in.ID)
 	}
 
-	files := make([]RawFile, 0, len(pkg.Files)+len(pkg.Toolsets))
+	files := make([]RawFile, 0, len(pkg.Files)+len(pkg.Toolsets)+len(pkg.Hooks))
 	files = append(files, pkg.Files...)
 	for _, ts := range pkg.Toolsets {
 		files = append(files, ts.RawFile)
+	}
+	for _, h := range pkg.Hooks {
+		files = append(files, h.RawFile)
 	}
 	if len(files) > 0 {
 		if err := a.files.Write(ctx, id, files); err != nil {
@@ -331,6 +342,18 @@ func (a *defaultApplier) Apply(ctx context.Context, id string, pkg Package) (*Sk
 		for _, f := range files {
 			writtenFiles = append(writtenFiles, f.Path)
 		}
+	}
+
+	// Hooks go live after their own declaration files are on disk — a real
+	// Hooks adapter that reads a hook's script off the installed skill's own
+	// directory needs it to already be there, the same reason toolsets'
+	// RawFile is written before anything downstream might read it back.
+	if len(pkg.Hooks) > 0 {
+		if err := a.hooks.Register(ctx, id, pkg.Hooks); err != nil {
+			rollback()
+			return nil, errApplyFailed(id, "hooks", err)
+		}
+		hooksRegistered = true
 	}
 
 	now := a.clock.Now()
@@ -374,6 +397,9 @@ func metadataOf(pkg Package) Metadata {
 	}
 	for _, ts := range pkg.Toolsets {
 		m.Toolsets = append(m.Toolsets, ToolsetRef{ID: ts.ID, Type: ts.Type})
+	}
+	for _, h := range pkg.Hooks {
+		m.Hooks = append(m.Hooks, Ref{ID: h.ID})
 	}
 	return m
 }

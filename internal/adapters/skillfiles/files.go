@@ -54,8 +54,26 @@ func (f *Files) skillRoot(skillID string) (string, error) {
 // whole batch, so a Write that fails partway through and leaves some of it on
 // disk is a contract this type must not violate — every file below the one
 // that failed is left unwritten, not attempted.
+//
+// The skill's own directory is created before root is resolved, deliberately
+// — not left for the first file's own write to create as a side effect.
+// pathx.Resolve returns a path unchanged when its parent does not exist yet
+// and fully symlink-resolved once it does (see its own doc), and on a
+// platform where the workspace root sits behind a symlink (macOS's
+// /var → /private/var, notably), those are two different strings. A batch
+// with two new files sharing one new subdirectory — a hook's own
+// declaration and the script it names, both freshly under hooks/ — would
+// resolve its first file against the unresolved form and its second against
+// the now-resolved one, and the second would fail containment against a root
+// captured in the other form. Creating the directory first makes root fully
+// resolved from its very first use, so every file in the batch is compared
+// against the same string.
 func (f *Files) Write(_ context.Context, skillID string, files []skill.RawFile) error {
-	root, err := f.skillRoot(skillID)
+	dir := filepath.Join(f.root, collections.Root, "skills", skillID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return errResolveFailed(skillID, err)
+	}
+	root, err := pathx.Root(dir)
 	if err != nil {
 		return errResolveFailed(skillID, err)
 	}

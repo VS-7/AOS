@@ -31,6 +31,7 @@ import (
 	"github.com/OWNER/aos/internal/adapters/osfile"
 	"github.com/OWNER/aos/internal/adapters/skillfetch"
 	"github.com/OWNER/aos/internal/adapters/skillfiles"
+	"github.com/OWNER/aos/internal/adapters/skillhooks"
 	"github.com/OWNER/aos/internal/adapters/sqlitequeue"
 	"github.com/OWNER/aos/internal/adapters/supervise"
 	"github.com/OWNER/aos/internal/adapters/telegramapi"
@@ -502,6 +503,12 @@ func New(opts Options) (*App, error) {
 		Clock:      clock,
 		Log:        logger,
 	})
+	// hooksAdapter turns a skill's declared hooks into live handlers on
+	// hookBus — see internal/adapters/skillhooks. It is built here, before
+	// skillInstaller, so the same instance is both the Hooks port below and
+	// what reconcileHooks re-registers from disk once skillInstaller exists
+	// too — see that call, further down.
+	hooksAdapter := skillhooks.New(hookBus, root)
 	skillInstaller := skill.NewInstaller(skill.Deps{
 		Fetcher:     skillfetch.New(),
 		Approver:    broker,
@@ -509,10 +516,15 @@ func New(opts Options) (*App, error) {
 		Collections: collectionSvc,
 		Views:       viewSvc,
 		Files:       skillfiles.New(root),
-		Hooks:       noopSkillHooks{},
+		Hooks:       hooksAdapter,
 		Toolsets:    noopSkillToolsets{},
 		Clock:       clock,
 	})
+	// A skill installed in an earlier run of this daemon has its hooks on
+	// disk but nothing in the (freshly built, empty) event bus or in
+	// hooksAdapter's own bookkeeping — see reconcileHooks' own doc comment
+	// for why this cannot wait.
+	reconcileHooks(context.Background(), skillInstaller, hooksAdapter, skillfetch.New(), root, logger)
 
 	// The eight domains Phase 8 declared alongside the ecosystem core — see
 	// the App field's own comment. Built here, after skillInstaller and

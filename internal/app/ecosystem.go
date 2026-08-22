@@ -3,9 +3,12 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
+	"path/filepath"
 
 	"github.com/OWNER/aos/internal/adapters/marketplacegit"
 	"github.com/OWNER/aos/internal/adapters/marketplacehttp"
+	"github.com/OWNER/aos/internal/adapters/skillhooks"
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/command"
@@ -15,6 +18,7 @@ import (
 	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/domain/goal"
 	"github.com/OWNER/aos/internal/domain/marketplace"
+	"github.com/OWNER/aos/internal/domain/skill"
 	"github.com/OWNER/aos/internal/domain/task"
 	"github.com/OWNER/aos/internal/domain/tunnel"
 	"github.com/OWNER/aos/internal/transport/realtime"
@@ -115,18 +119,43 @@ func errActionCommandNotFound(name string) error {
 		CTA(apperr.CallToAction{Label: "the view names a command that no longer exists; edit or remove the action"})
 }
 
-// noopSkillHooks is the Deregister a skill's hooks need on Uninstall.
+// reconcileHooks re-registers every active, already-installed skill's hooks
+// once, at boot.
 //
-// It has nothing to do yet: hook registration in this build is static —
-// event.Service.Register is called once, at boot, for the handlers wired
-// into New — nothing here registers one dynamically per skill for this to
-// tear down. A skill that ships hooks still installs; they simply do not
-// intercept anything until dynamic hook registration exists, an honest gap
-// disclosed here rather than a Deregister that pretends to undo work that
-// was never done.
-type noopSkillHooks struct{}
-
-func (noopSkillHooks) Deregister(context.Context, string) error { return nil }
+// skillhooks.Hooks starts every run with nothing in memory — the event bus
+// is fresh, and so is this adapter's own bookkeeping of which handler ids
+// belong to which skill — but a skill's hooks are still sitting on disk from
+// whenever it was installed, in an earlier run of this same daemon. Without
+// this, a skill's hooks silently stop intercepting anything the moment the
+// process restarts, until someone reinstalls the skill to get them back —
+// the same problem reconcileCollections (watch.go) solves for a dynamic
+// collection's schema.json, and the same fix: read what a prior run already
+// wrote and make it live again before a turn can reach it.
+//
+// A skill whose reconciliation fails — a hook script since deleted by hand,
+// say — is logged and skipped rather than aborting the rest: one broken
+// skill must not silently take every other installed skill's hooks down
+// with it.
+func reconcileHooks(ctx context.Context, skills *skill.Installer, hooks *skillhooks.Hooks, fetcher skill.Fetcher, root string, log *slog.Logger) {
+	out, err := skills.List(ctx)
+	if err != nil {
+		log.Warn("could not reconcile skill hooks declared on disk", "err", err)
+		return
+	}
+	for _, s := range out.Skills {
+		if !s.Active || len(s.Metadata.Hooks) == 0 {
+			continue
+		}
+		pkg, err := fetcher.Fetch(ctx, filepath.Join(root, collections.Root, "skills", s.ID), "")
+		if err != nil {
+			log.Warn("could not re-read an installed skill's hooks", "skill", s.ID, "err", err)
+			continue
+		}
+		if err := hooks.Register(ctx, s.ID, pkg.Hooks); err != nil {
+			log.Warn("could not re-register an installed skill's hooks", "skill", s.ID, "err", err)
+		}
+	}
+}
 
 // noopSkillToolsets is the Close a skill's toolset connections need on
 // Uninstall.

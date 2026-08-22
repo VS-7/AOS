@@ -9,6 +9,7 @@ import (
 
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/domain/collection"
+	"github.com/OWNER/aos/internal/domain/event"
 	"github.com/OWNER/aos/internal/domain/view"
 )
 
@@ -115,11 +116,20 @@ type Files interface {
 	Remove(ctx context.Context, skillID, path string) error
 }
 
-// Hooks deregisters the handlers a skill's own hooks became when it was
-// installed. Uninstall calls it before the skill's files are removed, so
-// nothing keeps intercepting a tool call on behalf of a directory that no
-// longer exists.
+// Hooks turns a skill's declared hooks into live handlers on the event bus,
+// and takes them down again.
 type Hooks interface {
+	// Register makes decls live, on skillID's behalf. Apply calls it once,
+	// after everything else about the install has already succeeded — a
+	// failure here still rolls the whole install back (see Apply's own
+	// comment), the same as a failure creating a collection or a view does.
+	Register(ctx context.Context, skillID string, decls []HookDecl) error
+
+	// Deregister removes every hook Register added for skillID. Uninstall
+	// calls it before the skill's files are removed, so nothing keeps
+	// intercepting a tool call on behalf of a directory that no longer
+	// exists. It is idempotent: a skillID Register was never called for, or
+	// was already deregistered, is a no-op.
 	Deregister(ctx context.Context, skillID string) error
 }
 
@@ -158,6 +168,25 @@ type ToolsetDecl struct {
 	RawFile RawFile
 }
 
+// HookDecl is one hook a package declares: both what VerifyManifest checks
+// (every one of Events against Permissions.Hooks — an undeclared event a
+// hook wants is refused the same way an undeclared exec or network reach
+// is) and what Hooks.Register turns into a live handler on the bus.
+//
+// Unlike ToolsetDecl's Command, which usually names a binary already on the
+// machine, a hook's Command is expected to be the package's own script —
+// content the same install approval that covers the rest of the package
+// already covers, per ADR-0015's "hooks são declarativos" framing: the risk
+// is the event it asks to intercept, which the manifest check above covers,
+// not a second exec allowlist this package does not add.
+type HookDecl struct {
+	ID      string
+	Events  []event.Type
+	Command string
+	Args    []string
+	RawFile RawFile
+}
+
 // Package is a skill's content, read but not yet applied. Fetch produces it;
 // VerifyManifest checks it against Manifest.Permissions; only a consented
 // Install ever writes it anywhere.
@@ -174,6 +203,7 @@ type Package struct {
 	Collections []collection.CreateInput
 	Views       []view.CreateInput
 	Toolsets    []ToolsetDecl
+	Hooks       []HookDecl
 
 	// Files is everything else the package brings — agents (with their
 	// memories and routines), templates, instructions, goals, references —

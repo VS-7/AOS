@@ -19,6 +19,7 @@ import (
 
 	"github.com/OWNER/aos/internal/core/pathx"
 	"github.com/OWNER/aos/internal/domain/collection"
+	"github.com/OWNER/aos/internal/domain/event"
 	"github.com/OWNER/aos/internal/domain/skill"
 	"github.com/OWNER/aos/internal/domain/view"
 )
@@ -94,6 +95,9 @@ func (Local) Fetch(_ context.Context, source, ref string) (skill.Package, error)
 	if pkg.Toolsets, err = readToolsets(root); err != nil {
 		return skill.Package{}, err
 	}
+	if pkg.Hooks, err = readHooks(root); err != nil {
+		return skill.Package{}, err
+	}
 	if pkg.Files, err = readFiles(root); err != nil {
 		return skill.Package{}, err
 	}
@@ -124,6 +128,16 @@ type toolsetFrontMatter struct {
 	Type    string `yaml:"type"`
 	Command string `yaml:"command,omitempty"`
 	BaseURL string `yaml:"baseUrl,omitempty"`
+}
+
+// hookFrontMatter is the front matter of a hook's own declaration file —
+// enough for VerifyManifest to check its Events against Permissions.Hooks
+// and for Hooks.Register to build a live handler from it. The file itself is
+// relocated unmodified by Apply, the same as a toolset's.
+type hookFrontMatter struct {
+	Events  []string `yaml:"events"`
+	Command string   `yaml:"command"`
+	Args    []string `yaml:"args,omitempty"`
 }
 
 // readCollections decodes collections/{id}/schema.json for every declared
@@ -242,13 +256,71 @@ func readToolsets(root string) ([]skill.ToolsetDecl, error) {
 	return out, nil
 }
 
+// readHooks decodes hooks/{id}.hook.md for every declared hook: enough of
+// its front matter (events, command, args) for VerifyManifest to check it
+// and Hooks.Register to build a live handler from it, plus the file itself,
+// unmodified, for Apply to write — the same shape readToolsets reads its own
+// declarations in.
+func readHooks(root string) ([]skill.HookDecl, error) {
+	dir := filepath.Join(root, "hooks")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, errRead(dir, err)
+	}
+	var out []skill.HookDecl
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".hook.md") {
+			continue
+		}
+		p := filepath.Join(dir, e.Name())
+		data, err := os.ReadFile(p) //nolint:gosec // p is built from a directory entry under root, not user input
+		if err != nil {
+			return nil, errRead(p, err)
+		}
+		front, _ := splitFrontMatter(data)
+		var hm hookFrontMatter
+		if len(strings.TrimSpace(string(front))) > 0 {
+			if err := yaml.Unmarshal(front, &hm); err != nil {
+				return nil, errDecode(p, err)
+			}
+		}
+		rel, err := filepath.Rel(root, p)
+		if err != nil {
+			return nil, errRead(p, err)
+		}
+		events := make([]event.Type, len(hm.Events))
+		for i, raw := range hm.Events {
+			events[i] = event.Type(raw)
+		}
+		out = append(out, skill.HookDecl{
+			ID:      strings.TrimSuffix(e.Name(), ".hook.md"),
+			Events:  events,
+			Command: hm.Command,
+			Args:    hm.Args,
+			RawFile: skill.RawFile{Path: filepath.ToSlash(rel), Content: data},
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
 // readFiles walks everything under root except SKILL.md and the three
-// directories with their own reader above, and returns it as raw files: an
-// agent's directory (with its memories and routines nested inside), a
-// template, an instruction, a goal, a reference. The walk never leaves root —
-// filepath.WalkDir only visits real directory entries — so this is safe
-// without pathx; readResources below is where a declared path, rather than an
-// entry the walk found itself, needs confining.
+// directories wholly owned by their own reader above, and returns it as raw
+// files: an agent's directory (with its memories and routines nested
+// inside), a template, an instruction, a goal, a reference, and — unlike
+// collections/views/toolsets — the one thing hooks/ itself still needs a
+// second pass for: a hook's own *.hook.md is already carried by readHooks,
+// as each HookDecl's own RawFile, but a companion script a hook's Command
+// names (a relative path, not a bare PATH-resolved name) is package content
+// like any other and has to reach the installed skill's directory the same
+// way everything else here does — readHooks has no reason to know that, its
+// job is the declaration, not the whole directory. The walk never leaves
+// root — filepath.WalkDir only visits real directory entries — so this is
+// safe without pathx; readResources below is where a declared path, rather
+// than an entry the walk found itself, needs confining.
 func readFiles(root string) ([]skill.RawFile, error) {
 	skipTop := map[string]bool{"SKILL.md": true, "collections": true, "views": true, "toolsets": true}
 	entries, err := os.ReadDir(root)
@@ -260,12 +332,16 @@ func readFiles(root string) ([]skill.RawFile, error) {
 		if skipTop[e.Name()] || strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
+		underHooks := e.Name() == "hooks"
 		sub := filepath.Join(root, e.Name())
 		walkErr := filepath.WalkDir(sub, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
 			if d.IsDir() {
+				return nil
+			}
+			if underHooks && strings.HasSuffix(p, ".hook.md") {
 				return nil
 			}
 			data, rerr := os.ReadFile(p) //nolint:gosec // p comes from WalkDir over sub, itself under root
