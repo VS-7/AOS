@@ -148,11 +148,42 @@ var pricingRaw []byte
 > [!decision] Tabela de preços versionada
 > Adição, para dar custo por mensagem em [[Chat (Go)]].
 
+## Estado atual
+
+A tabela de preços que a seção "Pendente" mais abaixo chamava de inexistente
+já existe e está wireada — essa nota ficou desatualizada nesse ponto
+específico; o resto dela continua verdadeiro. Dois itens seguem
+genuinamente em aberto:
+
+- **`RefreshFunc` dos adaptadores OAuth não está implementado.**
+  `oauthfile.Store.Refresh` é o campo certo — o resto do `Store` (leitura,
+  expiração, lock entre processos, regravação preservando chaves
+  desconhecidas) tem suíte própria agora (`oauthfile_test.go`, contra um
+  `RefreshFunc` fake, sem tocar rede real) — mas `oauthfile.Codex`/
+  `oauthfile.GeminiCLI` não o preenchem — um token expirado sempre vira
+  `OAUTH_TOKEN_EXPIRED` pedindo
+  novo login, nunca tenta renovar. Implementar isso exige saber o endpoint
+  real de token e os parâmetros (`client_id`, escopo) que o Codex CLI e o
+  Gemini CLI de terceiros realmente usam — não é algo que se infere do
+  design deste sistema, é comportamento de uma ferramenta externa. Uma
+  tentativa de pesquisar isso via busca na web e API do GitHub nesta sessão
+  foi bloqueada pelo classificador de segurança do ambiente (um padrão de
+  busca por "refresh token endpoint" de ferramenta de terceiro aciona a
+  mesma proteção que existe contra exfiltração de credencial, mesmo sendo
+  pesquisa de código aberto legítima) — então isso não foi implementado às
+  cegas, para não gravar algo incorreto no arquivo de credencial real de
+  alguém. Requer decisão de como obter a especificação real (documentação
+  pública oficial, ou o próprio usuário fornecendo os valores).
+- **Nenhum adaptador foi exercitado contra a API real de um provider** —
+  a suíte de contrato roda contra troca gravada (`httptest`), nunca contra
+  `api.openai.com`/`api.anthropic.com`/etc. de verdade. Precisa de uma
+  chave de API válida para cada provider, que este ambiente não tem.
+
 ## Testes
 
 - Contrato de `LLMProvider` roda contra os oito adaptadores mais o fake ([[Testes de Contrato de Port]])
 - Registro por `init()` torna um provider fictício resolvível sem tocar no core
-- OAuth: arquivo ausente falha com CTA; token expirado é renovado uma vez; dois processos renovando concorrentes não corrompem
+- OAuth: arquivo ausente falha com CTA; token expirado sem `Refresh` configurado é um erro pedindo novo login; token expirado com `Refresh` configurado renova e persiste, preservando chaves desconhecidas do arquivo; dois processos renovando ao mesmo tempo não corrompem (lock de arquivo)
 - Capability: slot vazio → `_MODEL_MISSING`; provider sem a interface → `_NOT_SUPPORTED`
 - `opencode` roteia `-free` para o endpoint alternativo
 - Cálculo de custo bate com a tabela para cada modelo listado
@@ -161,9 +192,9 @@ var pricingRaw []byte
 ## Critério de pronto
 
 - [x] Oito providers implementados, com suíte de contrato verde
-- [~] Adaptadores OAuth leem e travam entre processos; a renovação não tem função de refresh
+- [~] Adaptadores OAuth leem e travam entre processos; a renovação não tem função de refresh — ver "Estado atual" acima
 - [x] Verificação de capability em duas etapas
-- [ ] Custo por mensagem calculado
+- [x] Custo por mensagem calculado — `pricing.json` existe, embutido em `internal/runtime/providers`; `session.go:246` grava `CostUSD` em todo turno; `TestCostUSDPricesAKnownModel`, `TestCostUSDIsZeroForTheOAuthSubscriptionAdapters`
 
 ## Saída dos testes — Fase 5
 
