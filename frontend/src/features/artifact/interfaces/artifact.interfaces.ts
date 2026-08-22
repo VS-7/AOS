@@ -1,41 +1,37 @@
 /**
- * There is no AOS Go backend for this domain yet, but a real, checkable
- * declaration exists in the old AOS server:
- * `v401/server/src/features/artifact/schemas/artifact.schema.ts`
- * (`ArtifactSchema`, the entity) and
- * `.../services/artifact/artifact.service.ts` (the exact construction site
- * for `ArtifactListItem` and `ArtifactUrls` — the type-only
- * `interfaces/artifact.interfaces.ts` that would normally declare these
- * was itself erased by the bundler, same as everywhere else, so the
- * schema + the literal object construction are the best available ground
- * truth). Recovered, not guessed. When AOS grows a Go backend for this,
- * re-verify against that instead.
+ * Re-verified against the real Go backend — `internal/domain/artifact`
+ * (`entity.go`, `service.go`) — now that it exists; this used to be
+ * recovered from the original product's TS server instead (see git history
+ * for that version's own doc comment), per its own instruction to do
+ * exactly this once a Go backend grew.
  *
- * `ArtifactListItem` is `{ ...artifact, urls }`
- * (`artifact.service.ts`'s `list()`, `sorted.map(async (artifact) => ({
- * ...artifact, urls: await this._get_artifact_urls(artifact.id) }))`) —
- * every field of the full entity, not just the four the frontend's ported
- * UI (`artifact.store.ts`, `use-artifacts.ts`, `artifact.helper.ts`,
- * `artifact.trigger.ts`) happens to read. `ArtifactUrls` comes from
- * `_get_artifact_urls`: `{ local, tunnel }` — the frontend only ever reads
- * `.local`, but `.tunnel` is a real field on the wire (nullable, not
- * optional — always computed, just `null` when no tunnel is configured).
+ * Three fields the original had no longer apply: `icon` and `serve` were
+ * never added to this rebuild's entity (`ArtifactHelper.getIcon` already
+ * treats a missing icon as the normal case, falling back to a default), and
+ * the password is never sent to a client at all — `PasswordHash` is
+ * `json:"-"` on the Go side (`entity.go`), by design; there is no `secret`
+ * field on the wire to read.
+ *
+ * `urls` is real and always present, computed by the service on every read
+ * (`Service.urlsFor`, `service.go`) rather than persisted — `.local` is
+ * `internal/transport/artifactapi`'s route for this artifact
+ * (`/v/artifacts/{id}/`), which `ArtifactHelper.openInBrowserTab` opens
+ * directly. `.tunnel` is on the wire, matching the original's own shape,
+ * but this build does not yet compute one — always `null` today (see
+ * `urlsFor`'s own comment on why).
  */
 export type ArtifactVisibility = "private" | "workspace" | "by_password";
 
 export interface Artifact {
   id: string;
   name: string;
-  icon?: string;
   skill?: string;
   description?: string;
   entrypoint: string;
-  serve?: string;
   visibility: ArtifactVisibility;
-  /** Hashed password when `visibility` is `"by_password"`. Present on the wire as-is — the server does not strip it for list/get responses. */
-  secret?: string;
   createdAt: string;
   updatedAt: string;
+  urls: ArtifactUrls;
 }
 
 export interface ArtifactUrls {
@@ -43,6 +39,9 @@ export interface ArtifactUrls {
   tunnel: string | null;
 }
 
-export type ArtifactListItem = Artifact & {
-  urls: ArtifactUrls;
-};
+/**
+ * Historically `Artifact & { urls }` — the Go entity carries `urls` itself
+ * now (see the module doc above), so this is just an alias kept for every
+ * existing call site that names it.
+ */
+export type ArtifactListItem = Artifact;

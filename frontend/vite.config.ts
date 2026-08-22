@@ -60,6 +60,11 @@ export default defineConfig({
       // is the one thing that exists only while developing.
       "/api": { target: "http://127.0.0.1:5326", changeOrigin: true },
       "/ws": { target: "ws://127.0.0.1:5326", ws: true },
+      // Artifacts (internal/transport/artifactapi) — missed when that mount
+      // point was added, which meant every artifact URL a dev build opened
+      // resolved to Vite's own index.html (a 200, wrong content) instead of
+      // ever reaching the daemon.
+      "/v": { target: "http://127.0.0.1:5326", changeOrigin: true },
     },
   },
 });

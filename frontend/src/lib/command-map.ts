@@ -661,7 +661,14 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // render, marketplace.install) have no live caller yet, the same
   // "no live caller" status collection.createRecord and skill's unused
   // fields above already carry.
-  "artifact.list": "artifacts_list",
+  // `artifacts_list` (`internal/domain/artifact/service.go`'s `List`)
+  // answers a bare `[]Artifact`, not `{artifacts: [...]}` — the live
+  // consumer, `artifact.store.ts`'s `preload`/`refresh`, reads
+  // `response.data?.artifacts`. Without `wrapOut` here, that read was always
+  // `undefined` off a bare array, so `ArtifactStore.items` stayed empty no
+  // matter how many artifacts existed — found while wiring the sidebar's
+  // "Surfaces" group up to a real backend, not by a live failure report.
+  "artifact.list": { key: "artifacts_list", wrapOut: "artifacts" },
   "artifact.getById": { key: "artifacts_get", renameIn: { artifact: "id" } },
   "artifact.create": "artifacts_create",
   "artifact.update": { key: "artifacts_update", renameIn: { artifact: "id" } },
