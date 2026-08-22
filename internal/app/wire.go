@@ -530,7 +530,16 @@ func New(opts Options) (*App, error) {
 		Repo: repos.instructions, Clock: clock,
 	})
 	templateSvc := template.NewService(template.Deps{
-		Repo: repos.templates, Engine: liquidengine.New(), Clock: clock,
+		Repo:   repos.templates,
+		Engine: liquidengine.New(),
+		// Workspaces and Files back templates_render's write:true — the same
+		// workspaceRoot and osfile.FS the file explorer already uses, since
+		// writing a template's rendered Output to disk is the same
+		// workspace-confined filesystem operation the file domain already
+		// performs, not a second implementation of it.
+		Workspaces: workspaceRoot{workspaceSvc},
+		Files:      osfile.New(),
+		Clock:      clock,
 	})
 	goalSvc := goal.NewService(goal.Deps{
 		Repo: repos.goals, Tasks: goalTasksAdapter{tasks: taskSvc}, Clock: clock,

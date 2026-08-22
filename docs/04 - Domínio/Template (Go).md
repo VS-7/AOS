@@ -14,6 +14,20 @@ origem: "[[Template]]"
 
 Geradores reutilizáveis para trabalho com forma repetível — briefs de task, planos, relatórios, e-mails.
 
+## Estado atual
+
+`templates_render` grava em disco, mas só quando o chamador pede: `write:true`
+em `RenderInput` (default `false` — a única fronteira do sistema onde Liquid
+de terceiro roda contra dados do chamador não escreve nada por padrão).
+`Output` é ele mesmo Liquid, renderizado pelo mesmo `render()` limitado por
+timeout/tamanho que `Content` usa, e o caminho resolvido é confinado ao
+workspace ativo (`template.Workspaces`/`template.Files`, ligados em `wire.go`
+ao mesmo `workspaceRoot`/`osfile.New()` que o file explorer já usa — não uma
+segunda implementação). A anotação `ReadOnlyHint` do comando `render` foi
+removida por causa disso: o canal de aprovação deriva o risco dela
+([[ADR-0007 Canal real de aprovação de tool]]), e um comando que pode
+escrever não pode se anunciar como somente-leitura.
+
 ## Comportamento do original
 
 Motor LiquidJS ([[Template]]). Papel no prompt:

@@ -2,6 +2,7 @@ package template
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 
 	"github.com/OWNER/aos/internal/core/collections"
@@ -11,21 +12,35 @@ import (
 // Service is the template aggregate: persistence (List, Get, Create, Update,
 // Delete) and the one place this system runs user-authored Liquid (Render).
 type Service struct {
-	repo   Repository
-	engine Engine
-	clock  Clock
+	repo       Repository
+	engine     Engine
+	workspaces Workspaces
+	files      Files
+	clock      Clock
 }
 
 // Deps is what the service is built from.
 type Deps struct {
 	Repo   Repository
 	Engine Engine
-	Clock  Clock
+
+	// Workspaces and Files are what Render needs to honor RenderInput.Write —
+	// see Render's own doc comment. A caller that never sets Write leaves
+	// both unused, which is why every existing construction of Deps before
+	// this field pair existed continues to work unchanged.
+	Workspaces Workspaces
+	Files      Files
+
+	Clock Clock
 }
 
 // NewService wires the service over its ports.
 func NewService(d Deps) *Service {
-	return &Service{repo: d.Repo, engine: d.Engine, clock: d.Clock}
+	return &Service{
+		repo: d.Repo, engine: d.Engine,
+		workspaces: d.Workspaces, files: d.Files,
+		clock: d.Clock,
+	}
 }
 
 // ListInput selects the templates List returns. Query and Skill mirror the
@@ -215,24 +230,32 @@ type RenderInput struct {
 	ID        string         `json:"id" jsonschema:"Identifier of the template to render." validate:"required,notblank"`
 	Variables map[string]any `json:"variables,omitempty" jsonschema:"Values for the template's declared Variables. A missing Required variable with no Default refuses the render."`
 
+	// Write, when true, additionally writes the rendered output to disk at
+	// the template's own Output path — itself run through Liquid against the
+	// same Variables, since a scaffolding path like
+	// ".aos/artifacts/plans/{{ name }}.plan.md" is exactly as much a template
+	// as Content is. False, the default, only returns the rendered text: the
+	// one place in this system Liquid runs over caller data is not a place
+	// that touches disk unless a caller explicitly opts in.
+	Write bool `json:"write,omitempty" jsonschema:"When true, also writes the rendered output to disk at the template's own (Liquid-rendered) Output path. Refused if the template declares no Output. Default false only returns the rendered text."`
+
 	command.Reasoning
 }
 
 // RenderResult is what a render produced.
 type RenderResult struct {
 	Output string `json:"output" jsonschema:"The rendered text."`
+
+	// WrittenTo is the workspace-relative path Output was actually written
+	// to, set only when RenderInput.Write was true.
+	WrittenTo string `json:"writtenTo,omitempty" jsonschema:"Workspace-relative path the output was written to. Empty unless Write was true."`
 }
 
 // Render validates in.Variables against the template's declared contract,
 // then runs Content through the engine under a timeout and an output size
 // cap — see render() in render.go for what that boundary actually enforces
-// and why.
-//
-// It writes nothing to disk: the entity's own Output field is a suggested
-// path for a caller to use, not a target this method resolves and writes to
-// itself — the original does write render output to disk as its primary
-// scaffolding path, and this build does not yet. See this package's
-// INTEGRATION.md for the gap and what wiring it would need.
+// and why. With Write, it additionally renders the template's own Output
+// path and writes the result there — see writeOutput.
 func (s *Service) Render(ctx context.Context, in RenderInput) (RenderResult, error) {
 	t, err := s.Get(ctx, GetInput{ID: in.ID})
 	if err != nil {
@@ -248,7 +271,54 @@ func (s *Service) Render(ctx context.Context, in RenderInput) (RenderResult, err
 	if err != nil {
 		return RenderResult{}, err
 	}
-	return RenderResult{Output: out}, nil
+	result := RenderResult{Output: out}
+	if !in.Write {
+		return result, nil
+	}
+
+	written, err := s.writeOutput(ctx, t, vars, out)
+	if err != nil {
+		return RenderResult{}, err
+	}
+	result.WrittenTo = written
+	return result, nil
+}
+
+// writeOutput renders t.Output as a second, independent Liquid template
+// against the same vars Content just rendered with, then writes Content's
+// already-rendered output there, confined to the active workspace.
+//
+// Output is rendered through the same bounded render() Content is — a
+// pathological Output path template gets the same timeout and size cap as a
+// pathological body, rather than a second, unguarded code path.
+func (s *Service) writeOutput(ctx context.Context, t *Template, vars map[string]any, rendered string) (string, error) {
+	if strings.TrimSpace(t.Output) == "" {
+		return "", errNoOutputPath(t.ID)
+	}
+	path, err := render(ctx, s.engine, t.ID, t.Output, vars)
+	if err != nil {
+		return "", errOutputPathRenderFailed(t.ID, err)
+	}
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", errOutputPathEmpty(t.ID)
+	}
+
+	root, err := s.workspaces.Root(ctx)
+	if err != nil {
+		return "", errWorkspaceUnavailable(t.ID, err)
+	}
+	resolved, err := s.files.Resolve(ctx, root, path)
+	if err != nil {
+		return "", errOutputWriteFailed(t.ID, path, err)
+	}
+	if err := s.files.MkdirAll(ctx, filepath.Dir(resolved)); err != nil {
+		return "", errOutputWriteFailed(t.ID, path, err)
+	}
+	if err := s.files.WriteFile(ctx, resolved, []byte(rendered)); err != nil {
+		return "", errOutputWriteFailed(t.ID, path, err)
+	}
+	return path, nil
 }
 
 // validateContent refuses Content that does not parse as Liquid, unless it

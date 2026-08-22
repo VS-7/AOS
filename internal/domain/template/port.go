@@ -38,3 +38,25 @@ type Engine interface {
 	// itself is not bounded, callers are (see render.go's Render).
 	Render(source string, vars map[string]any) (string, error)
 }
+
+// Workspaces resolves the directory a render's Output path is relative to —
+// the same port file.Service takes in wire.go (see workspaceRoot there).
+type Workspaces interface {
+	Root(ctx context.Context) (string, error)
+}
+
+// Files is the filesystem slice a disk-writing Render needs: confine a path
+// to the workspace root, and write to it. It is narrowed to exactly
+// file.FS's own Resolve/WriteFile/MkdirAll, so the real osfile.FS adapter
+// already wired for the file domain satisfies it with no wrapper — see
+// wire.go. It stays its own interface rather than an import of file.FS, the
+// same reason every port in this codebase is declared locally: this package
+// must not import another domain's.
+type Files interface {
+	// Resolve confines p to root, the way pathx.ResolveInside — which the
+	// real adapter delegates to — confines a file explorer's own reads.
+	Resolve(ctx context.Context, root, p string) (string, error)
+
+	WriteFile(ctx context.Context, path string, data []byte) error
+	MkdirAll(ctx context.Context, path string) error
+}

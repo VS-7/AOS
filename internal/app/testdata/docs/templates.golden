@@ -11,7 +11,8 @@ execute pattern every composite tool in this system follows.
 - **update** — change an existing template's body, variables or metadata
 - **delete** — remove a template
 - **render** — run a template's body against variables, bounded by a
-  timeout and an output size cap
+  timeout and an output size cap; write:true also writes the result to the
+  template's own (Liquid-rendered) Output path
 
 ## When to use
 - **Work has a recognizable, repeatable shape:** a task brief, a plan, a
@@ -223,6 +224,10 @@ timeout and an output size cap. A required variable with no default and no
 value given refuses the render, naming which one and pointing at
 templates_get.
 
+With write:true, also renders the template's own Output path — itself
+Liquid — and writes the result there, confined to the active workspace.
+Refused if the template declares no Output.
+
 ```json
 {
   "type": "object",
@@ -235,6 +240,10 @@ templates_get.
       "type": "object",
       "description": "Values for the template's declared Variables. A missing Required variable with no Default refuses the render.",
       "additionalProperties": true
+    },
+    "write": {
+      "type": "boolean",
+      "description": "When true, also writes the rendered output to disk at the template's own (Liquid-rendered) Output path. Refused if the template declares no Output. Default false only returns the rendered text."
     },
     "_reasoning": {
       "type": "string",

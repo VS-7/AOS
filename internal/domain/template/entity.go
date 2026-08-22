@@ -37,10 +37,11 @@ type Template struct {
 	Variables []Variable `yaml:"variables,omitempty" json:"variables,omitempty" jsonschema:"The variables this template's body expects. templates_render validates against this before rendering."`
 
 	// Output names where a render should land, when this template generates a
-	// file rather than a caller-consumed string. It is metadata only in this
-	// build — see render.go's doc comment on Render for the honest gap: no
-	// filesystem port is wired to actually write it yet.
-	Output string `yaml:"output,omitempty" json:"output,omitempty" jsonschema:"Suggested relative output path for a render of this template. Not written to automatically in this build — see templates_render's own doc."`
+	// file rather than a caller-consumed string. It is itself Liquid,
+	// rendered against the same variables Content is — see
+	// Service.writeOutput — and templates_render only writes there when the
+	// caller opts in with Write; by default a render only returns text.
+	Output string `yaml:"output,omitempty" json:"output,omitempty" jsonschema:"Relative output path for a render of this template, itself Liquid. Written to only when templates_render is called with write:true — see its own doc."`
 
 	CreatedAt time.Time `yaml:"createdAt" json:"createdAt" jsonschema:"When this template was created."`
 	UpdatedAt time.Time `yaml:"updatedAt" json:"updatedAt" jsonschema:"When it was last changed."`

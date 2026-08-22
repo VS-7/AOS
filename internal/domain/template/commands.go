@@ -22,7 +22,8 @@ execute pattern every composite tool in this system follows.
 - **update** — change an existing template's body, variables or metadata
 - **delete** — remove a template
 - **render** — run a template's body against variables, bounded by a
-  timeout and an output size cap
+  timeout and an output size cap; write:true also writes the result to the
+  template's own (Liquid-rendered) Output path
 
 ## When to use
 - **Work has a recognizable, repeatable shape:** a task brief, a plan, a
@@ -122,15 +123,22 @@ anything is written.`,
 		Doc: `Runs a template's Liquid body against the variables given, bounded by a
 timeout and an output size cap. A required variable with no default and no
 value given refuses the render, naming which one and pointing at
-templates_get.`,
+templates_get.
+
+With write:true, also renders the template's own Output path — itself
+Liquid — and writes the result there, confined to the active workspace.
+Refused if the template declares no Output.`,
 		Examples: []command.Example{
 			{Description: "render with variables", Input: RenderInput{ID: "plan", Variables: map[string]any{"name": "auth"}}},
+			{Description: "render and write to the template's Output path", Input: RenderInput{ID: "plan", Variables: map[string]any{"name": "auth"}, Write: true}},
 		},
 		Registry: true,
-		Annotations: command.Annotations{
-			Title: "Render a template", ReadOnlyHint: true,
-		},
-		Handler: svc.Render,
+		// No ReadOnlyHint: write:true makes this a real filesystem write, and
+		// the approval channel derives its risk level from this struct — a
+		// command that can write must not claim to be read-only just because
+		// it defaults to not writing (ADR-0007).
+		Annotations: command.Annotations{Title: "Render a template"},
+		Handler:     svc.Render,
 	})
 }
 

@@ -105,32 +105,34 @@ collection/record view can compose over the `templates` native collection
 (the same fallback `view.Scaffold` already gives every other native
 collection).
 
-## 4. Known, disclosed gap: `render` does not write to disk
+## 4. Closed gap: `render` now writes to disk, opt-in
 
-The original's `render` command is described as "the primary scaffolding
-command" — it renders **and writes the result to disk** at a (Liquid-
-interpolated) `output` path. The Go design doc's own `Design em Go` sketch for
-`Render` only returns a string (`RenderResult{Output: out}`), with no
-filesystem port in the `Service` interface it sketches, and the `Template`
-entity's `Output` field is documented there only as "declares where a render
-should land" — descriptive, not a instruction to `Render` itself.
+This was previously a disclosed gap: `Render` only ever returned the rendered
+string, with no filesystem port wired to it, unlike the original's `render`
+("the primary scaffolding command"), which writes the result to disk at a
+Liquid-interpolated `output` path.
 
-This build follows the design doc's explicit sketch: `Render` returns the
-rendered string and touches no filesystem. If disk-writing is wanted to match
-the original's actual behavior, it needs:
+It is now closed, resolved exactly the way this note's own three open
+questions anticipated:
 
-- A `Workspaces`-shaped port (the same one `file.Service` takes in wire.go,
-  see `workspaceRoot` there) so `Render` knows what directory `Output` is
-  relative to.
-- A decision on **when** it writes — always, or only when the caller opts in
-  (an explicit `Write bool` on `RenderInput`, the safer default given this is
-  the one place in the system Liquid actually executes over caller data).
-- `Output` itself is plausibly Liquid too (the original's own example is
-  `.fractal/artifacts/plans/{{name}}.plan.md`) — it would need to run through
-  the same bounded `render()` path before being used as a path, with the same
-  path-traversal care `artifact`'s HTTP serving already applies elsewhere in
-  this phase.
+- `template.Deps` gained `Workspaces` (`Root(ctx) (string, error)`, the same
+  shape `file.Service` already takes) and `Files` (`Resolve`/`WriteFile`/
+  `MkdirAll`, narrowed to exactly `file.FS`'s own three methods) —
+  `wire.go` wires both to the same `workspaceRoot{workspaceSvc}` and
+  `osfile.New()` the file explorer already uses, not a second
+  implementation.
+- Writing is opt-in: `RenderInput.Write` (default `false`) — only the caller
+  asking for it touches disk, given this is the one place in the system
+  Liquid actually executes over caller data. The `render` command's
+  `ReadOnlyHint` annotation was removed accordingly, since the approval
+  channel derives its risk level from it (ADR-0007) and the command can now
+  genuinely write.
+- `Output` is itself rendered through the same bounded `render()` Content
+  uses — a pathological Output path gets the same timeout and size cap as a
+  pathological body — and the resolved path is confined to the workspace via
+  `Files.Resolve`, which returns whatever the real adapter's containment
+  check reports (an outside-the-workspace path surfaces as
+  `TEMPLATE_OUTPUT_WRITE_FAILED`, not a silent escape).
 
-Flagged here rather than silently built, per this project's own convention of
-disclosing a gap instead of padding scope beyond what was specified
-(see the Fase 8 roadmap note's own "Pendente" sections).
+See `internal/domain/template/service.go`'s `Render`/`writeOutput` and
+`internal/domain/template/service_test.go`'s "render, write to disk" section.

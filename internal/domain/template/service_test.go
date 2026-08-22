@@ -2,6 +2,7 @@ package template_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -261,6 +262,220 @@ func TestFilterGoldens(t *testing.T) {
 				t.Fatalf("%s: got %q, want %q", c.name, out.Output, c.want)
 			}
 		})
+	}
+}
+
+// --- render, write to disk ------------------------------------------------
+
+// fakeWorkspaces is the Workspaces fake every write test builds a service
+// over — a fixed root, or a fixed failure when rootErr is set.
+type fakeWorkspaces struct {
+	root    string
+	rootErr error
+}
+
+func (f fakeWorkspaces) Root(context.Context) (string, error) { return f.root, f.rootErr }
+
+// fakeFiles is an in-memory Files fake: no real filesystem, so this stays a
+// domain test that runs on a fake rather than touching disk. Resolve rejects
+// a path that climbs above root with the same shape pathx.ErrOutside gives
+// the real adapter — this fake exists to prove Service wires the failure
+// through, not to reprove pathx's own containment logic (that belongs to
+// pathx's and osfile's own tests).
+type fakeFiles struct {
+	resolveErr error
+	writeErr   error
+	mkdirErr   error
+
+	writes map[string]string // resolved path -> content
+	dirsOf map[string]bool   // resolved parent dirs MkdirAll was called with
+}
+
+func (f *fakeFiles) Resolve(_ context.Context, root, p string) (string, error) {
+	if f.resolveErr != nil {
+		return "", f.resolveErr
+	}
+	if strings.Contains(p, "..") {
+		return "", errors.New("fakeFiles: path climbs above its root")
+	}
+	return root + "/" + p, nil
+}
+
+func (f *fakeFiles) MkdirAll(_ context.Context, path string) error {
+	if f.mkdirErr != nil {
+		return f.mkdirErr
+	}
+	if f.dirsOf == nil {
+		f.dirsOf = map[string]bool{}
+	}
+	f.dirsOf[path] = true
+	return nil
+}
+
+func (f *fakeFiles) WriteFile(_ context.Context, path string, data []byte) error {
+	if f.writeErr != nil {
+		return f.writeErr
+	}
+	if f.writes == nil {
+		f.writes = map[string]string{}
+	}
+	f.writes[path] = string(data)
+	return nil
+}
+
+// newServiceWithDisk builds a service whose Render can honor write:true,
+// over the given root and Files fake.
+func newServiceWithDisk(t *testing.T, root string, files *fakeFiles) *template.Service {
+	t.Helper()
+	return template.NewService(template.Deps{
+		Repo:       fakes.NewRepo[template.Template]("templates"),
+		Engine:     liquidengine.New(),
+		Workspaces: fakeWorkspaces{root: root},
+		Files:      files,
+		Clock:      &fixedClock{},
+	})
+}
+
+func TestRenderWithWriteWritesTheRenderedOutputAtTheLiquidRenderedOutputPath(t *testing.T) {
+	files := &fakeFiles{}
+	svc := newServiceWithDisk(t, "/workspace", files)
+	if _, err := svc.Create(ctx(), template.CreateInput{
+		ID: "plan", Name: "plan", Content: "## {{ name }}",
+		Output:    ".aos/artifacts/plans/{{ name }}.plan.md",
+		Variables: []template.Variable{{Name: "name", Required: true}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := svc.Render(ctx(), template.RenderInput{
+		ID: "plan", Variables: map[string]any{"name": "auth"}, Write: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.WrittenTo != ".aos/artifacts/plans/auth.plan.md" {
+		t.Fatalf("WrittenTo = %q", out.WrittenTo)
+	}
+	got, ok := files.writes["/workspace/.aos/artifacts/plans/auth.plan.md"]
+	if !ok {
+		t.Fatalf("nothing was written; writes = %v", files.writes)
+	}
+	if got != "## auth" {
+		t.Fatalf("written content = %q, want %q", got, "## auth")
+	}
+}
+
+func TestRenderWithoutWriteTouchesNoFiles(t *testing.T) {
+	files := &fakeFiles{}
+	svc := newServiceWithDisk(t, "/workspace", files)
+	if _, err := svc.Create(ctx(), template.CreateInput{
+		ID: "plan", Name: "plan", Content: "## {{ name }}", Output: "plans/{{ name }}.md",
+		Variables: []template.Variable{{Name: "name", Required: true}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := svc.Render(ctx(), template.RenderInput{ID: "plan", Variables: map[string]any{"name": "auth"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.WrittenTo != "" {
+		t.Fatalf("WrittenTo = %q, want empty when Write was false", out.WrittenTo)
+	}
+	if len(files.writes) != 0 {
+		t.Fatalf("write:false must not touch the filesystem, wrote %v", files.writes)
+	}
+}
+
+func TestRenderWithWriteRefusesATemplateWithNoOutput(t *testing.T) {
+	files := &fakeFiles{}
+	svc := newServiceWithDisk(t, "/workspace", files)
+	if _, err := svc.Create(ctx(), template.CreateInput{ID: "plan", Name: "plan", Content: "## plan"}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := svc.Render(ctx(), template.RenderInput{ID: "plan", Write: true})
+	if code := codeOf(t, err); code != "AOS_TEMPLATE_NO_OUTPUT_PATH" {
+		t.Fatalf("code = %q", code)
+	}
+	if len(files.writes) != 0 {
+		t.Fatalf("a refused write must not touch the filesystem, wrote %v", files.writes)
+	}
+}
+
+func TestRenderWithWritePropagatesAnOutputPathThatEscapesTheWorkspace(t *testing.T) {
+	files := &fakeFiles{}
+	svc := newServiceWithDisk(t, "/workspace", files)
+	if _, err := svc.Create(ctx(), template.CreateInput{
+		ID: "escapee", Name: "escapee", Content: "x", Output: "../../etc/passwd",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := svc.Render(ctx(), template.RenderInput{ID: "escapee", Write: true})
+	if code := codeOf(t, err); code != "AOS_TEMPLATE_OUTPUT_WRITE_FAILED" {
+		t.Fatalf("code = %q, want the write-failed code for a path outside the workspace", code)
+	}
+	if len(files.writes) != 0 {
+		t.Fatalf("an escaping path must never be written, wrote %v", files.writes)
+	}
+}
+
+func TestRenderWithWriteRendersTheOutputPathAsLiquidTooNotAsALiteralString(t *testing.T) {
+	files := &fakeFiles{}
+	svc := newServiceWithDisk(t, "/workspace", files)
+	if _, err := svc.Create(ctx(), template.CreateInput{
+		ID: "report", Name: "report", Content: "body",
+		Output:    "reports/{{ year }}/{{ slug }}.md",
+		Variables: []template.Variable{{Name: "year", Required: true}, {Name: "slug", Required: true}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := svc.Render(ctx(), template.RenderInput{
+		ID: "report", Write: true, Variables: map[string]any{"year": "2026", "slug": "q1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.WrittenTo != "reports/2026/q1.md" {
+		t.Fatalf("WrittenTo = %q, want the Liquid placeholders substituted", out.WrittenTo)
+	}
+}
+
+func TestRenderWithWriteWrapsAWorkspaceResolutionFailure(t *testing.T) {
+	files := &fakeFiles{}
+	svc := template.NewService(template.Deps{
+		Repo:       fakes.NewRepo[template.Template]("templates"),
+		Engine:     liquidengine.New(),
+		Workspaces: fakeWorkspaces{rootErr: errors.New("no active workspace")},
+		Files:      files,
+		Clock:      &fixedClock{},
+	})
+	if _, err := svc.Create(ctx(), template.CreateInput{ID: "plan", Name: "plan", Content: "x", Output: "plan.md"}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := svc.Render(ctx(), template.RenderInput{ID: "plan", Write: true})
+	if code := codeOf(t, err); code != "AOS_TEMPLATE_WORKSPACE_UNAVAILABLE" {
+		t.Fatalf("code = %q", code)
+	}
+}
+
+func TestRenderWithWriteMakesTheParentDirectoryBeforeWriting(t *testing.T) {
+	files := &fakeFiles{}
+	svc := newServiceWithDisk(t, "/workspace", files)
+	if _, err := svc.Create(ctx(), template.CreateInput{
+		ID: "plan", Name: "plan", Content: "x", Output: "a/b/c.md",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.Render(ctx(), template.RenderInput{ID: "plan", Write: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !files.dirsOf["/workspace/a/b"] {
+		t.Fatalf("MkdirAll was not called with the resolved parent directory, got %v", files.dirsOf)
 	}
 }
 

@@ -85,6 +85,70 @@ func errOutputTooLarge(id string, n int) error {
 		CTA(apperr.CallToAction{Label: "the template's own loops or included data produced too much output — bound them"})
 }
 
+// errNoOutputPath fires when Render is asked to Write a template that
+// declares no Output — nothing names where it would go.
+func errNoOutputPath(id string) error {
+	return apperr.New("TEMPLATE_NO_OUTPUT_PATH").
+		Causer("template.Service.Render").
+		Msgf("template %q has no declared Output path, so there is nowhere to write it", id).
+		Issue("id", id).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{Label: "set Output before rendering with write, or render without it", Tool: "templates_update"})
+}
+
+// errOutputPathRenderFailed wraps a failure rendering the template's own
+// Output field — itself Liquid, run through the same bounded render() as
+// Content. Wrapped separately from errRenderFailed/errRenderTimeout so a
+// caller is not told the template's body failed when it was the path that
+// did.
+func errOutputPathRenderFailed(id string, cause error) error {
+	return apperr.New("TEMPLATE_OUTPUT_PATH_RENDER_FAILED").
+		Causer("template.Service.writeOutput").
+		Msgf("template %q's own Output path failed to render: %v", id, cause).
+		Issue("id", id).
+		Status(apperr.StatusUnprocessableEntity).
+		Wrap(cause).
+		CTA(apperr.CallToAction{Label: "check the template's own Output field for valid Liquid"})
+}
+
+// errOutputPathEmpty fires when Output renders to nothing — every character
+// was Liquid and it evaluated to the empty string.
+func errOutputPathEmpty(id string) error {
+	return apperr.New("TEMPLATE_OUTPUT_PATH_EMPTY").
+		Causer("template.Service.writeOutput").
+		Msgf("template %q's Output rendered to an empty path", id).
+		Issue("id", id).
+		Status(apperr.StatusUnprocessableEntity).
+		CTA(apperr.CallToAction{Label: "check the template's own Output field"})
+}
+
+// errWorkspaceUnavailable fires when Write cannot learn what directory to
+// resolve Output against.
+func errWorkspaceUnavailable(id string, cause error) error {
+	return apperr.New("TEMPLATE_WORKSPACE_UNAVAILABLE").
+		Causer("template.Service.writeOutput").
+		Msgf("could not resolve the active workspace to write template %q's output: %v", id, cause).
+		Issue("id", id).
+		Status(apperr.StatusInternalServerError).
+		Wrap(cause).
+		CTA(apperr.CallToAction{Label: "retry; if it persists, this is a bug"})
+}
+
+// errOutputWriteFailed wraps a failure resolving or writing the rendered
+// output to disk — including a rendered Output path that resolves outside
+// the workspace, which the real Files adapter reports through this same
+// path (see internal/adapters/osfile).
+func errOutputWriteFailed(id, path string, cause error) error {
+	return apperr.New("TEMPLATE_OUTPUT_WRITE_FAILED").
+		Causer("template.Service.writeOutput").
+		Msgf("could not write template %q's output to %q: %v", id, path, cause).
+		Issue("id", id).
+		Issue("path", path).
+		Status(apperr.StatusBadRequest).
+		Wrap(cause).
+		CTA(apperr.CallToAction{Label: "check that Output resolves to a path inside the workspace"})
+}
+
 // errReadFailed wraps a repository failure that is not "not found" — the
 // operation name is dynamic because it fires from several call sites.
 func errReadFailed(op string, cause error) error {
