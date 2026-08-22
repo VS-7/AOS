@@ -669,7 +669,14 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // matter how many artifacts existed — found while wiring the sidebar's
   // "Surfaces" group up to a real backend, not by a live failure report.
   "artifact.list": { key: "artifacts_list", wrapOut: "artifacts" },
-  "artifact.getById": { key: "artifacts_get", renameIn: { artifact: "id" } },
+  // `artifacts_get` also answers bare, same as `artifacts_list` above.
+  // `plugin-detail-section.component.tsx`'s live caller reads
+  // `result.data?.artifact` plus a *sibling* `result.data?.urls` — that
+  // second read is itself wrong (this rebuild nests `urls` inside the
+  // artifact, not beside it; see `Artifact.URLs`, `entity.go`) and was
+  // fixed at that call site instead, since `wrapOut` only adds one nesting
+  // level and cannot invent a sibling key that was never on the wire.
+  "artifact.getById": { key: "artifacts_get", renameIn: { artifact: "id" }, wrapOut: "artifact" },
   "artifact.create": "artifacts_create",
   "artifact.update": { key: "artifacts_update", renameIn: { artifact: "id" } },
   "artifact.setPassword": { key: "artifacts_set-password", renameIn: { artifact: "id" } },

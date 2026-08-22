@@ -207,13 +207,16 @@ export function PluginDetailSection({
         const result = await aos.client.artifact.getById.query({
           params: { artifact: entityId },
         });
+        // `urls` is a field on the artifact itself (Service.urlsFor,
+        // internal/domain/artifact/entity.go), not a sibling of it — this
+        // used to read `result.data?.urls` as a separate top-level key,
+        // which was never the actual wire shape.
         const artifact = result.data?.artifact;
-        const urls = result.data?.urls;
-        if (!artifact || !urls?.local) {
+        if (!artifact || !artifact.urls?.local) {
           toast.error("Artifact URL not available");
           return;
         }
-        ArtifactHelper.openInBrowserTab({ ...artifact, urls });
+        ArtifactHelper.openInBrowserTab(artifact);
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Failed to open artifact",
