@@ -24,6 +24,7 @@ import (
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/command"
+	corecfg "github.com/OWNER/aos/internal/core/config"
 	"github.com/OWNER/aos/internal/domain/auth"
 )
 
@@ -45,6 +46,16 @@ type Config struct {
 	// computes itself (see onboarding), and a handler that read the wall
 	// clock directly would drift from the service that issued the token.
 	Clock clockx.Clock
+
+	// Paths locates local.token — see its own doc comment
+	// (internal/core/config/paths.go). Onboarding writes the freshly minted,
+	// indefinite token there, once, the moment the account is created: the
+	// one place a same-machine, same-user process (the CLI first among them)
+	// can read a working credential without an interactive login. Zero value
+	// (Paths{}) skips the write rather than writing to "local.token" in the
+	// process's own working directory, which a test building this Config
+	// without a real installation could otherwise do by accident.
+	Paths corecfg.Paths
 }
 
 // New builds the router. It is mounted by the caller — see httpapi's
@@ -57,7 +68,7 @@ func New(cfg Config) http.Handler {
 	if cfg.Clock == nil {
 		cfg.Clock = clockx.System{}
 	}
-	s := &server{svc: cfg.Service, log: cfg.Log, clock: cfg.Clock}
+	s := &server{svc: cfg.Service, log: cfg.Log, clock: cfg.Clock, paths: cfg.Paths}
 
 	r := chi.NewRouter()
 	r.Get("/status", s.status)
@@ -73,6 +84,7 @@ type server struct {
 	svc   *auth.Service
 	log   *slog.Logger
 	clock clockx.Clock
+	paths corecfg.Paths
 }
 
 // status answers "what should this page show" without requiring a
@@ -136,6 +148,16 @@ func (s *server) onboarding(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
+	// The one place local.token is ever written — see Config.Paths' own doc
+	// comment. A failure here is logged, not returned: the account exists
+	// and the browser session below still works regardless of whether the
+	// CLI's own bootstrap credential landed on disk.
+	if s.paths.Root != "" {
+		if err := corecfg.WriteSecret(s.paths.LocalToken(), []byte(out.Token)); err != nil {
+			s.log.Warn("could not write local.token", "err", err)
+		}
+	}
+
 	// Onboarding mints a token but not an expiry the way Login does — see
 	// its own doc: it is the first, indefinite credential of the account. A
 	// far-future date here is display-only; the token has no ExpiresAt on

@@ -18,7 +18,9 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
+	"time"
 
 	"golang.org/x/term"
 
@@ -31,6 +33,7 @@ import (
 	"github.com/OWNER/aos/internal/core/logging"
 	"github.com/OWNER/aos/internal/domain/gateway"
 	"github.com/OWNER/aos/internal/transport/clix"
+	"github.com/OWNER/aos/internal/transport/daemonclient"
 )
 
 func main() { os.Exit(exitCode()) }
@@ -81,9 +84,45 @@ func run(ctx context.Context, args []string) error {
 	gateway.Register(reg, newGateway(resolver, paths, logger))
 	reg.Freeze()
 
-	root := clix.NewRoot(clix.Config{Registry: reg, IsTTY: isTTY})
+	cfg := clix.Config{Registry: reg, IsTTY: isTTY, Out: os.Stdout, Err: os.Stderr}
+	root := clix.NewRoot(cfg)
+
+	// The rest of the tree — every domain command — is not linked into this
+	// binary (see the package doc): it arrives from a running daemon, if one
+	// answers within a few seconds. A daemon that is not up yet leaves root
+	// exactly as NewRoot built it, which is what lets `gateway start` itself
+	// run with nothing attached.
+	daemon := newDaemonClient(resolver, paths)
+	discover, cancel := context.WithTimeout(ctx, 3*time.Second)
+	clix.AttachDaemon(discover, root, daemon, cfg)
+	cancel()
+
 	root.SetArgs(args)
 	return root.ExecuteContext(ctx)
+}
+
+// newDaemonClient points at the daemon this installation's gateway would
+// itself start: same host and port newGateway supervises, same TOKEN
+// environment variable the desktop honours, falling back to local.token —
+// the credential onboarding writes once, on this machine, for exactly this
+// reader (see authapi.Config.Paths' own doc comment).
+func newDaemonClient(resolver *env.Resolver, paths corecfg.Paths) *daemonclient.Client {
+	host := resolver.String(env.KeyServerHost, env.DefaultServerHost)
+	port := resolver.Int(env.KeyServerPort, build.Port)
+	address := fmt.Sprintf("http://%s:%d", host, port)
+
+	token := resolver.String(env.KeyToken, "")
+	if token == "" {
+		if raw, err := os.ReadFile(paths.LocalToken()); err == nil {
+			token = strings.TrimSpace(string(raw))
+		}
+	}
+
+	return daemonclient.New(daemonclient.Options{
+		BaseURL:   address,
+		Token:     token,
+		Workspace: resolver.String(env.KeyWorkspaceID, ""),
+	})
 }
 
 // newGateway builds the supervisor over the installation this binary is

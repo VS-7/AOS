@@ -76,7 +76,7 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 		Registry:   a.Registry,
 		Auth:       a.Auth,
 		Files:      fileapi.New(fileapi.Config{Service: a.Files, Log: log}),
-		AuthRoutes: authapi.New(authapi.Config{Service: a.Auth, Log: log, Clock: a.Clock}),
+		AuthRoutes: authapi.New(authapi.Config{Service: a.Auth, Log: log, Clock: a.Clock, Paths: a.Paths}),
 		Bot:        botapi.New(botapi.Config{Registry: a.Bots, Log: log}),
 		Realtime: realtime.Upgrade(realtime.Config{
 			Hub:     a.Events,
