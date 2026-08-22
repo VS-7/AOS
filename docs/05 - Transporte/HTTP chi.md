@@ -154,4 +154,14 @@ ok  	github.com/OWNER/aos/internal/transport/httpapi
 
 **Não verificado:** golden do envelope. As asserções hoje são sobre forma e status; o golden entra junto com o do CLI, quando houver saída estável que o justifique.
 
-**Pendente:** `/mcp` sobre HTTP tem ponto de montagem (`Config.MCP`) e nada o preenche — stdio é o único transporte MCP hoje. `/v/*` é da **Fase 8**.
+**Resolvido:** `/mcp` sobre HTTP — `internal/transport/mcpserver.NewHTTPHandler` envolve o
+mesmo `*mcp.Server` de `ServeStdio` (`mcp.NewStreamableHTTPHandler` do SDK), e
+`app.Serve` liga `Config.MCP` a ele. Fica atrás do mesmo middleware de bearer
+token do grupo `/api` guardado — não se autentica sozinho como `/ws`, porque
+alcança exatamente o mesmo registry — e segue o mesmo `SecurityEnabled` desse
+grupo (não é uma segunda porta mais estrita que `/api/docs`). Ver
+`TestMCPOverHTTPRoundTripsThroughTheRunningDaemon` e
+`TestMCPOverHTTPRequiresAuthenticationOnTheRunningDaemon`
+(`internal/app/daemon_test.go`).
+
+**Pendente:** `/v/*` é da **Fase 8**.

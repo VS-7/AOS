@@ -62,8 +62,11 @@ type Config struct {
 	// authenticated, and conflating them is defect #5.
 	Realtime http.Handler
 
-	// MCP is the tool surface over HTTP, mounted at /mcp. Nil leaves it
-	// unmounted, which is the state while the only transport is stdio.
+	// MCP is the tool surface over HTTP, mounted at /mcp behind the same
+	// bearer-token middleware as every guarded /api route — see New's own
+	// comment on why it is not treated the way Realtime is. Nil leaves it
+	// unmounted, which is what a build with no MCP-over-HTTP transport
+	// wired (internal/transport/mcpserver.NewHTTPHandler) looks like.
 	MCP http.Handler
 
 	// Files is the file explorer's own router, mounted at /api/file inside
@@ -161,7 +164,15 @@ func New(cfg Config) *Server {
 		r.Handle("/ws", cfg.Realtime)
 	}
 	if cfg.MCP != nil {
-		r.Mount("/mcp", cfg.MCP)
+		// Outside /api because it isn't one — a client speaks the MCP wire
+		// protocol here, not this system's own command envelope — but it
+		// reaches the exact same registry every guarded /api route does, so
+		// it shares that group's own auth middleware and its own posture on
+		// SecurityEnabled, rather than authorising itself the way /ws does:
+		// a mount that IS this daemon's own tool surface must answer to the
+		// same credential /api/records/touch does, not a second, divergent
+		// decision about who may reach it.
+		r.With(authenticate(cfg.Auth, cfg.SecurityEnabled)).Mount("/mcp", cfg.MCP)
 	}
 
 	r.NotFound(s.notFound)

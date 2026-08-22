@@ -21,10 +21,8 @@ import (
 	"golang.org/x/term"
 
 	"github.com/OWNER/aos/internal/app"
-	"github.com/OWNER/aos/internal/core/build"
 	corecfg "github.com/OWNER/aos/internal/core/config"
 	"github.com/OWNER/aos/internal/core/logging"
-	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/transport/clix"
 	"github.com/OWNER/aos/internal/transport/mcpserver"
 )
@@ -79,8 +77,8 @@ func run(ctx context.Context, args []string) error {
 		}
 		return mcpserver.ServeStdio(ctx, mcpserver.Config{
 			Registry:     application.Registry,
-			Shape:        shapeFrom(cfg),
-			Instructions: instructions(),
+			Shape:        app.MCPShapeFrom(cfg),
+			Instructions: app.MCPInstructions(),
 		})
 	}
 
@@ -110,22 +108,4 @@ func isMCPMode(args []string) bool {
 		}
 	}
 	return false
-}
-
-func shapeFrom(cfg config.Config) mcpserver.Shape {
-	switch cfg.MCP.ToolShape {
-	case config.ToolShapeFlat:
-		return mcpserver.ShapeFlat
-	case config.ToolShapeBoth:
-		return mcpserver.ShapeBoth
-	default:
-		return mcpserver.ShapeComposite
-	}
-}
-
-func instructions() string {
-	return build.DisplayName + " exposes the workspace as tools. Every call requires " +
-		"`_reasoning`: say why the tool is being called now, what outcome you expect, " +
-		"and the immediate next step. Call a composite tool with `schema: true` to read " +
-		"an action's contract before executing it."
 }

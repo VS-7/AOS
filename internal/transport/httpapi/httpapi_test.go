@@ -595,3 +595,63 @@ func TestARenamedCommandKeepsAnsweringAtItsOldPath(t *testing.T) {
 		t.Fatalf("the response does not say where the command moved to: %s", body)
 	}
 }
+
+// stubHandler is a minimal http.Handler for testing this package's own
+// routing and auth decisions around a mount — not the real handler's own
+// protocol, which is that handler's own test suite's job
+// (internal/transport/mcpserver's for MCP).
+func stubHandler(status int) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) })
+}
+
+// TestMCPMountIsUnreachableWhenUnconfigured mirrors Realtime's own nil case:
+// a build with no MCP-over-HTTP transport wired leaves /mcp unmounted, not
+// mounted-and-erroring.
+func TestMCPMountIsUnreachableWhenUnconfigured(t *testing.T) {
+	h := newHarness(t)
+	res := h.do(t, http.MethodPost, "/mcp", nil)
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 with no MCP handler configured", res.StatusCode)
+	}
+}
+
+// TestMCPMountRequiresAuthentication is the property /mcp exists to prove
+// over Realtime's own "/ws authorises itself" shape: this mount reaches the
+// exact same command registry every guarded /api route does, so it must sit
+// behind the same bearer-token check, not its own.
+func TestMCPMountRequiresAuthentication(t *testing.T) {
+	h := newHarness(t, func(c *httpapi.Config) { c.MCP = stubHandler(http.StatusOK) })
+
+	res := h.do(t, http.MethodPost, "/mcp", nil, func(r *http.Request) {
+		r.Header.Del("Authorization")
+	})
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated /mcp, status = %d", res.StatusCode)
+	}
+
+	res = h.do(t, http.MethodPost, "/mcp", nil)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("authenticated /mcp, status = %d", res.StatusCode)
+	}
+}
+
+// TestMCPMountFollowsSecurityEnabledTheSameWayTheGuardedAPIGroupDoes: /mcp
+// reaches the exact same command registry the guarded /api group does, so it
+// shares that group's posture on the loopback convenience toggle too —
+// unlike /api/docs, which stays guarded regardless (see
+// TestTheDocsRouteStaysGuardedEvenWithSecurityOff), /mcp is not a second,
+// stricter door onto a surface the REST routes already leave open when
+// security is off — guardExposure (serve.go) is what stops that
+// configuration from ever reaching beyond loopback in the first place.
+func TestMCPMountFollowsSecurityEnabledTheSameWayTheGuardedAPIGroupDoes(t *testing.T) {
+	h := newHarness(t, func(c *httpapi.Config) {
+		c.MCP = stubHandler(http.StatusOK)
+		c.SecurityEnabled = func() bool { return false }
+	})
+	res := h.do(t, http.MethodPost, "/mcp", nil, func(r *http.Request) {
+		r.Header.Del("Authorization")
+	})
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want /mcp reachable with no credential once security is off, like /api/records/touch already is", res.StatusCode)
+	}
+}

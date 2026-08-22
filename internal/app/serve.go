@@ -20,6 +20,7 @@ import (
 	"github.com/OWNER/aos/internal/transport/botapi"
 	"github.com/OWNER/aos/internal/transport/fileapi"
 	"github.com/OWNER/aos/internal/transport/httpapi"
+	"github.com/OWNER/aos/internal/transport/mcpserver"
 	"github.com/OWNER/aos/internal/transport/realtime"
 )
 
@@ -83,6 +84,15 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 			Auth:    a.Workspaces,
 			Origins: origins,
 			Log:     log,
+		}),
+		// The same tool surface ServeStdio gives `aos --mcp`, reachable over
+		// the network instead of spawned as a subprocess — see
+		// mcpserver.NewHTTPHandler's own doc comment for why this carries no
+		// authentication itself.
+		MCP: mcpserver.NewHTTPHandler(mcpserver.Config{
+			Registry:     a.Registry,
+			Shape:        MCPShapeFrom(current),
+			Instructions: MCPInstructions(),
 		}),
 		// Read per request rather than captured: the configuration file is
 		// meant to be edited while the daemon runs.
@@ -233,6 +243,31 @@ func errCannotListen(addr string, cause error) error {
 			Command: build.Name + " gateway status",
 			Tool:    "gateway_status",
 		})
+}
+
+// MCPShapeFrom reads which projection of the tool surface (ADR-0011) a
+// workspace's own configuration asks for. It is exported so cmd/aosd's own
+// stdio entrypoint (`aos --mcp`) and Serve's HTTP mount read the same
+// decision from the same place, rather than each keeping its own copy of
+// this switch to drift out of sync with the other.
+func MCPShapeFrom(cfg config.Config) mcpserver.Shape {
+	switch cfg.MCP.ToolShape {
+	case config.ToolShapeFlat:
+		return mcpserver.ShapeFlat
+	case config.ToolShapeBoth:
+		return mcpserver.ShapeBoth
+	default:
+		return mcpserver.ShapeComposite
+	}
+}
+
+// MCPInstructions is the server-level hint every MCP transport gives a
+// client, stdio and HTTP alike.
+func MCPInstructions() string {
+	return build.DisplayName + " exposes the workspace as tools. Every call requires " +
+		"`_reasoning`: say why the tool is being called now, what outcome you expect, " +
+		"and the immediate next step. Call a composite tool with `schema: true` to read " +
+		"an action's contract before executing it."
 }
 
 func errExposedWithoutAuth(host string) error {

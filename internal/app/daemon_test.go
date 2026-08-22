@@ -17,6 +17,7 @@ import (
 	"github.com/OWNER/aos/internal/core/env"
 	"github.com/OWNER/aos/internal/core/ids"
 	"github.com/coder/websocket"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/domain/workspace"
@@ -296,4 +297,56 @@ func TestTheSocketIsAuthorisedAgainstTheWorkspace(t *testing.T) {
 			t.Fatalf("event = %+v", e)
 		}
 	})
+}
+
+// TestMCPOverHTTPRoundTripsThroughTheRunningDaemon proves the tool surface
+// docs/05 - Transporte/HTTP chi.md's own "Pendente" note described — /mcp
+// has a mount point and nothing filling it, stdio the only transport — is
+// now filled: a real *mcp.Client, over a real socket, reaches the same
+// command registry the CLI and stdio MCP already do.
+func TestMCPOverHTTPRoundTripsThroughTheRunningDaemon(t *testing.T) {
+	base, a := serving(t, nil)
+	if _, err := a.Config.Update(context.Background(), configOff()); err != nil {
+		t.Fatal(err)
+	}
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+	session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: base + "/mcp"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = session.Close() }()
+
+	res, err := session.ListTools(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, tool := range res.Tools {
+		if tool.Name == "Gateway" {
+			found = true
+		}
+	}
+	if !found {
+		names := make([]string, len(res.Tools))
+		for i, tool := range res.Tools {
+			names[i] = tool.Name
+		}
+		t.Fatalf("tools = %v, want Gateway (the default shape is composite)", names)
+	}
+}
+
+// TestMCPOverHTTPRequiresAuthenticationOnTheRunningDaemon is
+// TestMCPMountRequiresAuthentication (httpapi's own package) proven against
+// the real composition root rather than a stub handler: connecting without a
+// credential to a daemon that has one configured is refused before any tool
+// call, not answered and then denied per call.
+func TestMCPOverHTTPRequiresAuthenticationOnTheRunningDaemon(t *testing.T) {
+	base, _ := serving(t, nil) // security stays on: serving's own default
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+	_, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: base + "/mcp"}, nil)
+	if err == nil {
+		t.Fatal("an unauthenticated client connected to /mcp")
+	}
 }

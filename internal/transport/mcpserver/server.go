@@ -7,6 +7,7 @@ package mcpserver
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -73,6 +74,26 @@ func New(cfg Config) *mcp.Server {
 // what a client registers in its MCP configuration.
 func ServeStdio(ctx context.Context, cfg Config) error {
 	return New(cfg).Run(ctx, &mcp.StdioTransport{})
+}
+
+// NewHTTPHandler returns the same tool surface ServeStdio serves over stdio,
+// as an http.Handler speaking the Streamable HTTP transport — for a client
+// that reaches this daemon over the network instead of spawning it as a
+// subprocess, mounted at /mcp (internal/transport/httpapi's own Config.MCP).
+//
+// One *mcp.Server answers every request: New's own registration work — one
+// tool per command, per cfg.Shape — happens once here, not per connection,
+// the same way the composite/flat shapes are chosen once for the whole
+// process rather than per call. The SDK's own example does the same for
+// exactly this reason.
+//
+// It carries no authentication of its own — httpapi.New wraps this mount in
+// the same bearer-token middleware every other command surface answers
+// behind, so this stays the same handler whether or not the caller requires
+// a credential to reach it.
+func NewHTTPHandler(cfg Config) http.Handler {
+	srv := New(cfg)
+	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
 }
 
 // annotationsOf maps our annotations onto the protocol's.
