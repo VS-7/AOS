@@ -1,13 +1,12 @@
 # Integrating the artifact domain
 
-**`wire.go` and `command-map.ts` are done** — `artifactSvc` is built,
-registered, and on `App.Artifacts`; `frontend/src/lib/command-map.ts` has
+**Done**, all of it. `wire.go` builds and registers `artifactSvc`, on
+`App.Artifacts`; `frontend/src/lib/command-map.ts` has
 `artifact.list`/`.getById`/`.create`/`.update`/`.setPassword`/`.delete`
-(`artifact` is not in `DORMANT_DOMAINS`). The sections below documenting
-that wiring are kept for reference but are no longer the open item.
-
-**HTTP serving (`/v/*`) is the remaining gap** — see "What's missing" below,
-still accurate as of this note.
+(`artifact` is not in `DORMANT_DOMAINS`); and HTTP serving at `/v/artifacts/{id}/*`
+— the one gap this note used to track — is built, tested, and wired. See
+"HTTP serving — done" below for what shipped and what's still genuinely open
+beyond it.
 
 ## `internal/app/wire.go`
 
@@ -96,28 +95,37 @@ Verify the exact left-hand method names the ported UI in
 this — they were skimmed but not cross-checked line by line against this
 mapping, for time.
 
-## HTTP serving — NOT built this round, see below
+## HTTP serving — done
 
-`/v/{workspace}/artifacts/{id}/*` (path-traversal guard, strict CSP, no
-session cookie, extension-derived Content-Type, unknown → attachment) is
-specified in `docs/05 - Transporte/Artifacts e Estáticos.md` and in this
-domain's own design doc, but was **not implemented** — see "What's missing"
-below. `Service.Authorize` (three visibilities) is fully built and tested and
-is what that transport layer should call before serving a file; `Files` in
-`internal/adapters/artifactfiles` resolves paths inside one artifact's own
-directory via `pathx.ResolveInside`, which the HTTP handler should reuse
-rather than re-implementing containment.
+`internal/transport/artifactapi` serves `/v/artifacts/{id}/*` (no
+`{workspace}` segment — this daemon is single-workspace, see that package's
+own doc), mounted via `httpapi.Config.Artifacts` at `/v`, outside the
+authenticated `/api` group: it authorises itself per artifact, per
+visibility, through `artifact.Service.Authorize`, and never accepts the
+session cookie the guarded group's own middleware falls back to — only a
+deliberately presented `Authorization`/`X-Auth-Token` header, or, for a
+`by_password` artifact, the password itself via the query string.
+Containment reuses `artifactfiles.Files.Resolve` (new, alongside `Ensure`) —
+the same `pathx.ResolveInside` call, not a second implementation. CSP is
+fixed and restrictive (`default-src 'self'`, no `unsafe-inline`); the
+per-artifact relaxation the design doc's sketch anticipated has no field on
+the entity yet, so every artifact gets the strict policy — a smaller,
+disclosed gap, not the whole transport layer being missing.
 
-## What's missing (be honest, not padded)
+Tested at three levels: `internal/transport/artifactapi`'s own suite against
+fakes (traversal, directory-listing refusal, CSP headers, cookie vs. header
+auth, password-via-query), and `TestArtifactsAreServedThroughTheRunningDaemon`/
+`TestPrivateArtifactsRequireAuthenticationOnTheRunningDaemon` (`internal/app`)
+against the real composition root — a real HTTP GET, over a real socket,
+reaching a real artifact.Service and artifactfiles.Files.
 
-- **HTTP serving is not built.** The domain package (CRUD, scaffolding,
-  password hashing/persistence, three-visibility authorization) is complete
-  and tested; the `/v/*` transport layer that actually serves an artifact's
-  files to a browser is not. This was a stretch goal per the task brief and
-  was cut for time after three stalled attempts at this task ate the budget
-  meant for it. The path-traversal and CSP/Content-Type requirements from the
-  design doc are consequently untested at the HTTP layer — `artifactfiles`'s
-  own tests prove the *filesystem* containment (`pathx.ResolveInside`
-  refuses `../../../etc/passwd`), not a served HTTP response.
-- Frontend `command-map.ts` mapping above is a best-effort sketch, not
-  verified against the ported UI's actual call sites.
+## What's still open (be honest, not padded)
+
+- Per-artifact CSP relaxation (opt-in, per the design doc's sketch) has no
+  entity field — out of scope for this pass; every artifact is strict today.
+- No frontend page exists yet to open an artifact from — `frontend/src/features/artifact/`
+  has state-layer files (store/hooks/triggers) but no page component. The
+  backend is directly reachable by URL; there is no "open" button in the app.
+- Frontend `command-map.ts` mapping in this note is unchanged from the
+  original sketch — still not verified against the ported UI's actual call
+  sites, since no UI calls it yet.

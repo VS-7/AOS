@@ -16,6 +16,7 @@ import (
 	"github.com/OWNER/aos/internal/domain/agent"
 	"github.com/OWNER/aos/internal/domain/bot"
 	"github.com/OWNER/aos/internal/domain/config"
+	"github.com/OWNER/aos/internal/transport/artifactapi"
 	"github.com/OWNER/aos/internal/transport/authapi"
 	"github.com/OWNER/aos/internal/transport/botapi"
 	"github.com/OWNER/aos/internal/transport/fileapi"
@@ -72,6 +73,19 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 		return err
 	}
 
+	// Shared with Artifacts below: the configuration file is meant to be
+	// edited with the daemon running, so both read it fresh per request
+	// rather than each capturing their own snapshot at boot.
+	securityEnabled := func() bool {
+		c, err := a.Config.Raw(ctx)
+		if err != nil {
+			// Unreadable configuration means the safe reading, not the
+			// convenient one.
+			return true
+		}
+		return c.Security.Enabled
+	}
+
 	origins := allowedOrigins(resolver)
 	server := httpapi.New(httpapi.Config{
 		Registry:   a.Registry,
@@ -79,6 +93,13 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 		Files:      fileapi.New(fileapi.Config{Service: a.Files, Log: log}),
 		AuthRoutes: authapi.New(authapi.Config{Service: a.Auth, Log: log, Clock: a.Clock, Paths: a.Paths}),
 		Bot:        botapi.New(botapi.Config{Registry: a.Bots, Log: log}),
+		Artifacts: artifactapi.New(artifactapi.Config{
+			Artifacts:       a.Artifacts,
+			Files:           a.ArtifactFiles,
+			Auth:            a.Auth,
+			SecurityEnabled: securityEnabled,
+			Log:             log,
+		}),
 		Realtime: realtime.Upgrade(realtime.Config{
 			Hub:     a.Events,
 			Auth:    a.Workspaces,
@@ -94,20 +115,10 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 			Shape:        MCPShapeFrom(current),
 			Instructions: MCPInstructions(),
 		}),
-		// Read per request rather than captured: the configuration file is
-		// meant to be edited while the daemon runs.
-		SecurityEnabled: func() bool {
-			c, err := a.Config.Raw(ctx)
-			if err != nil {
-				// Unreadable configuration means the safe reading, not the
-				// convenient one.
-				return true
-			}
-			return c.Security.Enabled
-		},
-		DocsEnabled:    !resolver.IsProduction(),
-		AllowedOrigins: origins,
-		Log:            log,
+		SecurityEnabled: securityEnabled,
+		DocsEnabled:     !resolver.IsProduction(),
+		AllowedOrigins:  origins,
+		Log:             log,
 	})
 
 	// Only the daemon runs the watcher: a one-shot CLI process exits before a

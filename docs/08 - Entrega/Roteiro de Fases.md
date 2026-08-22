@@ -104,10 +104,6 @@ Os oito domínios inicialmente declarados como fora do núcleo
 `command-map.ts`; a maioria tem `status: pronto` na sua própria nota
 (ver `docs/04 - Domínio/`). O que resta, rastreado por domínio:
 
-- **Artifact** — CRUD, senha persistida e as três visibilidades estão
-  prontos; o transporte HTTP que serve `/v/{workspace}/artifacts/{id}/*`
-  (contenção, CSP, tipo por extensão) não foi construído — ver
-  `internal/domain/artifact/INTEGRATION.md`.
 - **Model Providers** (Fase 5, não Fase 8, mas ainda `em-construção`) —
   falta a tabela de preços (`CostUSD` sempre zero) e nenhum adaptador foi
   exercitado contra a API real de um provider.

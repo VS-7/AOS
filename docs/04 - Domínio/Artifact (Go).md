@@ -2,7 +2,7 @@
 tags: [dominio, artifact, publicacao]
 aliases: [Artifact Go, Aplicação Hospedada]
 fase: 8
-status: especificado
+status: pronto
 origem: "[[Artifact]]"
 ---
 
@@ -111,9 +111,27 @@ Ver [[Artifacts e Estáticos]] para o transporte. Três garantias:
 - CSP presente na resposta; sem cookie de sessão nessa rota
 - Extensão desconhecida vira `attachment`
 
+## Estado atual
+
+O transporte que servia os arquivos de um artifact — a única lacuna que
+`internal/domain/artifact/INTEGRATION.md` deixava aberta — está construído:
+`internal/transport/artifactapi` serve `/v/artifacts/{id}/*`, montado fora
+do grupo autenticado de `/api` (ver [[HTTP chi]]). Contenção reaproveita
+`artifactfiles.Files.Resolve`, a mesma usada em `Ensure`. `Authenticated`
+nunca lê o cookie de sessão — só um cabeçalho `Authorization`/`X-Auth-Token`
+apresentado deliberadamente — e a senha de um artifact `by_password` chega
+pela query string, já que é um segredo pensado para ser compartilhável num
+link, diferente do bearer de sessão. CSP é fixa e restritiva
+(`default-src 'self'`, sem `unsafe-inline`); o relaxamento por artifact que
+o esboço original previa não tem campo na entidade ainda — toda instância
+recebe a política estrita hoje, uma lacuna menor e sinalizada, não silenciosa.
+Sem UI própria ainda: `frontend/src/features/artifact/` tem só a camada de
+estado (store/hooks/triggers), sem página — o backend é alcançável
+diretamente pela URL, mas não há botão "abrir" no app.
+
 ## Critério de pronto
 
-- [ ] CRUD com scaffold de entrypoint
-- [ ] Senha persistida sobrevivendo a restart
-- [ ] Três visibilidades aplicadas
-- [ ] CSP e isolamento de origem verificados
+- [x] CRUD com scaffold de entrypoint — `internal/domain/artifact/service_test.go`'s round-trip and scaffold tests
+- [x] Senha persistida sobrevivendo a restart — `PasswordHash` persistido via `SetPassword`, argon2id (`artifact.Argon2Hasher`)
+- [x] Três visibilidades aplicadas — `Service.Authorize`; `TestPrivateArtifactsRequireAuthenticationOnTheRunningDaemon` (`internal/app`)
+- [x] CSP e isolamento de origem verificados — `TestCSPAndSecurityHeadersArePresent`, `TestPathTraversalIsRefused`, `TestADirectoryIsNeverListed` (`internal/transport/artifactapi`); ponta a ponta em `TestArtifactsAreServedThroughTheRunningDaemon` (`internal/app`)

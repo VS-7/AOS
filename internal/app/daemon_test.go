@@ -19,6 +19,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/OWNER/aos/internal/domain/artifact"
 	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/domain/workspace"
 	"github.com/OWNER/aos/internal/transport/httpapi"
@@ -348,5 +349,74 @@ func TestMCPOverHTTPRequiresAuthenticationOnTheRunningDaemon(t *testing.T) {
 	_, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: base + "/mcp"}, nil)
 	if err == nil {
 		t.Fatal("an unauthenticated client connected to /mcp")
+	}
+}
+
+// TestArtifactsAreServedThroughTheRunningDaemon proves the /v/artifacts/*
+// mount point docs/04 - Domínio/Artifact (Go).md's own INTEGRATION.md
+// disclosed as the one remaining gap — the domain package existed, complete
+// and tested, with nothing serving its files over HTTP — is now filled: a
+// real HTTP GET, over a real socket, reaches an artifact this daemon just
+// created, through the real artifact.Service and the real
+// artifactfiles.Files behind it, not a fake of either.
+func TestArtifactsAreServedThroughTheRunningDaemon(t *testing.T) {
+	base, a := serving(t, nil)
+	if _, err := a.Config.Update(context.Background(), configOff()); err != nil {
+		t.Fatal(err)
+	}
+
+	created, err := a.Artifacts.Create(context.Background(), artifact.CreateInput{
+		Name: "Demo", Visibility: artifact.Workspace,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := http.Get(base + "/v/artifacts/" + created.ID + "/") //nolint:noctx // a real HTTP GET in a test
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "This artifact has no content yet") {
+		t.Fatalf("body did not contain the scaffolded entrypoint: %s", body)
+	}
+	if csp := resp.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") {
+		t.Fatalf("Content-Security-Policy = %q", csp)
+	}
+	for _, c := range resp.Cookies() {
+		t.Fatalf("the artifacts route must never set a cookie, got %q", c.Name)
+	}
+}
+
+// TestPrivateArtifactsRequireAuthenticationOnTheRunningDaemon proves the
+// other half: with security on (serving's own default), an artifact whose
+// visibility needs authentication actually refuses an anonymous request
+// through the real composition root, not only against a fake Authenticator.
+func TestPrivateArtifactsRequireAuthenticationOnTheRunningDaemon(t *testing.T) {
+	base, a := serving(t, nil) // security stays on
+
+	created, err := a.Artifacts.Create(context.Background(), artifact.CreateInput{
+		Name: "Secret", Visibility: artifact.Private,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := http.Get(base + "/v/artifacts/" + created.ID + "/") //nolint:noctx // a real HTTP GET in a test
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusOK {
+		t.Fatal("an unauthenticated request read a private artifact")
 	}
 }

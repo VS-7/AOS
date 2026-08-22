@@ -2,7 +2,7 @@
 tags: [transporte, artifact, estatico]
 aliases: [Artifacts Transport, Estáticos]
 fase: 8
-status: especificado
+status: em-construcao
 origem: "[[Artifact]]"
 ---
 
@@ -113,8 +113,29 @@ Implementado: `monaco-editor` + `@monaco-editor/react` no bundle Vite, self-host
 - SPA: rota de cliente cai em `index.html`; asset faltando devolve 404
 - Nenhum cookie de sessão enviado na rota de artifacts
 
+## Estado atual
+
+Implementado como `internal/transport/artifactapi`, não `internal/transport/artifacts`
+como o esboço acima nomeia — mesma ideia, montado em `/v` por `httpapi.Config.Artifacts`,
+fora do grupo autenticado (nem o cookie de sessão nem o token da API guardam
+essa rota; ela lê só um cabeçalho `Authorization`/`X-Auth-Token` apresentado
+de propósito, ou a senha de um artifact `by_password` pela query string — ver
+[[Artifact (Go)]]). `{workspace}` no caminho do esboço original não existe
+nesta reconstrução: o daemon é single-workspace, então a URL é
+`/v/artifacts/{id}/*` sem esse segmento.
+
+A SPA embutida existe só em `aos-desktop` (`//go:embed all:dist`,
+`cmd/aos-desktop/main.go`) — `aosd`, o daemon headless, não serve a SPA por
+HTTP; não há decisão registrada sobre se deveria (expor a UI completa no
+daemon muda o modelo de ameaça de "API com token" para "aplicativo web",
+inclusive por [[Tunnel (Go)]]). Fora do escopo desta rodada — sinalizado,
+não decidido.
+
+Monaco não tem transporte próprio, como o esboço já previa — está no bundle
+do frontend.
+
 ## Critério de pronto
 
-- [ ] Artifacts servidos com contenção e CSP
-- [ ] SPA embutida servida pelos dois binários
-- [ ] Helper de contenção compartilhado com sandbox e file
+- [x] Artifacts servidos com contenção e CSP — `TestPathTraversalIsRefused`, `TestCSPAndSecurityHeadersArePresent`, `TestADirectoryIsNeverListed` (`internal/transport/artifactapi`); ponta a ponta em `TestArtifactsAreServedThroughTheRunningDaemon` (`internal/app`)
+- [~] SPA embutida servida pelos dois binários — só em `aos-desktop`; `aosd` não serve a SPA (ver "Estado atual")
+- [x] Helper de contenção compartilhado com sandbox e file — `internal/core/pathx.ResolveInside`, usado por `artifactfiles`, `file` e `sandbox`

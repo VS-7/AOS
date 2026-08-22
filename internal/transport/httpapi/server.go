@@ -91,6 +91,13 @@ type Config struct {
 	// Nil leaves it unmounted.
 	Bot http.Handler
 
+	// Artifacts serves generated static applications at /v/artifacts/{id}/*,
+	// outside /api entirely — it is not a command surface and it authorises
+	// itself per artifact, per visibility, never against the guarded group's
+	// own session-cookie-accepting credential check. See artifactapi's
+	// package doc. Nil leaves it unmounted.
+	Artifacts http.Handler
+
 	Log   *slog.Logger
 	Now   func() time.Time
 	NewID func() string
@@ -162,6 +169,12 @@ func New(cfg Config) *Server {
 		// Outside /api because it is not one: it takes no payload, returns no
 		// envelope, and authorises itself.
 		r.Handle("/ws", cfg.Realtime)
+	}
+	if cfg.Artifacts != nil {
+		// Outside /api for the same reason /ws is: no envelope, and its own
+		// authorisation — see artifactapi's package doc for why it must not
+		// share the guarded group's session-cookie-accepting check.
+		r.Mount("/v", cfg.Artifacts)
 	}
 	if cfg.MCP != nil {
 		// Outside /api because it isn't one — a client speaks the MCP wire

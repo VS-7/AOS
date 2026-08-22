@@ -161,7 +161,15 @@ type App struct {
 	// The eight domains Phase 8 declared alongside the ecosystem core, built
 	// in a later slice of the same phase — see docs/08 - Entrega/Roteiro de
 	// Fases.md's "Fora do núcleo, declarado".
-	Artifacts    *artifact.Service
+	Artifacts *artifact.Service
+
+	// ArtifactFiles resolves a path inside one artifact's own directory —
+	// Serve's HTTP layer uses it to serve an artifact's files, the same
+	// containment Artifacts' own Create/Ensure already enforces. It is not
+	// reached through Registry, the same reason Files (the file explorer)
+	// is not.
+	ArtifactFiles *artifactfiles.Files
+
 	Goals        *goal.Service
 	Instructions *instruction.Service
 	Marketplace  *marketplace.Service
@@ -536,9 +544,13 @@ func New(opts Options) (*App, error) {
 	// the App field's own comment. Built here, after skillInstaller and
 	// taskSvc both exist: marketplace installs through the former, and
 	// goal/project both clear their reference off a task through the latter.
+	// Shared with the HTTP layer below, not rebuilt there: artifactFiles.
+	// Resolve is what internal/transport/artifactapi confines a served path
+	// through, the same containment Ensure uses for scaffolding.
+	artifactFiles := artifactfiles.New(root)
 	artifactSvc := artifact.NewService(artifact.Deps{
 		Repo:   repos.artifacts,
-		Files:  artifactfiles.New(root),
+		Files:  artifactFiles,
 		Hasher: artifact.Argon2Hasher{},
 		Clock:  clock,
 		IDs:    idgen,
@@ -782,14 +794,15 @@ func New(opts Options) (*App, error) {
 		Skills:             skillInstaller,
 		Watcher:            watcher,
 
-		Artifacts:    artifactSvc,
-		Goals:        goalSvc,
-		Instructions: instructionSvc,
-		Marketplace:  marketplaceSvc,
-		Projects:     projectSvc,
-		Templates:    templateSvc,
-		Tunnel:       tunnelSvc,
-		Bots:         botRegistry,
+		Artifacts:     artifactSvc,
+		ArtifactFiles: artifactFiles,
+		Goals:         goalSvc,
+		Instructions:  instructionSvc,
+		Marketplace:   marketplaceSvc,
+		Projects:      projectSvc,
+		Templates:     templateSvc,
+		Tunnel:        tunnelSvc,
+		Bots:          botRegistry,
 
 		Clock:   clock,
 		env:     resolver,

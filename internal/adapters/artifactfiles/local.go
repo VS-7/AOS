@@ -1,7 +1,8 @@
 // Package artifactfiles is the filesystem implementation of artifact.Files:
 // it scaffolds an artifact's entrypoint on Create and removes its directory
 // on Delete. Serving the files back out over HTTP is a transport concern —
-// internal/transport/httpapi — not this adapter's.
+// internal/transport/artifactapi — which calls Resolve below for the same
+// containment Ensure uses, rather than a second implementation of it.
 package artifactfiles
 
 import (
@@ -64,6 +65,22 @@ func (f *Files) Ensure(_ context.Context, id, entrypoint string) (string, error)
 		}
 	}
 	return entrypoint, nil
+}
+
+// Resolve confines path inside artifact id's own directory, exactly the way
+// Ensure confines entrypoint — the same helper, so the transport that serves
+// an artifact's files back out over HTTP (internal/transport/artifactapi)
+// cannot drift from the containment Ensure already enforces at write time.
+func (f *Files) Resolve(id, path string) (string, error) {
+	root, err := f.artifactRoot(id)
+	if err != nil {
+		return "", errResolveFailed(id, err)
+	}
+	target, err := pathx.ResolveInside(root, path)
+	if err != nil {
+		return "", errPathOutside(id, path, err)
+	}
+	return target, nil
 }
 
 // Remove deletes the artifact's directory and everything under it. It is
