@@ -4,6 +4,7 @@ import {
   ArrowRight01Icon,
   Layout01Icon,
   Layers01Icon,
+  PlusSignIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
@@ -21,6 +22,7 @@ import {
 } from "@/components/ui/collapsible";
 import { ArtifactHelper } from "@/features/artifact/presentation/helpers/artifact.helper";
 import { useArtifacts } from "@/features/artifact/presentation/hooks/use-artifacts";
+import { CreateArtifactDialog } from "@/features/artifact/presentation/components/create-artifact-dialog";
 import { useViews } from "@/features/view/presentation/hooks/use-views";
 
 type SurfaceRow = {
@@ -101,6 +103,14 @@ export function WorkspaceSidebarSurfacesGroupMenu() {
         </CollapsibleTrigger>
         <CollapsibleContent>
           <SidebarMenuSub>
+            <SidebarMenuItem>
+              <CreateArtifactDialog>
+                <SidebarMenuButton className="text-muted-foreground hover:text-foreground">
+                  <HugeiconsIcon icon={PlusSignIcon} className="size-3.5" />
+                  <span>New artifact</span>
+                </SidebarMenuButton>
+              </CreateArtifactDialog>
+            </SidebarMenuItem>
             {rows.map((row, index) => (
               <SidebarMenuMotionItem key={row.key} index={index}>
                 <SidebarMenuItem>
