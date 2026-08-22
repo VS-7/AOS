@@ -64,8 +64,20 @@ func (s *Service) List(ctx context.Context, _ ListInput) ([]Artifact, error) {
 	out := make([]Artifact, len(found))
 	for i := range found {
 		out[i] = found[i].Clone()
+		out[i].URLs = s.urlsFor(out[i].ID)
 	}
 	return out, nil
+}
+
+// urlsFor computes where a client reaches id's own files. Local always
+// points at internal/transport/artifactapi's mount — see URLs' own doc
+// comment. Tunnel stays nil: computing a real one needs this service to
+// know whether a tunnel is active, which would mean threading a
+// tunnel.Service dependency through Deps for a field nothing reads yet
+// (the frontend this was ported alongside only ever reads .local — see
+// URLs' own doc) — a real follow-up, not a silent omission.
+func (s *Service) urlsFor(id string) *URLs {
+	return &URLs{Local: "/v/artifacts/" + id + "/"}
 }
 
 // GetInput names one artifact.
@@ -92,6 +104,7 @@ func (s *Service) get(ctx context.Context, id string) (*Artifact, error) {
 		return nil, errNotFound(id)
 	}
 	clone := found.Clone()
+	clone.URLs = s.urlsFor(clone.ID)
 	return &clone, nil
 }
 
@@ -147,6 +160,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Artifact, error)
 	if err := s.repo.Create(ctx, a); err != nil {
 		return nil, errWriteFailed("Create", err)
 	}
+	a.URLs = s.urlsFor(a.ID)
 	return a, nil
 }
 
@@ -192,6 +206,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Artifact, error)
 	if err := s.repo.Update(ctx, &toWrite, collections.Version{}); err != nil {
 		return nil, errWriteFailed("Update", err)
 	}
+	current.URLs = s.urlsFor(current.ID)
 	return current, nil
 }
 
@@ -256,7 +271,12 @@ func (s *Service) SetPassword(ctx context.Context, in SetPasswordInput) (SetPass
 	if err := s.repo.Update(ctx, &toWrite, collections.Version{}); err != nil {
 		return SetPasswordOutput{}, errWriteFailed("SetPassword", err)
 	}
-	return SetPasswordOutput{URL: "/v/{workspace}/artifacts/" + id + "/" + current.Entrypoint}, nil
+	// Was "/v/{workspace}/artifacts/" + id + "/" + current.Entrypoint — a
+	// literal, never-interpolated "{workspace}" left over from the design
+	// doc's own sketch, predating internal/transport/artifactapi's real
+	// route (single-workspace, no such segment — see that package's doc).
+	// s.urlsFor is the one place this daemon computes an artifact's URL now.
+	return SetPasswordOutput{URL: s.urlsFor(id).Local}, nil
 }
 
 // AccessRequest is what a caller of Authorize brings: whatever it was able

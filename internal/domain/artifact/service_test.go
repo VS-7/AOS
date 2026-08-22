@@ -111,6 +111,50 @@ func TestCreateGetUpdateDeleteRoundTrips(t *testing.T) {
 	}
 }
 
+// TestURLsAreComputedOnEveryRead proves the one field the frontend this
+// domain was ported alongside reads with no fallback if it is absent
+// (features/artifact/presentation/helpers/artifact.helper.ts's
+// openInBrowserTab reads artifact.urls.local directly) is actually present
+// on Create, Get, List and Update — not just persisted-and-forgotten, since
+// URLs is never round-tripped through the repository at all (yaml:"-").
+func TestURLsAreComputedOnEveryRead(t *testing.T) {
+	svc, _, _ := newService(t)
+	want := "/v/artifacts/art-1/"
+
+	created, err := svc.Create(ctx(), artifact.CreateInput{Name: "Dashboard"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.URLs == nil || created.URLs.Local != want {
+		t.Fatalf("Create: URLs = %+v, want Local = %q", created.URLs, want)
+	}
+
+	got, err := svc.Get(ctx(), artifact.GetInput{ID: created.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.URLs == nil || got.URLs.Local != want {
+		t.Fatalf("Get: URLs = %+v, want Local = %q", got.URLs, want)
+	}
+
+	newName := "Renamed"
+	updated, err := svc.Update(ctx(), artifact.UpdateInput{ID: created.ID, Name: &newName})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.URLs == nil || updated.URLs.Local != want {
+		t.Fatalf("Update: URLs = %+v, want Local = %q", updated.URLs, want)
+	}
+
+	list, err := svc.List(ctx(), artifact.ListInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].URLs == nil || list[0].URLs.Local != want {
+		t.Fatalf("List: %+v", list)
+	}
+}
+
 // --- scaffold on empty entrypoint --------------------------------------
 
 func TestCreateWithNoEntrypointScaffoldsTheDefault(t *testing.T) {
@@ -152,8 +196,16 @@ func TestSetPasswordThenAuthorizeAcceptsTheRightPasswordAndRejectsTheWrongOne(t 
 		t.Fatal(err)
 	}
 
-	if _, err := svc.SetPassword(ctx(), artifact.SetPasswordInput{ID: created.ID, Password: "correct-horse-battery-staple"}); err != nil {
+	out, err := svc.SetPassword(ctx(), artifact.SetPasswordInput{ID: created.ID, Password: "correct-horse-battery-staple"})
+	if err != nil {
 		t.Fatal(err)
+	}
+	// Regression: this used to be the literal, never-interpolated
+	// "/v/{workspace}/artifacts/" + id + "/" + entrypoint — see
+	// urlsFor's own comment.
+	wantURL := "/v/artifacts/" + created.ID + "/"
+	if out.URL != wantURL {
+		t.Fatalf("SetPassword URL = %q, want %q", out.URL, wantURL)
 	}
 
 	stored, err := svc.Get(ctx(), artifact.GetInput{ID: created.ID})

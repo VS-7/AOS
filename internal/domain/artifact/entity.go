@@ -69,10 +69,33 @@ type Artifact struct {
 	// the frontmatter+body model every native record is stored as. It always
 	// reads back empty and is never written.
 	Content string `yaml:"-" json:"-" collection:"content"`
+
+	// URLs is computed on every read (List, Get, Create, Update), never
+	// persisted — see Service.urlsFor. It exists because the frontend this
+	// domain was ported alongside expects it on the wire (recovered from the
+	// original product's own `_get_artifact_urls`, not guessed): a sidebar
+	// entry opens an artifact by reading .urls.local directly, with no
+	// fallback if it is absent.
+	URLs *URLs `yaml:"-" json:"urls,omitempty"`
 }
 
-// Clone returns an Artifact that shares no mutable state with a. Nothing in
-// this struct is a slice or map today, but every sibling domain's entity
-// carries its own Clone, and a struct that grows one later is safer for
-// already calling it everywhere a value crosses a boundary.
-func (a Artifact) Clone() Artifact { return a }
+// URLs is where a client reaches one artifact's files. Local is always
+// present; Tunnel is nil until this build computes one from an active
+// tunnel (see Service.urlsFor's own doc) — always present as a field on the
+// wire, per the original's own shape, just null today.
+type URLs struct {
+	Local  string  `json:"local"`
+	Tunnel *string `json:"tunnel"`
+}
+
+// Clone returns an Artifact that shares no mutable state with a — including
+// URLs, a pointer, which every sibling domain's Clone with a nested pointer
+// or slice already copies rather than aliases.
+func (a Artifact) Clone() Artifact {
+	c := a
+	if a.URLs != nil {
+		u := *a.URLs
+		c.URLs = &u
+	}
+	return c
+}
