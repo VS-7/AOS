@@ -682,16 +682,31 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "artifact.setPassword": { key: "artifacts_set-password", renameIn: { artifact: "id" } },
   "artifact.delete": { key: "artifacts_delete", renameIn: { artifact: "id" } },
 
-  "goal.list": "goals_list",
+  // `goals_list` answers a bare []Goal (internal/domain/goal/service.go's
+  // List) — same bug class as artifacts_list above. Three live readers
+  // (workspace home, goal's own (main) page, and the Goals tab inside a
+  // project's detail page) all read response.data?.goals and got an empty
+  // list regardless of what actually existed.
+  "goal.list": { key: "goals_list", wrapOut: "goals" },
   "goal.getById": { key: "goals_get", renameIn: { goal: "id" }, wrapOut: "goal" },
-  "goal.create": "goals_create",
-  "goal.update": { key: "goals_update", renameIn: { goal: "id" } },
+  // goals_create answers bare too; the live caller (goal/($id)/index.tsx)
+  // reads result.data?.goal?.id to navigate to the new goal after creating
+  // it — always undefined before this, so "create" silently never
+  // navigated anywhere. goal.update carries wrapOut for the same reason
+  // goal.getById already did, even though its one live caller today only
+  // checks result?.error and does not read the body.
+  "goal.create": { key: "goals_create", wrapOut: "goal" },
+  "goal.update": { key: "goals_update", renameIn: { goal: "id" }, wrapOut: "goal" },
   "goal.delete": { key: "goals_delete", renameIn: { goal: "id" } },
 
   "instruction.list": "instructions_list",
-  "instruction.getById": { key: "instructions_get", renameIn: { instruction: "id" } },
-  "instruction.create": "instructions_create",
-  "instruction.update": { key: "instructions_update", renameIn: { instruction: "id" } },
+  // instructions_get/-create/-update all answer bare too. The live caller
+  // (instructions.context.tsx) reads response.data?.instruction for all
+  // three — get, create and update — so every one of them silently failed
+  // to ever show or persist a loaded/created/edited instruction.
+  "instruction.getById": { key: "instructions_get", renameIn: { instruction: "id" }, wrapOut: "instruction" },
+  "instruction.create": { key: "instructions_create", wrapOut: "instruction" },
+  "instruction.update": { key: "instructions_update", renameIn: { instruction: "id" }, wrapOut: "instruction" },
   "instruction.delete": { key: "instructions_delete", renameIn: { instruction: "id" } },
 
   // `marketplace.list` is the ported UI's name for a search/browse call —
@@ -704,10 +719,17 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "marketplace.getByName": { key: "marketplace_get", renameIn: { name: "source" } },
   "marketplace.install": "marketplace_install",
 
-  "project.list": "projects_list",
-  "project.getById": { key: "projects_get", renameIn: { project: "id" } },
-  "project.create": "projects_create",
-  "project.update": { key: "projects_update", renameIn: { project: "id" } },
+  // Same bug class as goal.* just above: projects_list/-get/-create all
+  // answer bare (internal/domain/project/service.go). Three live readers
+  // expect wrapped responses — workspace home and project's own (main)
+  // page read response.data?.projects; project/($id)/index.tsx's loader
+  // reads result.data?.project (so opening any project 404'd, since that
+  // read was always undefined) and its create handler reads
+  // result.data?.project?.id to navigate to the new project afterward.
+  "project.list": { key: "projects_list", wrapOut: "projects" },
+  "project.getById": { key: "projects_get", renameIn: { project: "id" }, wrapOut: "project" },
+  "project.create": { key: "projects_create", wrapOut: "project" },
+  "project.update": { key: "projects_update", renameIn: { project: "id" }, wrapOut: "project" },
   "project.delete": { key: "projects_delete", renameIn: { project: "id" } },
 
   "template.list": "templates_list",
