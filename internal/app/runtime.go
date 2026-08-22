@@ -9,10 +9,18 @@ import (
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/domain/agent"
+	"github.com/OWNER/aos/internal/domain/artifact"
 	"github.com/OWNER/aos/internal/domain/chat"
 	"github.com/OWNER/aos/internal/domain/config"
 	"github.com/OWNER/aos/internal/domain/event"
+	"github.com/OWNER/aos/internal/domain/goal"
+	"github.com/OWNER/aos/internal/domain/instruction"
 	"github.com/OWNER/aos/internal/domain/memory"
+	"github.com/OWNER/aos/internal/domain/project"
+	"github.com/OWNER/aos/internal/domain/routine"
+	"github.com/OWNER/aos/internal/domain/skill"
+	"github.com/OWNER/aos/internal/domain/template"
+	"github.com/OWNER/aos/internal/domain/view"
 	"github.com/OWNER/aos/internal/domain/workspace"
 	"github.com/OWNER/aos/internal/runtime/agentloop"
 	"github.com/OWNER/aos/internal/runtime/prompt"
@@ -64,9 +72,17 @@ func zoneFrom(cfg config.Service, log *slog.Logger) *time.Location {
 // reader answers the two questions the context document asks of the rest of the
 // system: what the workspace holds, and how much this agent remembers.
 type reader struct {
-	workspaces *workspace.Service
-	agents     *agent.Service
-	memories   *memory.Service
+	workspaces   *workspace.Service
+	agents       *agent.Service
+	memories     *memory.Service
+	skills       *skill.Installer
+	templates    *template.Service
+	views        *view.Service
+	goals        *goal.Service
+	routines     *routine.Service
+	projects     *project.Service
+	artifacts    *artifact.Service
+	instructions *instruction.Service
 }
 
 // countLimit is high enough that the per-category counts are exact for any
@@ -96,11 +112,72 @@ func (r reader) Inventory(ctx context.Context, id string) (prompt.Inventory, err
 			}
 		}
 	}
+	if r.skills != nil {
+		if list, err := r.skills.List(ctx); err == nil {
+			for _, s := range list.Skills {
+				out.Skills = append(out.Skills, s.ID)
+			}
+		}
+	}
+	if r.templates != nil {
+		if list, err := r.templates.List(ctx, template.ListInput{}); err == nil {
+			for _, t := range list.Templates {
+				out.Templates = append(out.Templates, t.ID)
+			}
+		}
+	}
+	if r.views != nil {
+		if list, err := r.views.List(ctx, view.ListInput{}); err == nil {
+			for _, v := range list.Views {
+				out.Views = append(out.Views, v.ID)
+			}
+		}
+	}
+	if r.goals != nil {
+		if list, err := r.goals.List(ctx, goal.ListInput{}); err == nil {
+			for _, g := range list {
+				out.Goals = append(out.Goals, g.ID)
+			}
+		}
+	}
+	if r.routines != nil {
+		if list, err := r.routines.List(ctx, routine.ListInput{}); err == nil {
+			for _, rt := range list.Routines {
+				out.Routines = append(out.Routines, rt.ID)
+			}
+		}
+	}
+	if r.projects != nil {
+		if list, err := r.projects.List(ctx, project.ListInput{}); err == nil {
+			for _, p := range list {
+				out.Projects = append(out.Projects, p.ID)
+			}
+		}
+	}
+	if r.artifacts != nil {
+		if list, err := r.artifacts.List(ctx, artifact.ListInput{}); err == nil {
+			for _, ar := range list {
+				out.Artifacts = append(out.Artifacts, ar.ID)
+			}
+		}
+	}
+	if r.instructions != nil {
+		if list, err := r.instructions.List(ctx, instruction.ListInput{}); err == nil {
+			for _, ins := range list.Instructions {
+				out.Instructions = append(out.Instructions, ins.ID)
+			}
+		}
+	}
 	sort.Strings(out.Collections)
 	sort.Strings(out.Agents)
-	// The remaining categories are the aggregates of the phases that come
-	// after this one. They are empty here rather than absent, so the block the
-	// agent reads keeps its shape as they arrive.
+	sort.Strings(out.Skills)
+	sort.Strings(out.Templates)
+	sort.Strings(out.Views)
+	sort.Strings(out.Goals)
+	sort.Strings(out.Routines)
+	sort.Strings(out.Projects)
+	sort.Strings(out.Artifacts)
+	sort.Strings(out.Instructions)
 	return out, nil
 }
 

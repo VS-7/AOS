@@ -642,9 +642,14 @@ func New(opts Options) (*App, error) {
 	tunnel.Register(reg, tunnelSvc)
 
 	assembler := prompt.NewAssembler(prompt.Deps{
-		Clock:  promptClock{clock: clock, zone: zoneFrom(configSvc, logger)},
-		Reader: reader{workspaces: workspaceSvc, agents: agentSvc, memories: memorySvc},
-		Log:    logger,
+		Clock: promptClock{clock: clock, zone: zoneFrom(configSvc, logger)},
+		Reader: reader{
+			workspaces: workspaceSvc, agents: agentSvc, memories: memorySvc,
+			skills: skillInstaller, templates: templateSvc, views: viewSvc,
+			goals: goalSvc, routines: routineSvc, projects: projectSvc,
+			artifacts: artifactSvc, instructions: instructionSvc,
+		},
+		Log: logger,
 	})
 	runtime := session.New(session.Deps{
 		Agents:   agentSvc,

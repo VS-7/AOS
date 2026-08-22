@@ -351,4 +351,12 @@ ok  	github.com/OWNER/aos/internal/runtime/prompt
 
 **Colisão herdada, mantida:** a categoria de memória `context` produz `<context count="0">` dentro do documento cuja raiz é `<context>`. É o que o original faz, é XML válido, e renomear qualquer um dos dois seria pior. Registrado porque parece defeito na primeira leitura.
 
-**Pendente:** as contagens de memória vêm de uma varredura, não de facetas do índice. Ver [[ADR-0013 Bleve para busca full-text]] — a decisão continua de pé, a implementação é da fase que ligar as facetas. O inventário traz hoje coleções e agentes; skills, views, goals, routines, templates, projects e artifacts entram com seus agregados, e o bloco já tem o formato.
+**Pendente:** as contagens de memória vêm de uma varredura, não de facetas do índice. Ver [[ADR-0013 Bleve para busca full-text]] — a decisão continua de pé, a implementação é da fase que ligar as facetas.
+
+**Resolvido:** o inventário traz hoje as nove categorias, não só coleções e
+agentes — `internal/app/runtime.go`'s `reader.Inventory` lê skills, templates,
+views, goals, routines, projects, artifacts e instructions dos próprios
+serviços, cada um com sua guarda `!= nil` e sua ordenação, o mesmo padrão que
+coleções e agentes já usavam. O bloco só esperava o formato até aqui; agora
+os agregados chegam junto. Ver `TestTheAssembledPromptCarriesEveryInventoryCategory`
+(`internal/app/inventory_test.go`).
