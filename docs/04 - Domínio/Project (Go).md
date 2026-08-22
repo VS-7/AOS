@@ -73,6 +73,6 @@ type Service interface {
 
 ## Critério de pronto
 
-- [ ] CRUD completo
-- [ ] Desassociação verificada em delete
-- [ ] Projeto aparecendo no inventário do [[Prompt Assembly]]
+- [x] CRUD completo — `TestRoundTrip`
+- [x] Desassociação verificada em delete — `TestDeleteUnlinksWithoutRemovingTheReferencingWork`
+- [x] Projeto aparecendo no inventário do [[Prompt Assembly]] — `TestTheAssembledPromptCarriesEveryInventoryCategory` (`internal/app`)

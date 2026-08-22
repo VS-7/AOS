@@ -79,6 +79,6 @@ type Service interface {
 
 ## Critério de pronto
 
-- [ ] CRUD completo
-- [ ] Goals ativas no inventário do [[Prompt Assembly]]
-- [ ] Goals trazidas por skill instaladas e removidas com ela
+- [x] CRUD completo — `TestRoundTrip`
+- [x] Goals ativas no inventário do [[Prompt Assembly]] — `TestTheAssembledPromptCarriesEveryInventoryCategory` (`internal/app`)
+- [x] Goals trazidas por skill instaladas e removidas com ela — `TestCreateInstalledBySkillCarriesSkillField`; a remoção é o mecanismo genérico que todo recurso relocatável de uma skill já usa (CascadeDelete no registro da skill), não código próprio deste domínio
