@@ -169,9 +169,16 @@ export const CollectionPage = aos
         query: {},
       });
 
+      // `collections_records-list` answers `{records, total}`
+      // (`RecordsListOutput`, internal/domain/collection/commands.go), not
+      // a bare array — `command-map.ts`'s own comment on `collection.
+      // listRecords` already discloses this as a call-site fix. Reading
+      // `records.data` directly handed the whole `{records, total}` object
+      // to `allRecords` below wherever any record existed, breaking every
+      // `.map`/`.length` use on it instead of quietly returning nothing.
       return {
         collection: collection.data.collection,
-        records: records.data ?? [],
+        records: records.data?.records ?? [],
       };
     } catch {
       return response.notFound();
