@@ -1177,6 +1177,8 @@ export interface CommandMap {
     "id": string;
     /** Values for the template's declared Variables. A missing Required variable with no Default refuses the render. */
     "variables"?: Record<string, unknown>;
+    /** When true, also writes the rendered output to disk at the template's own (Liquid-rendered) Output path. Refused if the template declares no Output. Default false only returns the rendered text. */
+    "write"?: boolean;
   }; output: unknown };
   /** Change an existing template. */
   "templates_update": { input: {
@@ -1388,6 +1390,44 @@ export interface CommandMap {
   }; output: unknown };
   /** Tear the tunnel down. */
   "tunnel_stop": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+  }; output: unknown };
+  /** Install a staged, verified release and restart the daemon. */
+  "update_apply": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** The staged release, as DownloadOutput.staged returned it. */
+    "staged": {
+    "binaries": Record<string, string>;
+    "dir": string;
+    "version": string;
+  };
+  }; output: unknown };
+  /** Query the release channel. Never downloads anything. */
+  "update_check": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** stable or beta. Defaults to stable. */
+    "channel"?: string;
+  }; output: unknown };
+  /** Fetch and verify this platform's assets for a release. Nothing is installed yet. */
+  "update_download": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** The release to download, as CheckOutput.release returned it. */
+    "release": {
+    "assets": unknown;
+    "channel": string;
+    "checksumsUrl": string;
+    "notes"?: string;
+    "publishedAt": string;
+    "signatureUrl": string;
+    "version": string;
+  };
+  }; output: unknown };
+  /** Report the current version and channel, without checking the network. */
+  "update_status": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
   }; output: unknown };
@@ -1671,6 +1711,10 @@ export const COMMAND_KEYS = [
   "tunnel_start",
   "tunnel_status",
   "tunnel_stop",
+  "update_apply",
+  "update_check",
+  "update_download",
+  "update_status",
   "views_components",
   "views_create",
   "views_delete",

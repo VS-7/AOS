@@ -43,6 +43,7 @@ import (
 	"github.com/OWNER/aos/internal/domain/todo"
 	"github.com/OWNER/aos/internal/domain/toolset"
 	"github.com/OWNER/aos/internal/domain/tunnel"
+	"github.com/OWNER/aos/internal/domain/update"
 	"github.com/OWNER/aos/internal/domain/view"
 	"github.com/OWNER/aos/internal/domain/workspace"
 	"github.com/OWNER/aos/internal/transport/clix"
@@ -126,6 +127,16 @@ var excluded = map[string]string{
 		"even a single run here would only exercise the exposure guard, not a real " +
 		"tunnel. Both the guard and the supervised run are covered by the tunnel suite " +
 		"over a fake Runner.",
+	"update_check": "the parity installation has no release feed configured (BaseURL " +
+		"empty), so this could only exercise the up-to-date refusal path, never a real " +
+		"channel read. Covered by the update suite's own fakeSource.",
+	"update_download": "same reason as update_check, and it needs a real signed release " +
+		"to verify against, which the parity harness has no channel to fetch one from. " +
+		"Covered by the update suite over a fakeSource and a real relsig keypair.",
+	"update_apply": "restarts the daemon out from under whichever surface is running it — " +
+		"running it on five surfaces would restart the daemon five times, mid-suite. " +
+		"Covered end to end by the update suite's own Apply tests over a fake " +
+		"DaemonSupervisor.",
 }
 
 // scenario describes one command well enough to run it on every surface.
@@ -720,6 +731,10 @@ var scenarios = map[string]scenario{
 	},
 	"tunnel_stop": {
 		Payload: tunnel.StopInput{Reasoning: reason()},
+	},
+
+	"update_status": {
+		Payload: update.StatusInput{Reasoning: reason()},
 	},
 }
 

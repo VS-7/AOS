@@ -29,12 +29,14 @@ import (
 	"github.com/OWNER/aos/internal/adapters/mcpclient"
 	"github.com/OWNER/aos/internal/adapters/openapiclient"
 	"github.com/OWNER/aos/internal/adapters/osfile"
+	"github.com/OWNER/aos/internal/adapters/releasesource"
 	"github.com/OWNER/aos/internal/adapters/skillfetch"
 	"github.com/OWNER/aos/internal/adapters/skillfiles"
 	"github.com/OWNER/aos/internal/adapters/skillhooks"
 	"github.com/OWNER/aos/internal/adapters/sqlitequeue"
 	"github.com/OWNER/aos/internal/adapters/supervise"
 	"github.com/OWNER/aos/internal/adapters/telegramapi"
+	"github.com/OWNER/aos/internal/adapters/updateinstall"
 	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/collections"
@@ -69,6 +71,7 @@ import (
 	"github.com/OWNER/aos/internal/domain/todo"
 	"github.com/OWNER/aos/internal/domain/toolset"
 	"github.com/OWNER/aos/internal/domain/tunnel"
+	"github.com/OWNER/aos/internal/domain/update"
 	"github.com/OWNER/aos/internal/domain/view"
 	"github.com/OWNER/aos/internal/domain/workspace"
 	"github.com/OWNER/aos/internal/runtime/agentloop"
@@ -176,6 +179,11 @@ type App struct {
 	Projects     *project.Service
 	Templates    *template.Service
 	Tunnel       tunnel.Service
+
+	// Update is Fase 9's own domain — keeps aos, aosd and aos-desktop on one
+	// verified version. Built after Queue (below) since it needs the same
+	// active-work count Apply waits on.
+	Update update.Service
 
 	// Bots has no command-registry surface — configuring an external channel
 	// is a human action, not an agent capability — so it is reached only
@@ -737,6 +745,28 @@ func New(opts Options) (*App, error) {
 
 	jobSvc := job.NewService(job.Deps{Queue: queue, Clock: clock, Log: logger})
 	job.Register(reg, jobSvc)
+
+	// Fase 9: same "installed next to this executable" convention
+	// supervise.Resolver already uses to find aosd — aos, aosd and
+	// aos-desktop are expected to live in one directory together (docs/08 -
+	// Entrega/Build e Cross-Compile.md's own layout), so wherever this
+	// process's own binary is IS where Apply swaps the others in too.
+	binDir := paths.Root
+	if self, err := os.Executable(); err == nil {
+		binDir = filepath.Dir(self)
+	}
+	updateSvc := update.NewService(update.Deps{
+		Source:     releasesource.New(resolver.String(env.KeyUpdateBaseURL, "")),
+		Installer:  updateinstall.New(paths.UpdateDir(), binDir),
+		Supervisor: updateSupervisor{svc: gatewaySvc},
+		ActiveWork: updateActiveWork{queue: queue},
+		Clock:      clock,
+		Sleeper:    supervise.Sleeper{},
+		Log:        logger,
+		PublicKey:  releasePublicKey(),
+	})
+	update.Register(reg, updateSvc)
+
 	reg.Freeze()
 
 	var pool *worker.Pool
@@ -802,6 +832,7 @@ func New(opts Options) (*App, error) {
 		Projects:      projectSvc,
 		Templates:     templateSvc,
 		Tunnel:        tunnelSvc,
+		Update:        updateSvc,
 		Bots:          botRegistry,
 
 		Clock:   clock,

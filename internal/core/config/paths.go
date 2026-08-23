@@ -77,6 +77,7 @@ func (p Paths) JobsDB() string             { return filepath.Join(p.Data(), "job
 func (p Paths) Runtime() string            { return filepath.Join(p.Root, "runtime") }
 func (p Paths) GatewayDir() string         { return filepath.Join(p.Runtime(), "gateway") }
 func (p Paths) GatewayLock() string        { return filepath.Join(p.GatewayDir(), "gateway.lock") }
+func (p Paths) UpdateDir() string          { return filepath.Join(p.Runtime(), "update") }
 func (p Paths) Tmp() string                { return filepath.Join(p.Root, "tmp") }
 func (p Paths) Outputs() string            { return filepath.Join(p.Tmp(), "outputs") }
 func (p Paths) Workspaces() string         { return filepath.Join(p.Root, "workspaces") }
@@ -105,7 +106,7 @@ func (p Paths) SecretFiles() []string { return []string{p.Config(), p.Users(), p
 func (p Paths) Ensure() error {
 	dirs := []string{
 		p.Root, p.Data(), p.Runtime(), p.GatewayDir(),
-		p.Outputs(), p.Workspaces(), p.Themes(),
+		p.Outputs(), p.Workspaces(), p.Themes(), p.UpdateDir(),
 	}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o700); err != nil {

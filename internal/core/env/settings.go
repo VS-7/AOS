@@ -24,6 +24,7 @@ const (
 	KeyShutdownTimeout  = "SHUTDOWN_TIMEOUT"  //
 	KeyApprovalDeadline = "APPROVAL_DEADLINE" // ADR-0007
 	KeyNoColor          = "NO_COLOR"          //
+	KeyUpdateBaseURL    = "UPDATE_BASE_URL"   // release feed root; empty disables update.check (Fase 9)
 )
 
 // Defaults for the tunables above.
