@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/form-section";
 import { aos } from "@/app/aos";
 import { toast } from "sonner";
-import type { ModelProvider } from "@/features/model/interfaces/model.interfaces";
+import { useModelProviders } from "@/features/model/services/model-provider.service";
 import type { ConfigAgentModels } from "@/features/config/interfaces/config.interfaces";
 import {
   ModelsSection,
@@ -43,13 +43,7 @@ export function UserAgentsSection() {
   const context = aos.useContext();
   const config = context.config;
 
-  const providersQuery = aos.client.model.list.useQuery({
-    query: {
-      mode: "available"
-    }
-  });
-  const providers: ModelProvider[] =
-    (providersQuery.data as ModelProvider[] | undefined) ?? [];
+  const providers = useModelProviders();
 
   const [models, setModels] = React.useState<ModelsValue>(() => {
     const result: ModelsValue = {};
@@ -139,7 +133,7 @@ export function UserAgentsSection() {
           </FormSectionDescription>
         </FormSectionHeader>
         <FormSectionContent>
-          <ProvidersSection providers={providers} onRefresh={() => { void providersQuery.refetch(); }} />
+          <ProvidersSection providers={providers} />
         </FormSectionContent>
       </FormSection>
 

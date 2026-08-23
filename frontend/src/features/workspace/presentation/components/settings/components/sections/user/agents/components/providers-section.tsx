@@ -21,10 +21,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { aos } from "@/app/aos";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { ModelProvider } from "@/features/model/interfaces/model.interfaces";
+import { setModelProviderKey } from "@/features/model/services/model-provider.service";
 import { ProviderUpsertDialog } from "./provider-upsert-dialog";
 import { useProviderLogo } from "../hooks/use-provider-logo";
 
@@ -62,19 +62,8 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
 
   const handleDisconnect = async (provider: ModelProvider) => {
     try {
-      const result = await aos.client.model.set.mutate({
-        params: { provider: provider.id },
-        body: { key: "" },
-      });
-      if (result?.error) {
-        const message =
-          (result.error as { message?: string })?.message ??
-          "Failed to disconnect provider.";
-        toast.error(message);
-        return;
-      }
+      await setModelProviderKey(provider.id, "");
       toast.success(`${provider.name} disconnected.`);
-      await aos.stores.config.actions.refresh();
       onRefresh?.();
       router.invalidate();
     } catch (error) {
@@ -236,8 +225,7 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
           }
         }
         mode={editing?.configured ? "edit" : "create"}
-        onSuccess={async () => {
-          await aos.stores.config.actions.refresh();
+        onSuccess={() => {
           onRefresh?.();
           router.invalidate();
         }}

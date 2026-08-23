@@ -12,9 +12,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { aos } from "@/app/aos";
 import { toast } from "sonner";
 import type { ModelProvider, ModelProviderAuth } from "@/features/model/interfaces/model.interfaces";
+import { setModelProviderKey } from "@/features/model/services/model-provider.service";
 import { useProviderLogo } from "../hooks/use-provider-logo";
 
 interface ProviderUpsertDialogProps {
@@ -74,18 +74,7 @@ export function ProviderUpsertDialog({
 
     setIsSubmitting(true);
     try {
-      const result = await aos.client.model.set.mutate({
-        params: { provider: provider.id },
-        body: { key: value.trim() },
-      });
-
-      if (result?.error) {
-        const message =
-          (result.error as { message?: string })?.message ??
-          "Failed to save provider.";
-        toast.error(message);
-        return;
-      }
+      await setModelProviderKey(provider.id, value);
 
       toast.success(
         mode === "edit"
