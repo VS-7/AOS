@@ -2,13 +2,36 @@
 tags: [entrega, update, releases]
 aliases: [Auto-Update, Atualização]
 fase: 9
-status: especificado
+status: em-construcao
 origem: "[[Versões e Artefatos]]"
 ---
 
 # Auto-Update
 
 > Pai: [[AOS]] · Origem no original: [[Versões e Artefatos]] · Fase: 9
+
+**Núcleo entregue.** `internal/domain/update` implementa Check/Download/Apply
+como este design pede: Download recusa a release inteira
+(`UPDATE_SIGNATURE_INVALID`) se a assinatura do arquivo de checksums não
+verificar contra a chave embutida, antes de confiar em qualquer checksum
+dele; cada asset é então conferido pelo próprio SHA-256
+(`UPDATE_CHECKSUM_MISMATCH`) — nada fica staged em nenhuma falha. Apply
+espera o trabalho em andamento drenar (limitado), troca os binários,
+reinicia o daemon, e desfaz tudo — reiniciando de novo na versão anterior —
+se a nova não ficar saudável a tempo. `internal/core/relsig` é uma
+implementação Ed25519 própria (não bit-a-bit compatível com o `minisign`
+real — ver o comentário do próprio pacote) em vez de uma reimplementação
+adivinhada do formato do minisign. `internal/core/build.Compatible` cobre a
+verificação de versão única entre os três binários.
+
+**Não entregue:** coordenação com `~/.mcp.json` (`aos self mcp doctor`) —
+feature própria, de escopo comparável, não construída nesta rodada. A chave
+de assinatura em uso é uma chave de desenvolvimento gerada por
+`tools/genreleasekey`; a privada não foi commitada e precisa ser trocada por
+uma chave real antes de qualquer release de verdade. Nenhum canal de release
+existe ainda (`internal/adapters/releasesource` funciona com um `BaseURL`
+vazio = "sem release", o estado honesto de uma instalação sem
+infraestrutura de distribuição configurada).
 
 ## Objetivo
 

@@ -2,13 +2,24 @@
 tags: [skill, publicada, llm]
 aliases: [SKILL.md, Skill Publicada]
 fase: 9
-status: especificado
+status: pronto
 origem: "[[Skill]]"
 ---
 
 # SKILL (gerada)
 
 > Pai: [[Especificação da Skill]] · Fase: 9
+
+**Entregue**, com uma divergência de forma (não de conteúdo) em relação ao
+esboço abaixo: o texto curado vive como a constante `skillMD` em
+`tools/genskill/main.go`, não num arquivo `.md` separado copiado — a mesma
+forma que todo `GroupDoc.Doc` já usa neste código-base (string Go editada à
+mão), não um mecanismo à parte. Os três comandos do protocolo de início de
+sessão (`agents_me`, `memories_recall`, `workspace_introspect`) e as nove
+entradas da tabela de roteamento foram verificados contra o registry real,
+testado (`tools/genskill/main_test.go`) — os nomes de arquivo são o nome
+real do grupo no plural (`memories.md`, não `memory.md`), diferente do
+exemplo abaixo.
 
 ## Objetivo
 

@@ -2,11 +2,24 @@
 tags: [entrega, build, cross-compile]
 aliases: [Build, Cross-Compile, Taskfile]
 fase: 9
-status: especificado
+status: pronto
 origem: "[[Versões e Artefatos]]"
 ---
 
 # Build e Cross-Compile
+
+**Entregue.** `task build:verify-reproducible` prova que dois builds do mesmo
+commit são byte-idênticos (corrigiu `DATE` para honrar `SOURCE_DATE_EPOCH`,
+que antes ignorava silenciosamente). `task build:check-size` aplica os alvos
+desta nota (30/45/55 MB, tolerância de 20%) — hoje `aos` 9 MB, `aosd` 32 MB,
+`aos-desktop` 64 MB (só 2 MB de folga antes do teto, vale observar).
+`task build:check-no-abspath` prova que `-trimpath` realmente removeu os
+caminhos deste desenvolvedor. As seis combinações já compilavam
+(`task build:all`, entregue na Fase 8); esta rodada verificou as três
+propriedades que a seção "Critério de pronto" pedia e que nada checava
+antes. Distribuição (`install.sh`, Homebrew, `go install`, Scoop/MSI) segue
+não implementada — depende de onde os releases vão morar, uma decisão de
+infraestrutura, não de código.
 
 > Pai: [[AOS]] · Origem no original: [[Versões e Artefatos]] · Fase: 9
 

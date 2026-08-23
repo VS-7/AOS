@@ -2,13 +2,28 @@
 tags: [skill, documentacao, llm, geracao]
 aliases: [Especificação da Skill, Skill Publicada]
 fase: 9
-status: especificado
+status: em-construcao
 origem: "[[Skill]]"
 ---
 
 # Especificação da Skill
 
 > Pai: [[AOS]] · Origem no original: [[Skill]] · [[Ponte CLI para MCP]] · Fase: 9
+
+**Núcleo entregue.** `pkg/skill` (sem dependência do projeto, como esta nota
+pede) gera `SKILL.md` + 26 `references/*.md` a partir do registry real —
+`tools/genskill`, gate de CI (`task gen-skill && git diff --exit-code
+pkg/skill/`), geração determinística testada. `Sync` copia para diretórios
+de agente sem sobrescrever skill de terceiro com o mesmo nome, testado.
+
+**Divergência conhecida, não escondida:** a estrutura de seção obrigatória
+existe (`skill.RequiredSections`, `skill.MissingSections`) mas **não
+bloqueia** a geração — verificado contra o registry real: **0 dos 26 grupos**
+têm hoje as cinco seções completas (os `Doc` existentes são prosa útil, só
+não neste formato). Impor isso agora significaria reescrever a documentação
+voltada a LLM de 26 domínios numa única passada em vez de revisar cada um
+pelo que ele realmente precisa dizer — fora do escopo de um gerador.
+`genskill` reporta a lacuna a cada geração (stderr), não a esconde.
 
 ## Objetivo
 

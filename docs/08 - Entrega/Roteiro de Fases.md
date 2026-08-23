@@ -114,6 +114,24 @@ Cross-compile, empacotamento, auto-update, `SKILL.md` publicada, completions.
 **Notas:** [[Build e Cross-Compile]] · [[Empacotamento Wails3]] · [[Auto-Update]] · [[Especificação da Skill]] · [[SKILL (gerada)]]
 **Entrega:** binários assinados e instaláveis.
 
+**Parcialmente entregue.** [[Build e Cross-Compile]] e [[SKILL (gerada)]]
+fecharam — build reprodutível verificado, gate de tamanho, `SKILL.md` +
+26 referências geradas do registry real, sincronização testada.
+[[Auto-Update]] tem o núcleo (Check/Download/Apply, verificação de
+assinatura e checksum, espera-troca-rollback) mas não a coordenação com
+`~/.mcp.json`. [[Especificação da Skill]] tem uma divergência disclosed: a
+estrutura de cinco seções por grupo é verificada mas não imposta — 0 dos 26
+grupos a têm hoje. **Completions** já existiam (`aos self completions`,
+gerador embutido do cobra) — nada a construir.
+
+**Não iniciado, e é o que falta para "binários assinados e instaláveis":**
+[[Empacotamento Wails3]] inteira — assinatura/notarização macOS, MSI
+Windows, `.deb`/`.rpm`/AppImage/Flatpak Linux. Bloqueada em duas decisões
+que não são deste código: o nome definitivo do produto (a própria nota já
+avisa — "Fase 9 pressupõe o nome definido") e as credenciais de assinatura
+(Apple Developer ID, certificado de code-signing Windows), que só o dono do
+projeto tem ou pode obter.
+
 ## Dependências entre fases
 
 ```
