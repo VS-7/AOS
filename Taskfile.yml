@@ -16,8 +16,20 @@ vars:
     sh: git describe --tags --always --dirty 2>/dev/null || echo dev
   COMMIT:
     sh: git rev-parse --short HEAD 2>/dev/null || echo none
+  # Reproducible by default: a release is built with SOURCE_DATE_EPOCH
+  # pinned to the commit's own timestamp (docs/08 - Entrega/Build e
+  # Cross-Compile.md's own example), so DATE has to come from there when
+  # it's set rather than from wall-clock time — otherwise two builds of the
+  # same commit, minutes apart, would embed two different dates and never
+  # hash-match. `date -r` is macOS/BSD's "from epoch"; `date -d @epoch` is
+  # GNU's. Falls back to wall-clock only for an ordinary local `task build`.
   DATE:
-    sh: date -u +%Y-%m-%dT%H:%M:%SZ
+    sh: |
+      if [ -n "$SOURCE_DATE_EPOCH" ]; then
+        date -u -r "$SOURCE_DATE_EPOCH" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$SOURCE_DATE_EPOCH" +%Y-%m-%dT%H:%M:%SZ
+      else
+        date -u +%Y-%m-%dT%H:%M:%SZ
+      fi
   LDFLAGS: >-
     -s -w
     -X github.com/OWNER/aos/internal/core/build.Version={{.VERSION}}
@@ -228,6 +240,69 @@ tasks:
               -ldflags="{{.LDFLAGS}}" \
               -o dist/{{.ITEM}}/${bin}${ext} ./cmd/${bin}
           done
+
+  build:verify-reproducible:
+    desc: "Fase 9: two builds of the same commit, same SOURCE_DATE_EPOCH, must be byte-identical"
+    cmds:
+      - |
+        set -e
+        EPOCH=$(git log -1 --format=%ct)
+        DATE_ISO=$(date -u -r "$EPOCH" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$EPOCH" +%Y-%m-%dT%H:%M:%SZ)
+        LDFLAGS="-s -w -X github.com/OWNER/aos/internal/core/build.Version={{.VERSION}} -X github.com/OWNER/aos/internal/core/build.Commit={{.COMMIT}} -X github.com/OWNER/aos/internal/core/build.Date=${DATE_ISO}"
+        WORK=$(mktemp -d)
+        trap 'rm -rf "$WORK"' EXIT
+        for bin in {{.BINARIES}}; do
+          CGO_ENABLED=0 go build -trimpath -ldflags="$LDFLAGS" -o "$WORK/a-${bin}" ./cmd/${bin}
+          CGO_ENABLED=0 go build -trimpath -ldflags="$LDFLAGS" -o "$WORK/b-${bin}" ./cmd/${bin}
+          if ! cmp -s "$WORK/a-${bin}" "$WORK/b-${bin}"; then
+            echo "NOT REPRODUCIBLE: ${bin} (two builds from the same commit differ)" >&2
+            exit 1
+          fi
+          echo "reproducible: ${bin} ($(shasum -a 256 "$WORK/a-${bin}" | cut -d' ' -f1))"
+        done
+
+  build:check-size:
+    desc: "Fase 9: fail if a release binary exceeds its target size by more than 20% (docs/08 - Entrega/Build e Cross-Compile.md)"
+    vars:
+      # Targets are 30/45/55 MB; the 20% ceiling the doc's own "Critério de
+      # pronto" describes ("falha se ultrapassar o alvo em mais de 20%").
+      LIMIT_AOS: 36
+      LIMIT_AOSD: 54
+      LIMIT_DESKTOP: 66
+    cmds:
+      - |
+        set -e
+        check() {
+          bin="$1"; limit_mb="$2"
+          [ -f "$bin" ] || { echo "missing: $bin (run task build:cli / build:desktop first)" >&2; exit 1; }
+          size=$(stat -f%z "$bin" 2>/dev/null || stat -c%s "$bin")
+          size_mb=$((size / 1024 / 1024))
+          echo "$bin: ${size_mb}MB (limit ${limit_mb}MB)"
+          if [ "$size_mb" -gt "$limit_mb" ]; then
+            echo "TOO LARGE: $bin is ${size_mb}MB, limit is ${limit_mb}MB" >&2
+            exit 1
+          fi
+        }
+        check dist/aos {{.LIMIT_AOS}}
+        check dist/aosd {{.LIMIT_AOSD}}
+        if [ -f dist/aos-desktop ]; then check dist/aos-desktop {{.LIMIT_DESKTOP}}; fi
+
+  build:check-no-abspath:
+    desc: "Fase 9: fail if a release binary embeds this machine's home directory (proves -trimpath actually stripped paths)"
+    cmds:
+      - |
+        set -e
+        found=0
+        for bin in dist/aos dist/aosd dist/aos-desktop; do
+          [ -f "$bin" ] || continue
+          if strings "$bin" | grep -q "$HOME"; then
+            echo "ABSOLUTE PATH LEAKED into $bin:" >&2
+            strings "$bin" | grep "$HOME" | head -5 >&2
+            found=1
+          fi
+        done
+        if [ "$found" -eq 1 ]; then exit 1; fi
+        echo "no absolute paths found in dist/"
 
   clean:
     cmds: [rm -rf dist coverage.out]
