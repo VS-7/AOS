@@ -13,6 +13,7 @@ import { GoalHelper } from "@/features/goal/presentation/helpers/goal.helper";
 import {
   GOAL_STATUS_CONFIG,
   GOAL_PRIORITY_CONFIG,
+  goalPriorityConfig,
 } from "@/features/goal/presentation/consts/goal";
 import { aos } from "@/app/aos";
 import { toast } from "sonner";
@@ -29,7 +30,7 @@ export function GoalListRow({ goal }: GoalListRowProps) {
   const router = useRouter();
   const status = GoalHelper.getStatus(goal.status);
   const StatusIcon = status.icon;
-  const priority = GOAL_PRIORITY_CONFIG[goal.priority];
+  const priority = goalPriorityConfig(goal.priority);
   const PriorityIcon = priority.icon;
   const deadlineFormatted = GoalHelper.formatDeadline(goal.deadline);
   const isOverdue = GoalHelper.isOverdue(goal.deadline);
@@ -41,7 +42,7 @@ export function GoalListRow({ goal }: GoalListRowProps) {
         body: { priority },
       });
       toast.success(
-        `Priority updated to ${GOAL_PRIORITY_CONFIG[priority].label}`,
+        `Priority updated to ${goalPriorityConfig(priority).label}`,
       );
       router.invalidate();
     } catch {

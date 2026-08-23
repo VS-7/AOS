@@ -1,4 +1,4 @@
-import { GOAL_STATUS_CONFIG, GOAL_STATUS_ORDER } from "@/features/goal/presentation/consts/goal";
+import { GOAL_STATUS_ORDER, goalStatusConfig } from "@/features/goal/presentation/consts/goal";
 import type { Goal } from "@/features/goal/interfaces/goal.interfaces";
 
 /**
@@ -12,8 +12,11 @@ export class GoalHelper {
    * @param {Goal["status"]} status - The goal status.
    * @returns {Object} The status configuration.
    */
-  public static getStatus(status: Goal["status"]) {
-    return GOAL_STATUS_CONFIG[status];
+  public static getStatus(status: Goal["status"] | undefined) {
+    // Total by way of `goalStatusConfig` — see its doc comment for why a
+    // status read off a Go `Goal` cannot be assumed to be one this build
+    // declares.
+    return goalStatusConfig(status);
   }
 
   /**

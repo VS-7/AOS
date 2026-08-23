@@ -212,7 +212,11 @@ export async function call(feature: string, action: string, opts?: CallOpts): Pr
     // Only a defined result gets wrapped — an empty/void response has
     // nothing worth nesting, and wrapping `undefined` as `{ [key]:
     // undefined }` would just trade one falsy shape for a different one.
-    const data = descriptor.wrapOut && raw !== undefined ? { [descriptor.wrapOut]: raw } : raw;
+    // `mapOut` first, then `wrapOut`: the mapper is written against the
+    // bare Go result (see CommandDescriptor.mapOut), and wrapping before
+    // mapping would hand it the nested object instead.
+    const mapped = descriptor.mapOut && raw !== undefined ? descriptor.mapOut(raw) : raw;
+    const data = descriptor.wrapOut && mapped !== undefined ? { [descriptor.wrapOut]: mapped } : mapped;
     return { data, error: undefined };
   } catch (err) {
     return { data: undefined, error: toEnvelopeError(err) };

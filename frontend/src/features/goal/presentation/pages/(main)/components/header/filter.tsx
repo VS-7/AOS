@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { CircleDot, ChevronDown, Flag, X } from "lucide-react";
 import {
   GOAL_PRIORITY_CONFIG,
+  goalPriorityConfig,
   GOAL_PRIORITY_ORDER,
   GOAL_STATUS_ORDER,
 } from "@/features/goal/presentation/consts/goal";
@@ -45,7 +46,7 @@ export function GoalsFilter() {
   const getPriorityButtonLabel = () => {
     if (selectedPriorities.length === 0) return "Priority";
     if (selectedPriorities.length === 1) {
-      return `Priority: ${GOAL_PRIORITY_CONFIG[selectedPriorities[0]].label}`;
+      return `Priority: ${goalPriorityConfig(selectedPriorities[0]).label}`;
     }
     return `Priority (${selectedPriorities.length})`;
   };

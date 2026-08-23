@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TabsSubtle, TabsSubtleItem } from "@/components/ui/tabs-subtle";
 import {
   GOAL_STATUS_CONFIG,
+  goalStatusConfig,
   GOAL_STATUS_ORDER,
 } from "@/features/goal/presentation/consts/goal";
 import { GoalHelper } from "@/features/goal/presentation/helpers/goal.helper";
@@ -29,7 +30,7 @@ interface GoalRowProps {
 }
 
 function GoalRow({ goal }: GoalRowProps) {
-  const statusCfg = GOAL_STATUS_CONFIG[goal.status];
+  const statusCfg = goalStatusConfig(goal.status);
   const StatusIcon = statusCfg.icon;
   const deadline = GoalHelper.formatDeadline(goal.deadline);
   const isOverdue = GoalHelper.isOverdue(goal.deadline);
