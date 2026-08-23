@@ -229,7 +229,7 @@ func (s *service) rollbackAll(ctx context.Context, targets []string) {
 func (s *service) rollbackAndRestart(ctx context.Context, targets []string, cause error) (ApplyOutput, error) {
 	s.rollbackAll(ctx, targets)
 	if err := s.supervisor.Restart(ctx); err != nil {
-		return ApplyOutput{}, errRollbackFailed(fmt.Errorf("health check failed (%w), then restart-on-rollback also failed: %v", cause, err))
+		return ApplyOutput{}, errRollbackFailed(fmt.Errorf("health check failed (%w), then restart-on-rollback also failed: %w", cause, err))
 	}
 	return ApplyOutput{RolledBack: true}, errRolledBack(cause)
 }
