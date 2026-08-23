@@ -208,7 +208,14 @@ type models struct {
 
 // For resolves the model cascade and builds the provider that owns it.
 func (m models) For(ctx context.Context, a *agent.Agent) (agentloop.LLMProvider, agentloop.ModelRef, error) {
-	current, err := m.config.Get(ctx, config.GetInput{})
+	// Raw, not Get: Get redacts every provider key to a fingerprint before it
+	// leaves the config package (ADR-0010), and keyFor below needs the real
+	// one to hand the provider adapter, or every API-key provider call would
+	// authenticate with the fingerprint string instead of the key the user
+	// saved. Raw never crosses a transport boundary, which is what makes it
+	// safe here — this is the runtime resolving its own model, not answering
+	// a caller.
+	current, err := m.config.Raw(ctx)
 	if err != nil {
 		return nil, agentloop.ModelRef{}, err
 	}
