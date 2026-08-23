@@ -55,75 +55,6 @@ interface ModelsSectionProps {
   onChange: (slot: SlotKey, next: AgentModelSelectValue) => void;
 }
 
-function supportsCapability(
-  provider: ModelProvider,
-  capability: "fast" | "reasoning" | "vision" | "realtime" | "voice" | "image" | "video",
-) {
-  if (capability === "vision") {
-    return provider.models.some((m) => m.capabilities?.vision);
-  }
-  if (capability === "reasoning") {
-    return provider.models.some((m) => m.capabilities?.reasoning);
-  }
-  if (capability === "realtime") {
-    return provider.models.some((m) => m.capabilities?.realtime);
-  }
-  if (capability === "voice") {
-    return provider.models.some((m) => m.capabilities?.voice);
-  }
-  if (capability === "image") {
-    return provider.models.some((m) => m.capabilities?.image);
-  }
-  if (capability === "video") {
-    return provider.models.some((m) => m.capabilities?.video);
-  }
-  return true;
-}
-
-function getFirstModel(
-  provider: ModelProvider,
-  capability: "fast" | "reasoning" | "vision" | "realtime" | "voice" | "image" | "video",
-) {
-  if (provider.models.length === 0) return undefined;
-  if (capability === "vision") {
-    return (
-      provider.models.find((m) => m.capabilities?.vision) ??
-      provider.models[0]
-    );
-  }
-  if (capability === "reasoning") {
-    return (
-      provider.models.find((m) => m.capabilities?.reasoning) ??
-      provider.models[0]
-    );
-  }
-  if (capability === "realtime") {
-    return (
-      provider.models.find((m) => m.capabilities?.realtime) ??
-      provider.models[0]
-    );
-  }
-  if (capability === "voice") {
-    return (
-      provider.models.find((m) => m.capabilities?.voice) ??
-      provider.models[0]
-    );
-  }
-  if (capability === "image") {
-    return (
-      provider.models.find((m) => m.capabilities?.image) ??
-      provider.models[0]
-    );
-  }
-  if (capability === "video") {
-    return (
-      provider.models.find((m) => m.capabilities?.video) ??
-      provider.models[0]
-    );
-  }
-  return provider.models[0];
-}
-
 function modelHasCapability(
   model: ModelProvider["models"][number],
   capability: "fast" | "reasoning" | "vision" | "realtime" | "voice" | "image" | "video",
@@ -175,9 +106,27 @@ function ProviderLogo({ provider }: { provider: ModelProvider }) {
   );
 }
 
+/**
+ * What this slot should show: the saved value, or nothing.
+ *
+ * This used to invent a value — first configured provider, its first
+ * model — whenever the slot had none saved, and return it as if it were
+ * the current selection. Nothing persisted it: `onChange` only fires when
+ * somebody actually picks. So connecting any provider made all six slots
+ * *look* configured while `agents.models` stayed `{}` in the config, and
+ * the one slot that matters (`default`, the only one the runtime reads to
+ * answer a chat) was empty. The agent then failed every message with
+ * `AOS_AGENT_PROVIDER_NOT_ENABLED` while the screen showed a model
+ * sitting right there. A control has to show what is saved, or a person
+ * cannot tell configured from unconfigured.
+ *
+ * `setModelProviderKey` now seeds `default` on connect, so the common
+ * path arrives here with a real stored value. A slot whose saved
+ * provider has since been disconnected also reads as unset: the stored
+ * pick is no longer usable, and saying so is what prompts a new one.
+ */
 function resolveSlotValue(
   providers: ModelProvider[],
-  capability: "fast" | "reasoning" | "vision" | "realtime" | "voice" | "image" | "video",
   current: AgentModelSelectValue | undefined,
 ): AgentModelSelectValue {
   if (current?.provider) {
@@ -186,20 +135,7 @@ function resolveSlotValue(
       return current;
     }
   }
-
-  const fallback = providers
-    .filter((p) => p.configured && supportsCapability(p, capability))
-    .sort((a, b) => b.name.localeCompare(a.name))[0];
-
-  if (!fallback) {
-    return { provider: "", model: "" };
-  }
-  const first = getFirstModel(fallback, capability);
-  return {
-    provider: fallback.id,
-    model: first?.id ?? "",
-    reasoning: current?.reasoning ?? "medium",
-  };
+  return { provider: "", model: "", reasoning: current?.reasoning };
 }
 
 export function ModelsSection({ providers, value, onChange }: ModelsSectionProps) {
@@ -208,11 +144,7 @@ export function ModelsSection({ providers, value, onChange }: ModelsSectionProps
       {(Object.keys(SLOT_META) as SlotKey[]).map((slot) => {
         const meta = SLOT_META[slot];
         const selectProviders = toSelectProviders(providers, meta.capability);
-        const current = resolveSlotValue(
-          providers,
-          meta.capability,
-          value[slot],
-        );
+        const current = resolveSlotValue(providers, value[slot]);
 
         const currentModel = providers
           .find((p) => p.id === current.provider)

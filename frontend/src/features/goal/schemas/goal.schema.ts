@@ -15,9 +15,9 @@ import { Schema } from "@/core/helpers/schema.helper";
  * ```
  */
 export const GoalStatusSchema = z
-  .enum(["active", "achieved", "abandoned"])
+  .enum(["active", "achieved", "abandoned", "paused"])
   .describe(
-    "Goal lifecycle status. Use active for in-progress goals, achieved when done, abandoned when cancelled. Example: \"active\".",
+    "Goal lifecycle status. Use active for in-progress goals, achieved when done, abandoned when cancelled, paused when set aside. Example: \"active\".",
   );
 
 /**

@@ -84,7 +84,10 @@ type Loop struct {
 	clock    clockx.Clock
 	limits   Limits
 	emitter  Emitter
-	log      *slog.Logger
+	// tools_ is emitter again, when it also wants tool lifecycle. Resolved
+	// once at construction rather than type-asserted per call.
+	watcher ToolWatcher
+	log     *slog.Logger
 }
 
 // New wires the loop.
@@ -108,6 +111,7 @@ func New(d Deps) *Loop {
 	return &Loop{
 		provider: d.Provider, tools: d.Tools, hooks: hooks, compact: compact,
 		clock: clock, limits: d.Limits.withDefaults(), emitter: d.Emitter, log: log,
+		watcher: watcherOf(d.Emitter),
 	}
 }
 
@@ -304,7 +308,15 @@ func (l *Loop) runOne(ctx context.Context, s *State, c ToolCall, mu *sync.Mutex)
 		mu.Unlock()
 	}
 
+	// Announced before it runs, not after: the whole point is to show the
+	// slow thing while it is slow.
+	if l.watcher != nil {
+		l.watcher.ToolStarted(ctx, c)
+	}
 	result := l.invoke(ctx, c)
+	if l.watcher != nil {
+		l.watcher.ToolFinished(ctx, result)
+	}
 
 	mu.Lock()
 	err = l.hooks.AfterTool(ctx, &c, &result, s)
@@ -313,6 +325,17 @@ func (l *Loop) runOne(ctx context.Context, s *State, c ToolCall, mu *sync.Mutex)
 		return ToolResult{}, err
 	}
 	return result, nil
+}
+
+// watcherOf reports whether this emitter also wants tool lifecycle. A nil
+// Emitter is not a ToolWatcher, and the interface assertion on a nil
+// interface value would panic rather than answer false.
+func watcherOf(e Emitter) ToolWatcher {
+	if e == nil {
+		return nil
+	}
+	w, _ := e.(ToolWatcher)
+	return w
 }
 
 func (l *Loop) invoke(ctx context.Context, c ToolCall) ToolResult {

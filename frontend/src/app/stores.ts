@@ -1,5 +1,5 @@
 import { AosStore } from "./builders/store";
-import { client } from "@/lib/client";
+import { client, setWorkspace } from "@/lib/client";
 import { session, status, login, logout } from "@/lib/auth";
 import type {
   WorkspaceDirectoryAgent,
@@ -127,6 +127,79 @@ interface CurrentWorkspaceState {
  * stays exactly that until those commands exist.
  */
 
+/**
+ * Finds which workspace this window is for, and tells the transport about
+ * it — the step that was missing, and that every workspace-scoped screen
+ * silently depended on.
+ *
+ * `workspace_get` names no workspace of its own: it answers for whichever
+ * one the *request* addresses, via the `x-workspace-id` header or cookie
+ * (`internal/transport/httpapi/middleware.go`'s `ambientIdentity`), and
+ * refuses with `AOS_WORKSPACE_NOT_FOUND` — "no workspace was named and
+ * none is active" — when the request carries neither. The desktop window
+ * sets that up out of band, before the interface ever loads:
+ * `cmd/aos-desktop`'s `introspectWorkspace` registers the directory it
+ * was launched in and calls `daemonclient.SetWorkspace` with the id, so
+ * every Wails-transport call already carries it. Nothing does the
+ * equivalent for the HTTP transport, so calling `workspace_get` straight
+ * out of this preload 404'd on every boot outside the desktop window. The
+ * store then kept its empty default and the header rendered "No
+ * Workspace" — with `namespace.workspaceId` left `undefined`, which is
+ * also the partition key every `.withNamespace(...)` store resolves
+ * against (`app/aos.tsx`).
+ *
+ * `workspace_list` is the one workspace command that needs no such
+ * context, so it goes first: it establishes the id, `setWorkspace`
+ * publishes it to the HTTP transport (`lib/client.ts`'s `workspaceHeader`)
+ * and to the daemon's cookie, and only then is `workspace_get` a question
+ * with an answer. Its entries are already complete `Workspace` objects —
+ * same fields `workspace_get` returns — so the list doubles as the
+ * `options` the workspace switcher shows, which was hardcoded empty
+ * before.
+ *
+ * Returns `null` when the daemon knows of no workspace at all, which is a
+ * real state on a fresh installation (nothing registered yet) and not an
+ * error to surface: the caller keeps the empty default.
+ */
+async function resolveWorkspaces(
+  preferredId: string | undefined,
+): Promise<{ current: CurrentWorkspaceState; options: CurrentWorkspaceState[] } | null> {
+  const listed = (await client.invoke("workspace_list", {
+    _reasoning: "resolving which workspace this window addresses, before any workspace-scoped call",
+  })) as { workspaces?: CurrentWorkspaceState[] } | undefined;
+
+  const workspaces = listed?.workspaces ?? [];
+  if (workspaces.length === 0) return null;
+
+  const current =
+    workspaces.find((workspace) => workspace.id === preferredId) ?? workspaces[0];
+
+  setWorkspace(current.id);
+  if (typeof document !== "undefined") {
+    document.cookie = `x-workspace-id=${encodeURIComponent(current.id)}; path=/; max-age=31536000; SameSite=Lax`;
+  }
+
+  // Now that the request carries an id, ask for the full record. The list
+  // entry is already complete today; this keeps working if `workspace_get`
+  // ever returns more than `workspace_list` does, and costs one call.
+  let detail = current;
+  try {
+    detail = ((await client.invoke("workspace_get", {
+      _reasoning: "populating the workspace store's current-workspace snapshot (task-type taxonomy, name) at app start",
+    })) as CurrentWorkspaceState) ?? current;
+  } catch {
+    // The list entry is a complete answer on its own — keep it.
+  }
+
+  const resolved: CurrentWorkspaceState = { ...detail, tasks: detail.tasks ?? [] };
+  return {
+    current: resolved,
+    options: workspaces.map((workspace) =>
+      workspace.id === resolved.id ? resolved : { ...workspace, tasks: workspace.tasks ?? [] },
+    ),
+  };
+}
+
 const workspaceStore = AosStore.create("workspace")
   .withState({
     directory: {
@@ -144,13 +217,9 @@ const workspaceStore = AosStore.create("workspace")
   })
   .withPreload(async (ctx) => {
     try {
-      const out = (await client.invoke("workspace_get", {
-        _reasoning: "populating the workspace store's current-workspace snapshot (task-type taxonomy, name) at app start",
-      })) as { id: string; name: string; tasks?: WorkspaceTaskType[] };
-      return {
-        ...ctx.state.get(),
-        current: { id: out.id, name: out.name, tasks: out.tasks ?? [] },
-      };
+      const resolved = await resolveWorkspaces(ctx.state.get().current?.id);
+      if (!resolved) return ctx.state.get();
+      return { ...ctx.state.get(), current: resolved.current, options: resolved.options };
     } catch {
       // No workspace registered yet, or the daemon isn't reachable — the
       // rest of the app already has its own failure handling for that
@@ -170,12 +239,12 @@ const workspaceStore = AosStore.create("workspace")
        */
       async () => {
         try {
-          const out = (await client.invoke("workspace_get", {
-            _reasoning: "refreshing the workspace store's current-workspace snapshot after a settings save",
-          })) as { id: string; name: string; tasks?: WorkspaceTaskType[] };
+          const resolved = await resolveWorkspaces(ctx.state.get().current?.id);
+          if (!resolved) return;
           ctx.state.set((state) => ({
             ...state,
-            current: { ...state.current, id: out.id, name: out.name, tasks: out.tasks ?? [] },
+            current: resolved.current,
+            options: resolved.options,
           }));
         } catch {
           // Keep the last known snapshot on a transient failure.

@@ -254,25 +254,76 @@ func keyFor(c config.Config, provider string) string {
 }
 
 // publisher pushes what a turn is producing to whoever is watching.
-type publisher struct{ hub *realtime.Hub }
+type publisher struct {
+	hub *realtime.Hub
+
+	// channel names the workspace to publish under when the turn does not.
+	// See channelFor.
+	channel func(ctx context.Context, workspaceID string) string
+}
+
+// channelFor picks the channel a turn's events go out on.
+//
+// Every socket subscribes to the channel of the workspace it resolved, so a
+// mismatch here is not a degraded experience — it is silence. And the
+// mismatch was the normal case: `session.Deps.WorkspaceID` comes from
+// `AOS_WORKSPACE_ID` (`wire.go`'s `active`), which is a deliberate pin that
+// nothing sets in a desktop installation — the window names its workspace
+// per request instead. So the id was empty, every delta and every done
+// event was published to `ChannelFor("")`, and the interface never learned
+// anything had happened until something else forced it to refetch. That is
+// the "I have to reload the page to see the answer" symptom.
+//
+// The fallback is the same single-installation assumption
+// `workspace.Service.AuthorizeWorkspace` already makes: one registered
+// workspace is unambiguous. It is resolved per publish rather than at
+// wiring because a fresh installation registers its workspace *after* the
+// daemon is up (`workspace_introspect`, from the desktop's own start-up),
+// so anything computed at wiring time would still be empty.
+func (p publisher) channelFor(ctx context.Context, workspaceID string) string {
+	if workspaceID == "" && p.channel != nil {
+		workspaceID = p.channel(ctx, workspaceID)
+	}
+	return realtime.ChannelFor(workspaceID)
+}
+
+func (p publisher) ChatStarted(ctx context.Context, workspaceID, chatID, agentID string) {
+	if p.hub == nil {
+		return
+	}
+	p.hub.Publish(ctx, p.channelFor(ctx, workspaceID), realtime.Event{
+		Type: realtime.EventChatStarted,
+		Data: map[string]any{"chat": chatID, "agent": agentID},
+	})
+}
 
 func (p publisher) ChatDelta(ctx context.Context, workspaceID, chatID, text, reasoning string) {
 	if p.hub == nil || (text == "" && reasoning == "") {
 		return
 	}
-	p.hub.Publish(ctx, realtime.ChannelFor(workspaceID), realtime.Event{
+	p.hub.Publish(ctx, p.channelFor(ctx, workspaceID), realtime.Event{
 		Type: realtime.EventChatDelta,
 		Data: map[string]any{"chat": chatID, "text": text, "reasoning": reasoning},
 	})
 }
 
-func (p publisher) ChatDone(ctx context.Context, workspaceID, chatID string, usage chat.TokenUsage) {
+func (p publisher) ChatMessage(ctx context.Context, workspaceID, chatID string, message chat.Message) {
 	if p.hub == nil {
 		return
 	}
-	p.hub.Publish(ctx, realtime.ChannelFor(workspaceID), realtime.Event{
+	p.hub.Publish(ctx, p.channelFor(ctx, workspaceID), realtime.Event{
+		Type: realtime.EventChatMessage,
+		Data: map[string]any{"chat": chatID, "message": message},
+	})
+}
+
+func (p publisher) ChatDone(ctx context.Context, workspaceID, chatID, agentID string, usage chat.TokenUsage) {
+	if p.hub == nil {
+		return
+	}
+	p.hub.Publish(ctx, p.channelFor(ctx, workspaceID), realtime.Event{
 		Type: realtime.EventChatDone,
-		Data: map[string]any{"chat": chatID, "usage": usage},
+		Data: map[string]any{"chat": chatID, "agent": agentID, "usage": usage},
 	})
 }
 

@@ -12,6 +12,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/OWNER/aos/internal/core/apperr"
@@ -91,8 +93,29 @@ type Deps struct {
 
 // Publisher is how a turn reaches whoever is watching it happen.
 type Publisher interface {
+	// ChatStarted says an agent has picked up a conversation, before it has
+	// produced anything. It is what puts "Atlas is working…" on screen
+	// during the wait for a first token, which on a reasoning model is most
+	// of the turn.
+	ChatStarted(ctx context.Context, workspace, chatID, agentID string)
+
 	ChatDelta(ctx context.Context, workspace, chatID string, text, reasoning string)
-	ChatDone(ctx context.Context, workspace, chatID string, usage chat.TokenUsage)
+
+	// ChatDone carries the agent as well as the usage: the interface has to
+	// know *whose* work ended to take that agent off the conversation, and
+	// a turn that ended without saying so leaves it working forever.
+	ChatDone(ctx context.Context, workspace, chatID, agentID string, usage chat.TokenUsage)
+
+	// ChatMessage publishes the answer as it is being written: the same
+	// message shape the transcript stores, carrying everything the turn has
+	// produced so far.
+	//
+	// ChatDelta carries text and nothing else, which is only part of what a
+	// turn does — a tool call is often the slowest and most interesting
+	// stretch of one, and it never appeared until the turn ended. A snapshot
+	// carries all of it, and lets the interface render an in-progress answer
+	// with exactly the component that renders a finished one.
+	ChatMessage(ctx context.Context, workspace, chatID string, message chat.Message)
 }
 
 // Observer is the background cognitive layer, fired when a turn ends.
@@ -156,15 +179,54 @@ func (r *Runner) Dispatch(ctx context.Context, in chat.Turn) (string, error) {
 // It is exported and synchronous because that is what makes the delivery
 // provable: a test can run a turn and assert on what came out of it, rather
 // than on a goroutine it has to wait for.
-func (r *Runner) Run(ctx context.Context, in chat.Turn) (*agentloop.Result, error) {
+func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Result, err error) {
+	// The turn began here, not just before the model call: prompt assembly
+	// and sandbox setup are part of how long somebody waited, and a turn that
+	// fails before ever reaching the provider has to have a start time too.
+	started := r.deps.Clock.Now()
+
 	conversation, err := r.deps.Chats.Get(ctx, chat.GetInput{Chat: in.ChatID})
 	if err != nil {
+		// Nothing to record the failure against — the conversation itself is
+		// what recordFailure would write to.
 		return nil, err
 	}
+
+	// Every failure from here on is written onto the message that asked for
+	// it, in one place rather than at each return.
+	//
+	// recordFailure used to be called from exactly one of them: the model
+	// call. Everything before it — resolving the agent, resolving its model,
+	// building the sandbox, assembling the prompt — returned bare, so those
+	// turns left no trace anywhere a person could see. That is not an even
+	// spread of risk: `Models.For` is where a fresh installation fails, every
+	// time, with AOS_AGENT_PROVIDER_NOT_ENABLED until a model slot is set,
+	// and it was the one failure guaranteed to be invisible. The message sat
+	// in the conversation with no answer and no reason, and the only record
+	// was a line in the daemon's log.
+	agentID := in.AgentID
+	if r.deps.Events != nil {
+		r.deps.Events.ChatStarted(ctx, r.deps.WorkspaceID, conversation.ID, agentID)
+	}
+	defer func() {
+		if err == nil {
+			return
+		}
+		r.recordFailure(ctx, in, agentID, started, err)
+		// Same signal a completed turn sends, so a window watching this
+		// conversation refetches and shows the failure instead of waiting
+		// for an answer that is never coming. `chat.done` means the turn
+		// ended; it does not promise the turn succeeded.
+		if r.deps.Events != nil {
+			r.deps.Events.ChatDone(ctx, r.deps.WorkspaceID, conversation.ID, agentID, chat.TokenUsage{})
+		}
+	}()
+
 	worker, err := r.deps.Agents.Get(ctx, agent.GetInput{ID: in.AgentID})
 	if err != nil {
 		return nil, err
 	}
+	agentID = worker.ID
 
 	provider, model, err := r.deps.Models.For(ctx, worker)
 	if err != nil {
@@ -208,6 +270,11 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (*agentloop.Result, erro
 		return nil, err
 	}
 
+	// The id the answer will be stored under, minted before the loop so the
+	// snapshots published while it is written and the message finally
+	// persisted are the same message — see chat.ReplyInput.MessageID.
+	answerID := r.newID()
+
 	state := &agentloop.State{
 		SessionID:    conversation.ID,
 		AgentID:      worker.ID,
@@ -230,26 +297,26 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (*agentloop.Result, erro
 		},
 		Clock:   r.deps.Clock,
 		Limits:  r.deps.Limits,
-		Emitter: r.emitter(conversation.ID),
+		Emitter: r.emitter(conversation.ID, answerID, worker.ID),
 		Log:     r.log,
 	})
 
-	started := r.deps.Clock.Now()
-	result, runErr := loop.Run(ctx, state)
-	if runErr != nil {
-		r.recordFailure(ctx, in, worker.ID, started, runErr)
-		return nil, runErr
+	result, err = loop.Run(ctx, state)
+	if err != nil {
+		// Recorded by the deferred handler at the top, along with every
+		// other way this turn can fail.
+		return nil, err
 	}
 	// Priced here, not inside agentloop: the loop talks to LLMProvider, not to
 	// the pricing table, and internal/runtime/providers already imports
 	// agentloop for the interface it builds — the reverse import would cycle.
 	result.Usage.CostUSD = providers.CostUSD(model.Provider, model.Model, result.Usage)
 
-	if err := r.persist(ctx, in, worker.ID, started, result); err != nil {
+	if err = r.persist(ctx, in, worker.ID, answerID, started, result); err != nil {
 		return result, err
 	}
 	if r.deps.Events != nil {
-		r.deps.Events.ChatDone(ctx, r.deps.WorkspaceID, conversation.ID, usageOf(result.Usage))
+		r.deps.Events.ChatDone(ctx, r.deps.WorkspaceID, conversation.ID, worker.ID, usageOf(result.Usage))
 	}
 	r.deliverToChannel(ctx, conversation, worker.ID, result)
 	r.observe(ctx, worker, conversation.ID, state)
@@ -346,31 +413,156 @@ func (r *Runner) toolsFor(box *sandbox.Sandbox) *toolexec.Registry {
 	return registry
 }
 
-func (r *Runner) emitter(chatID string) agentloop.Emitter {
+func (r *Runner) emitter(chatID, messageID, agentID string) agentloop.Emitter {
 	if r.deps.Events == nil {
 		return nil
 	}
-	return emitterFunc(func(ctx context.Context, c agentloop.Chunk) {
-		r.deps.Events.ChatDelta(ctx, r.deps.WorkspaceID, chatID, c.Text, c.Reasoning)
-	})
+	return &liveAnswer{
+		runner: r, chatID: chatID, messageID: messageID, agentID: agentID,
+		startedAt: r.deps.Clock.Now(),
+	}
 }
 
-type emitterFunc func(context.Context, agentloop.Chunk)
+// snapshotInterval bounds how often a growing answer is republished.
+//
+// A streamed answer arrives a few tokens at a time; forwarding every one of
+// them as a whole-message snapshot would spend more on the socket than on the
+// model. Tool lifecycle ignores this and publishes immediately — those are
+// rare, and each one is a visible change of what the agent is doing.
+const snapshotInterval = 120 * time.Millisecond
 
-func (f emitterFunc) Delta(ctx context.Context, c agentloop.Chunk) { f(ctx, c) }
+// liveAnswer accumulates what a turn has produced and publishes it as the
+// message the transcript will eventually hold.
+//
+// It carries the id the answer will be stored under (see chat.ReplyInput's
+// MessageID) so that the in-progress message and the finished one are the
+// same message, not two.
+type liveAnswer struct {
+	runner    *Runner
+	chatID    string
+	messageID string
+	agentID   string
+	startedAt time.Time
+
+	mu        sync.Mutex
+	text      strings.Builder
+	reasoning strings.Builder
+	calls     []chat.Part
+	results   []chat.Part
+	lastSent  time.Time
+}
+
+func (l *liveAnswer) Delta(ctx context.Context, c agentloop.Chunk) {
+	// The text-only event stays: it is what a caller that only wants the
+	// answer streaming (and not the whole message) still listens to.
+	l.runner.deps.Events.ChatDelta(ctx, l.runner.deps.WorkspaceID, l.chatID, c.Text, c.Reasoning)
+
+	l.mu.Lock()
+	l.text.WriteString(c.Text)
+	l.reasoning.WriteString(c.Reasoning)
+	now := l.runner.deps.Clock.Now()
+	due := now.Sub(l.lastSent) >= snapshotInterval
+	if due {
+		l.lastSent = now
+	}
+	snapshot := l.snapshotLocked()
+	l.mu.Unlock()
+
+	if due {
+		l.publish(ctx, snapshot)
+	}
+}
+
+func (l *liveAnswer) ToolStarted(ctx context.Context, call agentloop.ToolCall) {
+	l.mu.Lock()
+	l.calls = append(l.calls, chat.Part{
+		Type: chat.PartToolCall, ToolName: call.Name, ToolCallID: call.ID, Input: call.Input,
+	})
+	l.lastSent = l.runner.deps.Clock.Now()
+	snapshot := l.snapshotLocked()
+	l.mu.Unlock()
+	l.publish(ctx, snapshot)
+}
+
+func (l *liveAnswer) ToolFinished(ctx context.Context, result agentloop.ToolResult) {
+	l.mu.Lock()
+	l.results = append(l.results, chat.Part{
+		Type: chat.PartToolResult, ToolName: result.Name, ToolCallID: result.CallID, Output: result.Output,
+	})
+	l.lastSent = l.runner.deps.Clock.Now()
+	snapshot := l.snapshotLocked()
+	l.mu.Unlock()
+	l.publish(ctx, snapshot)
+}
+
+// snapshotLocked renders what has arrived so far, in the order persist writes
+// it — so the live message and the stored one describe the same turn the same
+// way, and the last snapshot is not visibly rearranged when the real one
+// lands.
+func (l *liveAnswer) snapshotLocked() chat.Message {
+	parts := make([]chat.Part, 0, 2+len(l.calls)+len(l.results))
+	if text := l.text.String(); text != "" {
+		parts = append(parts, chat.Part{Type: chat.PartText, Text: text})
+	}
+	if reasoning := l.reasoning.String(); reasoning != "" {
+		parts = append(parts, chat.Part{Type: chat.PartReasoning, Text: reasoning})
+	}
+	parts = append(parts, l.calls...)
+	parts = append(parts, l.results...)
+
+	return chat.Message{
+		ID:        l.messageID,
+		Role:      chat.RoleAssistant,
+		Author:    &chat.Author{Type: chat.ActorAgent, ID: l.agentID},
+		Parts:     parts,
+		CreatedAt: l.startedAt,
+	}
+}
+
+func (l *liveAnswer) publish(ctx context.Context, message chat.Message) {
+	if len(message.Parts) == 0 {
+		return
+	}
+	l.runner.deps.Events.ChatMessage(ctx, l.runner.deps.WorkspaceID, l.chatID, message)
+}
 
 // persist writes the answer back into the conversation.
 //
 // Everything the turn did goes in: the text, the reasoning, and every tool call
 // with what it returned. A transcript that shows only the answer cannot answer
 // "why did it do that", which is the question people actually ask.
-func (r *Runner) persist(ctx context.Context, in chat.Turn, agentID string, started time.Time, result *agentloop.Result) error {
+// answerParts renders one turn's result as the parts of a stored message:
+// what the agent said, the tools it called, and what they returned.
+//
+// Pure and separate from persist so the scoping rule below is testable
+// without standing up the conversation aggregate.
+func answerParts(result *agentloop.Result) []chat.Part {
 	parts := []chat.Part{}
 	if result.Text != "" {
 		parts = append(parts, chat.Part{Type: chat.PartText, Text: result.Text})
 	}
+
+	// Only the calls this turn actually made.
+	//
+	// `result.Messages` is the loop's whole working transcript, and the loop
+	// is seeded with the conversation so far — so walking it wrote every tool
+	// call *ever made in this conversation* into this one answer, again, on
+	// every turn. A chat that had run a few tools showed them repeated across
+	// each new message, growing by the whole history each time.
+	//
+	// `result.ToolCalls` holds the results of this turn (its name is the
+	// loop's, not this layer's). A call whose id produced one of them is a
+	// call this turn made; anything else belongs to an earlier message that
+	// already carries it.
+	thisTurn := make(map[string]bool, len(result.ToolCalls))
+	for _, c := range result.ToolCalls {
+		thisTurn[c.CallID] = true
+	}
 	for _, m := range result.Messages {
 		for _, c := range m.ToolCalls {
+			if !thisTurn[c.ID] {
+				continue
+			}
 			parts = append(parts, chat.Part{
 				Type: chat.PartToolCall, ToolName: c.Name, ToolCallID: c.ID, Input: c.Input,
 			})
@@ -381,11 +573,17 @@ func (r *Runner) persist(ctx context.Context, in chat.Turn, agentID string, star
 			Type: chat.PartToolResult, ToolName: c.Name, ToolCallID: c.CallID, Output: c.Output,
 		})
 	}
+	return parts
+}
+
+func (r *Runner) persist(ctx context.Context, in chat.Turn, agentID, answerID string, started time.Time, result *agentloop.Result) error {
+	parts := answerParts(result)
 
 	_, err := r.deps.Chats.Reply(ctx, chat.ReplyInput{
 		Chat:      in.ChatID,
 		ReplyTo:   in.MessageID,
 		AgentID:   agentID,
+		MessageID: answerID,
 		Parts:     parts,
 		Usage:     usageOf(result.Usage),
 		StartedAt: started,
@@ -401,6 +599,17 @@ func (r *Runner) recordFailure(ctx context.Context, in chat.Turn, agentID string
 	var app *apperr.Error
 	if errors.As(cause, &app) {
 		code, message = app.Code, app.Message
+		// The outermost message names which layer gave up — "the google
+		// provider did not answer" — and says nothing about why. The reason
+		// is in the cause, which is exactly what AGENT_PROVIDER_FAILED's own
+		// call to action promises ("the provider's own message is in the
+		// cause"), and it was being dropped here: a person reading the
+		// conversation got the useless half of a two-part error, and so did
+		// anyone debugging from it. A wrong model id, an exhausted quota and
+		// a rejected credential all looked identical.
+		if detail := deepestMessage(app); detail != "" && detail != message {
+			message += ": " + detail
+		}
 	}
 	if _, err := r.deps.Chats.Reply(ctx, chat.ReplyInput{
 		Chat: in.ChatID, ReplyTo: in.MessageID, AgentID: agentID,
@@ -410,6 +619,24 @@ func (r *Runner) recordFailure(ctx context.Context, in chat.Turn, agentID string
 		r.log.Error("the failure of a turn could not be recorded",
 			"chat", in.ChatID, "err", err)
 	}
+}
+
+// deepestMessage returns the innermost apperr's message in a chain — the one
+// closest to what actually went wrong, which for a provider failure is the
+// provider's own words.
+func deepestMessage(from error) string {
+	out := ""
+	for err := error(from); err != nil; {
+		var app *apperr.Error
+		if !errors.As(err, &app) {
+			break
+		}
+		if app.Message != "" {
+			out = app.Message
+		}
+		err = app.Cause
+	}
+	return out
 }
 
 // transcript turns a stored conversation into the messages a model reads.

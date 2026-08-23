@@ -63,9 +63,10 @@ export function useRealtime(
     }
 
     const descriptor = typeof entry === "string" ? { type: entry } : entry;
+    const types = Array.isArray(descriptor.type) ? descriptor.type : [descriptor.type];
 
     const unsubscribe = onRealtimeEvent((raw: RealtimeEvent) => {
-      if (raw.type !== descriptor.type) return;
+      if (!types.includes(raw.type)) return;
       const payload = descriptor.adapt ? descriptor.adapt(raw) : raw.data;
       callbackRef.current(payload);
     });

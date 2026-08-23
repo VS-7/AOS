@@ -23,6 +23,15 @@ import (
 // DefaultBaseURL is the public endpoint.
 const DefaultBaseURL = "https://api.openai.com/v1"
 
+// codexBaseURL is where a ChatGPT subscription's Codex access lives.
+//
+// It is not the public API with a different credential, which is what this
+// adapter assumed: the token the Codex CLI writes carries no `api.*` scopes
+// at all, so every call to api.openai.com came back 401 "Missing scopes:
+// api.responses.write" and the provider could never answer. Same Responses
+// protocol, different host and a few headers of its own.
+const codexBaseURL = "https://chatgpt.com/backend-api/codex"
+
 func init() {
 	providers.Register("openai", func(cfg providers.Config) (agentloop.LLMProvider, error) {
 		return New("openai", cfg, nil), nil
@@ -31,8 +40,42 @@ func init() {
 	// tooling wrote on this machine. It is a documented way to use a
 	// subscription somebody already pays for rather than paying per token.
 	providers.Register("codex", func(cfg providers.Config) (agentloop.LLMProvider, error) {
-		return New("codex", cfg, oauthfile.Codex(cfg.Home)), nil
+		return newCodex(cfg), nil
 	})
+}
+
+// newCodex builds the ChatGPT-subscription variant.
+//
+// The endpoint identifies the caller by account as well as by token — a
+// subscription request has to say which subscription — so the account id
+// travels from the same credential file as the token, per request, rather
+// than being configured.
+func newCodex(cfg providers.Config) *Provider {
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = codexBaseURL
+	}
+	tokens := oauthfile.Codex(cfg.Home)
+	p := New("codex", cfg, tokens)
+	p.client.Auth = func(ctx context.Context, r *http.Request) error {
+		token, err := tokens.Token(ctx)
+		if err != nil {
+			return err
+		}
+		r.Header.Set("Authorization", "Bearer "+token)
+		// Identifies the surface being spoken to. Without them the host
+		// answers as though this were a browser session, not Codex.
+		r.Header.Set("OpenAI-Beta", "responses=experimental")
+		r.Header.Set("originator", "codex_cli_rs")
+		account, err := tokens.Account(ctx)
+		if err != nil {
+			return err
+		}
+		if account != "" {
+			r.Header.Set("chatgpt-account-id", account)
+		}
+		return nil
+	}
+	return p
 }
 
 // Provider is the adapter.
@@ -273,6 +316,18 @@ type stream struct {
 	reader *providers.EventReader
 	model  string
 	final  agentloop.Response
+
+	// items is the answer assembled from the per-item events.
+	//
+	// The public API repeats the whole answer in `response.completed`, so
+	// reading it there was enough. The Codex backend does not: its completed
+	// event carries `output: []` and the content only ever arrives through
+	// `response.output_item.done`. Trusting the completed event alone made
+	// every Codex answer parse as empty — and an empty answer is not
+	// harmless, because agentloop.Result falls back to the last assistant
+	// message already in the transcript, so the turn silently "replied" with
+	// the *previous* turn's answer.
+	items []outputItem
 }
 
 func (s *stream) Recv() (agentloop.Chunk, error) {
@@ -282,20 +337,29 @@ func (s *stream) Recv() (agentloop.Chunk, error) {
 			return agentloop.Chunk{}, err
 		}
 		var frame struct {
-			Type     string   `json:"type"`
-			Delta    string   `json:"delta"`
-			Response response `json:"response"`
+			Type     string     `json:"type"`
+			Delta    string     `json:"delta"`
+			Item     outputItem `json:"item"`
+			Response response   `json:"response"`
 		}
 		if err := json.Unmarshal(e.Data, &frame); err != nil {
 			continue // a frame this build does not understand is not a reason to stop
 		}
 		switch frame.Type {
+		case "response.output_item.done":
+			s.items = append(s.items, frame.Item)
 		case "response.output_text.delta":
 			return agentloop.Chunk{Text: frame.Delta}, nil
 		case "response.reasoning_summary_text.delta":
 			return agentloop.Chunk{Reasoning: frame.Delta}, nil
 		case "response.completed", "response.incomplete":
-			s.final = translate(frame.Response, s.model)
+			// Prefer what the completed event holds; fall back to the items
+			// when it holds nothing, which is the Codex backend's shape.
+			answer := frame.Response
+			if len(answer.Output) == 0 {
+				answer.Output = s.items
+			}
+			s.final = translate(answer, s.model)
 			return agentloop.Chunk{}, io.EOF
 		}
 	}

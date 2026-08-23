@@ -8,11 +8,18 @@ import { Schema } from "@/core/helpers/schema.helper";
  * - **active** — Currently being pursued. The default status for new goals.
  * - **achieved** — Successfully completed. The goal's outcome has been met.
  * - **abandoned** — No longer pursued. The goal was intentionally deprioritized or cancelled.
+ * - **paused** — Set aside for now, still intended.
+ *
+ * The four match Go's `goal.Status` union exactly
+ * (`internal/domain/goal/entity.go`). `paused` was missing here, so a goal
+ * the daemon returned in that state had no entry in
+ * `GOAL_STATUS_CONFIG` and threw when a row read `.icon` off the lookup.
  */
 export const GoalStatusSchema = z.enum([
   "active",
   "achieved",
   "abandoned",
+  "paused",
 ]);
 
 /**

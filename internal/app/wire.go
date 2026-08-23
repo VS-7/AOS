@@ -12,6 +12,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/OWNER/aos/internal/adapters/activitylog"
 	"github.com/OWNER/aos/internal/adapters/artifactfiles"
@@ -689,7 +690,7 @@ func New(opts Options) (*App, error) {
 		Approver:      broker,
 		Prompt:        assembler,
 		Spiller:       toolexec.NewSpiller(paths.Outputs(), logger),
-		Events:        publisher{hub: events},
+		Events:        publisher{hub: events, channel: soleWorkspace(workspaceSvc)},
 		Bots:          botRegistry,
 		Clock:         clock,
 		IDs:           idgen,
@@ -897,6 +898,36 @@ type repoSet struct {
 	instructions *fscollections.Repo[instruction.Instruction]
 	projects     *fscollections.Repo[project.Project]
 	templates    *fscollections.Repo[template.Template]
+}
+
+// soleWorkspace resolves the channel a turn publishes on when nothing pinned
+// one — see publisher.channelFor for why that is the normal case.
+//
+// It answers only when the installation has exactly one workspace, which is
+// the same condition workspace.Service.AuthorizeWorkspace already treats as
+// unambiguous. With two or more there is no safe guess, and guessing wrong
+// would broadcast one workspace's conversation into another's channel.
+//
+// The answer is cached once found: a workspace is registered once, and the
+// alternative is a store read on every streamed chunk.
+func soleWorkspace(svc *workspace.Service) func(context.Context, string) string {
+	var (
+		mu     sync.Mutex
+		cached string
+	)
+	return func(ctx context.Context, _ string) string {
+		mu.Lock()
+		defer mu.Unlock()
+		if cached != "" {
+			return cached
+		}
+		out, err := svc.List(ctx, workspace.ListInput{})
+		if err != nil || len(out.Workspaces) != 1 {
+			return ""
+		}
+		cached = out.Workspaces[0].ID
+		return cached
+	}
 }
 
 func newRepoSet(root string, lock *collections.PathLock, index *fscollections.Index, pub collections.Publisher) (repoSet, error) {

@@ -56,6 +56,17 @@ type ToolCall struct {
 	ID    string          `json:"id"`
 	Name  string          `json:"name"`
 	Input json.RawMessage `json:"input,omitempty"`
+
+	// Signature is an opaque token a provider attached to this call and
+	// requires back, unchanged, when the conversation continues past it —
+	// the same arrangement Message.Encrypted describes for reasoning, and
+	// carried for the same reason: it is never read here, only returned.
+	//
+	// Gemini 3 is why it exists. It rejects a follow-up request whose
+	// functionCall parts have lost their thought_signature ("required for
+	// tools to work correctly"), which makes every tool-using turn fail on
+	// its second model call — the one that reads the tool's result.
+	Signature string `json:"signature,omitempty"`
 }
 
 // ToolResult is what came back.
@@ -185,4 +196,21 @@ type (
 // shows an answer being written rather than appearing.
 type Emitter interface {
 	Delta(ctx context.Context, c Chunk)
+}
+
+// ToolWatcher is an Emitter that also wants to see the tools a turn runs, as
+// it runs them.
+//
+// Separate from Emitter, and optional, for the reason the two-method
+// LLMProvider split exists: a turn either has somebody watching it work or it
+// does not, and an emitter that only wants the answer should not have to
+// implement two methods it ignores. The loop checks for it at construction.
+//
+// It is what lets an interface show "searching memory" while it happens.
+// Without it the only live signal a turn produced was streamed text, so every
+// tool call — often the slowest and most interesting part of a turn — was
+// invisible until the whole thing finished and the transcript was refetched.
+type ToolWatcher interface {
+	ToolStarted(ctx context.Context, call ToolCall)
+	ToolFinished(ctx context.Context, result ToolResult)
 }

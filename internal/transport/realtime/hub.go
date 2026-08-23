@@ -30,7 +30,9 @@ type Event struct {
 // shows up as silence.
 const (
 	EventActivity          = "activity"           // a new entry in the inbox
+	EventChatStarted       = "chat.started"       // an agent began working on a conversation
 	EventChatDelta         = "chat.delta"         // a chunk of a streamed answer
+	EventChatMessage       = "chat.message"       // the answer so far, as a whole message
 	EventChatDone          = "chat.done"          // the turn ended, with its token usage
 	EventTaskChanged       = "task.changed"       // a task moved
 	EventApprovalRequest   = "approval.request"   // a tool is waiting for a decision
@@ -39,7 +41,7 @@ const (
 
 // Types lists every event this channel emits.
 var Types = []string{
-	EventActivity, EventChatDelta, EventChatDone,
+	EventActivity, EventChatStarted, EventChatDelta, EventChatMessage, EventChatDone,
 	EventTaskChanged, EventApprovalRequest, EventCollectionChanged,
 }
 

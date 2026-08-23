@@ -82,6 +82,22 @@ export interface CommandDescriptor {
    * dormant or errored call is untouched.
    */
   wrapOut?: string;
+  /**
+   * Reshapes what Go answered before the ported code reads it, for a
+   * response field whose *name* diverges rather than its nesting —
+   * `wrapOut`'s counterpart on the value side.
+   *
+   * It receives the bare Go result (so: the array for a `*_list`, the
+   * entity for a `*_get`) and runs *before* `wrapOut` nests it, which is
+   * what lets one function serve both shapes of the same domain.
+   *
+   * Reach for this only when Go and the ported UI genuinely name the same
+   * field differently. A field Go does not have at all is not a mapping
+   * problem — that one belongs at the call site, where the UI can decide
+   * what to render in its absence (see `goalPriorityConfig` in
+   * `features/goal/presentation/consts/goal.ts`).
+   */
+  mapOut?: (data: unknown) => unknown;
 }
 
 export type MapEntry = CommandKey | CommandDescriptor | HttpHandler | null;
@@ -93,6 +109,79 @@ const dotted = (prefix: string, value: unknown): Record<string, unknown> =>
   Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([k, v]) => [`${prefix}.${k}`, v]),
   );
+
+/**
+ * Go's `Goal` calls the deadline `dueAt`
+ * (`internal/domain/goal/entity.go`); every ported goal screen reads
+ * `goal.deadline` (`GoalHelper.formatDeadline`/`isOverdue`, the list row,
+ * the detail form). Same field, two names — so the rename happens once
+ * here rather than at each of the six read sites.
+ *
+ * Copies `dueAt` across instead of moving it: nothing reads `dueAt`
+ * today, but leaving it means a future reader of the real Go name still
+ * finds it, and `deadline` never disagrees with it.
+ *
+ * Note this is the read direction only. The write direction is
+ * `renameIn: { deadline: "dueAt" }` on `goal.create`/`goal.update`, which
+ * is why both appear on those entries.
+ */
+const withDeadline = (value: unknown): unknown => {
+  const one = (goal: unknown) => {
+    if (!goal || typeof goal !== "object") return goal;
+    const record = goal as Record<string, unknown>;
+    return record.dueAt === undefined ? record : { ...record, deadline: record.dueAt };
+  };
+  return Array.isArray(value) ? value.map(one) : one(value);
+};
+
+/**
+ * Fills in the `stats.todos` breakdown the task detail screen reads off
+ * every task, from the one aggregate Go actually keeps.
+ *
+ * `(\$id)/components/main/index.tsx` opens with `const todoStats =
+ * task.stats.todos`, then sums `completed + in_progress + in_review +
+ * todo` for the completion bar. Go's `Task` has no `stats` at all
+ * (`internal/domain/task/entity.go`); what it has is `progress`
+ * — `{completed, total}`, and its own doc says it "mirrors the todo
+ * aggregate's count". So `task.stats` was `undefined` and reading
+ * `.todos` off it threw before the page rendered a single element: the
+ * task detail screen was unreachable for every task, which is the
+ * "Cannot read properties of undefined (reading 'todos')" boundary.
+ *
+ * The projection is exact where the UI actually looks. `completed` and
+ * the total both come straight from `progress`, so the percentage and
+ * the all-done check are right. The split between the three unfinished
+ * states is not data Go publishes per task — the daemon's own
+ * `todo.Status` union is `pending|in_progress|blocked|finished|skipped`,
+ * which doesn't even line up one-to-one with the four buckets this UI
+ * declares — so the remainder all lands in `todo` rather than being
+ * invented across the other two. The Todos widget on the same page reads
+ * the real per-todo records through `todo.list` and is unaffected by
+ * this.
+ */
+const withTaskStats = (value: unknown): unknown => {
+  if (!value || typeof value !== "object") return value;
+  const task = value as Record<string, unknown>;
+  if (task.stats !== undefined) return task;
+
+  const progress = (task.progress ?? {}) as { completed?: number; total?: number };
+  const completed = progress.completed ?? 0;
+  const total = progress.total ?? 0;
+
+  return {
+    ...task,
+    stats: {
+      todos: {
+        completed,
+        in_progress: 0,
+        in_review: 0,
+        todo: Math.max(0, total - completed),
+      },
+    },
+    todos: task.todos ?? [],
+    comments: task.comments ?? [],
+  };
+};
 
 /**
  * The map is explicit, not a pluralization rule.
@@ -348,7 +437,7 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
     wrapOut: "task",
   },
   "task.delete": { key: "tasks_delete", renameIn: { task: "id" } },
-  "task.getById": { key: "tasks_get", renameIn: { task: "id" }, wrapOut: "task" },
+  "task.getById": { key: "tasks_get", renameIn: { task: "id" }, wrapOut: "task", mapOut: withTaskStats },
   // `coerceIn` on `task.list`: `(main)/index.tsx`'s filter bar is a
   // genuine multi-select — that UI decision is untouched. What Go's
   // `ListInput` actually accepts for `type`/`project`/`goal` is one
@@ -727,16 +816,16 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // (workspace home, goal's own (main) page, and the Goals tab inside a
   // project's detail page) all read response.data?.goals and got an empty
   // list regardless of what actually existed.
-  "goal.list": { key: "goals_list", wrapOut: "goals" },
-  "goal.getById": { key: "goals_get", renameIn: { goal: "id" }, wrapOut: "goal" },
+  "goal.list": { key: "goals_list", wrapOut: "goals", mapOut: withDeadline },
+  "goal.getById": { key: "goals_get", renameIn: { goal: "id" }, wrapOut: "goal", mapOut: withDeadline },
   // goals_create answers bare too; the live caller (goal/($id)/index.tsx)
   // reads result.data?.goal?.id to navigate to the new goal after creating
   // it — always undefined before this, so "create" silently never
   // navigated anywhere. goal.update carries wrapOut for the same reason
   // goal.getById already did, even though its one live caller today only
   // checks result?.error and does not read the body.
-  "goal.create": { key: "goals_create", wrapOut: "goal" },
-  "goal.update": { key: "goals_update", renameIn: { goal: "id" }, wrapOut: "goal" },
+  "goal.create": { key: "goals_create", renameIn: { deadline: "dueAt" }, wrapOut: "goal", mapOut: withDeadline },
+  "goal.update": { key: "goals_update", renameIn: { goal: "id", deadline: "dueAt" }, wrapOut: "goal", mapOut: withDeadline },
   "goal.delete": { key: "goals_delete", renameIn: { goal: "id" } },
 
   "instruction.list": "instructions_list",

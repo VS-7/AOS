@@ -314,6 +314,16 @@ type ReplyInput struct {
 	Parts []Part
 	Usage TokenUsage
 
+	// MessageID names the answer being stored, when the caller already
+	// announced it. A turn that streams publishes snapshots of the answer
+	// while it is being written, and those snapshots have to carry an id —
+	// the interface keys on it to replace the in-progress message rather
+	// than append another. Storing the finished answer under a fresh id
+	// would leave that in-progress copy on screen forever, beside its own
+	// completed twin. Empty means "mint one", which is every non-streaming
+	// caller.
+	MessageID string
+
 	// Failure records a turn that did not answer. A turn that failed silently
 	// is a conversation where somebody is still waiting.
 	Failure *RunError
@@ -386,8 +396,12 @@ func (s *Service) Reply(ctx context.Context, in ReplyInput) (ReplyOutput, error)
 
 	var out ReplyOutput
 	if len(in.Parts) > 0 {
+		id := strings.TrimSpace(in.MessageID)
+		if id == "" {
+			id = s.ids.New()
+		}
 		msg := Message{
-			ID:        s.ids.New(),
+			ID:        id,
 			Role:      RoleAssistant,
 			Author:    &Author{Type: ActorAgent, ID: in.AgentID},
 			Parts:     in.Parts,

@@ -19,6 +19,11 @@ import {
   Conversation,
   ConversationEmptyState,
 } from "@/components/ui/conversation";
+import {
+  ChatTurnFailure,
+  latestFailure,
+  runsOf,
+} from "@/features/chat/presentation/components/message/turn-failure";
 
 interface ChatMessageListProps {
   agents: Agent[];
@@ -142,6 +147,14 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
   );
   const reactionsDisabled = !persisted || isTogglingReaction;
 
+  // A turn that failed is recorded on the message that asked for it, not as
+  // an answer — see `turn-failure.tsx`. Rendering it here keeps the reason
+  // attached to the message it belongs to.
+  const failure = React.useMemo(
+    () => latestFailure(runsOf(message)),
+    [message],
+  );
+
   const handleAddReaction = React.useCallback(
     (emoji: string) => onToggleReaction(message.id, emoji),
     [message.id, onToggleReaction],
@@ -176,6 +189,8 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
         usersById={usersById}
         animateIn={!persisted}
       />
+
+      {failure ? <ChatTurnFailure run={failure} /> : null}
     </React.Fragment>
   );
 }, areRowsEqual);

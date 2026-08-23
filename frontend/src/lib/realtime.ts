@@ -75,7 +75,21 @@ export function useRealtime(queryClient: QueryClient): ConnectionState {
       if (closed) return;
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const workspace = getWorkspace();
-      const url = `${protocol}//${window.location.host}/ws${workspace ? `?workspace=${encodeURIComponent(workspace)}` : ""}`;
+
+      // The daemon refuses a socket that names no workspace — it has no
+      // channel to subscribe it to (`realtime.Upgrade`: "a workspace must be
+      // named"). At first paint none is known yet: the workspace store
+      // resolves it a moment later and publishes it through `setWorkspace`.
+      // Connecting anyway burns a real attempt on a guaranteed 400 and
+      // advances the backoff, so by the time the id exists the retry is
+      // seconds away. Waiting costs one short poll and connects on the first
+      // try instead.
+      if (!workspace) {
+        timer = setTimeout(connect, 250);
+        return;
+      }
+
+      const url = `${protocol}//${window.location.host}/ws?workspace=${encodeURIComponent(workspace)}`;
 
       const ws = new WebSocket(url);
       socket.current = ws;
