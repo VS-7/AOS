@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
+
 	"github.com/OWNER/aos/internal/runtime/agentloop"
 	"github.com/OWNER/aos/internal/runtime/providers"
 	"github.com/OWNER/aos/internal/runtime/providers/oauthfile"
@@ -118,11 +120,206 @@ func toolDefs(tools []toolexec.Spec) []map[string]any {
 	for _, t := range tools {
 		def := map[string]any{"name": t.Name, "description": t.Description}
 		if t.InputSchema != nil {
-			def["parameters"] = t.InputSchema
+			if params := geminiParameters(t.InputSchema); params != nil {
+				def["parameters"] = params
+			}
 		}
 		out = append(out, def)
 	}
 	return out
+}
+
+// geminiSchemaKeys is what this API's Schema accepts. It is an OpenAPI 3.0
+// subset, not JSON Schema, and it rejects the request outright — 400, whole
+// turn lost — on any field it does not know.
+//
+// This is a whitelist rather than a list of things to strip, deliberately: a
+// tool schema is generated from a Go input struct, so a field type nobody
+// anticipated can introduce a keyword at any time. Dropping what is not
+// recognised degrades one parameter's description; forwarding it fails every
+// call to every tool.
+var geminiSchemaKeys = map[string]bool{
+	"type": true, "format": true, "title": true, "description": true,
+	"nullable": true, "enum": true, "items": true, "properties": true,
+	"required": true, "minItems": true, "maxItems": true,
+	"minLength": true, "maxLength": true, "pattern": true,
+	"minimum": true, "maximum": true, "default": true, "example": true,
+	"anyOf": true,
+}
+
+// geminiParameters renders a tool's input schema in the shape this API takes.
+//
+// Sending JSON Schema straight through is what the adapter used to do, and it
+// made every tool-carrying turn fail: the registry's schemas carry
+// `additionalProperties` (no such field in the Schema proto) and union types
+// as `"type": ["string", "null"]` (the proto's type is a single enum, not
+// repeating). Both are rejected with "Invalid JSON payload received", so the
+// agent could never call a tool — which, since the loop always sends its
+// toolset, meant it could never answer at all.
+func geminiParameters(in *jsonschema.Schema) map[string]any {
+	raw, err := json.Marshal(in)
+	if err != nil {
+		return nil
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return nil
+	}
+	return geminiSchemaOf(doc, definitionsOf(doc), 0)
+}
+
+// definitionsOf collects the reusable subschemas a $ref can point at, so that
+// resolving one inlines the real thing instead of dropping the parameter.
+func definitionsOf(doc map[string]any) map[string]any {
+	out := map[string]any{}
+	for _, key := range []string{"$defs", "definitions"} {
+		if defs, ok := doc[key].(map[string]any); ok {
+			for name, def := range defs {
+				out[name] = def
+			}
+		}
+	}
+	return out
+}
+
+// maxSchemaDepth bounds $ref inlining. A self-referential schema is legal
+// JSON Schema and would otherwise expand forever.
+const maxSchemaDepth = 12
+
+func geminiSchemaOf(node map[string]any, defs map[string]any, depth int) map[string]any {
+	if node == nil || depth > maxSchemaDepth {
+		return nil
+	}
+	if ref, ok := node["$ref"].(string); ok {
+		if target := resolveRef(ref, defs); target != nil {
+			return geminiSchemaOf(target, defs, depth+1)
+		}
+		// An unresolvable $ref carries no shape this API can use; an empty
+		// object is at least a valid parameter it will accept.
+		return map[string]any{"type": "object"}
+	}
+
+	out := map[string]any{}
+	for key, value := range node {
+		if !geminiSchemaKeys[key] {
+			continue
+		}
+		out[key] = value
+	}
+
+	// A union type is the single commonest divergence: JSON Schema writes
+	// an optional string as `["string", "null"]`, which this API reads as a
+	// list where it wants one value.
+	if list, ok := out["type"].([]any); ok {
+		delete(out, "type")
+		for _, item := range list {
+			name, _ := item.(string)
+			if name == "null" {
+				out["nullable"] = true
+				continue
+			}
+			if _, taken := out["type"]; !taken && name != "" {
+				out["type"] = name
+			}
+		}
+	}
+
+	// `const` has no counterpart here, but a one-value enum means the same
+	// thing and is accepted.
+	if value, ok := node["const"]; ok {
+		if text, isText := value.(string); isText {
+			out["enum"] = []any{text}
+			if _, typed := out["type"]; !typed {
+				out["type"] = "string"
+			}
+		}
+	}
+
+	// This API's enum is a list of strings against a string type. A
+	// numeric or mixed enum would be rejected, and the type alone still
+	// describes the parameter.
+	if values, ok := out["enum"].([]any); ok {
+		for _, value := range values {
+			if _, isText := value.(string); !isText {
+				delete(out, "enum")
+				break
+			}
+		}
+	}
+
+	if properties, ok := node["properties"].(map[string]any); ok {
+		converted := map[string]any{}
+		for name, child := range properties {
+			childNode, isObject := child.(map[string]any)
+			if !isObject {
+				continue
+			}
+			if rendered := geminiSchemaOf(childNode, defs, depth+1); rendered != nil {
+				converted[name] = rendered
+			}
+		}
+		if len(converted) == 0 {
+			delete(out, "properties")
+		} else {
+			out["properties"] = converted
+		}
+	}
+
+	if items, ok := node["items"].(map[string]any); ok {
+		if rendered := geminiSchemaOf(items, defs, depth+1); rendered != nil {
+			out["items"] = rendered
+		} else {
+			delete(out, "items")
+		}
+	}
+
+	if branches, ok := node["anyOf"].([]any); ok {
+		rendered := make([]any, 0, len(branches))
+		for _, branch := range branches {
+			branchNode, isObject := branch.(map[string]any)
+			if !isObject {
+				continue
+			}
+			if converted := geminiSchemaOf(branchNode, defs, depth+1); converted != nil {
+				rendered = append(rendered, converted)
+			}
+		}
+		if len(rendered) == 0 {
+			delete(out, "anyOf")
+		} else {
+			out["anyOf"] = rendered
+		}
+	}
+
+	// `required` may only name properties that survived; naming a dropped
+	// one describes a parameter the model cannot see.
+	if names, ok := out["required"].([]any); ok {
+		properties, _ := out["properties"].(map[string]any)
+		kept := make([]any, 0, len(names))
+		for _, name := range names {
+			text, _ := name.(string)
+			if _, present := properties[text]; present {
+				kept = append(kept, text)
+			}
+		}
+		if len(kept) == 0 {
+			delete(out, "required")
+		} else {
+			out["required"] = kept
+		}
+	}
+
+	return out
+}
+
+func resolveRef(ref string, defs map[string]any) map[string]any {
+	for _, prefix := range []string{"#/$defs/", "#/definitions/"} {
+		if name, found := strings.CutPrefix(ref, prefix); found {
+			target, _ := defs[name].(map[string]any)
+			return target
+		}
+	}
+	return nil
 }
 
 // contents renders the conversation. This API calls the assistant "model" and
@@ -148,12 +345,19 @@ func contents(messages []agentloop.Message) []map[string]any {
 				parts = append(parts, map[string]any{"text": m.Text})
 			}
 			for _, c := range m.ToolCalls {
-				parts = append(parts, map[string]any{
+				// The signature rides alongside the call, not inside it —
+				// see agentloop.ToolCall.Signature for why it has to come
+				// back at all.
+				part := map[string]any{
 					"functionCall": map[string]any{
 						"name": c.Name,
 						"args": json.RawMessage(providers.JSONString(c.Input)),
 					},
-				})
+				}
+				if c.Signature != "" {
+					part["thoughtSignature"] = c.Signature
+				}
+				parts = append(parts, part)
 			}
 			if len(parts) == 0 {
 				continue
@@ -206,6 +410,7 @@ type part struct {
 		Name string          `json:"name"`
 		Args json.RawMessage `json:"args"`
 	} `json:"functionCall"`
+	ThoughtSignature string `json:"thoughtSignature"`
 }
 
 func translate(g generated, model string) agentloop.Response {
@@ -235,9 +440,10 @@ func translate(g generated, model string) agentloop.Response {
 			// with its call by one, so the position in the answer becomes it.
 			index++
 			out.ToolCalls = append(out.ToolCalls, agentloop.ToolCall{
-				ID:    p.FunctionCall.Name + "-" + itoa(index),
-				Name:  p.FunctionCall.Name,
-				Input: providers.ToolArguments(string(p.FunctionCall.Args)),
+				ID:        p.FunctionCall.Name + "-" + itoa(index),
+				Name:      p.FunctionCall.Name,
+				Input:     providers.ToolArguments(string(p.FunctionCall.Args)),
+				Signature: p.ThoughtSignature,
 			})
 		case p.Thought:
 			thinking.WriteString(p.Text)

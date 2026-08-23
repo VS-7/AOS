@@ -24,7 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { ModelProvider } from "@/features/model/interfaces/model.interfaces";
-import { setModelProviderKey } from "@/features/model/services/model-provider.service";
+import { disconnectModelProvider } from "@/features/model/services/model-provider.service";
 import { ProviderUpsertDialog } from "./provider-upsert-dialog";
 import { useProviderLogo } from "../hooks/use-provider-logo";
 
@@ -62,7 +62,7 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
 
   const handleDisconnect = async (provider: ModelProvider) => {
     try {
-      await setModelProviderKey(provider.id, "");
+      await disconnectModelProvider(provider.id);
       toast.success(`${provider.name} disconnected.`);
       onRefresh?.();
       router.invalidate();

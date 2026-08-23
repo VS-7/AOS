@@ -35,6 +35,11 @@ type Credentials struct {
 	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token,omitempty"`
 	ExpiresAt    time.Time `json:"-"`
+
+	// Account names the ChatGPT account the token belongs to. The Codex
+	// backend requires it as its own header — the token alone does not say
+	// which account's subscription a request should be billed against.
+	Account string `json:"-"`
 }
 
 // Store reads and refreshes one credential file.
@@ -76,6 +81,18 @@ func GeminiCLI(home string) *Store {
 		Owner: "the Gemini CLI",
 		Parse: parseGemini,
 	}
+}
+
+// Account returns the account the credential belongs to, loading the file if
+// it has not been read yet. Empty when the file names none — Gemini's does
+// not, and only Codex needs it.
+func (s *Store) Account(ctx context.Context) (string, error) {
+	if _, err := s.Token(ctx); err != nil {
+		return "", err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cached.Account, nil
 }
 
 // Token returns a usable access token, refreshing it if it has expired.
@@ -217,6 +234,7 @@ func parseCodex(raw []byte) (Credentials, error) {
 			AccessToken  string `json:"access_token"`
 			RefreshToken string `json:"refresh_token"`
 			IDToken      string `json:"id_token"`
+			AccountID    string `json:"account_id"`
 		} `json:"tokens"`
 		AccessToken  string `json:"access_token"`
 		RefreshToken string `json:"refresh_token"`
@@ -228,6 +246,7 @@ func parseCodex(raw []byte) (Credentials, error) {
 	out := Credentials{
 		AccessToken:  firstNonEmpty(doc.Tokens.AccessToken, doc.AccessToken),
 		RefreshToken: firstNonEmpty(doc.Tokens.RefreshToken, doc.RefreshToken),
+		Account:      doc.Tokens.AccountID,
 	}
 	return out, nil
 }

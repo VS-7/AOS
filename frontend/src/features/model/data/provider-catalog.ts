@@ -72,9 +72,11 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
       placeholder: "sk-ant-...",
       description: "Visit Anthropic's console to get your API key.",
     }),
+    // Opus 4.5 and Sonnet 4.5 are superseded; the current ids carry no
+    // date suffix. Haiku 4.5 is still current and unchanged.
     models: [
-      { id: "claude-opus-4-5", name: "Claude Opus 4.5", enabled: true },
-      { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5", enabled: true },
+      { id: "claude-opus-5", name: "Claude Opus 5", enabled: true },
+      { id: "claude-sonnet-5", name: "Claude Sonnet 5", enabled: true },
       { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", enabled: true },
     ],
   },
@@ -102,7 +104,16 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     logo: { light: "", dark: "" },
     default: false,
     auth: oauthFileAuth("~/.codex/auth.json", "Codex CLI / ChatGPT desktop app"),
-    models: [{ id: "gpt-5.1", name: "GPT-5.1", enabled: true }],
+    // The Codex surface has its own model line, and it is not the public
+    // API's — these are the four the original's own adapter lists
+    // (`_extracted/v401/server/.../adapters/codex.adapter.ts`), confirmed
+    // against the endpoint. `gpt-5.1` was never one of them.
+    models: [
+      { id: "gpt-5.4", name: "GPT-5.4", enabled: true },
+      { id: "gpt-5.5", name: "GPT-5.5", enabled: true },
+      { id: "gpt-5.4-mini", name: "GPT-5.4 Mini", enabled: true },
+      { id: "gpt-5.3-codex-spark", name: "GPT-5.3 Codex Spark", enabled: true },
+    ],
   },
   {
     id: "google",
@@ -114,9 +125,16 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
       placeholder: "AIza...",
       description: "Visit Google AI Studio to get your API key.",
     }),
+    // Verified against this API's own ListModels, not composed from a
+    // version number: `gemini-3-pro` and `gemini-3-flash` were never real
+    // ids, and generateContent answered 404 "is not found for API version
+    // v1beta" for both — every Google turn failed for that reason alone,
+    // with a valid key. Flash is first because the first entry is what
+    // `seedDefaultSlot` picks when connecting the provider, and it is the
+    // one confirmed to answer.
     models: [
-      { id: "gemini-3-pro", name: "Gemini 3 Pro", enabled: true },
-      { id: "gemini-3-flash", name: "Gemini 3 Flash", enabled: true },
+      { id: "gemini-3-flash-preview", name: "Gemini 3 Flash", enabled: true },
+      { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro", enabled: true },
     ],
   },
   {
@@ -126,7 +144,7 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     logo: { light: "", dark: "" },
     default: false,
     auth: oauthFileAuth("~/.gemini/oauth_creds.json", "Gemini CLI"),
-    models: [{ id: "gemini-3-pro", name: "Gemini 3 Pro", enabled: true }],
+    models: [{ id: "gemini-3-flash-preview", name: "Gemini 3 Flash", enabled: true }],
   },
   {
     id: "openrouter",
