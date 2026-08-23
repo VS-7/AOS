@@ -34,6 +34,7 @@ export function useChatComposer({
   agents,
   chat,
   isDirectMessage = false,
+  onConfirmed,
   onFailed,
   onSent,
   userId,
@@ -82,7 +83,19 @@ export function useChatComposer({
 
   const { mutate: sendMessage, loading: isSending } =
     aos.client.chat.send.useMutation({
-      onSuccess: () => {
+      onSuccess: (response) => {
+        // `chats_send` (internal/domain/chat/service.go's Send) always
+        // assigns its own message id — the client-generated one in
+        // `nextMessage` below never round-trips — so the local echo has to
+        // be swapped for this persisted message, not merged into it.
+        const persisted = (
+          response as { data?: { message?: ChatMessage } } | null | undefined
+        )?.data?.message;
+
+        if (pendingMessageIdRef.current && persisted) {
+          onConfirmed?.(pendingMessageIdRef.current, persisted);
+        }
+
         pendingMessageIdRef.current = null;
         setMentionState(null);
         setCommandOpen(false);

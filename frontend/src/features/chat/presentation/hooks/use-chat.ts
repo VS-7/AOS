@@ -15,6 +15,12 @@ export interface UseChatResult {
   isLoading: boolean;
   isRefreshing: boolean;
   refresh: () => void;
+  /** Inserts (or upserts by id) a message straight into local state — the optimistic echo for a just-submitted send. */
+  appendMessage: (message: ChatMessage) => void;
+  /** Swaps a locally-echoed message for the server-persisted one once the send mutation resolves. */
+  replaceMessage: (previousId: string, message: ChatMessage) => void;
+  /** Drops a locally-echoed message that failed to send. */
+  removeMessage: (id?: string) => void;
 }
 
 function getMessageUpdatedAt(message: ChatMessage): number {
@@ -156,6 +162,45 @@ export function useChat({ chatId, enabled = true }: UseChatParams): UseChatResul
     [],
   );
 
+  const replaceMessage = React.useCallback(
+    (previousId: string, message: ChatMessage) => {
+      setChat((currentChat) => {
+        if (!currentChat) {
+          return currentChat;
+        }
+
+        const withoutPrevious = (
+          (currentChat.messages ?? []) as ChatMessage[]
+        ).filter((existing) => existing.id !== previousId);
+
+        return {
+          ...currentChat,
+          messages: upsertMessage(withoutPrevious, message),
+        };
+      });
+    },
+    [],
+  );
+
+  const removeMessage = React.useCallback((id?: string) => {
+    if (!id) {
+      return;
+    }
+
+    setChat((currentChat) => {
+      if (!currentChat) {
+        return currentChat;
+      }
+
+      return {
+        ...currentChat,
+        messages: ((currentChat.messages ?? []) as ChatMessage[]).filter(
+          (existing) => existing.id !== id,
+        ),
+      };
+    });
+  }, []);
+
   useRealtime(
     "chat:refresh",
     (payload) => {
@@ -205,5 +250,8 @@ export function useChat({ chatId, enabled = true }: UseChatParams): UseChatResul
     isLoading: chatQuery.isLoading,
     isRefreshing: chatQuery.isFetching,
     refresh: chatQuery.refetch,
+    appendMessage: applyMessageSnapshot,
+    replaceMessage,
+    removeMessage,
   };
 }
