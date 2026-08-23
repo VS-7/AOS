@@ -123,6 +123,35 @@ describe("call", () => {
     expect(r.error?.message).toContain("worktrees");
   });
 
+  it("config.update flattens a nested section into Go's dotted-path `set` — tunnel/index.tsx's real shape", async () => {
+    // Before this coerceIn existed, `{tunnel: {...}}}` reached `config_update`
+    // with no `set` key at all — `UpdateInput.Set` is `validate:"required"`,
+    // so every tunnel settings save threw. This is the exact body `tunnel/
+    // index.tsx`'s activation form submits.
+    invoke.mockResolvedValue({ tunnel: { enabled: true } });
+    await call("config", "update", { body: { tunnel: { enabled: true } } });
+    expect(invoke).toHaveBeenCalledWith("config_update", {
+      set: { "tunnel.enabled": true },
+      _reasoning: "interface: config.update",
+    });
+  });
+
+  it("config.update leaves agents.models as one whole-map leaf, not flattened into its slots", async () => {
+    // `Agents.Models` is a `map[string]ModelRef` — a leaf per `patch.Apply`'s
+    // own contract ("composite values are leaves: a caller replaces the
+    // whole list"). `dotted` only flattens one level, so `agents.models`
+    // itself stays a single key holding the whole map, the shape `agents/
+    // index.tsx`'s `handleSlotChange` actually sends.
+    invoke.mockResolvedValue({ agents: {} });
+    await call("config", "update", {
+      body: { agents: { models: { default: { provider: "openai", model: "gpt-5.1" } } } },
+    });
+    expect(invoke).toHaveBeenCalledWith("config_update", {
+      set: { "agents.models": { default: { provider: "openai", model: "gpt-5.1" } } },
+      _reasoning: "interface: config.update",
+    });
+  });
+
   it("answers dormant without touching the network", async () => {
     // The example moved, the behaviour did not: `collection` was the
     // stand-in dormant domain until task-10 lit it (along with `view`,

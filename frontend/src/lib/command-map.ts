@@ -88,6 +88,12 @@ export type MapEntry = CommandKey | CommandDescriptor | HttpHandler | null;
 
 const s = (p: Record<string, unknown>, k: string): string => String(p[k] ?? "");
 
+/** One-level `{a, b}` -> `{"prefix.a": a, "prefix.b": b}`, for a `coerceIn` that turns a nested UI object into `patch.Apply`'s dotted-path leaves. */
+const dotted = (prefix: string, value: unknown): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([k, v]) => [`${prefix}.${k}`, v]),
+  );
+
 /**
  * The map is explicit, not a pluralization rule.
  *
@@ -226,7 +232,41 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // silently read `undefined`. Resolving it here removes the ambiguity for
   // every future caller: Go's response is bare, so no `wrapOut`.
   "config.get": "config_get",
-  "config.update": "config_update",
+  // Go's `UpdateInput` (`internal/domain/config/schema.go`) takes exactly
+  // one field: `set`, a dotted-path map (`{"tunnel.enabled": true}`) —
+  // `patch.Apply`'s contract, same one `workspace.update` already coerces
+  // for (see that entry's own comment for the exact collision constraint
+  // this mirrors). Every live caller instead sends a nested object shaped
+  // like a slice of `Config` itself — `tunnel/index.tsx`'s `{tunnel:
+  // {enabled}}`, `profile/index.tsx`'s `{region: {timezone, ...}}`,
+  // `agents/index.tsx`'s `{agents: {models: {...}}}` — which Go's decoder
+  // reads as an empty `Set` (no `set` key at all) and refuses with
+  // `validate:"required"`. Every one of those three call sites' submits
+  // was throwing before this entry existed; none of it was reachable by
+  // playing with the UI, only by reading what actually left the browser.
+  //
+  // `dotted` flattens one level, matching each of these three fields'
+  // real Go shape: `Tunnel`/`Region` are flat structs, and `Agents`' own
+  // fields (`providers []Provider`, `models map[string]ModelRef`) are
+  // leaves per `patch.Apply`'s own contract ("composite values are
+  // leaves: a caller replaces the whole list") — so `agents.models` must
+  // land as one dotted key holding the whole map, never flattened deeper
+  // into `agents.models.default.provider`, which `patch.Paths` does not
+  // recognise.
+  //
+  // `general`/`notifications` are deliberately NOT here: `general/
+  // index.tsx`'s one submit sends both together, and `coerceIn`'s
+  // per-field merge would collide on the `set` key exactly the way
+  // `workspace.update`'s own comment describes for `.../profile` — fixed
+  // at that one call site instead, building `{set: {...}}}` directly.
+  "config.update": {
+    key: "config_update",
+    coerceIn: {
+      tunnel: (value) => ({ set: dotted("tunnel", value) }),
+      region: (value) => ({ set: dotted("region", value) }),
+      agents: (value) => ({ set: dotted("agents", value) }),
+    },
+  },
 
   // Found by the final-review sweep's corrected pattern — `memories/
   // index.tsx`'s live `aos.client.memory.graph\n  .query(...)` is another

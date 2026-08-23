@@ -44,10 +44,17 @@ export function UserGeneralSection() {
       preventSleep: context.config?.general?.preventSleep ?? false,
       enableNotifications: context.config?.notifications?.enabled ?? true,
     },
+    // Two `Config` sections in one submit — built as `{set: {...}}}` here
+    // directly rather than through `command-map.ts`'s `config.update`
+    // `coerceIn` (see that entry's own comment): a coercion per field would
+    // collide on the `set` key it produces, the same situation `workspace.
+    // update` documents for its own `.../profile` call site.
     onSubmit: (values) => ({
       body: {
-        general: { preventSleep: values.preventSleep },
-        notifications: { enabled: values.enableNotifications },
+        set: {
+          "general.preventSleep": values.preventSleep,
+          "notifications.enabled": values.enableNotifications,
+        },
       },
     }),
     onResponse: ({ error }) => {
