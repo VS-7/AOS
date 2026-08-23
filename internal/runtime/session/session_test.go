@@ -230,3 +230,48 @@ func TestDeliverToChannelFailureIsNotPropagated(t *testing.T) {
 		t.Fatalf("Deliver was called %d times, want 1 (attempted once, regardless of the outcome)", len(bots.calls))
 	}
 }
+
+// The loop's transcript is seeded with the conversation so far, so it holds
+// every tool call the chat has ever made. Only this turn's belong on this
+// turn's message — otherwise each answer repeats the whole history, and grows
+// by it again on the next one.
+func TestAnAnswerCarriesOnlyTheToolCallsOfItsOwnTurn(t *testing.T) {
+	result := &agentloop.Result{
+		Text: "done",
+		Messages: []agentloop.Message{
+			// An earlier turn, already stored on its own message.
+			{Role: agentloop.RoleAssistant, ToolCalls: []agentloop.ToolCall{
+				{ID: "old-1", Name: "memories_store"},
+			}},
+			// This turn.
+			{Role: agentloop.RoleAssistant, ToolCalls: []agentloop.ToolCall{
+				{ID: "new-1", Name: "tasks_list"},
+			}},
+		},
+		ToolCalls: []agentloop.ToolResult{{CallID: "new-1", Name: "tasks_list"}},
+	}
+
+	var calls, results []string
+	for _, p := range answerParts(result) {
+		switch p.Type {
+		case chat.PartToolCall:
+			calls = append(calls, p.ToolCallID)
+		case chat.PartToolResult:
+			results = append(results, p.ToolCallID)
+		}
+	}
+
+	if len(calls) != 1 || calls[0] != "new-1" {
+		t.Errorf("tool calls = %v, want only this turn's", calls)
+	}
+	if len(results) != 1 || results[0] != "new-1" {
+		t.Errorf("tool results = %v, want the one this turn produced", results)
+	}
+}
+
+func TestAnAnswerWithNoToolsIsJustItsText(t *testing.T) {
+	parts := answerParts(&agentloop.Result{Text: "hello"})
+	if len(parts) != 1 || parts[0].Type != chat.PartText || parts[0].Text != "hello" {
+		t.Fatalf("parts = %#v, want one text part", parts)
+	}
+}

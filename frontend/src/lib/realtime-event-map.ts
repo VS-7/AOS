@@ -22,8 +22,16 @@ import type { RealtimeEvent } from "./realtime";
  *   and there's genuinely nothing on the other end".
  */
 export interface RealtimeEventDescriptor {
-  /** The daemon's event type (`internal/transport/realtime/hub.go`'s `Event.Type`). */
-  type: string;
+  /**
+   * The daemon's event type (`internal/transport/realtime/hub.go`'s
+   * `Event.Type`), or several of them when one original event is fed by
+   * more than one daemon event. `chat:refresh` is the case that needs it:
+   * the daemon reports an answer being written and an answer being
+   * finished as two different events, and the original's single callback
+   * handles both — it reads `payload.message` when there is one and
+   * refetches when there is not.
+   */
+  type: string | string[];
   /**
    * Reshapes the daemon event into the payload the ported callback expects.
    * Receives the whole event (`data` is most of what's needed, but a few
@@ -59,26 +67,51 @@ export const REALTIME_EVENT_MAP: Record<string, RealtimeMapEntry> = {
   // Correct, not free — a full refetch per completed turn instead of a
   // patched-in snapshot per message — and the closest daemon signal there
   // is; there is no message-level event to translate onto instead.
+  // `chat.message` carries the answer as it is written — text so far, plus
+  // every tool call and result the turn has made (`internal/runtime/
+  // session`'s `liveAnswer`). It is the same shape a stored message has and
+  // the same id the answer will be stored under, so the ported callback's
+  // `payload.message` branch patches it straight into the timeline and the
+  // finished answer later replaces it rather than appearing beside it.
+  //
+  // `chat.done` stays alongside it as the reconciliation point: it carries
+  // no message, so the callback refetches, which is what settles anything
+  // the snapshots missed (a failed turn's recorded run, most of all).
+  //
+  // Before this, the entry mapped `chat.done` alone. That event fires once,
+  // at the very end of a turn, so nothing at all appeared while the agent
+  // worked — no text, and no sign of the tool calls that are usually the
+  // slowest part of it.
   "chat:refresh": {
-    type: "chat.done",
-    adapt: (event) => ({ chatId: event.data?.["chat"] }),
+    type: ["chat.message", "chat.done"],
+    adapt: (event) =>
+      event.type === "chat.message"
+        ? { chatId: event.data?.["chat"], message: event.data?.["message"] }
+        : { chatId: event.data?.["chat"] },
   },
 
-  // `layout/index.tsx`'s two `setProcessing(chatId, agentId, ...)`
-  // listeners. No daemon event distinguishes "an agent started/stopped
-  // processing this chat" from a delta arriving — `chat.delta` fires once
-  // per streamed chunk (many times per turn, not once at the start) and
-  // neither `chat.delta` nor `chat.done`'s `Data` carries an `agentId`
-  // (`internal/app/runtime.go`'s `publisher.ChatDelta`/`ChatDone`: `{chat,
-  // text, reasoning}` / `{chat, usage}`, no agent field). Synthesizing a
-  // start/stop pair from delta arrival would call `setProcessing` with a
-  // fabricated or empty `agentId`, corrupting `AgentStore`'s `occupancy`
-  // map with a phantom key — worse than the honest `null` here. The
-  // processing indicator (`layout/index.tsx:89-103`) stays dark until the
-  // daemon either emits a distinct start/stop event or includes `agentId`
-  // on the ones it has; filed in the final-fix report, not fixed here.
-  "chat:start-processing": null,
-  "chat:end-processing": null,
+  // `layout/index.tsx`'s two `setProcessing(chatId, agentId, ...)` listeners,
+  // which drive `ChatProcessingIndicator`'s "Atlas is working…".
+  //
+  // Both were `null` here, and the reasoning was sound at the time: no daemon
+  // event said an agent had *started*, and neither `chat.delta` nor
+  // `chat.done` carried an `agentId`, so the only way to fill one was to
+  // fabricate it — which would have corrupted `AgentStore.occupancy` with a
+  // phantom key. Rather than guess, the daemon now states both facts:
+  // `chat.started` when a turn is picked up, and an `agent` field on
+  // `chat.done` saying whose work ended.
+  //
+  // `chat.started` fires before the model has produced anything, which is the
+  // point — on a reasoning model the wait for a first token is most of the
+  // turn, and that is exactly the stretch the indicator exists to cover.
+  "chat:start-processing": {
+    type: "chat.started",
+    adapt: (event) => ({ chatId: event.data?.["chat"], agentId: event.data?.["agent"] }),
+  },
+  "chat:end-processing": {
+    type: "chat.done",
+    adapt: (event) => ({ chatId: event.data?.["chat"], agentId: event.data?.["agent"] }),
+  },
 
   // `changes-content.tsx`, `files/content/index.tsx`, `files-explorer-
   // group.tsx` — all read `payload.context` (which explorer pane) and

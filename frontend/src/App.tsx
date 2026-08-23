@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { DomainError } from "@/lib/client";
 import { AppStateProvider } from "@/lib/app-state";
@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthGate } from "@/features/auth/AuthGate";
+import { useRealtime } from "@/lib/realtime";
 import { router } from "@/app/router";
 
 const queryClient = new QueryClient({
@@ -36,10 +37,32 @@ const queryClient = new QueryClient({
   },
 });
 
+/**
+ * Opens the one connection to the daemon's event channel.
+ *
+ * It has to be a component rather than a call in `App`: the hook needs the
+ * `QueryClient` from context, which only exists below `QueryClientProvider`.
+ *
+ * Nothing mounted this. `lib/realtime.ts`'s own doc describes it as "the one
+ * WebSocket the app opens", and it used to be opened by `app/root-layout.tsx`
+ * — which was deleted when `WorkspaceLayout` superseded it (see `app/aos.tsx`),
+ * taking the connection with it and leaving no import of this module anywhere.
+ * The listener side survived intact: `hooks/use-realtime.ts` and its eight
+ * call sites went on subscribing through `onRealtimeEvent` to a registry that
+ * nothing ever fed. So every live update in the application — an answer being
+ * written, a task moving, a file changing — silently did nothing, and the only
+ * way to see that anything had happened was to reload the page.
+ */
+function RealtimeConnection(): null {
+  useRealtime(useQueryClient());
+  return null;
+}
+
 export function App(): JSX.Element {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
+        <RealtimeConnection />
         <AppStateProvider>
           {/*
             * The shell wrapper, `Toaster` and `TooltipProvider` mirror the

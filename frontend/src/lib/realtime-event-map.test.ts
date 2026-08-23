@@ -19,8 +19,9 @@ function subscribeEvent(name: string, callback: (payload: unknown) => void): () 
   const entry = REALTIME_EVENT_MAP[name];
   if (!entry) return () => {};
   const descriptor = typeof entry === "string" ? { type: entry } : entry;
+  const types = Array.isArray(descriptor.type) ? descriptor.type : [descriptor.type];
   return onRealtimeEvent((raw) => {
-    if (raw.type !== descriptor.type) return;
+    if (!types.includes(raw.type)) return;
     callback(descriptor.adapt ? descriptor.adapt(raw) : raw.data);
   });
 }
@@ -37,7 +38,20 @@ describe("REALTIME_EVENT_MAP, exercised through the real delivery pipeline", () 
     unsubscribe();
   });
 
-  it("chat:refresh does not fire on a chat.delta (the daemon has no per-message signal, only end-of-turn)", () => {
+  it("chat:refresh carries the snapshot on chat.message, which is what renders a turn as it happens", () => {
+    const payloads: any[] = [];
+    const unsubscribe = subscribeEvent("chat:refresh", (p) => payloads.push(p));
+
+    const message = { id: "m-1", role: "assistant", parts: [{ type: "tool-call", toolName: "memories_recall" }] };
+    deliver(fakeQueryClient() as any, { type: "chat.message", data: { chat: "c-42", message } });
+
+    // `message` present is the branch use-chat.ts patches in locally; absent
+    // is the branch that refetches. Both have to reach the same callback.
+    expect(payloads).toEqual([{ chatId: "c-42", message }]);
+    unsubscribe();
+  });
+
+  it("chat:refresh does not fire on a chat.delta (text-only; the snapshot event carries the whole message)", () => {
     const payloads: any[] = [];
     const unsubscribe = subscribeEvent("chat:refresh", (p) => payloads.push(p));
 
@@ -83,15 +97,31 @@ describe("REALTIME_EVENT_MAP, exercised through the real delivery pipeline", () 
     unsubscribe();
   });
 
-  it("chat:start-processing and chat:end-processing are explicit nulls — no daemon counterpart, never a silent no-op", () => {
-    expect(REALTIME_EVENT_MAP["chat:start-processing"]).toBeNull();
-    expect(REALTIME_EVENT_MAP["chat:end-processing"]).toBeNull();
-    // Subscribing to a null entry must not throw and must simply never call
-    // back — verified, not assumed.
+  // These two were `null` while the daemon had no event naming *which* agent
+  // was working — `layout/index.tsx` feeds both straight into
+  // `setProcessing(chatId, agentId, ...)`, and an occupancy map keyed by a
+  // fabricated id is worse than an indicator that stays dark. The daemon now
+  // states both facts, so the pair drives "Atlas is working…" for real.
+  it("chat:start-processing carries the agent, so the indicator knows who is working", () => {
     const payloads: any[] = [];
     const unsubscribe = subscribeEvent("chat:start-processing", (p) => payloads.push(p));
-    deliver(fakeQueryClient() as any, { type: "chat.delta", data: { chat: "c-1" } });
-    expect(payloads).toEqual([]);
+
+    deliver(fakeQueryClient() as any, { type: "chat.started", data: { chat: "c-1", agent: "atlas" } });
+
+    expect(payloads).toEqual([{ chatId: "c-1", agentId: "atlas" }]);
+    unsubscribe();
+  });
+
+  it("chat:end-processing carries the same agent, so the indicator clears the one that finished", () => {
+    const payloads: any[] = [];
+    const unsubscribe = subscribeEvent("chat:end-processing", (p) => payloads.push(p));
+
+    deliver(fakeQueryClient() as any, {
+      type: "chat.done",
+      data: { chat: "c-1", agent: "atlas", usage: { total: 5 } },
+    });
+
+    expect(payloads).toEqual([{ chatId: "c-1", agentId: "atlas" }]);
     unsubscribe();
   });
 
