@@ -76,6 +76,7 @@ tasks:
       - task: gen-tokens
       - task: gen-schema
       - task: gen-components
+      - task: gen-skill
 
   gen-catalog:
     desc: Rebuild the error catalog from the apperr.New calls in the tree
@@ -100,6 +101,10 @@ tasks:
     # declares is not readable as text, so it has to be evaluated. See the
     # script's own comment.
     cmds: [npx tsx scripts/gen-components.mjs]
+
+  gen-skill:
+    desc: Rebuild pkg/skill/SKILL.md and references/*.md from the command registry
+    cmds: [go run ./tools/genskill]
 
   vet:
     cmds: [go vet ./...]
@@ -136,6 +141,7 @@ tasks:
       - task: gen
       - git diff --exit-code -- internal/core/apperr/catalog.gen.go
       - git diff --exit-code -- internal/domain/view/components.json
+      - git diff --exit-code -- pkg/skill/
       - task: vet
       - task: lint
       - task: test

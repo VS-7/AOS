@@ -13,6 +13,15 @@
 # hand, and this is what keeps it from happening again.
 /aos-desktop
 
+# `go build ./tools/<name>/...` with no -o writes a binary named after the
+# tool's own directory into the repo root — the same mistake /aos-desktop
+# above exists to catch, for the tools/ generators specifically.
+/gencatalog
+/genschema
+/gentokens
+/genskill
+/genreleasekey
+
 # The desktop's copy of the frontend bundle. `task build:desktop` puts it there
 # because a Go embed pattern cannot reach outside its own package; committing a
 # build output would put a stale interface in the history.

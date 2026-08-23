@@ -17,8 +17,12 @@ import (
 // longest matching prefix wins, so a package can be held to a higher bar than
 // the tree it lives in.
 var floors = map[string]float64{
-	"github.com/OWNER/aos/internal/domain":    80,
-	"github.com/OWNER/aos/internal/core":      80,
+	"github.com/OWNER/aos/internal/domain": 80,
+	"github.com/OWNER/aos/internal/core":   80,
+	// pkg/ is the one package meant to be useful outside this project (see
+	// its own doc comment) — held to the same bar as internal/core, not
+	// exempted as wiring.
+	"github.com/OWNER/aos/pkg":                80,
 	"github.com/OWNER/aos/internal/runtime":   75,
 	"github.com/OWNER/aos/internal/transport": 60,
 	// Adapters are held to their contract suite, not to a coverage number.
