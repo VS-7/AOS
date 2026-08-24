@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +15,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import type { ModelProvider, ModelProviderAuth } from "@/features/model/interfaces/model.interfaces";
-import { setModelProviderKey } from "@/features/model/services/model-provider.service";
+import {
+  MODEL_DISCOVERY_KEY,
+  setModelProviderKey,
+} from "@/features/model/services/model-provider.service";
 import { useProviderLogo } from "../hooks/use-provider-logo";
 
 interface ProviderUpsertDialogProps {
@@ -65,6 +69,8 @@ export function ProviderUpsertDialog({
   const requiresKey = provider.auth.required && provider.auth.mode === "api-key";
   const oauthLike = isOAuthLike(provider.auth);
 
+  const queryClient = useQueryClient();
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (requiresKey && !value.trim()) {
@@ -75,6 +81,10 @@ export function ProviderUpsertDialog({
     setIsSubmitting(true);
     try {
       await setModelProviderKey(provider.id, value);
+      // The catalogue is cached for five minutes on both sides, which is
+      // right for a screen being re-rendered and wrong for the one moment a
+      // person has just changed the credential the catalogue is read with.
+      await queryClient.invalidateQueries({ queryKey: MODEL_DISCOVERY_KEY });
 
       toast.success(
         mode === "edit"

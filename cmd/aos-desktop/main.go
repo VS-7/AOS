@@ -102,6 +102,12 @@ func main() {
 	// The window's event channel, relayed by this process — see
 	// forwardRealtime for why the window cannot open it itself.
 	realtimeCtx, stopRealtime := context.WithCancel(context.Background())
+	// The exit status travels through a variable rather than an os.Exit at
+	// the failure site, because an os.Exit there would skip the stop below and
+	// leave the daemon holding an event socket for a window that is gone.
+	// Registered first, so it runs last.
+	exitCode := 0
+	defer func() { os.Exit(exitCode) }()
 	defer stopRealtime()
 	// Assigned once the window exists, below, and before anything that could
 	// call it is started — the `go ensureDaemon` below and AuthService's
@@ -206,7 +212,7 @@ func main() {
 
 	if err := desktop.Run(); err != nil {
 		log.Error("the window closed with an error", "err", err)
-		os.Exit(1)
+		exitCode = 1
 	}
 }
 

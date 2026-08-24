@@ -792,6 +792,13 @@ export interface CommandMap {
     /** Sharp, specific headline. It is what you will scan later. */
     "title": string;
   }; output: unknown };
+  /** List the models the connected providers serve. */
+  "models_list": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** One provider id. Empty asks every provider this installation has a credential for. */
+    "provider"?: string;
+  }; output: unknown };
   /** Create a new project. */
   "projects_create": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
@@ -1661,6 +1668,7 @@ export const COMMAND_KEYS = [
   "memories_recall",
   "memories_reflect",
   "memories_store",
+  "models_list",
   "projects_create",
   "projects_delete",
   "projects_get",

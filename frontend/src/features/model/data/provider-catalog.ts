@@ -4,13 +4,22 @@ import type { ModelProvider } from "@/features/model/interfaces/model.interfaces
  * Static reference data for the providers `internal/runtime/providers`
  * actually registers — `internal/runtime/providers/{anthropic,openai,
  * google,compat}/*.go`'s own `providers.Register` calls, verified by grep,
- * not assumed. AOS's Go backend has no live "list models for this
- * provider" command (the original's `IModelProviderAdapter.models()`
- * called each provider's real `/models` endpoint; nothing here does), so
- * this is a curated, static list rather than a discovered one. The model
- * ids for anthropic/openai/google are the same ones `internal/runtime/
- * providers/pricing.json` already prices, so a model picked here is
- * guaranteed to be one the backend already knows the cost of.
+ * not assumed.
+ *
+ * The `models` arrays here are no longer what a connected provider shows.
+ * `models_list` (`internal/domain/model/commands.go`) asks each connected
+ * provider's own catalogue endpoint, and `model-provider.service.ts` puts
+ * that answer in front of these — so this list now serves the two cases
+ * discovery cannot: a provider that is not connected yet, where there is no
+ * credential to ask with, and one that failed to answer, where the last
+ * known names beat none. Everything else in an entry — the name, the
+ * description, how it authenticates — is not something any provider
+ * publishes, and stays here permanently.
+ *
+ * Treat the model ids below as a fallback that will go stale, because it
+ * will: this file has already shipped a Codex model that does not exist and
+ * two Gemini ids that answered 404. That is the reason the discovery path
+ * exists, and the reason nothing should be added here to "keep it current".
  *
  * `capabilities` is left unset on every model: none of the four provider
  * adapters implement anything beyond `Generate`/`Stream` (plain text and

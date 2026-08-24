@@ -578,3 +578,141 @@ func titlesOf(cs []chat.Chat) []string {
 	}
 	return out
 }
+
+// Post and Reply are the pair a caller that runs its own turn uses: put the
+// question on the record, run it, then store the answer against it. Neither is
+// a command — see their own doc comments — so nothing else in this suite
+// reaches them, and they went untested when the streaming id was threaded
+// through Reply.
+
+func TestPostWritesTheMessageWithoutDispatchingATurn(t *testing.T) {
+	h := newHarness(t)
+	c := h.create(t, chat.CreateInput{Title: "A routine's own run"})
+
+	msg, err := h.svc.Post(userCtx(), c.ID, "what changed today?")
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+	if msg.Role != chat.RoleUser || len(msg.Parts) != 1 || msg.Parts[0].Text != "what changed today?" {
+		t.Fatalf("message = %+v", msg)
+	}
+	// The whole reason this exists rather than Send: the caller is about to
+	// run the turn itself, and dispatching here would run it twice.
+	if len(h.dispatcher.turns) != 0 {
+		t.Fatalf("Post dispatched a turn: %+v", h.dispatcher.turns)
+	}
+
+	stored, err := h.svc.Get(userCtx(), chat.GetInput{Chat: c.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored.Messages) != 1 || stored.Messages[0].ID != msg.ID {
+		t.Fatalf("messages = %+v", stored.Messages)
+	}
+}
+
+func TestReplyRecordsTheAttemptOnTheMessageThatAskedForIt(t *testing.T) {
+	h := newHarness(t)
+	c := h.create(t, chat.CreateInput{Title: "A question"})
+	asked, err := h.svc.Post(userCtx(), c.ID, "why is it slow?")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := h.svc.Reply(userCtx(), chat.ReplyInput{
+		Chat:    c.ID,
+		ReplyTo: asked.ID,
+		AgentID: "atlas",
+		Parts:   []chat.Part{{Type: chat.PartText, Text: "the index is cold"}},
+		Usage:   chat.TokenUsage{Input: 12, Output: 34, Total: 46},
+	})
+	if err != nil {
+		t.Fatalf("Reply: %v", err)
+	}
+	if out.Run.Status != chat.StatusCompleted || out.Run.AgentID != "atlas" {
+		t.Fatalf("run = %+v", out.Run)
+	}
+	if out.Run.CompletedAt == nil || out.Run.StartedAt.IsZero() {
+		t.Fatalf("an attempt with no span: %+v", out.Run)
+	}
+
+	stored, err := h.svc.Get(userCtx(), chat.GetInput{Chat: c.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored.Messages) != 2 || stored.Messages[1].Role != chat.RoleAssistant {
+		t.Fatalf("messages = %+v", stored.Messages)
+	}
+	// The attempt belongs to the question, not to the answer: that is the
+	// granularity at which somebody asks why a particular reply was expensive.
+	if len(stored.Messages[0].Runs) != 1 || stored.Messages[0].Runs[0].Usage.Total != 46 {
+		t.Fatalf("the run was not recorded on the question: %+v", stored.Messages[0])
+	}
+	if len(stored.Messages[1].Runs) != 0 {
+		t.Fatalf("the run was recorded on the answer too: %+v", stored.Messages[1])
+	}
+}
+
+// A streaming turn announces the id of the answer it is writing before it
+// finishes writing it. Storing the finished answer under a fresh id leaves the
+// in-progress copy on screen forever, beside its own completed twin.
+func TestReplyStoresTheAnswerUnderTheIdTheTurnAlreadyAnnounced(t *testing.T) {
+	h := newHarness(t)
+	c := h.create(t, chat.CreateInput{Title: "A streamed answer"})
+	asked, err := h.svc.Post(userCtx(), c.ID, "explain it")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := h.svc.Reply(userCtx(), chat.ReplyInput{
+		Chat:      c.ID,
+		ReplyTo:   asked.ID,
+		AgentID:   "atlas",
+		MessageID: "announced-while-streaming",
+		Parts:     []chat.Part{{Type: chat.PartText, Text: "here it is"}},
+	})
+	if err != nil {
+		t.Fatalf("Reply: %v", err)
+	}
+	if out.Message == nil || out.Message.ID != "announced-while-streaming" {
+		t.Fatalf("the announced id was not kept: %+v", out.Message)
+	}
+}
+
+func TestAFailedTurnIsRecordedAsAnAttemptThatFailed(t *testing.T) {
+	h := newHarness(t)
+	c := h.create(t, chat.CreateInput{Title: "A turn that could not answer"})
+	asked, err := h.svc.Post(userCtx(), c.ID, "do the thing")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := h.svc.Reply(userCtx(), chat.ReplyInput{
+		Chat:    c.ID,
+		ReplyTo: asked.ID,
+		AgentID: "atlas",
+		Failure: &chat.RunError{Code: "AOS_AGENT_PROVIDER_FAILED", Message: "the provider answered 401"},
+	})
+	if err != nil {
+		t.Fatalf("Reply: %v", err)
+	}
+	if out.Run.Status != chat.StatusError || out.Run.Error == nil {
+		t.Fatalf("run = %+v", out.Run)
+	}
+	// A turn that failed silently is a conversation where somebody is still
+	// waiting: the attempt has to be on the record even though there is no
+	// message to show for it.
+	if out.Message != nil {
+		t.Fatalf("a failed turn stored an answer: %+v", out.Message)
+	}
+	stored, err := h.svc.Get(userCtx(), chat.GetInput{Chat: c.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored.Messages) != 1 {
+		t.Fatalf("messages = %+v", stored.Messages)
+	}
+	if len(stored.Messages[0].Runs) != 1 || stored.Messages[0].Runs[0].Error.Code != "AOS_AGENT_PROVIDER_FAILED" {
+		t.Fatalf("the failure was not recorded: %+v", stored.Messages[0].Runs)
+	}
+}

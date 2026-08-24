@@ -69,6 +69,44 @@ func (c *Client) PostJSON(ctx context.Context, path string, body, out any) error
 	return nil
 }
 
+// GetJSON reads a resource and decodes the answer.
+//
+// The one call shape that is not a POST. Every provider publishes its
+// catalogue on a plain GET, and routing that through post with a nil body
+// would send `null` as a payload to an endpoint that takes none.
+func (c *Client) GetJSON(ctx context.Context, path string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+path, nil)
+	if err != nil {
+		return errTransport(c.Provider, err)
+	}
+	req.Header.Set("Accept", "application/json")
+	for k, v := range c.Headers {
+		req.Header.Set(k, v)
+	}
+	if c.Auth != nil {
+		if err := c.Auth(ctx, req); err != nil {
+			return err
+		}
+	}
+	res, err := c.HTTP.Do(req)
+	if err != nil {
+		return errTransport(c.Provider, err)
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	raw, err := io.ReadAll(res.Body)
+	if err != nil {
+		return errTransport(c.Provider, err)
+	}
+	if res.StatusCode >= 300 {
+		return errStatus(c.Provider, res.StatusCode, raw)
+	}
+	if err := json.Unmarshal(raw, out); err != nil {
+		return errUnreadable(c.Provider, err, raw)
+	}
+	return nil
+}
+
 // PostSSE sends a request and returns a reader over the event stream.
 func (c *Client) PostSSE(ctx context.Context, path string, body any) (*EventReader, error) {
 	res, err := c.post(ctx, path, body, true)

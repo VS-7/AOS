@@ -34,6 +34,7 @@ import (
 	"github.com/OWNER/aos/internal/domain/instruction"
 	"github.com/OWNER/aos/internal/domain/job"
 	"github.com/OWNER/aos/internal/domain/memory"
+	"github.com/OWNER/aos/internal/domain/model"
 	"github.com/OWNER/aos/internal/domain/project"
 	"github.com/OWNER/aos/internal/domain/routine"
 	"github.com/OWNER/aos/internal/domain/skill"
@@ -488,6 +489,14 @@ var scenarios = map[string]scenario{
 
 	"themes_list": {
 		Payload: theme.ListInput{Reasoning: reason()},
+	},
+
+	// A parity installation has no provider connected, so this asks nobody
+	// and reaches no network — which is exactly the case worth checking on
+	// every surface. "Nothing is connected" has to be an empty answer, not an
+	// error and not a surface answering it differently from the next.
+	"models_list": {
+		Payload: model.ListInput{Reasoning: reason()},
 	},
 	"themes_get": {
 		Payload: theme.GetInput{ID: "nord", Reasoning: reason()},

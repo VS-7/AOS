@@ -626,7 +626,7 @@ func (r *Runner) recordFailure(ctx context.Context, in chat.Turn, agentID string
 // provider's own words.
 func deepestMessage(from error) string {
 	out := ""
-	for err := error(from); err != nil; {
+	for err := from; err != nil; {
 		var app *apperr.Error
 		if !errors.As(err, &app) {
 			break

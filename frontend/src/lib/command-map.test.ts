@@ -64,23 +64,25 @@ describe("COMMAND_MAP", () => {
     // task-10 lit `collection` (and `view`/`skill`/`toolset` with it); the
     // Phase 8 domain pass lit `artifact`/`goal`/`instruction`/`marketplace`/
     // `project`/`template`/`tunnel` alongside it — see each one's own
-    // comment above. `model` is still whole-domain dormant (only the
-    // pricing table is missing on the Go side, not the domain itself, but
-    // no command group exists yet either way), so it takes over this
-    // assertion's job.
-    expect("model.list" in COMMAND_MAP).toBe(true);
-    expect(COMMAND_MAP["model.list"]).toBeNull();
+    // comment above. `model.list` has since been lit too (the `models`
+    // group discovers a provider's catalogue by asking it), so the
+    // assertion moved to `model.set`, which stays dormant because
+    // connecting a provider is `config.update` here rather than a command
+    // of its own.
+    expect("model.set" in COMMAND_MAP).toBe(true);
+    expect(COMMAND_MAP["model.set"]).toBeNull();
   });
 
-  it("recognizes the 3 domains without a Go backend", () => {
+  it("recognizes the 2 domains without a Go backend", () => {
     // task-10 moved collection/view/toolset/skill out (14 -> 10); the
     // Phase 8 domain pass moved artifact/goal/instruction/marketplace/
-    // project/template/tunnel out in turn (10 -> 3) — every path they had
-    // is now a real mapping or an individually `null` one, not whole-domain
-    // dormancy. `model`, `token` and `user` remain: no command group exists
-    // for any of the three yet.
-    expect(DORMANT_DOMAINS.size).toBe(3);
-    expect(isDormant("model")).toBe(true);
+    // project/template/tunnel out in turn (10 -> 3), and the `models`
+    // group moved `model` out after it (3 -> 2) — every path they had is
+    // now a real mapping or an individually `null` one, not whole-domain
+    // dormancy. `token` and `user` remain: no command group exists for
+    // either yet.
+    expect(DORMANT_DOMAINS.size).toBe(2);
+    expect(isDormant("model")).toBe(false);
     expect(isDormant("goal")).toBe(false);
     expect(isDormant("collection")).toBe(false);
     expect(isDormant("task")).toBe(false);

@@ -9,6 +9,7 @@ import {
   PlusSignIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 
 import {
@@ -24,12 +25,34 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { ModelProvider } from "@/features/model/interfaces/model.interfaces";
-import { disconnectModelProvider } from "@/features/model/services/model-provider.service";
+import {
+  MODEL_DISCOVERY_KEY,
+  disconnectModelProvider,
+} from "@/features/model/services/model-provider.service";
 import { ProviderUpsertDialog } from "./provider-upsert-dialog";
 import { useProviderLogo } from "../hooks/use-provider-logo";
 
 function isSubscriptionAuth(provider: ModelProvider) {
   return provider.auth.mode !== "api-key";
+}
+
+/**
+ * What this connected provider is actually serving.
+ *
+ * The row used to say only how the provider authenticates, which is the one
+ * thing about it that never changes. What a person needs to see here is
+ * whether asking it worked: a count means the credential is good and the
+ * catalogue is this account's, and the failure means the models listed in the
+ * pickers are the static fallback rather than anything this provider said.
+ * Without that line the two are indistinguishable, which is how a provider
+ * that has been quietly refusing for a week goes unnoticed.
+ */
+function catalogueLabel(provider: ModelProvider): string {
+  const auth = isSubscriptionAuth(provider) ? "Subscription" : "API Key";
+  if (provider.modelsError) return `${auth} · could not read its models`;
+  if (!provider.modelsDiscovered) return auth;
+  const count = provider.models.length;
+  return `${auth} · ${count} ${count === 1 ? "model" : "models"}`;
 }
 
 function ProviderLogo({ className, provider }: { className?: string, provider: ModelProvider }) {
@@ -51,6 +74,7 @@ interface ProvidersSectionProps {
 
 export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [connectOpen, setConnectOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<ModelProvider | null>(null);
 
@@ -63,6 +87,9 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
   const handleDisconnect = async (provider: ModelProvider) => {
     try {
       await disconnectModelProvider(provider.id);
+      // Same reason as connecting: the credential this catalogue was read
+      // with is gone, so the catalogue is no longer this account's.
+      await queryClient.invalidateQueries({ queryKey: MODEL_DISCOVERY_KEY });
       toast.success(`${provider.name} disconnected.`);
       onRefresh?.();
       router.invalidate();
@@ -90,8 +117,17 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
           <ProviderLogo provider={provider} />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium leading-tight">{provider.name}</p>
-            <p className="text-xs text-muted-foreground leading-tight">
-              {isSubscriptionAuth(provider) ? "Subscription" : "API Key"}
+            <p
+              className={cn(
+                "text-xs leading-tight",
+                provider.modelsError ? "text-destructive" : "text-muted-foreground",
+              )}
+              // The provider's own words, for whoever needs to act on them —
+              // an expired key and a network that is down read identically
+              // until you can see which one it was.
+              title={provider.modelsError}
+            >
+              {catalogueLabel(provider)}
             </p>
           </div>
           <div className="flex items-center gap-2">

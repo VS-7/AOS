@@ -75,6 +75,7 @@ func newCodex(cfg providers.Config) *Provider {
 		}
 		return nil
 	}
+	p.codex = true
 	return p
 }
 
@@ -82,6 +83,12 @@ func newCodex(cfg providers.Config) *Provider {
 type Provider struct {
 	name   string
 	client *providers.Client
+
+	// codex marks the ChatGPT-subscription variant. The two speak the same
+	// Responses protocol but publish their catalogues on different endpoints
+	// in different shapes, which is the one place the distinction matters
+	// after construction.
+	codex bool
 }
 
 // New builds it. tokens, when given, replaces the API key with a token read

@@ -157,11 +157,11 @@ describe("call", () => {
     // stand-in dormant domain until task-10 lit it (along with `view`,
     // `toolset` and `skill`); `instruction` took over after that, until the
     // Phase 8 domain pass lit it too (along with `artifact`, `goal`,
-    // `marketplace`, `project`, `template` and `tunnel`). `model` is still
-    // whole-domain dormant — it is the same domain this file's `useQuery`
-    // comment already names — so it inherits the job of proving the
-    // short-circuit is real.
-    const r = await call("model", "list");
+    // `marketplace`, `project`, `template` and `tunnel`); `model` took over
+    // next, until the `models` group lit `model.list`. `user` is one of the
+    // two domains left with no Go command group at all, which is what makes
+    // it a durable stand-in rather than the next one to move.
+    const r = await call("user", "list");
     expect(invoke).not.toHaveBeenCalled();
     expect(r.data).toBeUndefined();
     expect(r.error?.code).toBe(DORMANT_CODE);
@@ -279,10 +279,11 @@ describe("useQuery's queryFn", () => {
 
   it("resolves a dormant call to null data, not undefined", async () => {
     const { wrapper } = withQueryClient();
-    // `model`, not `collection` or `instruction`: task-10 lit `collection`,
-    // and the Phase 8 domain pass lit `instruction`, so neither exercises
-    // the dormant branch this test exists for any more.
-    const { result } = renderHook(() => api.model!.list!.useQuery(), { wrapper });
+    // `user`, not `collection`/`instruction`/`model`: task-10 lit
+    // `collection`, the Phase 8 domain pass lit `instruction`, and the
+    // `models` group lit `model.list` — none of the three exercises the
+    // dormant branch this test exists for any more.
+    const { result } = renderHook(() => api.user!.list!.useQuery(), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -357,15 +358,16 @@ describe("useQuery's onSuccess shim", () => {
     // it does not special-case dormant. A dormant screen's `onSuccess`, if
     // it has one, does get called once with `null`.
     //
-    // `model`, not `collection` or `instruction`: task-10 lit `collection`,
-    // and the Phase 8 domain pass lit `instruction`. Either kept passing
-    // after its own move — a live call with no `invoke` mock also resolves
-    // to `null` — so it would silently stop being about dormancy at all.
-    // The `invoke` assertion below is what makes the next such move fail
-    // loudly instead of drifting.
+    // `user`, not `collection`/`instruction`/`model`: task-10 lit
+    // `collection`, the Phase 8 domain pass lit `instruction`, and the
+    // `models` group lit `model.list`. Each kept passing after its own move
+    // — a live call with no `invoke` mock also resolves to `null` — so it
+    // would silently stop being about dormancy at all. The `invoke`
+    // assertion below is what made this one fail loudly instead of
+    // drifting, which is exactly what it did when `model.list` was lit.
     const onSuccess = vi.fn();
     const { wrapper } = withQueryClient();
-    const { result } = renderHook(() => api.model!.list!.useQuery({ onSuccess }), { wrapper });
+    const { result } = renderHook(() => api.user!.list!.useQuery({ onSuccess }), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));

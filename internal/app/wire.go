@@ -64,6 +64,7 @@ import (
 	"github.com/OWNER/aos/internal/domain/job"
 	"github.com/OWNER/aos/internal/domain/marketplace"
 	"github.com/OWNER/aos/internal/domain/memory"
+	"github.com/OWNER/aos/internal/domain/model"
 	"github.com/OWNER/aos/internal/domain/project"
 	"github.com/OWNER/aos/internal/domain/routine"
 	"github.com/OWNER/aos/internal/domain/skill"
@@ -657,6 +658,12 @@ func New(opts Options) (*App, error) {
 	routine.Register(reg, routineSvc)
 	activity.Register(reg, activitySvc)
 	theme.Register(reg, themeSvc)
+	// The catalogue question — what can this installation actually reach —
+	// answered by asking the providers rather than by a list in the build.
+	model.Register(reg, model.NewService(model.Deps{
+		Catalog: newModelCatalog(configSvc, filepath.Dir(paths.Root), clock),
+		Log:     logger,
+	}))
 	collection.Register(reg, collectionSvc)
 	view.Register(reg, viewSvc)
 	toolset.Register(reg, toolsetSvc)

@@ -51,6 +51,19 @@ export interface ModelProvider {
   default: boolean;
   auth: ModelProviderAuth;
   models: ModelProviderOption[]
+  /**
+   * Whether `models` is what the provider itself answered, or the static
+   * fallback in `data/provider-catalog.ts`.
+   *
+   * Not decoration: the difference is between a list that is true right now
+   * and one that was true when somebody typed it. A screen that shows both
+   * identically gives a person no way to tell that the provider was never
+   * actually reached — the exact silence this project has already paid for
+   * once, in the chat.
+   */
+  modelsDiscovered?: boolean;
+  /** Why the provider could not be asked, when asking failed. */
+  modelsError?: string;
 }
 
 export interface ModelProviderAuth {

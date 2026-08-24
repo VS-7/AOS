@@ -646,7 +646,20 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // `memory.graph`'s own comment above describes.
   "collection.listRecords": "collections_records-list",
   "collection.updateRecord": { key: "collections_records-update", renameIn: { record: "id" } },
-  "model.list": null,
+  // `model.list` is lit: `internal/domain/model/commands.go` registers
+  // `models_list`, which asks each connected provider what it serves
+  // instead of answering from a list inside the build. Go's `ListOutput`
+  // is `{providers: [{id, models, error}], total}` — a shape the original
+  // never had, because the original's `models()` was per-adapter and
+  // mostly hardcoded (`_extracted/v401/.../adapters/*.adapter.ts`: only
+  // OpenRouter actually fetched). No `wrapOut`/`mapOut`: the one consumer
+  // (`model-provider.service.ts`) reads `.providers` directly and merges
+  // it onto the static catalog, which still owns what a provider *is*
+  // (name, description, auth mode) — none of which any provider publishes.
+  "model.list": "models_list",
+  // Still dormant: connecting a provider and choosing its models is
+  // `config.update` on `agents.providers`/`agents.models` here, not a
+  // command of its own. `model-provider.service.ts` is that seam.
   "model.set": null,
   // task-10: the `skill` domain is lit — `internal/domain/skill/
   // commands.go` registers list/install/create/update/delete.
@@ -878,7 +891,7 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
 
 /** The domains the Go backend does not have yet, whole. */
 export const DORMANT_DOMAINS: ReadonlySet<string> = new Set([
-  "model", "token", "user",
+  "token", "user",
 ]);
 
 /** Whether the whole domain is dormant — what the route shows as a panel. */
