@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { QueryClient } from "@tanstack/react-query";
-import { getWorkspace } from "./client";
+import { Events } from "@wailsio/runtime";
+import { getWorkspace, system } from "./client";
 
 /** One event from the daemon's realtime channel. */
 export interface RealtimeEvent {
@@ -54,6 +55,60 @@ function backoffFor(attempt: number): number {
 }
 
 /**
+ * The origin to open the event channel against.
+ *
+ * Same-origin is right in a browser, where the daemon serves the bundle
+ * itself. It is wrong in the desktop window, where the page comes from the
+ * application binary's own embedded assets: `window.location.host` there is
+ * the asset host, which serves no `/ws`, so the socket connected to nothing
+ * and every live update in the application silently never arrived. The
+ * daemon's real address is known to the Go side and asked for here.
+ *
+ * Resolved once and remembered — it cannot change while the window is open,
+ * and a reconnect should not pay for the bridge call again.
+ */
+let daemonOrigin: string | null = null;
+
+/**
+ * Read at module load, before anything can navigate.
+ *
+ * The window states the daemon's address in its own URL, and the router
+ * rewrites that URL on the first navigation — which happens well before the
+ * socket is ready to open, since it waits for a workspace first. Reading it
+ * lazily meant reading it after it was already gone.
+ */
+const declaredDaemon =
+  typeof window === "undefined"
+    ? null
+    : new URLSearchParams(window.location.search).get("daemon");
+
+async function originForSocket(): Promise<string> {
+  if (daemonOrigin !== null) return daemonOrigin;
+
+  // What the window declared (`cmd/aos-desktop`'s
+  // WebviewWindowOptions.URL) — see declaredDaemon above.
+  if (declaredDaemon) {
+    daemonOrigin = declaredDaemon.replace(/\/+$/, "");
+    return daemonOrigin;
+  }
+
+  // Failing that, ask the bridge.
+  try {
+    const address = await system.daemonAddress();
+    if (address) {
+      daemonOrigin = address.replace(/\/+$/, "");
+      return daemonOrigin;
+    }
+  } catch {
+    // No Wails host — a browser tab, where the page's own origin is the
+    // daemon and the answer below is right.
+  }
+
+  daemonOrigin = window.location.origin;
+  return daemonOrigin;
+}
+
+/**
  * Keeps one connection to the workspace channel and pushes what arrives into
  * the query cache.
  *
@@ -71,9 +126,34 @@ export function useRealtime(queryClient: QueryClient): ConnectionState {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let closed = false;
 
+    // Inside the desktop window the channel arrives over the Wails bridge,
+    // relayed by the application process (`cmd/aos-desktop`'s
+    // forwardRealtime). A WebView will not let a page served from the
+    // application's own `wails://` scheme open a ws:// socket to the daemon
+    // — the browser refuses it locally, so nothing reaches the daemon to
+    // even be refused there. Every live update in the desktop was lost to
+    // that, silently.
+    if (declaredDaemon) {
+      const off = Events.On("aos:realtime", (event: { data?: unknown }) => {
+        const payload = event?.data as RealtimeEvent | RealtimeEvent[] | undefined;
+        // Wails delivers a single emitted value as a one-element array in
+        // some versions and bare in others; accept both rather than depend
+        // on which.
+        const one = Array.isArray(payload) ? payload[0] : payload;
+        if (one && typeof one === "object" && "type" in one) {
+          deliver(queryClient, one as RealtimeEvent);
+        }
+      });
+      setState("open");
+      return () => {
+        closed = true;
+        setState("closed");
+        off();
+      };
+    }
+
     const connect = () => {
       if (closed) return;
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const workspace = getWorkspace();
 
       // The daemon refuses a socket that names no workspace — it has no
@@ -89,7 +169,23 @@ export function useRealtime(queryClient: QueryClient): ConnectionState {
         return;
       }
 
-      const url = `${protocol}//${window.location.host}/ws?workspace=${encodeURIComponent(workspace)}`;
+      void openAt(workspace);
+    };
+
+    const openAt = async (workspace: string) => {
+      const origin = await originForSocket();
+      if (closed) return;
+      if (!/^https?:/.test(origin)) {
+        // Nothing named a reachable daemon, and this page's own origin is
+        // not one either (the desktop's `wails://` scheme). Opening a
+        // socket at it throws; saying so beats a silent dead channel.
+        console.error(
+          `[realtime] no daemon address to open the event channel against (origin ${origin}) — live updates are off`,
+        );
+        setState("closed");
+        return;
+      }
+      const url = `${origin.replace(/^http/, "ws")}/ws?workspace=${encodeURIComponent(workspace)}`;
 
       const ws = new WebSocket(url);
       socket.current = ws;

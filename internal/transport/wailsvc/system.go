@@ -51,6 +51,13 @@ type Health interface {
 	Ready(ctx context.Context) (bool, error)
 }
 
+// Addressable knows where the daemon is. Health is usually the same object;
+// this is a second, narrower port so a caller that only wants the address
+// does not have to supply a health check.
+type Addressable interface {
+	BaseURL() string
+}
+
 // SystemService is the equivalent of the original's IPC surface.
 //
 // Every exported method becomes a TypeScript function in the generated
@@ -58,6 +65,7 @@ type Health interface {
 type SystemService struct {
 	platform Platform
 	health   Health
+	address  Addressable
 
 	// root is the workspace the window is looking at. Paths handed to the
 	// operating system are resolved inside it, because a renderer that could
@@ -68,11 +76,34 @@ type SystemService struct {
 
 // NewSystem builds the system service.
 func NewSystem(platform Platform, health Health, root string) *SystemService {
-	return &SystemService{platform: platform, health: health, root: filepath.Clean(root)}
+	svc := &SystemService{platform: platform, health: health, root: filepath.Clean(root)}
+	// The health port is the daemon client in every real wiring, and it is
+	// the thing that knows the address. Asked for rather than required, so a
+	// test can pass a bare health check.
+	if addr, ok := health.(Addressable); ok {
+		svc.address = addr
+	}
+	return svc
 }
 
 // ServiceName is what Wails calls this service in the generated bindings.
 func (s *SystemService) ServiceName() string { return "SystemService" }
+
+// DaemonAddress reports where the daemon is, as an http(s) origin.
+//
+// The window needs this to open the realtime channel. Everything else it
+// asks for goes through the Wails bridge, which needs no address — but the
+// event channel is a WebSocket the webview opens itself, and a URL built
+// from window.location there points at whatever is serving the interface,
+// which is the application binary, not the daemon. Empty when this build
+// has no daemon client, which is the browser case: there the page really is
+// served by the daemon, and a same-origin URL is correct.
+func (s *SystemService) DaemonAddress(context.Context) (string, error) {
+	if s.address == nil {
+		return "", nil
+	}
+	return s.address.BaseURL(), nil
+}
 
 // Ping reports whether the daemon is answering, which is what the splash
 // window waits on.

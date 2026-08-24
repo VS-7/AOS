@@ -13,9 +13,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -97,6 +99,28 @@ func main() {
 		Port:    port,
 	})
 
+	// The window's event channel, relayed by this process — see
+	// forwardRealtime for why the window cannot open it itself.
+	realtimeCtx, stopRealtime := context.WithCancel(context.Background())
+	defer stopRealtime()
+	// Assigned once the window exists, below, and before anything that could
+	// call it is started — the `go ensureDaemon` below and AuthService's
+	// afterAuth both happen after.
+	var emitRealtime func(event any)
+	var realtimeOnce sync.Once
+	startRealtime := func(workspaceID string) {
+		if workspaceID == "" {
+			return
+		}
+		realtimeOnce.Do(func() {
+			go forwardRealtime(realtimeCtx, address, workspaceID, func(event any) {
+				if emitRealtime != nil {
+					emitRealtime(event)
+				}
+			}, log)
+		})
+	}
+
 	platform := &wailsPlatform{}
 	desktop := application.New(application.Options{
 		Name:        build.DisplayName,
@@ -110,6 +134,7 @@ func main() {
 				// registration needed a token it didn't have until now.
 				if id, err := introspectWorkspace(ctx, daemon, root); err == nil {
 					daemon.SetWorkspace(id)
+					startRealtime(id)
 				} else {
 					log.Warn("could not register or find the workspace for this directory", "path", root, "err", err)
 				}
@@ -122,7 +147,21 @@ func main() {
 	})
 
 	window := desktop.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:     build.DisplayName,
+		Title: build.DisplayName,
+
+		// The daemon's address, handed to the interface in the one place it
+		// can read synchronously and cannot fail to reach: its own URL.
+		//
+		// Everything else the window asks for goes through the Wails bridge,
+		// which needs no address. The realtime channel is the exception — it
+		// is a WebSocket the webview opens itself, and in this window
+		// `window.location` is `wails://localhost`, the application's own
+		// asset scheme. A socket URL derived from it names something that
+		// serves no `/ws` and is not even a valid WebSocket scheme, which is
+		// why the desktop had no live updates at all: not a failing
+		// connection, no connection.
+		URL: "/?daemon=" + url.QueryEscape(address),
+
 		Width:     1440,
 		Height:    900,
 		MinWidth:  960,
@@ -141,6 +180,7 @@ func main() {
 		},
 	})
 	platform.window = window
+	emitRealtime = func(event any) { window.EmitEvent(RealtimeEventName, event) }
 
 	// The deep link: aos://task/123 reaches the window rather than starting a
 	// second copy of the application. macOS delivers a registered scheme as the
@@ -155,7 +195,7 @@ func main() {
 
 	// The daemon is asked to be running, not started blindly. Two things
 	// supervising one process is how you end up with two of it.
-	go ensureDaemon(supervisor, daemon, root, log)
+	go ensureDaemon(supervisor, daemon, root, startRealtime, log)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -182,7 +222,7 @@ func main() {
 // A failure here does not stop the window from opening: an interface that says
 // it cannot reach the daemon is more useful than an application that refuses to
 // start and does not say why.
-func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, root string, log *slog.Logger) {
+func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, root string, startRealtime func(string), log *slog.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -202,6 +242,7 @@ func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, root
 		log.Warn("could not register or find the workspace for this directory yet", "path", root, "err", err)
 	} else {
 		client.SetWorkspace(id)
+		startRealtime(id)
 	}
 }
 

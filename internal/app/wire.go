@@ -10,6 +10,7 @@ package app
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -690,7 +691,7 @@ func New(opts Options) (*App, error) {
 		Approver:      broker,
 		Prompt:        assembler,
 		Spiller:       toolexec.NewSpiller(paths.Outputs(), logger),
-		Events:        publisher{hub: events, channel: soleWorkspace(workspaceSvc)},
+		Events:        publisher{hub: events, channel: workspaceForEvents(workspaceSvc, root, logger)},
 		Bots:          botRegistry,
 		Clock:         clock,
 		IDs:           idgen,
@@ -900,17 +901,22 @@ type repoSet struct {
 	templates    *fscollections.Repo[template.Template]
 }
 
-// soleWorkspace resolves the channel a turn publishes on when nothing pinned
-// one — see publisher.channelFor for why that is the normal case.
+// workspaceForEvents resolves the channel a turn publishes on when nothing
+// pinned one — see publisher.channelFor for why that is the normal case.
 //
-// It answers only when the installation has exactly one workspace, which is
-// the same condition workspace.Service.AuthorizeWorkspace already treats as
-// unambiguous. With two or more there is no safe guess, and guessing wrong
-// would broadcast one workspace's conversation into another's channel.
+// It matches on the directory this daemon was started against, which is the
+// same thing `workspace_introspect` registers and therefore the workspace
+// this process is actually serving. An installation accumulates workspaces —
+// any directory ever introspected leaves one behind — so "the only one
+// registered" is not a safe reading of "the one we mean": it is right until
+// the second one appears, and then it silently resolves to nothing and every
+// live update stops. Falling back to a lone workspace is still useful for the
+// moment before this daemon's own has been registered.
 //
-// The answer is cached once found: a workspace is registered once, and the
-// alternative is a store read on every streamed chunk.
-func soleWorkspace(svc *workspace.Service) func(context.Context, string) string {
+// The answer is cached once found: a workspace's path does not move under a
+// running daemon, and the alternative is a store read on every streamed chunk.
+func workspaceForEvents(svc *workspace.Service, root string, log *slog.Logger) func(context.Context, string) string {
+	want := filepath.Clean(root)
 	var (
 		mu     sync.Mutex
 		cached string
@@ -922,11 +928,25 @@ func soleWorkspace(svc *workspace.Service) func(context.Context, string) string 
 			return cached
 		}
 		out, err := svc.List(ctx, workspace.ListInput{})
-		if err != nil || len(out.Workspaces) != 1 {
+		if err != nil {
 			return ""
 		}
-		cached = out.Workspaces[0].ID
-		return cached
+		for _, w := range out.Workspaces {
+			if filepath.Clean(w.Path) == want {
+				cached = w.ID
+				return cached
+			}
+		}
+		if len(out.Workspaces) == 1 {
+			cached = out.Workspaces[0].ID
+			return cached
+		}
+		// Nothing to publish against yet. Said once rather than per chunk:
+		// silence here is what "the interface never updates" looks like from
+		// the inside.
+		log.Warn("no workspace matches this daemon's directory; live updates have no channel",
+			"path", want, "registered", len(out.Workspaces))
+		return ""
 	}
 }
 

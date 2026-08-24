@@ -103,7 +103,7 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 		Realtime: realtime.Upgrade(realtime.Config{
 			Hub:     a.Events,
 			Auth:    a.Workspaces,
-			Origins: origins,
+			Origins: append(desktopOrigins(), origins...),
 			Log:     log,
 		}),
 		// The same tool surface ServeStdio gives `aos --mcp`, reachable over
@@ -220,6 +220,29 @@ func guardExposure(host string, c config.Config) error {
 		return nil
 	}
 	return errExposedWithoutAuth(host)
+}
+
+// desktopOrigins is where the application's own window loads its interface
+// from, which the event channel has to accept or the desktop has no live
+// updates at all.
+//
+// Without them the socket was refused with a bare 403 and nothing in this
+// daemon's log said why: the refusal is written by the WebSocket library
+// itself, before the handler runs. An empty allowlist means the library
+// requires same-origin, and the window is never same-origin — the page is
+// served out of the application binary, not by this daemon.
+//
+// Scheme-qualified on purpose. `coder/websocket` matches a pattern
+// containing "://" against scheme *and* host, so these admit the webview
+// and nothing else; a bare "localhost" would hand the workspace's event
+// stream to any page served on any localhost port.
+func desktopOrigins() []string {
+	return []string{
+		// macOS and Linux serve the window over a custom scheme.
+		"wails://localhost",
+		// Windows uses a virtual host instead.
+		"http://wails.localhost",
+	}
 }
 
 // allowedOrigins is the CORS allowlist. The desktop app's development server is

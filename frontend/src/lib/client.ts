@@ -183,6 +183,19 @@ const desktop: Client = {
  * will never have one) doesn't also pay for.
  */
 export const system = {
+  /**
+   * Where the daemon is, as an http(s) origin — empty outside the desktop.
+   *
+   * The realtime channel is the one connection the webview opens itself
+   * rather than routing through the bridge, so it needs a real address:
+   * inside the desktop window the page is served by the application, and a
+   * URL built from window.location reaches the asset host, never the
+   * daemon.
+   */
+  async daemonAddress(): Promise<string> {
+    return (await Call.ByName(`${WAILSVC_PKG}.SystemService.DaemonAddress`)) as string;
+  },
+
   async setAppearance(appearance: string, windows: string): Promise<void> {
     await Call.ByName(`${WAILSVC_PKG}.SystemService.SetAppearance`, appearance, windows);
   },

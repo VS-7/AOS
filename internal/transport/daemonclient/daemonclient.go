@@ -62,6 +62,13 @@ func New(opts Options) *Client {
 	return c
 }
 
+// BaseURL is where this client reaches the daemon. The window needs it to
+// open the event channel: that connection is a plain WebSocket the webview
+// makes itself, not a call through the Wails bridge, so it cannot be
+// relative to the page — the page is served by the application, not by the
+// daemon.
+func (c *Client) BaseURL() string { return c.base }
+
 // SetToken replaces the token later calls authenticate with.
 //
 // It exists because the desktop constructs this client before the daemon it
