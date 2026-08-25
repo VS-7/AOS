@@ -5,12 +5,26 @@ on:
     branches: [main]
   pull_request:
 
-env:
-  CGO_ENABLED: "0"
+permissions:
+  contents: read
 
 jobs:
   gates:
-    runs-on: ubuntu-latest
+    # Pinned rather than ubuntu-latest because this job apt-installs the Wails
+    # GUI stack, and those package names have moved across Ubuntu releases
+    # (webkit2gtk-4.1 -> webkitgtk-6.0). A silent runner bump should not be
+    # able to turn the gates red on its own.
+    runs-on: ubuntu-24.04
+    env:
+      # The race detector needs cgo — `go test -race` with CGO_ENABLED=0 stops
+      # at `go: -race requires cgo`, which is what the workflow-wide "0" this
+      # replaces would have produced the moment `go vet` stopped failing first.
+      #
+      # With cgo on, `go vet ./...` reaches cmd/aos-desktop for real, and on
+      # Linux that means Wails' GTK bindings. Installing them below is what
+      # makes the gates cover the desktop in the configuration that ships,
+      # rather than a headless variant nobody runs.
+      CGO_ENABLED: "1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -18,18 +32,27 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          # Read from go.mod instead of a second version to keep in sync: the
+          # pinned "1.23" here was already behind go.mod's 1.25, and every job
+          # was quietly downloading a toolchain on top of the one it installed.
+          go-version-file: go.mod
           check-latest: true
 
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
 
+      - uses: ./.github/actions/wails-linux-deps
+
       - name: go vet
         run: go vet ./...
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        # v9, not v6: the v6 line of this action only knows how to run
+        # golangci-lint v1, and .golangci.yml here is `version: "2"` pinned to
+        # v2.12.2. That pair could never have run — v7 is where v2 support
+        # starts.
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
 
@@ -45,7 +68,14 @@ jobs:
         run: go test -race -count=1 ./...
 
       - name: coverage floors
-        run: go test -count=1 -cover ./... | go run ./tools/covercheck
+        shell: bash
+        # pipefail, because the exit status of a pipeline is its last command:
+        # without it a package that fails to build reaches covercheck as
+        # missing coverage rather than as a failure, and the gate reports on
+        # the floors of a test run that never happened.
+        run: |
+          set -o pipefail
+          go test -count=1 -cover ./... | go run ./tools/covercheck
 
       - name: dependency rule
         run: go test -count=1 -run 'TestDependencyRule|TestNoDomainInClients|TestFeatureLayout|TestPortsAreSmall' ./internal/architecture/...
@@ -53,9 +83,16 @@ jobs:
       - name: specification graph
         run: node "docs/_scripts/validate-graph.mjs"
 
-  build:
+  # The two client binaries are pure Go, so one runner still cross-compiles all
+  # six targets with cgo off. aos-desktop can no longer ride along in `./cmd/...`
+  # the way it used to: Wails is cgo and a platform GUI toolkit, so with
+  # CGO_ENABLED=0 the darwin targets exclude every file in wails/v3/pkg/mac and
+  # the linux ones fail on an undefined `pointer`. It is built per platform in
+  # build-desktop instead.
+  build-cli:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - { goos: darwin, goarch: arm64 }
@@ -70,13 +107,58 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version-file: go.mod
           check-latest: true
       - name: build
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
         run: |
           go build -trimpath \
             -ldflags="-s -w -X github.com/OWNER/aos/internal/core/build.Version=$(git describe --tags --always --dirty)" \
-            -o /tmp/out/ ./cmd/...
+            -o /tmp/out/ ./cmd/aos ./cmd/aosd
+
+  # The desktop is the one binary that cannot be cross-compiled: Wails links
+  # Cocoa on macOS, WebView2 on Windows and GTK4/WebKitGTK on Linux. Each
+  # platform builds its own.
+  #
+  # This compiles the Go half only. The embed is satisfied by dist/.gitkeep,
+  # not by a real bundle — what ships comes from `task build:desktop`, which
+  # puts the vite output there first. The question this answers is whether
+  # cmd/aos-desktop still compiles against Wails on all three platforms, which
+  # nothing else in CI asks.
+  build-desktop:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Cocoa, through cgo.
+          - { os: macos-latest, cgo: "1" }
+          # WebView2, reached through go-winloader — no C toolchain involved,
+          # which is why this one target builds with cgo off.
+          - { os: windows-latest, cgo: "0" }
+          # GTK4 + WebKitGTK, through cgo. Pinned for the same reason as gates.
+          - { os: ubuntu-24.04, cgo: "1" }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - if: runner.os == 'Linux'
+        uses: ./.github/actions/wails-linux-deps
+      - name: build
+        # bash on all three runners: the Windows default shell has no mkdir -p
+        # and no $(git describe) the way this is written.
+        shell: bash
+        env:
+          CGO_ENABLED: ${{ matrix.cgo }}
+        run: |
+          mkdir -p dist
+          go build -trimpath \
+            -ldflags="-s -w -X github.com/OWNER/aos/internal/core/build.Version=$(git describe --tags --always --dirty)" \
+            -o dist/ ./cmd/aos-desktop

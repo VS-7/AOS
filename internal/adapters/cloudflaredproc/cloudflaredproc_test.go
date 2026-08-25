@@ -35,7 +35,15 @@ func TestSpawnSucceedsWhenCloudflaredReportsReady(t *testing.T) {
 sleep 5
 `)
 	r := Runner{Binary: filepath.Join(dir, "cloudflared")}
-	proc, err := r.Spawn(context.Background(), "example.com", "tok", 3*time.Second)
+	// A ceiling, not the assertion. What this test claims is that a
+	// cloudflared which reports a connection makes Spawn return a process —
+	// how many seconds the fork, the exec and the first line of stderr take
+	// is not part of that claim. Three seconds was: under `go test -race
+	// ./...` the whole tree competes for the same cores, and spawning a
+	// shell script inside that took longer than the wait, so this test failed
+	// on load rather than on behaviour. The timeout path has its own tests
+	// below, which assert it deliberately and cheaply.
+	proc, err := r.Spawn(context.Background(), "example.com", "tok", 30*time.Second)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

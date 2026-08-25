@@ -42,6 +42,14 @@ import (
 // copies frontend/dist here first. The copy is generated and ignored by Git —
 // committing a build output would put a stale interface in the history.
 //
+// What *is* versioned is dist/.gitkeep, and only because this directive is a
+// compile error when it matches nothing: an ignored, generated directory made
+// the whole module unbuildable from a clean checkout — CI, gopls and every
+// editor included, not just this command. The `all:` prefix is what makes the
+// pattern see a name that starts with a dot. When the real bundle is absent
+// the window says so on its own: Wails looks for index.html in this FS and
+// reports that it could not find one.
+//
 //go:embed all:dist
 var assets embed.FS
 

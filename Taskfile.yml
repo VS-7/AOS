@@ -190,8 +190,14 @@ tasks:
       # bundle's 54, which would put the desktop build at 199 MB — against
       # the 578 MB Electron figure ADR-0002 is argued on. The maps stay in
       # frontend/dist, where symbolication can still reach them.
-      - rm -rf cmd/aos-desktop/dist
+      #
+      # The bundle is replaced wholesale, but .gitkeep survives: it is the one
+      # versioned file in there (see its own comment — `//go:embed all:dist`
+      # is a compile error when the pattern matches nothing), and an `rm -rf`
+      # on the directory would leave every build with a deletion to explain in
+      # `git status`.
       - mkdir -p cmd/aos-desktop/dist
+      - find cmd/aos-desktop/dist -mindepth 1 ! -name .gitkeep -delete
       - cd frontend/dist && find . -type f ! -name '*.map' -exec rsync -R {} ../../cmd/aos-desktop/dist/ \;
       - CGO_ENABLED=1 go build -trimpath -ldflags="{{.LDFLAGS}}" -o dist/aos-desktop ./cmd/aos-desktop
 

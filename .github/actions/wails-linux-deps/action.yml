@@ -1,0 +1,33 @@
+name: Wails Linux dependencies
+description: >
+  Installs the C libraries Wails links against on Linux. Two jobs need the
+  same list and it must not drift between them, which is the only reason this
+  is an action and not a `run:` step repeated twice.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        # This list is not a guess: it is every `#cgo pkg-config` line that
+        # the default Linux build of wails/v3 selects — pkg/application's
+        # linux_cgo.go and global_shortcut_linux_x11.go, and its webview
+        # package's webkit/request/responsewriter/mainthread files:
+        #
+        #   gtk4  webkitgtk-6.0  libsoup-3.0  gio-unix-2.0  glib-2.0  x11
+        #
+        # The GTK3 variant behind `-tags gtk3` wants a different set. It is
+        # not what `task build:desktop` produces, so it is not what CI checks.
+        sudo apt-get update
+        sudo apt-get install --no-install-recommends --yes \
+          pkg-config \
+          libgtk-4-dev \
+          libwebkitgtk-6.0-dev \
+          libsoup-3.0-dev \
+          libglib2.0-dev \
+          libx11-dev
+        # Fail here, with the missing name, rather than three minutes later
+        # inside a cgo error nobody reads.
+        pkg-config --exists --print-errors \
+          gtk4 webkitgtk-6.0 libsoup-3.0 gio-unix-2.0 glib-2.0 x11

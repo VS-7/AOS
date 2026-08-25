@@ -1,0 +1,15 @@
+Este diretório é o bundle da interface, copiado de frontend/dist por
+`task build:desktop`. O conteúdo é gerado e não entra no histórico — um build
+commitado poria uma interface velha no repositório.
+
+Só este arquivo é versionado, e a razão é o `//go:embed all:dist` em main.go:
+um padrão de embed que não casa com nada é erro de compilação, não aviso. Sem
+um arquivo aqui, `go build ./...` falha num clone limpo — o módulo inteiro,
+não só o desktop — e com ele o CI, o gopls e qualquer editor. O prefixo `all:`
+é o que faz o embed enxergar um nome começado em ponto.
+
+Não é `index.html` de propósito: o vite emite esse nome, sobrescreveria o
+arquivo versionado a cada build e deixaria a árvore suja para sempre. Quando o
+bundle de verdade não está aqui, o Wails já diz isso com todas as letras
+("no `index.html` could be found in your Assets fs.FS") — não há silêncio a
+cobrir.

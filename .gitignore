@@ -25,7 +25,14 @@
 # The desktop's copy of the frontend bundle. `task build:desktop` puts it there
 # because a Go embed pattern cannot reach outside its own package; committing a
 # build output would put a stale interface in the history.
-/cmd/aos-desktop/dist/
+#
+# .gitkeep is the exception, and it is versioned on purpose: `//go:embed
+# all:dist` is a compile error when the pattern matches nothing, so with an
+# empty directory here a clean checkout cannot build the module at all — not
+# just the desktop. The pattern has to be `dist/*` plus a negation rather than
+# `dist/`, because Git never looks inside a directory it has already excluded.
+/cmd/aos-desktop/dist/*
+!/cmd/aos-desktop/dist/.gitkeep
 
 # go-task's local up-to-date cache (source hashes for `sources:`/`generates:`
 # checks) — machine-local, rebuilds itself, nothing to diff.
