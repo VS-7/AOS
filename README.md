@@ -55,12 +55,23 @@ pasta** — a próxima seção explica por quê.
 
 ### Linux
 
+O caminho mais simples é o **AppImage**: um arquivo só, sem instalar nada,
+sem root.
+
+```sh
+chmod +x AOS-<versão>-linux-x86_64.AppImage
+./AOS-<versão>-linux-x86_64.AppImage
+```
+
+Ele carrega o GTK e o WebKit dentro, e é por isso que é bem maior que o
+`.tar.gz` (~100 MB contra ~35 MB). Se preferir o menor:
+
 ```sh
 tar xzf AOS-<versão>-linux-amd64.tar.gz
 cd AOS && ./aos-desktop
 ```
 
-O aplicativo usa GTK4 e WebKitGTK, que precisam estar instalados. Os nomes dos
+O `.tar.gz` conta com GTK4 e WebKitGTK já instalados na máquina. Os nomes dos
 pacotes variam por distribuição; no Debian e no Ubuntu costumam ser:
 
 ```sh
@@ -68,7 +79,7 @@ sudo apt install libgtk-4-1 libwebkitgtk-6.0-4
 ```
 
 Se o `aos-desktop` reclamar de uma biblioteca ausente, o nome dela na mensagem
-é o que você precisa procurar no gerenciador de pacotes da sua distribuição.
+é o que procurar no gerenciador de pacotes da sua distribuição.
 
 ## Como o sistema funciona
 
@@ -170,9 +181,7 @@ consequência a registrar: instalações feitas neste beta carregam essa chave, 
 quando ela for rotacionada elas não conseguirão verificar releases assinados —
 vai ser preciso reinstalar uma vez.
 
-**Plataformas.** macOS só em Apple Silicon. Windows e Linux só em x86-64. O
-AppImage do Linux ainda não sai em todo release; quando não sair, o `.tar.gz`
-é o que está lá.
+**Plataformas.** macOS só em Apple Silicon. Windows e Linux só em x86-64.
 
 ## Licença
 
