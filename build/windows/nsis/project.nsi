@@ -93,6 +93,13 @@ Section
     
     !insertmacro wails.files
 
+    # The daemon, installed beside the application. aos-desktop does not embed
+    # it (ADR-0002): it supervises a separate aosd process, and
+    # supervise.Resolver looks for one next to its own executable, which here
+    # is $INSTDIR. Without this the installer produces an application that
+    # opens and has nothing to supervise.
+    File "/oname=aosd.exe" "${ARG_AOS_DAEMON_BINARY}"
+
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 

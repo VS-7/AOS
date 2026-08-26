@@ -96,7 +96,7 @@ jobs:
   # is also the only job in the repository that builds the real interface —
   # ci.yml's build-desktop compiles the Go half against dist/.gitkeep and
   # deliberately stops there.
-  desktop:
+  desktop-macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -145,15 +145,134 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: desktop
+          name: desktop-macos
           path: release/
           retention-days: 1
+
+  desktop-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: the build stamp
+        shell: bash
+        run: |
+          {
+            echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)"
+            echo "VERSION=$(git describe --tags --always)"
+          } >> "$GITHUB_ENV"
+      - name: tools
+        shell: bash
+        run: |
+          go install github.com/go-task/task/v3/cmd/task@latest
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.8
+          choco install nsis --no-progress -y
+          echo "C:\\Program Files (x86)\\NSIS" >> "$GITHUB_PATH"
+      - name: package
+        shell: bash
+        run: task package:desktop
+      - name: what a person downloads
+        shell: bash
+        # Both: the installer for people who want Start Menu entries and an
+        # uninstall, and a zip for people who would rather not run an unsigned
+        # installer at all — which, without a code-signing certificate,
+        # SmartScreen will warn about either way.
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          installer=$(ls bin/*installer*.exe 2>/dev/null | head -1) || true
+          if [ -n "${installer:-}" ]; then
+            cp "$installer" "release/AOS-setup-${VERSION}-windows-amd64.exe"
+          else
+            echo "::error::makensis produced no installer" && exit 1
+          fi
+          mkdir -p stage/AOS
+          cp dist/aos-desktop.exe dist/aosd.exe dist/aos.exe stage/AOS/
+          (cd stage && 7z a -tzip "../release/AOS-${VERSION}-windows-amd64.zip" AOS >/dev/null)
+          ls -la release/
+      - uses: actions/upload-artifact@v4
+        with: { name: desktop-windows, path: release/, retention-days: 1 }
+
+  desktop-linux:
+    runs-on: ubuntu-24.04
+    env:
+      # linuxdeploy ships as an AppImage and an AppImage needs FUSE, which a
+      # runner does not have. Extracting instead of mounting is the documented
+      # way around that and costs only disk.
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: ./.github/actions/wails-linux-deps
+      - name: the build stamp
+        run: |
+          {
+            echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)"
+            echo "VERSION=$(git describe --tags --always)"
+          } >> "$GITHUB_ENV"
+      - name: tools
+        run: |
+          go install github.com/go-task/task/v3/cmd/task@latest
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.8
+      - name: build
+        # Only the binaries here. The AppImage is assembled in the step after,
+        # which is allowed to fail without taking the release with it.
+        run: |
+          task build:desktop
+          task build:cli
+      - name: the tarball
+        # The certain artifact: three binaries beside each other, which is all
+        # supervise.Resolver needs. It expects GTK4 and WebKitGTK to be
+        # installed on the machine — the AppImage below is what would carry
+        # them, when it works.
+        run: |
+          set -euo pipefail
+          mkdir -p release stage/AOS
+          cp dist/aos-desktop dist/aosd dist/aos stage/AOS/
+          tar -C stage -czf "release/AOS-${VERSION}-linux-amd64.tar.gz" AOS
+      - name: the AppImage
+        # continue-on-error, and deliberately visible: linuxdeploy bundling
+        # WebKitGTK is the least certain thing in this workflow, and it is not
+        # worth failing a release over when the tarball above already ships.
+        # A failure here shows as a warned step rather than as nothing.
+        continue-on-error: true
+        run: task package:desktop:linux
+      - name: collect the AppImage if there is one
+        run: |
+          set -euo pipefail
+          if [ -f build/linux/appimage/aos-desktop.AppImage ]; then
+            cp build/linux/appimage/aos-desktop.AppImage \
+               "release/AOS-${VERSION}-linux-x86_64.AppImage"
+          else
+            echo "::warning::no AppImage was produced; the release carries the tarball only"
+          fi
+          ls -la release/
+      - uses: actions/upload-artifact@v4
+        with: { name: desktop-linux, path: release/, retention-days: 1 }
 
   # One release, one checksums file. install.sh verifies whatever subset it
   # downloaded against this single file, so it has to cover every asset —
   # which means it can only be written once both builds are in.
   publish:
-    needs: [cli, desktop]
+    needs: [cli, desktop-macos, desktop-windows, desktop-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

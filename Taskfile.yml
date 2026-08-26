@@ -198,14 +198,28 @@ tasks:
       # `git status`.
       - mkdir -p cmd/aos-desktop/dist
       - find cmd/aos-desktop/dist -mindepth 1 ! -name .gitkeep -delete
-      - cd frontend/dist && find . -type f ! -name '*.map' -exec rsync -R {} ../../cmd/aos-desktop/dist/ \;
-      - CGO_ENABLED=1 go build -trimpath -ldflags="{{.LDFLAGS}}" -o dist/aos-desktop ./cmd/aos-desktop
+      #
+      # tar rather than rsync: rsync is not on a Windows runner, and this task
+      # has to produce the same bundle on all three platforms. The pipe also
+      # copies the tree in one pass instead of forking once per file, which
+      # this bundle's 1686 of them make worth caring about.
+      - cd frontend/dist && tar cf - --exclude='*.map' . | (cd ../../cmd/aos-desktop/dist && tar xf -)
+      # CGO on macOS and Linux, where Wails links Cocoa and GTK. Windows
+      # reaches WebView2 through go-winloader and needs no C toolchain, which
+      # is why it is the one platform this builds with cgo off.
+      - CGO_ENABLED={{if eq OS "windows"}}0{{else}}1{{end}} go build -trimpath -ldflags="{{.LDFLAGS}}" -o dist/aos-desktop{{if eq OS "windows"}}.exe{{end}} ./cmd/aos-desktop
 
+  # EXT is empty everywhere but Windows, where a binary without it is not one.
+  # `go build -o <name>` writes exactly <name> and appends nothing, so the
+  # extension has to be asked for — build:all already does this, and packaging
+  # on Windows needs the two tasks below to agree with it.
   build:cli:
     desc: Build aos and aosd for this platform
+    vars:
+      EXT: '{{if eq OS "windows"}}.exe{{end}}'
     cmds:
       - for: {var: BINARIES}
-        cmd: CGO_ENABLED=0 go build -trimpath -ldflags="{{.LDFLAGS}}" -o dist/{{.ITEM}} ./cmd/{{.ITEM}}
+        cmd: CGO_ENABLED=0 go build -trimpath -ldflags="{{.LDFLAGS}}" -o dist/{{.ITEM}}{{.EXT}} ./cmd/{{.ITEM}}
 
   # "build"/"run"/"dev" below are the names `wails3 dev`/`wails3 build` call
   # by convention (see build/config.yml's dev_mode.executes and
@@ -235,16 +249,46 @@ tasks:
   # macOS only for now. Windows (NSIS) and Linux (AppImage) reuse the same
   # shape and land next.
   package:desktop:
-    desc: Package the desktop application into a distributable .app (macOS)
-    preconditions:
-      - sh: '[ "{{OS}}" = "darwin" ]'
-        msg: "package:desktop builds a .app; run it on macOS"
+    desc: Package the desktop application for this platform
     cmds:
       - task: build:desktop
-      # For the daemon that create:app:bundle copies into the bundle — see
-      # its own comment for why the app is useless without it.
+      # For the daemon each packager puts beside the application — see their
+      # own comments for why the app is useless without it.
       - task: build:cli
+      - task: "package:desktop:{{OS}}"
+
+  package:desktop:darwin:
+    internal: true
+    cmds:
       - task: darwin:create:app:bundle
+
+  # Not darwin:package / windows:package / linux:package, for the reason
+  # `build` above gives: the generated packaging tasks all depend on a
+  # generated `build` that runs `go build` from the project root, and this
+  # module's main package is cmd/aos-desktop. Only the assembly is reused.
+  package:desktop:windows:
+    internal: true
+    cmds:
+      - wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}/build/windows/nsis"
+      # ARG_AOS_DAEMON_BINARY is ours; project.nsi installs it beside the
+      # application. The WAILS_*_BINARY names are the scaffolding's own.
+      - cd build/windows/nsis && makensis -DARG_WAILS_AMD64_BINARY="{{.ROOT_DIR}}/dist/aos-desktop.exe" -DARG_AOS_DAEMON_BINARY="{{.ROOT_DIR}}/dist/aosd.exe" project.nsi
+
+  package:desktop:linux:
+    internal: true
+    cmds:
+      - task: linux:generate:dotdesktop
+      # build.sh assembles the AppDir by hand, which is what lets the daemon
+      # in: `wails3 generate appimage` takes one -binary and nothing else.
+      # APP_DAEMON is the variable build.sh reads for it.
+      - |
+        cd build/linux/appimage
+        APP_NAME=aos-desktop \
+        APP_BINARY="{{.ROOT_DIR}}/dist/aos-desktop" \
+        APP_DAEMON="{{.ROOT_DIR}}/dist/aosd" \
+        ICON_PATH="{{.ROOT_DIR}}/build/appicon.png" \
+        DESKTOP_FILE="{{.ROOT_DIR}}/build/linux/aos-desktop.desktop" \
+        ./build.sh
 
   run:
     desc: Run the desktop application

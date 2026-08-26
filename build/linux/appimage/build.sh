@@ -11,6 +11,13 @@ APP_DIR="${APP_NAME}.AppDir"
 # Create AppDir structure
 mkdir -p "${APP_DIR}/usr/bin"
 cp -r "${APP_BINARY}" "${APP_DIR}/usr/bin/"
+# The daemon travels in the AppDir beside the application, for the reason
+# ADR-0002 gives: aos-desktop supervises a separate aosd rather than embedding
+# one, and supervise.Resolver finds it next to its own executable — which,
+# inside a mounted AppImage, is this directory.
+if [ -n "${APP_DAEMON:-}" ]; then
+    cp "${APP_DAEMON}" "${APP_DIR}/usr/bin/"
+fi
 cp "${ICON_PATH}" "${APP_DIR}/"
 cp "${DESKTOP_FILE}" "${APP_DIR}/"
 
@@ -30,6 +37,9 @@ else
     ./linuxdeploy-aarch64.AppImage --appdir "${APP_DIR}" --output appimage
 fi
 
-# Rename the generated AppImage
-mv "${APP_NAME}*.AppImage" "${APP_NAME}.AppImage"
+# Rename the generated AppImage. The glob has to be outside the quotes: as
+# written by the scaffolding it was inside them, so the shell passed the
+# literal string through and the mv failed on every run. Nothing used this
+# script, which is how that survived.
+mv "${APP_NAME}"*.AppImage "${APP_NAME}.AppImage"
 
