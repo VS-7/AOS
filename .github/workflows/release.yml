@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  # gh release create writes to the repository. Nothing else here needs more.
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      # The two client binaries are pure Go, so one runner produces every
+      # target. aos-desktop is not here: Wails is cgo and a platform GUI
+      # toolkit, so it cannot be cross-compiled — the same reason Taskfile's
+      # BINARIES is "aos aosd" and ci.yml builds the desktop on three native
+      # runners. Publishing it needs the frontend bundle and a signing
+      # identity (see docs/08 - Entrega/Empacotamento Wails3.md), neither of
+      # which exists yet, and an unsigned desktop binary is what Gatekeeper
+      # and SmartScreen are for.
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # git describe reads the tag this run is named after
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: the build stamp
+        # Pinned to the tagged commit's own timestamp rather than wall-clock,
+        # so two builds of this tag embed the same date and hash the same.
+        # Taskfile's DATE var reads SOURCE_DATE_EPOCH for exactly this.
+        run: |
+          {
+            echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)"
+            echo "VERSION=$(git describe --tags --always)"
+            echo "COMMIT=$(git rev-parse --short HEAD)"
+          } >> "$GITHUB_ENV"
+
+      - name: go-task
+        # The release gates below live in Taskfile.yml and carry their own
+        # size limits. Running them from there rather than restating the
+        # numbers here is what keeps the two from drifting apart.
+        run: go install github.com/go-task/task/v3/cmd/task@latest
+
+      - name: release gates
+        # Phase 9's own criteria, and the only place they run: ci.yml gates
+        # the source, these gate the artifact. build:cli is what puts the
+        # native binaries in dist/ for the two checks that read them.
+        run: |
+          task build:verify-reproducible
+          task build:cli
+          task build:check-size
+          task build:check-no-abspath
+
+      - name: the six targets
+        run: |
+          set -euo pipefail
+          DATE=$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y-%m-%dT%H:%M:%SZ)
+          LDFLAGS="-s -w"
+          LDFLAGS="$LDFLAGS -X github.com/OWNER/aos/internal/core/build.Version=$VERSION"
+          LDFLAGS="$LDFLAGS -X github.com/OWNER/aos/internal/core/build.Commit=$COMMIT"
+          LDFLAGS="$LDFLAGS -X github.com/OWNER/aos/internal/core/build.Date=$DATE"
+
+          mkdir -p release
+          for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64 windows/arm64; do
+            goos=${target%/*}
+            goarch=${target#*/}
+            ext=""
+            [ "$goos" = windows ] && ext=".exe"
+            for bin in aos aosd; do
+              # Raw binaries, not archives, and deliberately: the updater
+              # writes an asset's bytes straight out as the executable
+              # (updateinstall.Stage, 0o755) and has nothing that unpacks a
+              # tar or a zip. Publishing archives now would mean repackaging
+              # everything the day the release feed is turned on.
+              GOOS=$goos GOARCH=$goarch go build -trimpath -ldflags="$LDFLAGS" \
+                -o "release/${bin}_${VERSION}_${goos}_${goarch}${ext}" "./cmd/${bin}"
+            done
+          done
+          ls -la release/
+
+      - name: checksums
+        # "<sha256>  <filename>" per line, which is both what sha256sum -c
+        # reads back and the exact format internal/domain/update expects at
+        # a release's ChecksumsURL. The feed can be added later without
+        # touching this file's shape.
+        run: |
+          set -euo pipefail
+          cd release && sha256sum -- * > checksums.txt && cat checksums.txt
+
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$VERSION" release/* \
+            --title "$VERSION" \
+            --generate-notes \
+            --verify-tag
