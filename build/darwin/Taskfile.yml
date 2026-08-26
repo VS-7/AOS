@@ -139,6 +139,17 @@ tasks:
           cp build/darwin/Assets.car "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
         fi
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
+      # The daemon travels inside the bundle. aos-desktop does not embed it
+      # (ADR-0002) — it supervises a separate aosd process, and
+      # supervise.Resolver's second candidate is a binary named aosd sitting
+      # beside its own executable, which inside a bundle means Contents/MacOS.
+      # Without this the app installs, opens, and then cannot start the one
+      # process that owns the workspace.
+      #
+      # Copied before the signature below rather than after: codesign seals
+      # what is in the bundle when it runs, so a binary added afterwards does
+      # not get covered by the seal — it invalidates it.
+      - cp "{{.BIN_DIR}}/aosd" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
       - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
       - task: '{{if eq OS "darwin"}}codesign:adhoc{{else}}codesign:skip{{end}}'
 

@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  cli:
     runs-on: ubuntu-latest
     env:
       # The two client binaries are pure Go, so one runner produces every
@@ -83,6 +83,95 @@ jobs:
                 -o "release/${bin}_${VERSION}_${goos}_${goarch}${ext}" "./cmd/${bin}"
             done
           done
+          ls -la release/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli
+          path: release/
+          retention-days: 1
+
+  # The desktop cannot be cross-compiled and cannot be built without the
+  # frontend bundle, so it gets its own runner and its own npm install. This
+  # is also the only job in the repository that builds the real interface —
+  # ci.yml's build-desktop compiles the Go half against dist/.gitkeep and
+  # deliberately stops there.
+  desktop:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: the build stamp
+        run: |
+          {
+            echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)"
+            echo "VERSION=$(git describe --tags --always)"
+          } >> "$GITHUB_ENV"
+
+      - name: go-task
+        run: go install github.com/go-task/task/v3/cmd/task@latest
+
+      - name: package
+        # package:desktop builds the frontend, embeds it, builds the daemon,
+        # assembles the .app with the daemon inside it, and ad-hoc signs the
+        # result. Its own comments carry the reasoning for each of those.
+        run: task package:desktop
+
+      - name: the bundle a person installs
+        # Renamed to the name macOS shows: CFBundleName is "AOS", while
+        # aos-desktop is what the executable inside is called. ditto rather
+        # than zip, because it is what preserves a bundle's permissions and
+        # its signature intact.
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          mv dist/aos-desktop.app dist/AOS.app
+          codesign --verify --deep --strict dist/AOS.app
+          ditto -c -k --keepParent dist/AOS.app "release/AOS-${VERSION}-darwin-arm64.zip"
+          ls -la release/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop
+          path: release/
+          retention-days: 1
+
+  # One release, one checksums file. install.sh verifies whatever subset it
+  # downloaded against this single file, so it has to cover every asset —
+  # which means it can only be written once both builds are in.
+  publish:
+    needs: [cli, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: the tag
+        run: echo "VERSION=$(git describe --tags --always)" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: incoming
+
+      - name: gather
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find incoming -type f -exec mv {} release/ \;
           ls -la release/
 
       - name: checksums

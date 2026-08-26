@@ -227,6 +227,25 @@ tasks:
       # neither of which build:desktop alone satisfies.
       - task: build:cli
 
+  # Packaging goes through here for the same reason `build` above does: the
+  # generated darwin:package runs `go build` from the project root, and this
+  # module's main package is cmd/aos-desktop. Only create:app:bundle is
+  # reused — it assembles and signs, and builds nothing.
+  #
+  # macOS only for now. Windows (NSIS) and Linux (AppImage) reuse the same
+  # shape and land next.
+  package:desktop:
+    desc: Package the desktop application into a distributable .app (macOS)
+    preconditions:
+      - sh: '[ "{{OS}}" = "darwin" ]'
+        msg: "package:desktop builds a .app; run it on macOS"
+    cmds:
+      - task: build:desktop
+      # For the daemon that create:app:bundle copies into the bundle — see
+      # its own comment for why the app is useless without it.
+      - task: build:cli
+      - task: darwin:create:app:bundle
+
   run:
     desc: Run the desktop application
     cmds:
