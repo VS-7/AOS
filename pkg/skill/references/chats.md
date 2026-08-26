@@ -19,6 +19,22 @@ transcript of an autonomous run is the same structure in a different place.
 
 ## Commands
 
+### `chats_clear`
+
+Empty a conversation, keeping the conversation.
+
+Throw away what was said, and keep the room.
+
+This is the "start over" of a long thread: the conversation, its participants
+and its bindings survive; the transcript does not. It is separate from
+`chats update` on purpose — a rename that could drop a transcript by
+carrying one field too many is a rename nobody can use safely.
+
+Clearing one that is already empty is not an error. You asked for a state, and
+that state holds.
+
+- start the thread over
+
 ### `chats_create`
 
 Open a conversation.
@@ -30,6 +46,19 @@ is not something anyone means to make.
 
 - a workspace channel
 - a private thread with one agent
+
+### `chats_delete`
+
+Remove a conversation and its transcript.
+
+Delete a conversation. The messages go with it.
+
+The conversation has to exist. Reporting success for an identifier this
+workspace has never had would hide the case that actually happens — a caller
+deleting against the wrong workspace — behind an answer that reads like it
+worked.
+
+- throw away a scratch thread
 
 ### `chats_get`
 
@@ -67,4 +96,21 @@ waiting through.
 
 - ask whoever is listening
 - ask a specific agent
+
+### `chats_update`
+
+Rename a conversation, or change who can read it.
+
+Change a conversation's name or its visibility.
+
+Only what you name changes. There is no way to send a whole conversation back
+and have it written, because that would let a rename drop the transcript or
+reopen a private thread to the workspace without anybody asking for it.
+
+Visibility has a consequence worth stating: `workspace` makes the
+transcript readable by every member, and there is no undo for what somebody has
+already read.
+
+- rename it
+- open it to the workspace
 

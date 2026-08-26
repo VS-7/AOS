@@ -52,6 +52,16 @@ type Git interface {
 	// "modified", "deleted", "untracked", or "" when there is no change.
 	Status(ctx context.Context, root, path string) (string, error)
 
+	// Changes lists every path the working tree differs from HEAD at, in one
+	// call. Status answers the same question for one path, and is what a diff
+	// the user has already opened uses; this is what the list of them needs,
+	// and building it out of Status would mean walking the whole repository
+	// and asking about every file in it.
+	//
+	// A directory that is not a repository is not an error here: a workspace
+	// does not have to be one, and the panel still has to open.
+	Changes(ctx context.Context, root string) ([]Change, error)
+
 	// Show returns path's content at ref. ok is false when the path does not
 	// exist at that ref — a new file has no HEAD version, a deleted file has
 	// no working-tree version, and neither is an error.

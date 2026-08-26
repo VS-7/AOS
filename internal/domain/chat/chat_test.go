@@ -551,7 +551,7 @@ func TestRegisterPublishesTheGroup(t *testing.T) {
 	reg := command.NewRegistry()
 	chat.Register(reg, h.svc)
 
-	want := []string{"chats_create", "chats_get", "chats_list", "chats_send"}
+	want := []string{"chats_clear", "chats_create", "chats_delete", "chats_get", "chats_list", "chats_send", "chats_update"}
 	got := make([]string, 0, len(want))
 	for _, d := range reg.Sorted() {
 		got = append(got, d.Key())
@@ -567,6 +567,9 @@ func TestRegisterPublishesTheGroup(t *testing.T) {
 	for _, d := range reg.Sorted() {
 		if d.Key() == "chats_send" && d.Annotations().ReadOnlyHint {
 			t.Error("sending a message is not a read")
+		}
+		if d.Key() == "chats_delete" && !d.Annotations().DestructiveHint {
+			t.Error("deleting a conversation takes its transcript with it, and says so")
 		}
 	}
 }
@@ -714,5 +717,172 @@ func TestAFailedTurnIsRecordedAsAnAttemptThatFailed(t *testing.T) {
 	}
 	if len(stored.Messages[0].Runs) != 1 || stored.Messages[0].Runs[0].Error.Code != "AOS_AGENT_PROVIDER_FAILED" {
 		t.Fatalf("the failure was not recorded: %+v", stored.Messages[0].Runs)
+	}
+}
+
+// TestDeleteRemovesTheConversation.
+//
+// The interface has had a delete on every conversation row since it was
+// ported, and nothing was behind it: `chat.delete` was `null` in the frontend's
+// command map because this group published four commands — list, get, create,
+// send — and no way to remove one. A workspace accumulated every thread anyone
+// had ever opened, including the throwaway ones, with no way to clear them.
+func TestDeleteRemovesTheConversation(t *testing.T) {
+	h := newHarness(t)
+	created := h.create(t, chat.CreateInput{Title: "Throwaway"})
+
+	out, err := h.svc.Delete(userCtx(), chat.DeleteInput{Chat: created.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Chat != created.ID || !out.Deleted {
+		t.Fatalf("output = %+v", out)
+	}
+
+	if _, err := h.svc.Get(userCtx(), chat.GetInput{Chat: created.ID}); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("the conversation survived: %v", err)
+	}
+}
+
+func TestDeletingAConversationThatIsNotThereIsRefused(t *testing.T) {
+	h := newHarness(t)
+	_, err := h.svc.Delete(userCtx(), chat.DeleteInput{Chat: "never-existed"})
+	if !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("error = %v, want not-found", err)
+	}
+}
+
+// TestUpdateRenamesAConversation: the other half of what the row's menu offers.
+func TestUpdateRenamesAConversation(t *testing.T) {
+	h := newHarness(t)
+	created := h.create(t, chat.CreateInput{Title: "Untitled"})
+
+	renamed, err := h.svc.Update(userCtx(), chat.UpdateInput{
+		Chat:  created.ID,
+		Title: "Release planning",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renamed.Title != "Release planning" {
+		t.Fatalf("title = %q", renamed.Title)
+	}
+	if !renamed.UpdatedAt.After(created.UpdatedAt) {
+		t.Error("the audit trail did not move")
+	}
+
+	read, err := h.svc.Get(userCtx(), chat.GetInput{Chat: created.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read.Title != "Release planning" {
+		t.Fatalf("the rename was not persisted: %q", read.Title)
+	}
+}
+
+// TestUpdateLeavesUnnamedFieldsAlone. A rename must not silently reopen a
+// private conversation or drop its transcript.
+func TestUpdateLeavesUnnamedFieldsAlone(t *testing.T) {
+	h := newHarness(t)
+	created := h.create(t, chat.CreateInput{
+		Title:      "Private",
+		Visibility: chat.VisibilityPrivate,
+		Kind:       chat.KindDM,
+	})
+	if _, err := h.svc.Send(userCtx(), chat.SendInput{Chat: created.ID, Text: "hello"}); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := h.svc.Update(userCtx(), chat.UpdateInput{Chat: created.ID, Title: "Still private"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Visibility != chat.VisibilityPrivate {
+		t.Errorf("visibility = %q, want it untouched", updated.Visibility)
+	}
+	if updated.Kind != chat.KindDM {
+		t.Errorf("kind = %q, want it untouched", updated.Kind)
+	}
+	if len(updated.Messages) == 0 {
+		t.Error("the transcript was dropped by a rename")
+	}
+}
+
+// TestUpdateCanOpenAPrivateConversationToTheWorkspace — the second field the
+// row's menu offers, and the one with a consequence: it changes who can read
+// the transcript.
+func TestUpdateChangesVisibility(t *testing.T) {
+	h := newHarness(t)
+	created := h.create(t, chat.CreateInput{Title: "Draft", Visibility: chat.VisibilityPrivate})
+
+	updated, err := h.svc.Update(userCtx(), chat.UpdateInput{
+		Chat:       created.ID,
+		Visibility: chat.VisibilityWorkspace,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Visibility != chat.VisibilityWorkspace {
+		t.Fatalf("visibility = %q", updated.Visibility)
+	}
+	if updated.Title != "Draft" {
+		t.Errorf("title = %q, want it untouched", updated.Title)
+	}
+}
+
+func TestUpdatingAConversationThatIsNotThereIsRefused(t *testing.T) {
+	h := newHarness(t)
+	_, err := h.svc.Update(userCtx(), chat.UpdateInput{Chat: "never-existed", Title: "x"})
+	if !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("error = %v, want not-found", err)
+	}
+}
+
+// TestClearEmptiesTheTranscriptWithoutRemovingTheConversation.
+//
+// The composer has a "clear context" action, and it was calling `chat.update`
+// with `{messages: []}` — a field Go's update does not have and must not have,
+// since a rename that can silently drop a transcript is a rename nobody can
+// trust. The action is real and separate, so it is its own command.
+func TestClearEmptiesTheTranscriptWithoutRemovingTheConversation(t *testing.T) {
+	h := newHarness(t)
+	created := h.create(t, chat.CreateInput{Title: "Long thread"})
+	if _, err := h.svc.Send(userCtx(), chat.SendInput{Chat: created.ID, Text: "one"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.svc.Send(userCtx(), chat.SendInput{Chat: created.ID, Text: "two"}); err != nil {
+		t.Fatal(err)
+	}
+
+	cleared, err := h.svc.Clear(userCtx(), chat.ClearInput{Chat: created.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.Removed != 2 {
+		t.Fatalf("removed = %d, want the two messages", cleared.Removed)
+	}
+
+	read, err := h.svc.Get(userCtx(), chat.GetInput{Chat: created.ID})
+	if err != nil {
+		t.Fatalf("the conversation went with its messages: %v", err)
+	}
+	if len(read.Messages) != 0 {
+		t.Fatalf("%d messages survived", len(read.Messages))
+	}
+	if read.Title != "Long thread" {
+		t.Errorf("title = %q, want it untouched", read.Title)
+	}
+}
+
+func TestClearingAnEmptyConversationIsNotAnError(t *testing.T) {
+	h := newHarness(t)
+	created := h.create(t, chat.CreateInput{Title: "Empty"})
+
+	out, err := h.svc.Clear(userCtx(), chat.ClearInput{Chat: created.ID})
+	if err != nil {
+		t.Fatalf("clearing what is already clear is the state the caller asked for: %v", err)
+	}
+	if out.Removed != 0 {
+		t.Fatalf("removed = %d", out.Removed)
 	}
 }

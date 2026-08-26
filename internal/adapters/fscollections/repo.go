@@ -72,12 +72,37 @@ func (r *Repo[T]) Root() string { return r.root }
 // resolve turns a workspace-relative path into an absolute one, refusing
 // anything that escapes the root. The check happens after resolution, which is
 // what closes path traversal — comparing the unresolved string would not.
+//
+// The prefix compared against is the root with a trailing separator, so that a
+// sibling whose name merely starts with the root's ("/tmp/ws-evil" against
+// "/tmp/ws") is not mistaken for a child. A root that already ends in the
+// separator — the filesystem root, "/" — must not have a second one appended:
+// nothing resolves under "//", so every path inside "/" was refused as
+// escaping it. That is not a hypothetical root. A macOS application bundle
+// launched from Finder starts with "/" as its working directory, the daemon
+// takes its working directory as the workspace root when nothing else names
+// one, and the result was AOS_COLLECTION_PATH_ESCAPES_ROOT for agents, skills
+// and collections at boot and a 403 from every collection-backed command for
+// the rest of the session.
 func (r *Repo[T]) resolve(rel string) (string, error) {
 	abs := filepath.Clean(filepath.Join(r.root, filepath.FromSlash(rel)))
-	if abs != r.root && !strings.HasPrefix(abs, r.root+string(filepath.Separator)) {
+	if !within(abs, r.root) {
 		return "", errOutside(rel, r.root)
 	}
 	return abs, nil
+}
+
+// within reports whether abs is the root or sits inside it. Both are expected
+// to be already cleaned.
+func within(abs, root string) bool {
+	if abs == root {
+		return true
+	}
+	prefix := root
+	if !strings.HasSuffix(prefix, string(filepath.Separator)) {
+		prefix += string(filepath.Separator)
+	}
+	return strings.HasPrefix(abs, prefix)
 }
 
 func (r *Repo[T]) relOf(abs string) string {

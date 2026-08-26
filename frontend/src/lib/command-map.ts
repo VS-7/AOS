@@ -1,5 +1,6 @@
 import type { CommandKey } from "./schema";
 import * as fileApi from "./file";
+import * as fileExplorer from "./file-explorer";
 import * as authApi from "./auth";
 
 /**
@@ -246,6 +247,19 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // it was never re-checked against the actual call sites once `chat` was
   // ported, which is exactly the gap the live-exercise pass exists to
   // catch.)
+  // Delete, rename and clear: the three actions every conversation row and
+  // the composer have offered since they were ported, all of which did
+  // nothing because this group published only list/get/create/send. See
+  // internal/domain/chat/commands.go for the three commands that closed it.
+  "chat.delete": "chats_delete",
+  // `wrapOut`, the same as `chat.getById` below: Go answers a bare Chat, and
+  // the ported code reads `result.data.chat`.
+  "chat.update": { key: "chats_update", wrapOut: "chat" },
+  // The composer's "clear context" used to call `chat.update` with
+  // `{messages: []}` — a field Go's update does not have and must not have,
+  // since a rename that can drop a transcript is a rename nobody can trust.
+  // It is its own command now, and its own path here.
+  "chat.clear": "chats_clear",
   "chat.create": { key: "chats_create", wrapOut: "chat" },
   "chat.getById": { key: "chats_get", wrapOut: "chat" },
   "chat.list": "chats_list",
@@ -564,7 +578,18 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "file.create": (p) => fileApi.write(s(p, "path"), s(p, "content")),
   "file.delete": (p) => fileApi.remove(s(p, "path")),
   "file.diff": (p) => fileApi.diff(s(p, "path")),
-  "file.list": (p) => fileApi.tree(s(p, "path"), p["recursive"] === true),
+  // The three screens the port left unmapped, assembled from what the daemon
+  // publishes — see lib/file-explorer.ts. Until this, the sidebar's file tree,
+  // the Changes panel and the composer's @-mention picker all rendered empty,
+  // with no error anywhere: a dormant call resolves to null rather than
+  // failing, so all three looked like an empty workspace.
+  "file.explorer": () => fileExplorer.explorer(),
+  "file.changes": () => fileExplorer.changes(),
+  "file.search": (p) => fileExplorer.search(s(p, "query"), Number(p["limit"]) || 24),
+  // Through the explorer adapter, not `fileApi.tree` directly: the daemon
+  // answers `{path, nodes}` and all three call sites read `.files` off a
+  // `WorkspaceFile[]`, so this resolved to `undefined` at every one of them.
+  "file.list": (p) => fileExplorer.list(s(p, "path"), p["recursive"] === true),
   "file.move": (p) => fileApi.move(s(p, "from"), s(p, "to")),
   "file.read": (p) => fileApi.read(s(p, "path")),
   "file.write": (p) => fileApi.write(s(p, "path"), s(p, "content")),
@@ -572,37 +597,32 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // ── dormant: command missing from a live domain ─────────────────────────
   "activity.listEvents": null,
   "auth.verifyWaitlist": null,
-  "chat.delete": null,
+  // `chat.findOrCreateDm`, `chat.stop` and `chat.toggleReaction` are the
+  // three of the five that are still dormant, and each for its own reason:
+  // a direct-message lookup needs a stable two-party key Go's `chats_create`
+  // does not derive yet, stopping a run needs the job queue to be able to
+  // cancel one mid-turn, and a reaction is a per-message record the chat
+  // collection has no shape for. None of the three can be composed out of
+  // what exists, which is what separates them from `chat.delete`/`.update`
+  // (below) — those were missing commands, and now are not.
   "chat.findOrCreateDm": null,
   "chat.stop": null,
   "chat.toggleReaction": null,
-  "chat.update": null,
-  // The Go side has file.tree; the explorer returns a snapshot with
-  // contexts. The difference is one of shape, not capability — a candidate
-  // for an adapter, not a new implementation. Out of scope for this port.
-  "file.changes": null,
-  "file.explorer": null,
-  "file.search": null,
+
   "session.updateProfile": null,
   "task.start": null,
-  // `workspace.directory` (`workspace-directory.fetch.ts`, called by both
-  // `AgentStore` and `WorkspaceStore` preload) has no Go counterpart at all
-  // — there is no `workspace_directory`/`workspace_inventory`-shaped command
-  // that returns agents+users combined the way the original did.
-  // Before this entry existed, the call fell through `call()`'s loud "not
-  // mapped" throw — caught locally by that one file's own try/catch (see its
-  // "Falls back to raw fetch when the typed client schema is stale" comment)
-  // and silently retried against `/api/workspaces/{id}/directory`, a REST
-  // path Go's `httpapi` router (`internal/transport/httpapi/server.go`) never
-  // registers — so the roster always resolved to `{ users: [], agents: [] }`,
-  // quietly, no matter what. Declaring this `null` here doesn't change that
-  // outcome (a dormant `query()` also resolves to empty for this call site),
-  // but it makes the failure go through the one documented dormancy path
-  // instead of a bespoke local one — and stops every agent-roster load from
-  // needlessly throwing and 404ing first. The actual gap — no Go command
-  // backs the agent roster the UI wants — is a task-12 escalation, not
-  // something this map entry can fix: `agents_list` exists and is live, but
-  // nothing wires it into `AgentStore` today.
+  // `workspace.directory` stays unmapped, and is now unused: there is no
+  // single Go command that answers agents+users the way the original's
+  // server-side `getDirectory()` did, and there does not need to be.
+  // `workspace-directory.fetch.ts` composes the roster from the two halves
+  // the daemon does publish — `agents_list` (live) and `/api/auth/users` —
+  // which is the same answer assembled one layer up.
+  //
+  // What this replaced: the roster resolved to `{ users: [], agents: [] }` on
+  // every load, with no error anywhere, so the sidebar's Team tab, the task
+  // assignee picker, the chat participant list and every avatar in the
+  // interface rendered empty. It was not failing to load; it was loading
+  // nothing.
   "workspace.directory": null,
   "workspace.addMember": null,
   "workspace.listMembers": null,
@@ -733,9 +753,20 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
     renameIn: { toolset: "id" },
     coerceIn: { values: (value) => ({ env: value }) },
   },
+  // `user.list` is the roster of accounts on this installation. It goes
+  // through its own HTTP surface for the same reason `auth.*` and `file.*`
+  // do: identity sits outside the command registry by backend decision (see
+  // internal/transport/authapi's package doc), so there is no `users_list`
+  // command key to map to.
+  //
+  // The three writes stay dormant. The domain has them
+  // (auth.Service.SetRole/Delete, and Onboarding for the first account), but
+  // no surface publishes them yet, and inventing a client-side compound out
+  // of endpoints that do not exist would be worse than saying so — a
+  // DormantGate on the section is a screen that explains itself.
   "user.create": null,
   "user.delete": null,
-  "user.list": null,
+  "user.list": () => authApi.users(),
   "user.update": null,
   // task-10: the `view` domain is lit — `internal/domain/view/
   // commands.go` registers list/get/render/execute-action/delete for the

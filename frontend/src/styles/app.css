@@ -121,6 +121,84 @@
   }
 }
 
+@layer components {
+  /*
+   * Window dragging and the caption buttons, for the frame the interface
+   * draws itself.
+   *
+   * The ported components carried Electron's `-webkit-app-region`. That is
+   * the right property on exactly one of the three platforms, and it took
+   * reading the runtime to find out which:
+   *
+   *   - Windows (WebView2/Chromium) implements `app-region` natively, and
+   *     Wails asks it for the answer — `nonClientHitTestFromScreen` falls
+   *     through to `chromium.GetNonClientRegionAtPoint` when no frontend
+   *     region matches (webview_window_windows_nonclient.go). So this
+   *     property is live here, and `app-region` is the standard spelling
+   *     that `-webkit-app-region` is now only an alias for.
+   *
+   *   - macOS (WKWebView) and Linux (WebKitGTK) do nothing with it at all.
+   *     Wails reads `--wails-draggable` off the computed style of whatever
+   *     is under the pointer instead (`isDraggableEvent` in the runtime's
+   *     drag.js). Without it the title area was inert and the window could
+   *     not be moved by dragging it anywhere.
+   *
+   * `no-drag` matters as much as `drag`: a button inside a drag region is a
+   * button that starts moving the window instead of being clicked.
+   */
+  .drag-region {
+    --wails-draggable: drag;
+    app-region: drag;
+    -webkit-app-region: drag;
+
+    /*
+     * Nothing in a drag region should look like text to select — dragging a
+     * window that highlights its own title as it moves reads as broken.
+     */
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .no-drag {
+    --wails-draggable: no-drag;
+    app-region: no-drag;
+    -webkit-app-region: no-drag;
+  }
+
+  /*
+   * The three caption buttons, for Windows' native hit testing.
+   *
+   * `--wails-non-client-region` is a second, separate mechanism from
+   * `--wails-draggable`: the runtime measures every element carrying it and
+   * hands the host a list of rectangles (appregion.js), which Windows then
+   * answers WM_NCHITTEST from. That is what makes the maximise button open
+   * the Windows 11 Snap Layouts flyout on hover and the close button light
+   * up the way a real one does — none of which a click handler can do.
+   *
+   * Only the buttons are marked, never the strip they sit in. The mechanism
+   * is rectangles, not computed style, so a caption region covering the whole
+   * title bar would swallow every control inside it; there is no `no-drag`
+   * equivalent that punches a hole in a rectangle. Dragging stays with
+   * `--wails-draggable` and `app-region`, which are resolved per element and
+   * do respect the holes.
+   *
+   * The runtime only tracks these on Windows, and only when the host sets its
+   * `nonClientRegionTracking` flag — which `cmd/aos-desktop` does, via
+   * WindowsWindow.WebView2CompositionHosting. Elsewhere they are inert.
+   */
+  .window-control-minimise {
+    --wails-non-client-region: minimize;
+  }
+
+  .window-control-maximise {
+    --wails-non-client-region: maximize;
+  }
+
+  .window-control-close {
+    --wails-non-client-region: close;
+  }
+}
+
 /*
  * Nothing else lives in this file on purpose.
  *

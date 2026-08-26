@@ -1,8 +1,29 @@
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import Latex from 'react-latex-next';
 import Marked, { ReactRenderer } from 'marked-react';
 import { Lexer } from 'marked';
 import React, { useCallback, useMemo, useState, Fragment, useRef, lazy, Suspense, useEffect, use } from 'react';
+import { openExternal } from '@/lib/wails';
+import { saveBlob } from '@/lib/save-file';
+
+/**
+ * Syntax highlighting and LaTeX, loaded when a message actually contains some.
+ *
+ * Both were imported at the top of this file, and this file is reached from
+ * the chat timeline, task details and comments — so both were in the startup
+ * bundle of every session. `react-syntax-highlighter`'s Prism build brings
+ * refractor with every grammar it knows (0.9 MB), and `react-latex-next`
+ * brings KaTeX with its full symbol tables (1.2 MB). Two and a bit megabytes,
+ * downloaded, parsed and compiled before the window could be used, so that a
+ * fenced code block or an inline formula somewhere down a conversation could
+ * render without a further request.
+ *
+ * Lazily they cost nothing until a message has one, and the fallback below is
+ * the same plain rendering both already fall back to for content they cannot
+ * handle — so the frame before the chunk arrives shows the code, not a gap.
+ */
+const SyntaxHighlighter = lazy(() =>
+  import('react-syntax-highlighter').then((m) => ({ default: m.Prism })),
+);
+const Latex = lazy(() => import('react-latex-next'));
 import { Button } from '@/components/ui/button';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
@@ -602,19 +623,33 @@ const CodeBlockInner: React.FC<CodeBlockInnerProps> = ({
   const renderCodeContent = (code: string) => {
     if (shouldHighlight) {
       return (
-        <SyntaxHighlighter
-          language={language || 'text'}
-          style={syntaxTheme}
-          customStyle={{
-            margin: 0,
-            padding: '0.5rem',
-            fontSize: '0.875rem',
-            lineHeight: '1.5',
-            background: 'transparent',
-          }}
+        <Suspense
+          fallback={
+            <pre
+              className={cn(
+                'font-mono text-sm leading-relaxed p-2',
+                isWrapped && 'whitespace-pre-wrap wrap-break-words',
+                !isWrapped && 'whitespace-pre overflow-x-auto',
+              )}
+            >
+              {code}
+            </pre>
+          }
         >
-          {code}
-        </SyntaxHighlighter>
+          <SyntaxHighlighter
+            language={language || 'text'}
+            style={syntaxTheme}
+            customStyle={{
+              margin: 0,
+              padding: '0.5rem',
+              fontSize: '0.875rem',
+              lineHeight: '1.5',
+              background: 'transparent',
+            }}
+          >
+            {code}
+          </SyntaxHighlighter>
+        </Suspense>
       );
     }
     return (
@@ -1714,9 +1749,11 @@ const SafeLatex: React.FC<{
 
   try {
     return (
-      <Latex delimiters={delimiters} strict={false}>
-        {children}
-      </Latex>
+      <Suspense fallback={<code className="font-mono text-sm">{children}</code>}>
+        <Latex delimiters={delimiters} strict={false}>
+          {children}
+        </Latex>
+      </Suspense>
     );
   } catch (error) {
     console.warn('LaTeX rendering error:', error, 'Content:', children);
@@ -1823,16 +1860,8 @@ const MarkdownTableWithActions: React.FC<{ children: React.ReactNode }> = React.
     try {
       const csv = csvUtils.buildCsvFromTable(tableEl);
       const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
       const timestamp = new Date().toISOString().replace(/[:T]/g, '-').replace(/\..+/, '');
-      a.href = url;
-      a.download = `table-${timestamp}.csv`;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      void saveBlob(blob, `table-${timestamp}.csv`);
     } catch (error) {
       console.error('Failed to download CSV:', error);
     }
@@ -2447,14 +2476,7 @@ async function downloadFileBlob(url: string, filename: string): Promise<void> {
   const res = await fetch(url, { mode: 'cors' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const blob = await res.blob();
-  const blobUrl = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = blobUrl;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(blobUrl);
+  await saveBlob(blob, filename);
 }
 
 const FileLinkPreview = React.memo(({ href, title }: { href: string; title?: string }) => {
@@ -2468,7 +2490,9 @@ const FileLinkPreview = React.memo(({ href, title }: { href: string; title?: str
     try {
       await downloadFileBlob(href, preview.filename);
     } catch {
-      window.open(href, '_blank', 'noopener,noreferrer');
+      // The download failed (CORS, network). Handing the URL to the operating
+      // system is the fallback; `window.open` is inert in a WebView.
+      void openExternal(href);
     } finally {
       setIsDownloading(false);
     }
@@ -2524,14 +2548,7 @@ async function downloadImageBlob(url: string, filename: string): Promise<void> {
   }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const blob = await res.blob();
-  const blobUrl = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = blobUrl;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(blobUrl);
+  await saveBlob(blob, filename);
 }
 
 // Module-level cache so image dimensions survive component remounts during streaming.
@@ -2569,15 +2586,15 @@ const ImageWithPreview = React.memo(({ src, alt, title }: { src: string; alt?: s
     try {
       await downloadImageBlob(src, filename);
     } catch {
-      // CORS or network error — fall back to opening in new tab
-      window.open(src, '_blank');
+      // CORS or network error — hand it to the operating system instead.
+      void openExternal(src);
     } finally {
       setIsDownloading(false);
     }
   }, [src, filename]);
 
   const handleOpenInNewTab = useCallback(() => {
-    window.open(src, '_blank');
+    void openExternal(src);
   }, [src]);
 
   // Lock layout: aspect-ratio from cache or 16:9 placeholder.

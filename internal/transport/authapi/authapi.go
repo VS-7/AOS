@@ -77,6 +77,7 @@ func New(cfg Config) http.Handler {
 	r.Post("/logout", s.logout)
 	r.Get("/session", s.session)
 	r.Post("/password", s.changePassword)
+	r.Get("/users", s.users)
 	return r
 }
 
@@ -163,6 +164,37 @@ func (s *server) onboarding(w http.ResponseWriter, r *http.Request) {
 	// far-future date here is display-only; the token has no ExpiresAt on
 	// the server side to actually enforce one.
 	s.writeSession(w, out.User, out.Token, s.clock.Now().AddDate(10, 0, 0))
+}
+
+// users lists the accounts on this installation.
+//
+// Three screens need it — the workspace roster the sidebar's Team tab draws,
+// the assignee picker on a task, and Settings → Users — and all three rendered
+// empty, because the domain had the list (auth.Service.Users) and nothing
+// published it.
+//
+// It answers the public projection, which is the whole point of that type
+// existing: a roster is names and addresses, never the argon2 hash beside them
+// in users.json.
+//
+// A credential is required. Who has an account here is not something an
+// unauthenticated caller on the loopback interface should be able to enumerate.
+func (s *server) users(w http.ResponseWriter, r *http.Request) {
+	if _, err := s.authenticate(r); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	found, err := s.svc.Users(r.Context())
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	// A non-nil slice: an installation with no accounts answers `[]`, not
+	// `null`, so the interface can map over it without a guard.
+	if found == nil {
+		found = []auth.Public{}
+	}
+	s.writeJSON(w, map[string]any{"users": found})
 }
 
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {

@@ -260,6 +260,13 @@ export interface CommandMap {
     /** New visibility. Omit to leave unchanged. */
     "visibility"?: unknown;
   }; output: unknown };
+  /** Empty a conversation, keeping the conversation. */
+  "chats_clear": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Conversation to empty. */
+    "chat": string;
+  }; output: unknown };
   /** Open a conversation. */
   "chats_create": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
@@ -287,6 +294,13 @@ export interface CommandMap {
     "title": string;
     /** private or workspace. Defaults to workspace. */
     "visibility"?: string;
+  }; output: unknown };
+  /** Remove a conversation and its transcript. */
+  "chats_delete": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Conversation to remove. */
+    "chat": string;
   }; output: unknown };
   /** Read one conversation. */
   "chats_get": { input: {
@@ -320,6 +334,17 @@ export interface CommandMap {
     "chat": string;
     /** What to say. Address a specific agent with @slug. */
     "text": string;
+  }; output: unknown };
+  /** Rename a conversation, or change who can read it. */
+  "chats_update": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Conversation to change. */
+    "chat": string;
+    /** New name. Leave empty to keep the current one. */
+    "title"?: string;
+    /** private restricts to the participants; workspace opens it to every member. Leave empty to keep the current one. */
+    "visibility"?: string;
   }; output: unknown };
   /** Declare a new collection. */
   "collections_create": { input: {
@@ -1621,10 +1646,13 @@ export const COMMAND_KEYS = [
   "artifacts_list",
   "artifacts_set-password",
   "artifacts_update",
+  "chats_clear",
   "chats_create",
+  "chats_delete",
   "chats_get",
   "chats_list",
   "chats_send",
+  "chats_update",
   "collections_create",
   "collections_delete",
   "collections_get",

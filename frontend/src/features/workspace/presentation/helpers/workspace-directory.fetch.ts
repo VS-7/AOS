@@ -1,5 +1,10 @@
 import { api } from "@/lib/aos-facade";
-import type { WorkspaceDirectory } from "@/features/workspace/interfaces/directory.interfaces";
+import { users as listAccounts } from "@/lib/auth";
+import type {
+  WorkspaceDirectory,
+  WorkspaceDirectoryAgent,
+  WorkspaceDirectoryUser,
+} from "@/features/workspace/interfaces/directory.interfaces";
 
 type DirectoryCacheEntry = {
   workspaceId: string;
@@ -70,57 +75,77 @@ export function invalidateWorkspaceDirectoryCache(): void {
   inflight = null;
 }
 
+/**
+ * Builds the roster from what the daemon actually publishes.
+ *
+ * There is no `workspace_directory` command, and there never was — the
+ * original composed this server-side and AOS's Go registry has no equivalent.
+ * What it has is the two halves: `agents_list`, which is live, and
+ * `/api/auth/users`, which lists the accounts on the installation.
+ *
+ * Until this, the call was mapped to `null` and every caller resolved to
+ * `{ users: [], agents: [] }` — quietly, with no error anywhere. That emptiness
+ * is what the sidebar's Team tab, the task assignee picker, the chat
+ * participant list and every avatar in the interface were rendering: the
+ * roster was not failing to load, it was loading nothing.
+ *
+ * A failure in either half is not a failure of the whole. An installation
+ * where the account list is unreachable should still show its agents, and the
+ * other way round, so each is caught on its own and contributes what it can.
+ */
 async function fetchWorkspaceDirectory(
   workspaceId: string,
 ): Promise<WorkspaceDirectory> {
-  const empty: WorkspaceDirectory = { users: [], agents: [] };
-
-  try {
-    const directoryClient = (
-      api.workspace as { directory?: { query: (input: unknown) => Promise<{ data?: unknown }> } }
-    ).directory;
-
-    if (directoryClient?.query) {
-      const response = await directoryClient.query({
-        params: { workspace: workspaceId },
-      });
-      return unwrapDirectoryPayload(response.data) ?? empty;
-    }
-  } catch {
-    // Fall through to raw fetch when the typed client rejects.
-  }
-
-  const response = await fetch(
-    `/api/workspaces/${encodeURIComponent(workspaceId)}/directory`,
-    { credentials: "include" },
-  );
-
-  if (!response.ok) {
-    return empty;
-  }
-
-  const json = (await response.json()) as { data?: unknown };
-  return unwrapDirectoryPayload(json.data) ?? empty;
+  const [agents, users] = await Promise.all([
+    fetchAgents(workspaceId),
+    fetchUsers(),
+  ]);
+  return { users, agents };
 }
 
-function unwrapDirectoryPayload(
-  payload: unknown,
-): WorkspaceDirectory | undefined {
-  if (!payload || typeof payload !== "object") {
-    return undefined;
-  }
+async function fetchAgents(workspaceId: string): Promise<WorkspaceDirectoryAgent[]> {
+  try {
+    const response = await api.agent.list.query(
+      workspaceId && workspaceId !== "current"
+        ? { query: { workspace: workspaceId } }
+        : {},
+    );
+    const raw = (response.data as { agents?: unknown[] } | undefined)?.agents;
+    if (!Array.isArray(raw)) return [];
 
-  if (
-    "directory" in payload &&
-    payload.directory &&
-    typeof payload.directory === "object"
-  ) {
-    return payload.directory as WorkspaceDirectory;
+    return raw.map((entry) => {
+      const agent = entry as Record<string, unknown>;
+      return {
+        id: String(agent.id ?? ""),
+        name: String(agent.name ?? agent.id ?? ""),
+        image: typeof agent.image === "string" ? agent.image : undefined,
+        role: typeof agent.role === "string" ? agent.role : undefined,
+        description:
+          typeof agent.description === "string" ? agent.description : undefined,
+        orchestrator: Boolean(agent.orchestrator),
+        // Which chats an agent is mid-turn on is realtime state, not a field
+        // of the record: `chat:start-processing` / `chat:end-processing` are
+        // what carry it, and `WorkspaceLayout` already routes both into the
+        // agent store. Reporting an empty list here rather than inventing one
+        // leaves that store the single source of it.
+        processing: [],
+      } satisfies WorkspaceDirectoryAgent;
+    });
+  } catch {
+    return [];
   }
+}
 
-  if ("users" in payload && "agents" in payload) {
-    return payload as WorkspaceDirectory;
+async function fetchUsers(): Promise<WorkspaceDirectoryUser[]> {
+  try {
+    const { users } = await listAccounts();
+    return users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      email: user.email,
+    }));
+  } catch {
+    return [];
   }
-
-  return undefined;
 }

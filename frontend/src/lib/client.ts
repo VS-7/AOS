@@ -1,4 +1,5 @@
 import { Call } from "@wailsio/runtime";
+import { daemonURL } from "./daemon-origin";
 import type { CommandInput, CommandKey, CommandOutput } from "./schema";
 import { desktopRetryDelays, isDesktopConfirmed, markDesktopConfirmed, sleep } from "./desktop-transport";
 
@@ -223,7 +224,7 @@ export const system = {
  */
 const http: Client = {
   async invoke(key, input) {
-    const response = await fetch(`/api/${key.replaceAll("_", "/")}`, {
+    const response = await fetch(daemonURL(`/api/${key.replaceAll("_", "/")}`), {
       method: "POST",
       headers: {
         "content-type": "application/json",

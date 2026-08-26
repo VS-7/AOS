@@ -24,6 +24,7 @@ import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { useSidebarActiveRoute } from "../sidebar/hooks/use-sidebar-active-route";
 import { WorkspaceTabStrip } from "./workspace-tab-strip";
 import { WORKSPACE_NAV_CONTROLS_INSET_CLASS } from "../sidebar/components/workspace-nav-controls-shell";
+import { WindowControls } from "@/components/ui/window-controls";
 
 export function WorkspaceNavigation() {
   const clickTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(
@@ -89,7 +90,7 @@ export function WorkspaceNavigation() {
   });
 
   return (
-    <div className="grid w-full min-w-0 grid-cols-[1fr_auto] items-center gap-1 pt-1 [-webkit-app-region:drag]">
+    <div className="grid w-full min-w-0 grid-cols-[1fr_auto] items-center gap-1 pt-1 drag-region">
       <div
         className={cn(
           "flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
@@ -115,7 +116,7 @@ export function WorkspaceNavigation() {
                 onClick={() => {
                   aos.stores.viewport.actions.createTab();
                 }}
-                className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground [-webkit-app-region:no-drag]"
+                className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground no-drag"
               >
                 <HugeiconsIcon icon={Add01Icon} className="size-4" />
               </button>
@@ -135,7 +136,7 @@ export function WorkspaceNavigation() {
         )}
       </div>
 
-      <div className="pointer-events-auto flex w-fit shrink-0 items-center gap-1 pr-4 [-webkit-app-region:no-drag]">
+      <div className="pointer-events-auto flex w-fit shrink-0 items-center gap-1 pr-4 no-drag">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -282,6 +283,13 @@ export function WorkspaceNavigation() {
           </TooltipContent>
         </Tooltip>
 
+        {/*
+          * Minimise, maximise and close, on the platforms where the operating
+          * system draws none — Windows and Linux, whose window is frameless.
+          * It renders nothing on macOS, which keeps its own traffic lights,
+          * and nothing in a browser tab. See components/ui/window-controls.
+          */}
+        <WindowControls className="-mr-4 ml-1" />
       </div>
     </div>
   );

@@ -165,8 +165,13 @@ func (f *fakeFS) Remove(_ context.Context, p string) error {
 // The table is keyed by the workspace-relative path, which is what Diff hands
 // to Status and Show — not the resolved absolute one.
 type fakeGit struct {
-	status string
-	head   map[string][]byte
+	status  string
+	head    map[string][]byte
+	changed []file.Change
+}
+
+func (g fakeGit) Changes(context.Context, string) ([]file.Change, error) {
+	return g.changed, nil
 }
 
 func (g fakeGit) Status(context.Context, string, string) (string, error) {
@@ -585,5 +590,52 @@ func TestEveryRouteAnswersJSON(t *testing.T) {
 		if !json.Valid(raw) {
 			t.Fatalf("%s %s: the body is not valid JSON: %s", tc.method, tc.target, raw)
 		}
+	}
+}
+
+// TestChangesListsTheWorkingTree is what the Changes panel reads. It rendered
+// nothing before this route existed: the domain could report one path's status
+// for a diff already open, and had no way to answer which paths had changed.
+func TestChangesListsTheWorkingTree(t *testing.T) {
+	fs := newFakeFS()
+	fs.mkdirAll(root)
+	srv := newServer(t, fs, fakeGit{changed: []file.Change{
+		{Path: "src/app.go", Status: "modified"},
+		{Path: "README.md", Status: "added"},
+	}}, fixedWorkspace{root: root})
+
+	res, raw := do(t, srv, http.MethodGet, "/changes", nil)
+	var out struct {
+		Files []file.Change `json:"files"`
+		Total int           `json:"total"`
+	}
+	dataOf(t, res, raw, &out)
+
+	if out.Total != 2 || len(out.Files) != 2 {
+		t.Fatalf("out = %+v", out)
+	}
+	// Ordered by path, so the list does not reshuffle between reads.
+	if out.Files[0].Path != "README.md" || out.Files[1].Path != "src/app.go" {
+		t.Fatalf("files = %+v, want them ordered by path", out.Files)
+	}
+}
+
+func TestChangesOnACleanTreeIsAnEmptyList(t *testing.T) {
+	fs := newFakeFS()
+	fs.mkdirAll(root)
+	srv := newServer(t, fs, fakeGit{}, fixedWorkspace{root: root})
+
+	res, raw := do(t, srv, http.MethodGet, "/changes", nil)
+	var out struct {
+		Files []file.Change `json:"files"`
+		Total int           `json:"total"`
+	}
+	dataOf(t, res, raw, &out)
+
+	if out.Total != 0 {
+		t.Fatalf("total = %d", out.Total)
+	}
+	if out.Files == nil {
+		t.Error("a clean tree answered null rather than an empty list")
 	}
 }

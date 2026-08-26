@@ -1,6 +1,6 @@
 import * as React from "react"
-import * as LucideIcons from "lucide-react"
 import { AppWindow, Globe, Check, FileText } from "lucide-react"
+import { iconByName, loadIcons } from "@/lib/icon-registry"
 import { aos } from "@/app/aos"
 import {
   CommandDialog,
@@ -37,6 +37,25 @@ export function WorkspaceCommander() {
 
     loadCommands()
   }, [open, query])
+
+  // The icons the listed commands name, fetched one small chunk each rather
+  // than imported at the top of this file: the lookup is by string, so a
+  // namespace import was keeping all 1.3 MB of icons in the startup bundle
+  // for a dialog behind ⌘K. See lib/icon-registry.
+  //
+  // `iconTick` exists to re-render once they arrive — `iconByName` reads a
+  // module-level cache, which React has no way to notice changing.
+  const [iconTick, setIconTick] = React.useState(0)
+  React.useEffect(() => {
+    if (!open || commands.length === 0) return
+    let cancelled = false
+    void loadIcons(commands.map((command: any) => command.icon)).then(() => {
+      if (!cancelled) setIconTick((tick) => tick + 1)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [open, commands])
 
   const groupedCommands = React.useMemo(() => {
     return commands.reduce((acc, command) => {
@@ -99,8 +118,11 @@ export function WorkspaceCommander() {
           <CommandGroup key={group} heading={group}>
             {groupCommands.map((command: any) => {
               const isTab = command.id.startsWith("tab:")
+              // `iconTick` is read so this recomputes once the icon chunks
+              // land; until then a named icon simply is not drawn yet.
+              void iconTick
               const Icon = command.icon
-                ? (LucideIcons as any)[command.icon] || (LucideIcons.icons as any)[command.icon]
+                ? iconByName(command.icon)
                 : isTab
                   ? (command.metadata?.type === 'file' ? FileText : command.metadata?.type === 'in-app' ? AppWindow : Globe)
                   : null

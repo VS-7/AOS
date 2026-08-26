@@ -19,7 +19,7 @@ export function WorkspaceNavControlsShell() {
       data-slot="workspace-nav-controls-shell"
       className={cn(
         "fixed top-0 left-[var(--workspace-rail-width)] z-30 flex h-14 items-center px-2 py-3",
-        "[-webkit-app-region:no-drag]",
+        "no-drag",
         isNative && "pl-20",
         isMainSidebarOpen
           ? "w-[var(--sidebar-width)] bg-sidebar"

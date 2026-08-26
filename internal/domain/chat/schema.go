@@ -44,6 +44,52 @@ type CreateInput struct {
 	command.Reasoning
 }
 
+// UpdateInput renames a conversation, or changes who can read it.
+//
+// Only what is named is changed. A rename must not silently reopen a private
+// conversation, and opening one must not rename it — which is why these are
+// two optional fields rather than a whole Chat the caller sends back.
+type UpdateInput struct {
+	Chat string `json:"chat" cli:"arg" jsonschema:"Conversation to change." validate:"required,notblank"`
+
+	Title      string     `json:"title,omitempty" jsonschema:"New name. Leave empty to keep the current one."`
+	Visibility Visibility `json:"visibility,omitempty" jsonschema:"private restricts to the participants; workspace opens it to every member. Leave empty to keep the current one."`
+
+	command.Reasoning
+}
+
+// ClearInput empties a conversation's transcript, keeping the conversation.
+//
+// It is not a variant of Update. Update changes what a conversation is called
+// and who can read it; this throws away what was said in it. Folding the second
+// into the first would mean a rename could drop a transcript by sending one
+// field too many, which is exactly what the interface was doing before this
+// existed.
+type ClearInput struct {
+	Chat string `json:"chat" cli:"arg" jsonschema:"Conversation to empty." validate:"required,notblank"`
+
+	command.Reasoning
+}
+
+// ClearOutput reports how much was thrown away.
+type ClearOutput struct {
+	Chat    string `json:"chat" jsonschema:"Identifier of the conversation."`
+	Removed int    `json:"removed" jsonschema:"How many messages were removed."`
+}
+
+// DeleteInput removes a conversation and its transcript.
+type DeleteInput struct {
+	Chat string `json:"chat" cli:"arg" jsonschema:"Conversation to remove." validate:"required,notblank"`
+
+	command.Reasoning
+}
+
+// DeleteOutput confirms what was removed.
+type DeleteOutput struct {
+	Chat    string `json:"chat" jsonschema:"Identifier of the conversation."`
+	Deleted bool   `json:"deleted" jsonschema:"True when it was removed."`
+}
+
 // SendInput appends a message and dispatches the answer.
 type SendInput struct {
 	Chat string `json:"chat" cli:"arg" jsonschema:"Conversation to write to." validate:"required,notblank"`

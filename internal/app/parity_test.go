@@ -341,6 +341,18 @@ var scenarios = map[string]scenario{
 		Payload: chat.SendInput{Chat: "m-1", Text: "@atlas what changed?", Reasoning: reason()},
 		Seed:    seedChat,
 	},
+	"chats_update": {
+		Payload: chat.UpdateInput{Chat: "m-1", Title: "Renamed", Reasoning: reason()},
+		Seed:    seedChat,
+	},
+	"chats_clear": {
+		Payload: chat.ClearInput{Chat: "m-1", Reasoning: reason()},
+		Seed:    seedChat,
+	},
+	"chats_delete": {
+		Payload: chat.DeleteInput{Chat: "m-1", Reasoning: reason()},
+		Seed:    seedChat,
+	},
 	// The two read-only halves of supervision are safe to run five times over:
 	// neither spawns anything. The two that do are in `excluded`.
 	"gateway_status": {

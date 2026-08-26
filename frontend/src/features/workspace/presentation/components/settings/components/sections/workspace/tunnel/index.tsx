@@ -3,6 +3,7 @@ import { useRouter } from "@tanstack/react-router";
 import * as z from "zod";
 import { Copy, Check, ExternalLink, Loader2, CircleCheck, CircleDot, Circle } from "lucide-react";
 import { toast } from "sonner";
+import { openExternal } from "@/lib/wails";
 
 import { aos } from "@/app/aos";
 import { api } from "@/lib/aos-facade";
@@ -160,7 +161,7 @@ export function WorkspaceTunnelSection() {
 
   const handleOpenUrl = () => {
     if (tunnelPublicUrl) {
-      window.open(tunnelPublicUrl, "_blank");
+      void openExternal(tunnelPublicUrl);
     }
   };
 

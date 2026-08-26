@@ -16,6 +16,13 @@ import (
 // already knows how to read it.
 const RealtimeEventName = "aos:realtime"
 
+// FilesDroppedEventName carries the paths of files dragged onto the window.
+//
+// A separate name from the realtime channel because it is a separate thing:
+// realtime events are the daemon's, relayed; this one originates in the window
+// itself and never leaves the machine.
+const FilesDroppedEventName = "aos:files-dropped"
+
 // forwardRealtime keeps the daemon's event channel open and hands what
 // arrives to the window.
 //

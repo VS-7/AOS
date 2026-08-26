@@ -11,6 +11,7 @@ import { ArrowLeft, ArrowRight, Download, Minus, Plus, X } from 'lucide-react';
 import { useEditorRef } from 'platejs/react';
 
 import { cn } from '@/lib/utils';
+import { saveBlob } from '@/lib/save-file';
 
 const buttonVariants = cva('rounded bg-[rgba(0,0,0,0.5)] px-1', {
   defaultVariants: {
@@ -48,16 +49,16 @@ export function MediaPreviewDialog() {
     zoomOutDisabled,
   } = useImagePreview({ scrollSpeed: SCROLL_SPEED });
   const downloadDisabled = !currentPreview?.url;
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!currentPreview?.url) return;
 
-    const link = document.createElement('a');
-    link.download = getImageDownloadFilename(currentPreview.url);
-    link.href = currentPreview.url;
-    link.rel = 'noopener noreferrer';
-    document.body.append(link);
-    link.click();
-    link.remove();
+    // Fetched rather than pointed at: `<a download>` writes nothing in the
+    // desktop window (see lib/save-file.ts), and the save panel there needs
+    // the bytes, not a URL. `download` on a cross-origin href was already
+    // ignored by browsers too, so this fixes the browser case as well.
+    const response = await fetch(currentPreview.url);
+    if (!response.ok) return;
+    await saveBlob(await response.blob(), getImageDownloadFilename(currentPreview.url));
   };
 
   return (
@@ -148,7 +149,7 @@ export function MediaPreviewDialog() {
                 })
               )}
               disabled={downloadDisabled}
-              onClick={handleDownload}
+              onClick={() => void handleDownload()}
               type="button"
             >
               <Download className="size-4" />

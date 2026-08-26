@@ -110,10 +110,77 @@ waiting through.`,
 		Annotations: command.Annotations{Title: "Send a message"},
 		Handler:     svc.Send,
 	})
+
+	command.MustRegister(reg, command.Command[UpdateInput, *Chat]{
+		Group:   "chats",
+		Name:    "update",
+		Summary: "Rename a conversation, or change who can read it.",
+		Doc: `Change a conversation's name or its visibility.
+
+Only what you name changes. There is no way to send a whole conversation back
+and have it written, because that would let a rename drop the transcript or
+reopen a private thread to the workspace without anybody asking for it.
+
+Visibility has a consequence worth stating: ` + "`workspace`" + ` makes the
+transcript readable by every member, and there is no undo for what somebody has
+already read.`,
+		Examples: []command.Example{
+			{Description: "rename it", Input: UpdateInput{Chat: "c-1", Title: "Release planning"}},
+			{Description: "open it to the workspace", Input: UpdateInput{Chat: "c-1", Visibility: VisibilityWorkspace}},
+		},
+		Registry:    true,
+		Annotations: command.Annotations{Title: "Change a conversation", IdempotentHint: true},
+		Handler:     svc.Update,
+	})
+
+	command.MustRegister(reg, command.Command[ClearInput, ClearOutput]{
+		Group:   "chats",
+		Name:    "clear",
+		Summary: "Empty a conversation, keeping the conversation.",
+		Doc: `Throw away what was said, and keep the room.
+
+This is the "start over" of a long thread: the conversation, its participants
+and its bindings survive; the transcript does not. It is separate from
+` + "`chats update`" + ` on purpose — a rename that could drop a transcript by
+carrying one field too many is a rename nobody can use safely.
+
+Clearing one that is already empty is not an error. You asked for a state, and
+that state holds.`,
+		Examples: []command.Example{
+			{Description: "start the thread over", Input: ClearInput{Chat: "c-1"}},
+		},
+		Registry: true,
+		Annotations: command.Annotations{
+			Title: "Clear a conversation", DestructiveHint: true, IdempotentHint: true,
+		},
+		Handler: svc.Clear,
+	})
+
+	command.MustRegister(reg, command.Command[DeleteInput, DeleteOutput]{
+		Group:   "chats",
+		Name:    "delete",
+		Aliases: []string{"rm"},
+		Summary: "Remove a conversation and its transcript.",
+		Doc: `Delete a conversation. The messages go with it.
+
+The conversation has to exist. Reporting success for an identifier this
+workspace has never had would hide the case that actually happens — a caller
+deleting against the wrong workspace — behind an answer that reads like it
+worked.`,
+		Examples: []command.Example{
+			{Description: "throw away a scratch thread", Input: DeleteInput{Chat: "c-1"}},
+		},
+		Registry:    true,
+		Annotations: command.Annotations{Title: "Delete a conversation", DestructiveHint: true},
+		Handler:     svc.Delete,
+	})
 }
 
 // compile-time proof that the handlers match the command signature.
 var (
-	_ func(context.Context, ListInput) (ListOutput, error) = (*Service)(nil).List
-	_ func(context.Context, SendInput) (SendOutput, error) = (*Service)(nil).Send
+	_ func(context.Context, ListInput) (ListOutput, error)     = (*Service)(nil).List
+	_ func(context.Context, SendInput) (SendOutput, error)     = (*Service)(nil).Send
+	_ func(context.Context, UpdateInput) (*Chat, error)        = (*Service)(nil).Update
+	_ func(context.Context, ClearInput) (ClearOutput, error)   = (*Service)(nil).Clear
+	_ func(context.Context, DeleteInput) (DeleteOutput, error) = (*Service)(nil).Delete
 )

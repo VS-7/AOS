@@ -13,9 +13,13 @@ package wailsvc
 
 import (
 	"context"
+	"encoding/base64"
 	"net/url"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/build"
@@ -32,6 +36,10 @@ type Platform interface {
 	// failure and must not be reported as one.
 	PickFiles(ctx context.Context, opts PickOptions) ([]string, error)
 
+	// PickSavePath opens the system save dialog and returns the path chosen.
+	// A cancelled dialog returns "" and no error, for the same reason.
+	PickSavePath(ctx context.Context, opts SaveOptions) (string, error)
+
 	// SetAppearance sets the window's native material, which is the desktop
 	// half of a theme change.
 	SetAppearance(ctx context.Context, appearance, windows string) error
@@ -44,6 +52,12 @@ type PickOptions struct {
 	Multiple    bool     `json:"multiple,omitempty"`
 	Directories bool     `json:"directories,omitempty"`
 	Extensions  []string `json:"extensions,omitempty"`
+}
+
+// SaveOptions describes the save dialog.
+type SaveOptions struct {
+	Title    string `json:"title,omitempty"`
+	Filename string `json:"filename,omitempty"`
 }
 
 // Health reports whether the daemon behind the window is answering.
@@ -71,12 +85,23 @@ type SystemService struct {
 	// operating system are resolved inside it, because a renderer that could
 	// ask the shell to open any path is a renderer with a filesystem browser
 	// nobody designed.
+	//
+	// It is empty until a workspace is known, and can be set once one is —
+	// see SetWorkspaceRoot. The mutex is because that happens on the
+	// goroutine that resolves the workspace over HTTP, while the reads happen
+	// on whichever goroutine Wails dispatches a call from.
+	mu   sync.RWMutex
 	root string
 }
 
 // NewSystem builds the system service.
+//
+// An empty root is allowed and is what an installed application starts with:
+// the workspace is resolved over HTTP after sign-in, long after this service
+// has to exist. Until then nothing is inside the workspace and every path is
+// refused, which is the safe end of that gap rather than the convenient one.
 func NewSystem(platform Platform, health Health, root string) *SystemService {
-	svc := &SystemService{platform: platform, health: health, root: filepath.Clean(root)}
+	svc := &SystemService{platform: platform, health: health, root: cleanRoot(root)}
 	// The health port is the daemon client in every real wiring, and it is
 	// the thing that knows the address. Asked for rather than required, so a
 	// test can pass a bare health check.
@@ -123,6 +148,21 @@ func (s *SystemService) Version(context.Context) (map[string]string, error) {
 		"commit":  build.Commit,
 		"date":    build.Date,
 	}, nil
+}
+
+// Platform names the operating system this window is running on, as Go spells
+// it: "darwin", "windows", "linux".
+//
+// The interface needs it to decide whether to draw its own minimise, maximise
+// and close controls. It draws them where the window is frameless and there is
+// nothing else to close it with, and must not draw them on macOS, where the
+// window keeps its native traffic lights over full-size content — two sets of
+// window controls in one corner is worse than none.
+//
+// It answers for the process, which is the window: a build runs on one
+// platform.
+func (s *SystemService) Platform(context.Context) (string, error) {
+	return runtime.GOOS, nil
 }
 
 // OpenPath asks the operating system to open a file with its default handler.
@@ -177,6 +217,55 @@ func (s *SystemService) PickFiles(ctx context.Context, opts PickOptions) ([]stri
 	return picked, nil
 }
 
+// SaveFile writes bytes the interface produced to a path the person chooses.
+//
+// It replaces `<a download>`, which is what the interface was ported with and
+// what an Electron renderer supports. A WebView does not: downloading needs a
+// download delegate on every platform (WKDownloadDelegate, WebView2's
+// DownloadStarting, WebKitGTK's decide-destination) and Wails implements none
+// of them, so the anchor click was accepted and nothing was ever written.
+// Exporting a table, saving an image and downloading mcp.json all did nothing
+// and said nothing.
+//
+// Content is base64 because it crosses the bridge as JSON and most of these
+// are not text — an image saved from a conversation, above all.
+//
+// The workspace confinement that guards OpenPath deliberately does not apply.
+// The path here is not one the interface chose: it comes back from the
+// operating system's own save panel, which the person just used. Refusing to
+// write where they said would make the feature useless — nobody saves an
+// export into the workspace they are working in.
+func (s *SystemService) SaveFile(ctx context.Context, filename, contentBase64 string) (string, error) {
+	content, err := base64.StdEncoding.DecodeString(contentBase64)
+	if err != nil {
+		return "", errUndecodableContent(filename, err)
+	}
+	if len(content) > maxSaveBytes {
+		return "", errContentTooLarge(filename, len(content))
+	}
+
+	chosen, err := s.platform.PickSavePath(ctx, SaveOptions{Filename: filepath.Base(filename)})
+	if err != nil {
+		return "", err
+	}
+	if chosen == "" {
+		// Cancelled. An empty answer, not a failure — the caller reads "" as
+		// "nothing to report", exactly as PickFiles' empty slice is read.
+		return "", nil
+	}
+
+	if err := os.WriteFile(chosen, content, 0o644); err != nil {
+		return "", errUnwritable(chosen, err)
+	}
+	return chosen, nil
+}
+
+// maxSaveBytes caps what may cross the bridge in one call. Base64 inflates by
+// a third and the whole thing is held in memory three times over — the string,
+// the decoded bytes, and the JSON frame — so a cap is what keeps a mistyped
+// export from taking the window down.
+const maxSaveBytes = 64 << 20
+
 // SetAppearance syncs the native window material with the theme the interface
 // switched to.
 func (s *SystemService) SetAppearance(ctx context.Context, appearance, windows string) error {
@@ -193,19 +282,92 @@ func (s *SystemService) SetAppearance(ctx context.Context, appearance, windows s
 	return s.platform.SetAppearance(ctx, appearance, windows)
 }
 
+// DroppedFile is one path dragged onto the window, resolved for the interface.
+//
+// The interface reads a file through the daemon, which addresses everything
+// relative to the workspace root — so a bare absolute path from a drag is not
+// something it can do anything with. Resolving it here rather than there keeps
+// one answer to "where is the workspace", on the side that already has it.
+type DroppedFile struct {
+	// Name is the file's own name, for showing while it loads.
+	Name string `json:"name"`
+	// Path is relative to the workspace root, and empty when Inside is false.
+	Path string `json:"path"`
+	// Inside reports whether the file is in the workspace at all. A drag from
+	// the Desktop is not, and the interface says so rather than failing.
+	Inside bool `json:"inside"`
+}
+
+// ResolveDropped maps paths dragged onto the window to workspace-relative ones.
+//
+// Not a bound method: nothing in the interface calls it, and it would be a
+// path-probing oracle if anything could. `cmd/aos-desktop` calls it on the way
+// out, when Wails reports a drop.
+func (s *SystemService) ResolveDropped(paths []string) []DroppedFile {
+	resolved := make([]DroppedFile, 0, len(paths))
+	for _, path := range paths {
+		file := DroppedFile{Name: filepath.Base(path)}
+		if abs, err := s.inside(path); err == nil {
+			s.mu.RLock()
+			root := s.root
+			s.mu.RUnlock()
+			if rel, err := filepath.Rel(root, abs); err == nil {
+				file.Path = filepath.ToSlash(rel)
+				file.Inside = true
+			}
+		}
+		resolved = append(resolved, file)
+	}
+	return resolved
+}
+
+// SetWorkspaceRoot names the workspace this window is looking at, once it is
+// known.
+//
+// The window opens before it can know: an installed application is launched
+// with no directory in mind, and the answer comes back from the daemon after
+// somebody has signed in. Passing "" to NewSystem and calling this later is
+// the honest shape of that, and it is safe in between — see inside.
+func (s *SystemService) SetWorkspaceRoot(root string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.root = cleanRoot(root)
+}
+
+// cleanRoot keeps an unset root unset. filepath.Clean("") is ".", the
+// process's working directory — which for an application launched from Finder
+// is "/", so confining paths "inside the workspace" would have confined them
+// to the entire disk.
+func cleanRoot(root string) string {
+	if strings.TrimSpace(root) == "" {
+		return ""
+	}
+	return filepath.Clean(root)
+}
+
 // inside resolves a path against the workspace and refuses anything outside it.
 func (s *SystemService) inside(path string) (string, error) {
+	s.mu.RLock()
+	root := s.root
+	s.mu.RUnlock()
+
+	// No workspace means no inside. Every path is refused until one is known,
+	// which is a few seconds at startup and never again.
+	if root == "" {
+		return "", errPathOutside(path)
+	}
+
 	trimmed := strings.TrimSpace(path)
 	if trimmed == "" {
 		return "", errPathOutside(path)
 	}
 	candidate := trimmed
 	if !filepath.IsAbs(candidate) {
-		candidate = filepath.Join(s.root, candidate)
+		candidate = filepath.Join(root, candidate)
 	}
 	candidate = filepath.Clean(candidate)
 
-	rel, err := filepath.Rel(s.root, candidate)
+	rel, err := filepath.Rel(root, candidate)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", errPathOutside(path)
 	}
@@ -222,6 +384,39 @@ func errUnsafeURL(raw, scheme string) error {
 		CTA(apperr.CallToAction{
 			Label: "a link with another scheme would hand the machine to whatever wrote it; open the file with the file explorer instead",
 		})
+}
+
+func errUndecodableContent(filename string, cause error) error {
+	return apperr.New("SYSTEM_UNDECODABLE_CONTENT").
+		Causer("wailsvc.SystemService.SaveFile").
+		Msgf("the content to save is not valid base64").
+		Issue("filename", filename).
+		Issue("cause", cause.Error()).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{
+			Label: "nothing was written and the save panel never opened; this is a fault in the interface, not the file — retry the save",
+		})
+}
+
+func errContentTooLarge(filename string, size int) error {
+	return apperr.New("SYSTEM_CONTENT_TOO_LARGE").
+		Causer("wailsvc.SystemService.SaveFile").
+		Msgf("this file is too large to save through the window").
+		Issue("filename", filename).
+		Issue("bytes", size).
+		Status(apperr.StatusPayloadTooLarge).
+		CTA(apperr.CallToAction{
+			Label: "files this size belong in the workspace, where the daemon writes them directly",
+		})
+}
+
+func errUnwritable(path string, cause error) error {
+	return apperr.New("SYSTEM_PATH_UNWRITABLE").
+		Causer("wailsvc.SystemService.SaveFile").
+		Msgf("the chosen location could not be written to").
+		Issue("path", path).
+		Issue("cause", cause.Error()).
+		Status(apperr.StatusInternalServerError)
 }
 
 func errPathOutside(path string) error {

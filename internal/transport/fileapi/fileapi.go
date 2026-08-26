@@ -46,6 +46,7 @@ func New(cfg Config) http.Handler {
 	r.Put("/move", s.move)
 	r.Delete("/delete", s.delete)
 	r.Get("/diff", s.diff)
+	r.Get("/changes", s.changes)
 	return r
 }
 
@@ -121,6 +122,19 @@ func (s *server) diff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, out)
+}
+
+// changes lists every path the working tree differs from HEAD at — what the
+// Changes panel draws before anybody opens a diff.
+func (s *server) changes(w http.ResponseWriter, r *http.Request) {
+	out, err := s.svc.Changes(r.Context())
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	// Under a key rather than as a bare array: an envelope whose data is a
+	// list has nowhere to grow, and this one already wants a count beside it.
+	s.writeJSON(w, map[string]any{"files": out, "total": len(out)})
 }
 
 func (s *server) decode(w http.ResponseWriter, r *http.Request, v any) bool {

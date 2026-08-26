@@ -117,6 +117,81 @@ func (s *Service) Get(ctx context.Context, in GetInput) (*Chat, error) {
 	return got, nil
 }
 
+// Update renames a conversation, or changes who can read it.
+//
+// Only what the caller named changes. The alternative — taking a whole Chat
+// back and writing it — would let a rename drop the transcript, reopen a
+// private conversation or move it to another task, none of which the screen
+// offering the rename is asking for.
+func (s *Service) Update(ctx context.Context, in UpdateInput) (*Chat, error) {
+	id := strings.TrimSpace(in.Chat)
+	current, err := s.repo.Get(ctx, collections.Key{"id": id})
+	if err != nil {
+		return nil, errNotFound(id)
+	}
+
+	if title := strings.TrimSpace(in.Title); title != "" {
+		current.Title = title
+	}
+	if in.Visibility != "" {
+		if in.Visibility != VisibilityPrivate && in.Visibility != VisibilityWorkspace {
+			return nil, errInvalidVisibility(string(in.Visibility))
+		}
+		current.Visibility = in.Visibility
+	}
+	current.UpdatedAt = s.clock.Now()
+
+	if err := s.repo.Update(ctx, current, collections.Version{}); err != nil {
+		return nil, errWriteFailed("Update", err)
+	}
+	return current, nil
+}
+
+// Clear empties the transcript, keeping the conversation.
+//
+// Clearing one that is already empty is not an error: the caller asked for a
+// state, and that state holds.
+func (s *Service) Clear(ctx context.Context, in ClearInput) (ClearOutput, error) {
+	id := strings.TrimSpace(in.Chat)
+	current, err := s.repo.Get(ctx, collections.Key{"id": id})
+	if err != nil {
+		return ClearOutput{Chat: id}, errNotFound(id)
+	}
+
+	removed := len(current.Messages)
+	if removed == 0 {
+		return ClearOutput{Chat: id, Removed: 0}, nil
+	}
+
+	// An empty slice rather than nil: the field is not omitempty, and a
+	// conversation that answers `"messages": null` is one every reader has to
+	// guard before iterating.
+	current.Messages = []Message{}
+	current.UpdatedAt = s.clock.Now()
+	if err := s.repo.Update(ctx, current, collections.Version{}); err != nil {
+		return ClearOutput{Chat: id}, errWriteFailed("Clear", err)
+	}
+	return ClearOutput{Chat: id, Removed: removed}, nil
+}
+
+// Delete removes a conversation and the transcript with it.
+//
+// The conversation has to exist. Deleting something that is not there could be
+// answered as a state that already holds — and is, for a workspace record
+// nobody references — but a chat is what a screen is looking at: a delete that
+// reports success for an identifier this workspace has never had is a caller
+// deleting from the wrong workspace and not being told.
+func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, error) {
+	id := strings.TrimSpace(in.Chat)
+	if _, err := s.repo.Get(ctx, collections.Key{"id": id}); err != nil {
+		return DeleteOutput{Chat: id}, errNotFound(id)
+	}
+	if err := s.repo.Delete(ctx, collections.Key{"id": id}); err != nil {
+		return DeleteOutput{Chat: id}, errWriteFailed("Delete", err)
+	}
+	return DeleteOutput{Chat: id, Deleted: true}, nil
+}
+
 // GetByChannel finds the conversation bound to an external messenger's own
 // chat, by the same Key Create derives from Channel — so a second inbound
 // message from the same Telegram chat lands in the same conversation as the

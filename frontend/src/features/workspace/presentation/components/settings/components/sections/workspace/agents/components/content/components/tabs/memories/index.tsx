@@ -1,6 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { BrainCircuit } from "lucide-react";
-import ForceGraph3D from "react-force-graph-3d";
+
+/**
+ * The 3D memory graph, loaded when this tab is actually rendering one.
+ *
+ * `react-force-graph-3d` brings all of three.js with it — 4.4 MB of source,
+ * the single largest thing in the application and about a seventh of the
+ * whole bundle. Imported at the top of this file, as it was, every one of
+ * those bytes was downloaded, parsed and compiled during startup for a screen
+ * behind Settings -> Agents -> a specific agent -> the Memories tab, which
+ * most sessions never open. That is most of what made the window slow to
+ * become interactive.
+ *
+ * It is loaded lazily and only below the "does this agent have any memories"
+ * check, so an agent with an empty graph never pays for it either.
+ */
+const ForceGraph3D = lazy(() => import("react-force-graph-3d"));
 import { AnimatedEmptyState } from "@/components/ui/animated-empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { aos } from "@/app/aos";
@@ -143,6 +158,7 @@ export function AgentMemoriesTab({ agent }: AgentMemoriesTabProps) {
       {!isLoading && graph.nodes.length > 0 && (
         <div ref={hostRef} className="h-full w-full min-h-130 overflow-hidden">
           {size.width > 0 && size.height > 0 && (
+            <Suspense fallback={<Skeleton className="h-full w-full" />}>
             <ForceGraph3D
               ref={graphRef}
               width={size.width}
@@ -162,6 +178,7 @@ export function AgentMemoriesTab({ agent }: AgentMemoriesTabProps) {
               warmupTicks={60}
               cooldownTicks={120}
             />
+            </Suspense>
           )}
         </div>
       )}

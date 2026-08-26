@@ -66,8 +66,17 @@
 
         /* ThemeProvider forces `solid` off the native shell; match it here so
            app.css's `[data-windows="blur"] body { background: transparent }`
-           doesn't blank the first frame in the browser. */
-        root.dataset.windows = window.aos ? settings.windows || "blur" : "solid";
+           doesn't blank the first frame in the browser.
+
+           The desktop is detected the same way lib/native.ts and
+           lib/realtime.ts detect it — the daemon address the window states in
+           its own URL — because this script runs before any module has loaded
+           and `window.aos` (installed by main.tsx) does not exist yet. Reading
+           it here, as this used to, was always false, so the desktop window
+           painted its first frame opaque and then switched to translucent a
+           moment later. */
+        var isDesktop = new URLSearchParams(window.location.search).has("daemon");
+        root.dataset.windows = isDesktop ? settings.windows || "blur" : "solid";
       })();
     </script>
   </head>

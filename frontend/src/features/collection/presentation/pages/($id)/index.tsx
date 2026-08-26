@@ -38,6 +38,7 @@ import { aos } from "@/app/aos";
 import { stores } from "@/app/lib/stores";
 import { isDormant } from "@/lib/command-map";
 import { DormantGate } from "@/components/DormantDomain";
+import { useAlert } from "@/components/ui/alert-provider";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
@@ -187,6 +188,7 @@ export const CollectionPage = aos
   .withComponent(({ route, client }) => {
     const navigate = useNavigate();
     const router = useRouter();
+    const { confirm } = useAlert();
     const collectionId = route.useParams().id;
     const loaderData = route.useLoaderData();
 
@@ -266,10 +268,19 @@ export const CollectionPage = aos
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => {
-                  if (!window.confirm(`Delete "${recordId}"?`)) {
-                    return;
-                  }
+                onClick={async () => {
+                  // Not `window.confirm`: WKWebView routes it to a delegate
+                  // method Wails does not implement, so it answered false
+                  // without asking and records could not be deleted from the
+                  // desktop window. See lib/wails.ts.
+                  const accepted = await confirm({
+                    title: `Delete "${recordId}"?`,
+                    description: "This record cannot be recovered.",
+                    confirmText: "Delete",
+                    variant: "destructive",
+                  });
+                  if (!accepted) return;
+
                   deleteRecord({
                     params: {
                       collection: collectionId,
@@ -286,7 +297,7 @@ export const CollectionPage = aos
       });
 
       return cols;
-    }, [columns, collectionId, navigate, deleteRecord]);
+    }, [columns, collectionId, navigate, deleteRecord, confirm]);
 
     const filters = React.useMemo(() => {
       return generateFiltersFromData(allRecords, columns);
@@ -328,6 +339,7 @@ function CollectionPageContent({
 }) {
   const navigate = useNavigate();
   const router = useRouter();
+  const { confirm } = useAlert();
   const { table } = useDataTable();
   const visibleCount = table.getFilteredRowModel().rows.length;
   const visibleColumnsCount = table.getVisibleFlatColumns().length;
@@ -338,13 +350,14 @@ function CollectionPageContent({
   const handleDeleteSelected = async () => {
     if (selectedRows.length === 0) return;
 
-    if (
-      !window.confirm(
-        `Are you sure you want to delete the ${selectedRows.length} selected record(s)?`
-      )
-    ) {
-      return;
-    }
+    // See the per-row delete above on why this is not `window.confirm`.
+    const accepted = await confirm({
+      title: `Delete ${selectedRows.length} record(s)?`,
+      description: "The selected records cannot be recovered.",
+      confirmText: "Delete",
+      variant: "destructive",
+    });
+    if (!accepted) return;
 
     const deletePromises = selectedRows.map((row: any) =>
       deleteRecordAsync({

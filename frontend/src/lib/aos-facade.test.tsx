@@ -161,7 +161,13 @@ describe("call", () => {
     // next, until the `models` group lit `model.list`. `user` is one of the
     // two domains left with no Go command group at all, which is what makes
     // it a durable stand-in rather than the next one to move.
-    const r = await call("user", "list");
+    //
+    // `create`, not `list`: the roster itself is live now — it goes through
+    // `/api/auth/users`, the identity surface that sits outside the command
+    // registry, which is why it never needed a command group to appear. The
+    // three writes still have no surface at all, so the domain is still the
+    // durable stand-in; only the path inside it moved.
+    const r = await call("user", "create");
     expect(invoke).not.toHaveBeenCalled();
     expect(r.data).toBeUndefined();
     expect(r.error?.code).toBe(DORMANT_CODE);
@@ -279,11 +285,12 @@ describe("useQuery's queryFn", () => {
 
   it("resolves a dormant call to null data, not undefined", async () => {
     const { wrapper } = withQueryClient();
-    // `user`, not `collection`/`instruction`/`model`: task-10 lit
-    // `collection`, the Phase 8 domain pass lit `instruction`, and the
-    // `models` group lit `model.list` — none of the three exercises the
-    // dormant branch this test exists for any more.
-    const { result } = renderHook(() => api.user!.list!.useQuery(), { wrapper });
+    // `user.create`, not `collection`/`instruction`/`model`/`user.list`:
+    // task-10 lit `collection`, the Phase 8 domain pass lit `instruction`,
+    // the `models` group lit `model.list`, and `user.list` now answers from
+    // the identity HTTP surface — none of them exercises the dormant branch
+    // this test exists for any more.
+    const { result } = renderHook(() => api.user!.create!.useQuery(), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -358,16 +365,17 @@ describe("useQuery's onSuccess shim", () => {
     // it does not special-case dormant. A dormant screen's `onSuccess`, if
     // it has one, does get called once with `null`.
     //
-    // `user`, not `collection`/`instruction`/`model`: task-10 lit
-    // `collection`, the Phase 8 domain pass lit `instruction`, and the
-    // `models` group lit `model.list`. Each kept passing after its own move
-    // — a live call with no `invoke` mock also resolves to `null` — so it
-    // would silently stop being about dormancy at all. The `invoke`
-    // assertion below is what made this one fail loudly instead of
-    // drifting, which is exactly what it did when `model.list` was lit.
+    // `user.create`, not `collection`/`instruction`/`model`/`user.list`:
+    // task-10 lit `collection`, the Phase 8 domain pass lit `instruction`,
+    // the `models` group lit `model.list`, and `user.list` now answers from
+    // the identity HTTP surface. Each kept passing after its own move — a
+    // live call with no `invoke` mock also resolves to `null` — so it would
+    // silently stop being about dormancy at all. The `invoke` assertion
+    // below is what made this one fail loudly instead of drifting, which is
+    // exactly what it did each time.
     const onSuccess = vi.fn();
     const { wrapper } = withQueryClient();
-    const { result } = renderHook(() => api.user!.list!.useQuery({ onSuccess }), { wrapper });
+    const { result } = renderHook(() => api.user!.create!.useQuery({ onSuccess }), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));

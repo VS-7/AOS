@@ -116,8 +116,12 @@ export function useChatComposer({
       },
     });
 
+  // `chat.clear`, not `chat.update`: this used to send `{messages: []}` to the
+  // update command, which has no such field — a rename that could drop a
+  // transcript by carrying one field too many is a rename nobody can trust, so
+  // Go keeps the two apart and so does this.
   const { mutate: clearChatContext, loading: isClearingContext } =
-    aos.client.chat.update.useMutation({
+    aos.client.chat.clear.useMutation({
       onSuccess: () => {
         toast.success("Chat context cleared.");
       },
@@ -460,7 +464,6 @@ export function useChatComposer({
 
         clearChatContext({
           params: { chat: chat.id },
-          body: { messages: [] },
         });
 
         closeSkillsCommand();

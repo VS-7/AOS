@@ -36,6 +36,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useAlert } from "@/components/ui/alert-provider";
 import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
 import {
   closeChatTab,
@@ -56,6 +57,7 @@ export function ChannelItem({
   unreadCount = 0,
   onChanged,
 }: ChannelItemProps) {
+  const { confirm } = useAlert();
   const [isEditing, setIsEditing] = React.useState(false);
   const [draftTitle, setDraftTitle] = React.useState(chat.title);
 
@@ -136,10 +138,18 @@ export function ChannelItem({
     });
   }
 
-  function handleDelete() {
-    if (!window.confirm(`Delete "${chat.title}"?`)) {
-      return;
-    }
+  async function handleDelete() {
+    // The application's own dialog, not `window.confirm`. WKWebView routes
+    // `confirm()` to a delegate method Wails does not implement, so it
+    // returned false without drawing anything and this channel could not be
+    // deleted from the desktop at all. See lib/wails.ts.
+    const accepted = await confirm({
+      title: `Delete "${chat.title}"?`,
+      description: "This channel and its messages cannot be recovered.",
+      confirmText: "Delete",
+      variant: "destructive",
+    });
+    if (!accepted) return;
 
     deleteChat({
       params: { chat: chat.id },
@@ -325,7 +335,7 @@ export function ChannelItem({
               variant="destructive"
               onClick={(event) => {
                 event.stopPropagation();
-                handleDelete();
+                void handleDelete();
               }}
             >
               <HugeiconsIcon icon={Delete01Icon} />

@@ -102,13 +102,51 @@ type Options struct {
 
 	// IDs is injected so a test can predict the identifier of a new record.
 	IDs ids.Generator
+
+	// The fields below are set only when this process builds a second (third,
+	// …) workspace for itself — see scopes in workspaces.go. They are
+	// unexported because nothing outside this package should be assembling a
+	// half-shared application.
+
+	// workspaceID is the id of the workspace being built, when it is one this
+	// process resolved rather than one the environment pinned.
+	workspaceID string
+
+	// sharedEvents is the primary's realtime hub. Every workspace publishes
+	// into the one hub, because there is one WebSocket server in front of it
+	// and the subscribers attached to a second hub would be nobody.
+	sharedEvents *realtime.Hub
+
+	// sharedQueue is the primary's work queue. It is one SQLite file for the
+	// installation, and a second handle on it would be a second set of
+	// connections to the same database for no gain — the worker that drains
+	// it is started once, by Serve, on the primary.
+	sharedQueue job.Queue
+
+	// secondary marks a workspace built by another App, so it does not build
+	// a set of workspaces of its own and recurse forever.
+	secondary bool
 }
 
 // App is everything wired together.
 type App struct {
 	Paths     corecfg.Paths
 	Workspace string
-	Registry  *command.Registry
+
+	// Registry is the published command surface. On the process's primary
+	// workspace it routes each call to the workspace the caller named (see
+	// workspaces.go); on a workspace built for another one it is that
+	// workspace's own registry.
+	Registry *command.Registry
+
+	// own is this workspace's commands, unrouted. It is what routing resolves
+	// to, and invoking through it is what makes a call land on this
+	// workspace's directory rather than being routed again.
+	own *command.Registry
+
+	// scopes is the other workspaces this process serves, built as they are
+	// first addressed. Nil on a workspace that was itself built by one.
+	scopes *scopes
 
 	Config     config.Service
 	Agents     *agent.Service
@@ -272,18 +310,28 @@ func New(opts Options) (*App, error) {
 		return nil, err
 	}
 
-	root := opts.WorkspaceRoot
-	if root == "" {
-		root = resolver.String(env.KeyWorkspacePath, "")
-	}
-	if root == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
+	logger := logging.New(logging.Config{})
+
+	// The registry is read before the root is decided, because one of the
+	// candidates is a workspace this installation already has — see
+	// resolveWorkspaceRoot, and the defect it exists to close: a launcher that
+	// provides no working directory (Finder, launchd, a Windows service) was
+	// handing this process "/" and every collection-backed command answered
+	// 403 for the whole session.
+	workspaceStore := fsworkspace.FromPaths(paths)
+	root, rootSource := resolveWorkspaceRoot(
+		opts.WorkspaceRoot, resolver.String(env.KeyWorkspacePath, ""), paths, workspaceStore)
+	logger.Debug("serving a workspace", "path", root, "from", string(rootSource))
+
+	// A root chosen for the caller rather than by it may not exist yet. The
+	// domain scaffolds the layout inside it, but nothing else creates the
+	// directory itself, and every repository under a missing root reads as
+	// empty and fails to write.
+	if rootSource == rootFromDefault {
+		if err := os.MkdirAll(root, 0o755); err != nil {
 			return nil, err
 		}
-		root = cwd
 	}
-	root = filepath.Clean(root)
 
 	// One lock and one record cache per workspace, shared by every repository,
 	// so two collections writing to the same directory serialise against each
@@ -297,9 +345,22 @@ func New(opts Options) (*App, error) {
 	// (see the CollectionRegistry field's own doc comment on App).
 	collReg := collections.NewRegistry()
 
-	logger := logging.New(logging.Config{})
-	active := resolver.String(env.KeyWorkspaceID, "")
-	events := realtime.NewHub(logger, clock)
+	// Which workspace this set of services is for. A workspace this process
+	// resolved for a caller names its own id; otherwise it is whatever the
+	// environment pinned, which is how an operator dedicates a daemon to one.
+	active := opts.workspaceID
+	if active == "" {
+		active = resolver.String(env.KeyWorkspaceID, "")
+	}
+
+	// One hub for the installation. A workspace built for another one
+	// publishes into the primary's, because that is where the WebSocket
+	// server's subscribers are — a hub of its own would emit to nobody, and
+	// the second workspace would have no live updates at all.
+	events := opts.sharedEvents
+	if events == nil {
+		events = realtime.NewHub(logger, clock)
+	}
 
 	// Repositories are built only now, after events exists: the four
 	// ecosystem natives (collections, views, toolsets, skills) publish a
@@ -352,7 +413,7 @@ func New(opts Options) (*App, error) {
 		Log:        logger,
 	})
 	workspaceSvc := workspace.NewService(workspace.Deps{
-		Store:    fsworkspace.FromPaths(paths),
+		Store:    workspaceStore,
 		FS:       fsworkspace.NewFiles(),
 		Git:      gitcli.New(),
 		Seeder:   newSeeder(lock, cache, clock),
@@ -714,7 +775,13 @@ func New(opts Options) (*App, error) {
 	// question, and the error says which capability was lost.
 	var queue job.Queue
 	var signatures subconscious.Signatures
-	if opened, err := sqlitequeue.Open(sqlitequeue.Options{
+	if opts.sharedQueue != nil {
+		// The primary already opened it. No closer is registered: the handle
+		// belongs to whoever opened it, and closing it here would take the
+		// installation's queue away from every other workspace.
+		queue = opts.sharedQueue
+		signatures = subconscious.NewMemorySignatures(clock.Now)
+	} else if opened, err := sqlitequeue.Open(sqlitequeue.Options{
 		Path: paths.JobsDB(), Clock: clock.Now,
 	}); err != nil {
 		logger.Warn("continuing without a work queue: nothing will run in the background", "err", err)
@@ -798,10 +865,11 @@ func New(opts Options) (*App, error) {
 		})
 	}
 
-	return &App{
+	built := &App{
 		Paths:      paths,
 		Workspace:  root,
 		Registry:   reg,
+		own:        reg,
 		Config:     configSvc,
 		Agents:     agentSvc,
 		Memories:   memorySvc,
@@ -847,7 +915,41 @@ func New(opts Options) (*App, error) {
 		Clock:   clock,
 		env:     resolver,
 		closers: closers,
-	}, nil
+	}
+
+	// The workspaces this process serves besides the one it opened.
+	//
+	// Only the primary gets them: a workspace built for a caller must not
+	// build a set of its own, or resolving one would recurse until the
+	// process ran out of stack. `secondary` is what says which this is.
+	//
+	// The published registry becomes the routed one, so every surface — the
+	// CLI, MCP, the HTTP router — publishes one command list and each call
+	// lands on the directory its caller named. `own` stays the unrouted set,
+	// which is what routing resolves to and what the turn runtime executes an
+	// agent's tools through: an agent works in one workspace and has no
+	// business being routed anywhere else.
+	if !opts.secondary {
+		built.scopes = &scopes{
+			primary: built,
+			build: func(id, workspaceRoot string) (*App, error) {
+				return New(Options{
+					Env:           opts.Env,
+					Clock:         opts.Clock,
+					IDs:           opts.IDs,
+					WorkspaceRoot: workspaceRoot,
+					workspaceID:   id,
+					sharedEvents:  events,
+					sharedQueue:   queue,
+					secondary:     true,
+				})
+			},
+		}
+		built.Registry = built.workspaceRegistry()
+		built.closers = append(built.closers, built.scopes.close)
+	}
+
+	return built, nil
 }
 
 // workspaceRoot adapts workspace.Service to file.Workspaces: the active

@@ -41,6 +41,12 @@ import {
 } from "@/components/ui/tooltip";
 import { blobUrlToDataUrl } from "@/lib/blob";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import {
+  FILE_DROP_TARGET_ATTRIBUTE,
+  useNativeFileDrop,
+  type RefusedDrop,
+} from "@/lib/file-drop";
 // The installed `ai` package version (4.x) doesn't export these UI message
 // part / status types yet (they were added in a later major version), but
 // this file's local attachment/source state is already shaped to match
@@ -784,6 +790,25 @@ export const PromptInput = ({
     };
   }, [add, globalDrop]);
 
+  /*
+   * The same drop, inside the application.
+   *
+   * The two effects above are the browser's path and stay exactly as they
+   * are — they are correct there. They simply never run in the desktop
+   * window, because the native window takes the drag before the WebView can
+   * see it. See lib/file-drop.ts.
+   */
+  const onNativeDrop = useCallback((dropped: File[]) => add(dropped), [add]);
+  const onNativeDropRefused = useCallback((refused: RefusedDrop) => {
+    toast.error(
+      refused.names.length === 1
+        ? `${refused.names[0]} is outside this workspace`
+        : `${refused.names.length} files are outside this workspace`,
+      { description: "The desktop reads files from the workspace it is open on." },
+    );
+  }, []);
+  useNativeFileDrop(onNativeDrop, onNativeDropRefused);
+
   useEffect(
     () => () => {
       if (!usingProvider) {
@@ -916,6 +941,7 @@ export const PromptInput = ({
         className={cn("w-full", className)}
         onSubmit={handleSubmit}
         ref={formRef}
+        {...{ [FILE_DROP_TARGET_ATTRIBUTE]: "" }}
         {...props}
       >
         <InputGroup className={cn("overflow-hidden", inputGroupClassName)}>{children}</InputGroup>

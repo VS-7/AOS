@@ -16,6 +16,7 @@ import {
   type RowSelectionState,
 } from "@tanstack/react-table";
 import { Checkbox } from "../checkbox";
+import { saveBlob } from "@/lib/save-file";
 import {
   DataTableContextValue,
   DataTableProviderProps,
@@ -273,14 +274,10 @@ export function DataTableProvider<TData>({
         .map((row) => row.join(","))
         .join("\n");
 
-      // Cria Blob para download
+      // `<a download>` writes nothing inside the desktop window — Wails
+      // implements no download delegate on any platform. See lib/save-file.ts.
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `export.${format}`;
-      link.click();
-
-      URL.revokeObjectURL(link.href);
+      void saveBlob(blob, `export.${format}`);
 
       // Converte blob em File
       const file = new File([blob], `export.${format}`, {

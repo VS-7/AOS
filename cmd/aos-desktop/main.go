@@ -13,10 +13,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -67,13 +67,28 @@ func main() {
 		os.Exit(1)
 	}
 
-	root := resolver.String(env.KeyWorkspacePath, "")
+	// The directory this window is for, when there is one to be had.
+	//
+	// A working directory is only taken when it could plausibly be somebody's
+	// project. An application bundle opened from Finder is started in "/", and
+	// passing that on made the daemon serve the top of the disk: every
+	// workspace-relative path resolved somewhere that cannot be read or
+	// written, and agents, tasks, chats, goals and collections all answered
+	// with a refusal for as long as the window was open.
+	//
+	// Empty is a real answer and the common one for an installed application:
+	// it means this window names no directory, and the daemon opens the
+	// workspace the installation already has (or makes the first one). See
+	// internal/app's resolveWorkspaceRoot for the other end of this.
+	root := strings.TrimSpace(resolver.String(env.KeyWorkspacePath, ""))
 	if root == "" {
-		if cwd, err := os.Getwd(); err == nil {
+		if cwd, err := os.Getwd(); err == nil && corecfg.CanHoldWorkspace(cwd) {
 			root = cwd
 		}
 	}
-	root = filepath.Clean(root)
+	if root != "" {
+		root = filepath.Clean(root)
+	}
 
 	host := resolver.String(env.KeyServerHost, env.DefaultServerHost)
 	port := resolver.Int(env.KeyServerPort, build.Port)
@@ -99,6 +114,17 @@ func main() {
 			Explicit: resolver.String("DAEMON_PATH", ""),
 			Args:     []string{"serve"},
 			Log:      filepath.Join(paths.GatewayDir(), "gateway.log"),
+
+			// The daemon is told which directory to serve rather than left to
+			// infer it from a working directory it inherited from this
+			// process — which, for an application launched from Finder, the
+			// Dock or Spotlight, is "/". A daemon started there served the top
+			// of the disk and refused every workspace-scoped command in the
+			// application. Both are set: Dir for anything that reads the
+			// working directory, and the environment variable because it is
+			// what the daemon actually consults first.
+			Dir: root,
+			Env: daemonEnv(root),
 		},
 		Clock:   clockx.System{},
 		Sleeper: supervise.Sleeper{},
@@ -136,21 +162,36 @@ func main() {
 	}
 
 	platform := &wailsPlatform{}
+	// The system service starts without a workspace and is told which one it
+	// is for as soon as that is known — see adopt below, and
+	// SystemService.SetWorkspaceRoot. Handing it the working directory instead,
+	// as this used to, confined "inside the workspace" to "/" for an
+	// application launched from Finder, which confines nothing.
+	systemSvc := wailsvc.NewSystem(platform, daemon, "")
+
+	// adopt is the one place the resolved workspace is applied, so the two
+	// callers below — the daemon supervisor's first attempt and the one after
+	// sign-in — cannot apply different halves of it.
+	adopt := func(opened workspaceRef) {
+		daemon.SetWorkspace(opened.ID)
+		systemSvc.SetWorkspaceRoot(opened.Path)
+		startRealtime(opened.ID)
+	}
+
 	desktop := application.New(application.Options{
 		Name:        build.DisplayName,
 		Description: "An operating system for AI agents.",
 		Services: []application.Service{
-			application.NewService(wailsvc.NewSystem(platform, daemon, root)),
+			application.NewService(systemSvc),
 			application.NewService(wailsvc.NewDomain(daemon)),
 			application.NewService(wailsvc.NewAuth(daemon, func(ctx context.Context) {
 				// A successful login or onboarding is the first moment this
 				// client can call anything past /api/auth — workspace
 				// registration needed a token it didn't have until now.
-				if id, err := introspectWorkspace(ctx, daemon, root); err == nil {
-					daemon.SetWorkspace(id)
-					startRealtime(id)
+				if opened, err := openWorkspace(ctx, daemon, root); err == nil {
+					adopt(opened)
 				} else {
-					log.Warn("could not register or find the workspace for this directory", "path", root, "err", err)
+					log.Warn("could not open a workspace", "path", root, "err", err)
 				}
 			})),
 		},
@@ -160,41 +201,33 @@ func main() {
 		LogLevel: slog.LevelWarn,
 	})
 
-	window := desktop.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title: build.DisplayName,
-
-		// The daemon's address, handed to the interface in the one place it
-		// can read synchronously and cannot fail to reach: its own URL.
-		//
-		// Everything else the window asks for goes through the Wails bridge,
-		// which needs no address. The realtime channel is the exception — it
-		// is a WebSocket the webview opens itself, and in this window
-		// `window.location` is `wails://localhost`, the application's own
-		// asset scheme. A socket URL derived from it names something that
-		// serves no `/ws` and is not even a valid WebSocket scheme, which is
-		// why the desktop had no live updates at all: not a failing
-		// connection, no connection.
-		URL: "/?daemon=" + url.QueryEscape(address),
-
-		Width:     1440,
-		Height:    900,
-		MinWidth:  960,
-		MinHeight: 600,
-
-		// Frameless with a translucent background, as in the original. The
-		// interface draws its own chrome, and the sidebar leaves room for the
-		// traffic lights macOS still draws over it.
-		Frameless:        true,
-		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
-		BackgroundType:   application.BackgroundTypeTranslucent,
-		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 40,
-			Backdrop:                application.MacBackdropTranslucent,
-			TitleBar:                application.MacTitleBarHiddenInset,
-		},
-	})
+	window := desktop.Window.NewWithOptions(windowOptions(address))
 	platform.window = window
 	emitRealtime = func(event any) { window.EmitEvent(RealtimeEventName, event) }
+
+	// Files dragged onto the window.
+	//
+	// The interface cannot receive these itself. Every platform routes a file
+	// drag to the native window before the WebView sees it — on macOS the
+	// window is registered as the dragging destination outright — so the
+	// HTML5 `drop` handlers the interface was ported with never fire, and a
+	// file dropped onto the composer did nothing at all. Wails turns the drop
+	// into a window event carrying the paths; this hands it on under a name
+	// the interface listens for, the same way realtime events are relayed.
+	window.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
+		if event == nil || event.Context() == nil {
+			return
+		}
+		paths := event.Context().DroppedFiles()
+		if len(paths) == 0 {
+			return
+		}
+		// Resolved against the workspace before it leaves this process: the
+		// interface reads files through the daemon, which addresses them
+		// relative to the workspace root, and this is the side that knows
+		// where that is.
+		window.EmitEvent(FilesDroppedEventName, systemSvc.ResolveDropped(paths))
+	})
 
 	// The deep link: aos://task/123 reaches the window rather than starting a
 	// second copy of the application. macOS delivers a registered scheme as the
@@ -209,7 +242,7 @@ func main() {
 
 	// The daemon is asked to be running, not started blindly. Two things
 	// supervising one process is how you end up with two of it.
-	go ensureDaemon(supervisor, daemon, root, startRealtime, log)
+	go ensureDaemon(supervisor, daemon, root, adopt, log)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -236,7 +269,7 @@ func main() {
 // A failure here does not stop the window from opening: an interface that says
 // it cannot reach the daemon is more useful than an application that refuses to
 // start and does not say why.
-func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, root string, startRealtime func(string), log *slog.Logger) {
+func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, root string, adopt func(workspaceRef), log *slog.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -252,45 +285,152 @@ func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, root
 		return
 	}
 
-	if id, err := introspectWorkspace(ctx, client, root); err != nil {
-		log.Warn("could not register or find the workspace for this directory yet", "path", root, "err", err)
+	if opened, err := openWorkspace(ctx, client, root); err != nil {
+		log.Warn("could not open a workspace yet", "path", root, "err", err)
 	} else {
-		client.SetWorkspace(id)
-		startRealtime(id)
+		adopt(opened)
 	}
 }
 
-// introspectWorkspace registers root as a workspace (idempotent — a directory
-// already registered comes back unchanged, see workspace_introspect's own
-// doc) and returns its id, so this desktop instance can address it without
-// anyone picking a workspace by hand.
-func introspectWorkspace(ctx context.Context, client *daemonclient.Client, root string) (string, error) {
+// daemonEnv is the environment the supervised daemon is started with: this
+// process's own, plus the workspace directory when this window names one.
+//
+// The whole environment is copied rather than a short list assembled, because
+// the daemon reads the same layered settings this process does — the state
+// directory, the port, the log level, a provider key — and a child handed only
+// what somebody remembered to forward is a child that behaves differently for
+// reasons nobody can see.
+func daemonEnv(root string) []string {
+	if root == "" {
+		// Nil means "inherit", which is what os/exec does with no Env set, and
+		// is the right answer when there is nothing to add.
+		return nil
+	}
+	key := env.Key(env.KeyWorkspacePath) + "="
+	out := make([]string, 0, len(os.Environ())+1)
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, key) {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return append(out, key+root)
+}
+
+// openWorkspace decides which workspace this window addresses, and returns its
+// id.
+//
+// It asks what is registered before registering anything. An installed
+// application is opened without a directory in mind — there is no working
+// directory that means anything, which is why root is usually empty here — and
+// what the person expects is the workspace they were using, not a new one
+// somewhere they did not choose. Only when this window does name a directory
+// is that directory registered, which is the behaviour of opening a project:
+// run the desktop inside a repository and the repository becomes the
+// workspace.
+//
+// The daemon resolves the same way for the same reasons (internal/app's
+// resolveWorkspaceRoot), so an empty registry here means a first run, and the
+// workspace the daemon created for itself is the one this returns.
+func openWorkspace(ctx context.Context, client *daemonclient.Client, root string) (opened workspaceRef, err error) {
+	if root != "" {
+		return introspectWorkspace(ctx, client, root)
+	}
+
+	registered, err := listWorkspaces(ctx, client)
+	if err != nil {
+		return workspaceRef{}, err
+	}
+	for _, w := range registered {
+		if !w.Archived {
+			return workspaceRef{ID: w.ID, Path: w.Path}, nil
+		}
+	}
+
+	// Nothing registered: the daemon serves a directory it chose for itself,
+	// and asking it to introspect with no path is asking for exactly that one.
+	return introspectWorkspace(ctx, client, "")
+}
+
+// workspaceRef is the workspace this window addresses: the id every call is
+// scoped by, and the directory the system service confines paths to.
+type workspaceRef struct {
+	ID   string
+	Path string
+}
+
+type registeredWorkspace struct {
+	ID       string `json:"id"`
+	Path     string `json:"path"`
+	Archived bool   `json:"archived"`
+}
+
+func listWorkspaces(ctx context.Context, client *daemonclient.Client) ([]registeredWorkspace, error) {
 	input, err := json.Marshal(map[string]string{
-		"path":       root,
-		"_reasoning": "the desktop is starting and needs to know which workspace it is for",
+		"_reasoning": "the desktop is starting and needs to know which workspaces exist",
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	raw, err := client.Invoke(ctx, "workspace_introspect", input)
+	raw, err := client.Invoke(ctx, "workspace_list", input)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	var envelope struct {
 		Data struct {
-			Workspace struct {
-				ID string `json:"id"`
-			} `json:"workspace"`
+			Workspaces []registeredWorkspace `json:"workspaces"`
 		} `json:"data"`
 		Error *struct {
 			Message string `json:"message"`
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return "", err
+		return nil, err
 	}
 	if envelope.Error != nil {
-		return "", fmt.Errorf("%s", envelope.Error.Message)
+		return nil, fmt.Errorf("%s", envelope.Error.Message)
 	}
-	return envelope.Data.Workspace.ID, nil
+	return envelope.Data.Workspaces, nil
+}
+
+// introspectWorkspace registers root as a workspace (idempotent — a directory
+// already registered comes back unchanged, see workspace_introspect's own
+// doc) and returns its id, so this desktop instance can address it without
+// anyone picking a workspace by hand.
+//
+// An empty root is not an omission: workspace_introspect then registers the
+// directory the daemon is serving, which is the one it resolved for itself.
+func introspectWorkspace(ctx context.Context, client *daemonclient.Client, root string) (workspaceRef, error) {
+	payload := map[string]string{
+		"_reasoning": "the desktop is starting and needs to know which workspace it is for",
+	}
+	if root != "" {
+		payload["path"] = root
+	}
+	input, err := json.Marshal(payload)
+	if err != nil {
+		return workspaceRef{}, err
+	}
+	raw, err := client.Invoke(ctx, "workspace_introspect", input)
+	if err != nil {
+		return workspaceRef{}, err
+	}
+	var envelope struct {
+		Data struct {
+			Workspace registeredWorkspace `json:"workspace"`
+		} `json:"data"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return workspaceRef{}, err
+	}
+	if envelope.Error != nil {
+		return workspaceRef{}, fmt.Errorf("%s", envelope.Error.Message)
+	}
+	return workspaceRef{
+		ID:   envelope.Data.Workspace.ID,
+		Path: envelope.Data.Workspace.Path,
+	}, nil
 }

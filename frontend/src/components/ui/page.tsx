@@ -108,7 +108,7 @@ export function PageHeader({
     >
       <div className={cn(
         'flex items-center gap-4 flex-1 min-w-0 [&>div]:flex [&>div]:items-center [*]:flex [*]:items-center justify-between',
-        isNative && '[-webkit-app-region:no-drag]'
+        isNative && 'no-drag'
       )}>
         {children}
       </div>

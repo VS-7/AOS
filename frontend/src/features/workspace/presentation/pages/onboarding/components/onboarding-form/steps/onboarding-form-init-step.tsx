@@ -6,6 +6,7 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import { useFormContext } from "react-hook-form";
 import { aos } from "@/app/aos";
 import { toast } from "sonner";
+import { reloadAt } from "@/lib/wails";
 import type { AuthOnboarding } from "@/features/auth/interfaces/auth.interfaces";
 
 interface InitStage {
@@ -222,7 +223,10 @@ export function OnboardingFormInitStep({
 
     const redirectTimer = setTimeout(() => {
       dispatch({ type: "REDIRECT" });
-      window.location.replace("/?welcome=true");
+      // Not `location.replace`: in the desktop window the query string
+      // carries the daemon's address, and dropping it strips the interface
+      // of its API origin and event channel. See lib/wails.ts.
+      reloadAt("/?welcome=true");
     }, 1200);
 
     return () => clearTimeout(redirectTimer);

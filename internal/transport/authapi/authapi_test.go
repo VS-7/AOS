@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -270,5 +271,68 @@ func TestChangePasswordThenLoginWithTheNewOne(t *testing.T) {
 	}, "")
 	if res.StatusCode != http.StatusOK {
 		t.Fatal("login with the new password should succeed")
+	}
+}
+
+// TestUsersListsTheAccountsOnThisInstallation.
+//
+// The interface has three screens that need to know who else is here — the
+// workspace roster the sidebar's Team tab draws, the assignee picker on a
+// task, and Settings → Users — and every one of them rendered empty because
+// nothing published the list. The domain has had it all along
+// (auth.Service.Users); this is the surface it was missing.
+func TestUsersListsTheAccountsOnThisInstallation(t *testing.T) {
+	srv := newServer(t)
+
+	// Signed out: an unauthenticated caller learns nothing about who has an
+	// account here.
+	res, _ := get(t, srv, "/users", "")
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status without a credential = %d, want 401", res.StatusCode)
+	}
+
+	_, env := post(t, srv, "/onboarding", map[string]string{
+		"name": "Vitor", "email": "vitor@example.test", "password": goodPassword,
+	}, "")
+	var session struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(env.Data, &session); err != nil {
+		t.Fatal(err)
+	}
+
+	res, env = get(t, srv, "/users", session.Token)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", res.StatusCode, env.Data)
+	}
+	var out struct {
+		Users []struct {
+			ID       string `json:"id"`
+			Name     string `json:"name"`
+			Email    string `json:"email"`
+			Username string `json:"username"`
+			Role     string `json:"role"`
+			Password string `json:"password"`
+		} `json:"users"`
+	}
+	if err := json.Unmarshal(env.Data, &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Users) != 1 {
+		t.Fatalf("got %d users, want the one that was onboarded", len(out.Users))
+	}
+	got := out.Users[0]
+	if got.Name != "Vitor" || got.Email != "vitor@example.test" || got.Role != "super" {
+		t.Fatalf("user = %+v", got)
+	}
+	if got.ID == "" {
+		t.Error("the account has no id, so nothing can reference it")
+	}
+	// The listing is a roster, not a credential dump.
+	if got.Password != "" {
+		t.Error("the password hash was published")
+	}
+	if strings.Contains(string(env.Data), "$argon2id$") {
+		t.Error("a password hash reached the response body")
 	}
 }

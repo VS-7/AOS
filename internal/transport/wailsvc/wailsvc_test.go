@@ -2,9 +2,12 @@ package wailsvc_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -21,7 +24,11 @@ type platform struct {
 	external   []string
 	appearance [2]string
 	picked     []string
-	failWith   error
+	// savePath is what the save panel answers with. Empty means the person
+	// cancelled, which every caller has to treat as an ordinary outcome.
+	savePath string
+	saveOpts wailsvc.SaveOptions
+	failWith error
 }
 
 func (p *platform) OpenPath(_ context.Context, path string) error {
@@ -37,6 +44,11 @@ func (p *platform) RevealInFolder(_ context.Context, path string) error {
 func (p *platform) OpenExternal(_ context.Context, rawURL string) error {
 	p.external = append(p.external, rawURL)
 	return p.failWith
+}
+
+func (p *platform) PickSavePath(_ context.Context, opts wailsvc.SaveOptions) (string, error) {
+	p.saveOpts = opts
+	return p.savePath, p.failWith
 }
 
 func (p *platform) PickFiles(context.Context, wailsvc.PickOptions) ([]string, error) {
@@ -430,5 +442,223 @@ func TestAuthRunsAfterAuthOnlyOnSuccess(t *testing.T) {
 	}
 	if hookRuns != 2 {
 		t.Fatalf("hookRuns after a successful onboarding = %d, want 2", hookRuns)
+	}
+}
+
+// TestAnUnknownWorkspaceConfinesNothingToTheWorkingDirectory.
+//
+// An installed application is opened without a directory in mind, so the
+// window starts before it knows which workspace it is for and hands this
+// service an empty root. filepath.Clean("") is ".", the process's working
+// directory — which for an application launched from Finder is "/", the whole
+// disk. Confining "inside the workspace" to "inside /" confines nothing, and
+// this is the boundary that keeps the interface from asking the shell to
+// reveal any file on the machine.
+//
+// Until a workspace is known, nothing is inside it.
+func TestAnUnknownWorkspaceConfinesNothingToTheWorkingDirectory(t *testing.T) {
+	svc := wailsvc.NewSystem(&platform{}, nil, "")
+
+	for _, path := range []string{"/etc/passwd", "some/file.txt", "."} {
+		if err := svc.OpenPath(ctx(), path); err == nil {
+			t.Errorf("%q was opened while no workspace was known", path)
+		}
+		if err := svc.RevealInFolder(ctx(), path); err == nil {
+			t.Errorf("%q was revealed while no workspace was known", path)
+		}
+	}
+}
+
+// TestTheWorkspaceIsLearnedAfterTheWindowOpens: an installed application
+// resolves its workspace over HTTP, after sign-in, which is later than this
+// service is constructed.
+func TestTheWorkspaceIsLearnedAfterTheWindowOpens(t *testing.T) {
+	dir := t.TempDir()
+	inside := filepath.Join(dir, "notes.md")
+	if err := os.WriteFile(inside, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := wailsvc.NewSystem(&platform{}, nil, "")
+	svc.SetWorkspaceRoot(dir)
+
+	if err := svc.OpenPath(ctx(), inside); err != nil {
+		t.Fatalf("a path inside the workspace was refused after it was set: %v", err)
+	}
+	if err := svc.OpenPath(ctx(), "/etc/passwd"); err == nil {
+		t.Fatal("a path outside the workspace was opened")
+	}
+}
+
+// TestPlatformNamesTheOperatingSystem. The interface draws its own minimise,
+// maximise and close controls on the platforms whose window is frameless, and
+// must not draw a second set next to the ones macOS draws itself. A user-agent
+// guess is what it has until this answers.
+func TestPlatformNamesTheOperatingSystem(t *testing.T) {
+	svc := wailsvc.NewSystem(&platform{}, nil, t.TempDir())
+
+	got, err := svc.Platform(ctx())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != runtime.GOOS {
+		t.Fatalf("platform = %q, want %q", got, runtime.GOOS)
+	}
+}
+
+// TestADroppedFileIsResolvedAgainstTheWorkspace.
+//
+// A file dragged onto the window arrives as an absolute path, and the
+// interface reads files through the daemon, which addresses them relative to
+// the workspace root. Nothing in the window knows that root — so an
+// unresolved path is a path the interface can do nothing with, which is the
+// state a drag was in: accepted by the operating system and then dropped.
+func TestADroppedFileIsResolvedAgainstTheWorkspace(t *testing.T) {
+	root := t.TempDir()
+	svc := wailsvc.NewSystem(&platform{}, health{ready: true}, root)
+
+	resolved := svc.ResolveDropped([]string{
+		filepath.Join(root, "notes", "todo.md"),
+	})
+
+	if len(resolved) != 1 {
+		t.Fatalf("resolved %d files, want 1", len(resolved))
+	}
+	if !resolved[0].Inside {
+		t.Error("a file in the workspace was reported as outside it")
+	}
+	if resolved[0].Path != "notes/todo.md" {
+		t.Errorf("path = %q, want the workspace-relative one", resolved[0].Path)
+	}
+	if resolved[0].Name != "todo.md" {
+		t.Errorf("name = %q, want the file's own name", resolved[0].Name)
+	}
+}
+
+// TestADroppedFileOutsideTheWorkspaceIsReportedNotRead.
+//
+// The desktop's file access is confined to the workspace the window is looking
+// at, and a drag is not a reason to widen it. The interface needs to be able to
+// say so, which means the refusal has to survive as an answer rather than
+// vanish from the list.
+func TestADroppedFileOutsideTheWorkspaceIsReportedNotRead(t *testing.T) {
+	root := t.TempDir()
+	elsewhere := filepath.Join(t.TempDir(), "secrets.env")
+	svc := wailsvc.NewSystem(&platform{}, health{ready: true}, root)
+
+	resolved := svc.ResolveDropped([]string{elsewhere})
+
+	if len(resolved) != 1 {
+		t.Fatalf("resolved %d files, want the refusal to still be listed", len(resolved))
+	}
+	if resolved[0].Inside {
+		t.Error("a file outside the workspace was reported as inside it")
+	}
+	if resolved[0].Path != "" {
+		t.Errorf("path = %q, want nothing the interface could read", resolved[0].Path)
+	}
+	if resolved[0].Name != "secrets.env" {
+		t.Errorf("name = %q, want the name so the refusal can say which file", resolved[0].Name)
+	}
+}
+
+// TestNoWorkspaceMeansNoDroppedFileIsInsideIt. The window opens before it
+// knows which workspace it is for, and "" as a root would otherwise clean to
+// the process's working directory — "/" for an application launched from
+// Finder, which would make the whole disk the workspace.
+func TestNoWorkspaceMeansNoDroppedFileIsInsideIt(t *testing.T) {
+	svc := wailsvc.NewSystem(&platform{}, health{ready: true}, "")
+
+	for _, file := range svc.ResolveDropped([]string{"/etc/hosts", "relative.txt"}) {
+		if file.Inside {
+			t.Errorf("%q was reported as inside a workspace that is not known yet", file.Name)
+		}
+	}
+}
+
+// TestSavingAFileWritesWhereThePersonChose.
+//
+// `<a download>` is what the interface was ported with, and what an Electron
+// renderer supports. A WebView does not: every platform needs a download
+// delegate and Wails implements none, so seven export and save actions —
+// a table to CSV, an image from a conversation, mcp.json — clicked an anchor
+// that wrote nothing and reported nothing.
+func TestSavingAFileWritesWhereThePersonChose(t *testing.T) {
+	chosen := filepath.Join(t.TempDir(), "export.csv")
+	p := &platform{savePath: chosen}
+	svc := wailsvc.NewSystem(p, health{ready: true}, t.TempDir())
+
+	written, err := svc.SaveFile(ctx(), "export.csv", base64.StdEncoding.EncodeToString([]byte("a,b\n1,2\n")))
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if written != chosen {
+		t.Errorf("wrote to %q, want %q", written, chosen)
+	}
+
+	content, err := os.ReadFile(chosen)
+	if err != nil {
+		t.Fatalf("reading back: %v", err)
+	}
+	if string(content) != "a,b\n1,2\n" {
+		t.Errorf("content = %q, want what the interface produced", content)
+	}
+	if p.saveOpts.Filename != "export.csv" {
+		t.Errorf("the panel opened on %q, want the suggested name", p.saveOpts.Filename)
+	}
+}
+
+// TestSavingOutsideTheWorkspaceIsAllowed.
+//
+// The confinement that guards OpenPath deliberately does not apply here: this
+// path did not come from the interface, it came back from the operating
+// system's own save panel, which the person just used. Nobody saves an export
+// into the workspace they are working in, and refusing would make the whole
+// feature useless.
+func TestSavingOutsideTheWorkspaceIsAllowed(t *testing.T) {
+	workspace := t.TempDir()
+	elsewhere := filepath.Join(t.TempDir(), "downloaded.png")
+	svc := wailsvc.NewSystem(&platform{savePath: elsewhere}, health{ready: true}, workspace)
+
+	if _, err := svc.SaveFile(ctx(), "downloaded.png", base64.StdEncoding.EncodeToString([]byte{0x89, 'P', 'N', 'G'})); err != nil {
+		t.Fatalf("a path the person chose in the save panel was refused: %v", err)
+	}
+	if _, err := os.Stat(elsewhere); err != nil {
+		t.Fatalf("nothing was written: %v", err)
+	}
+}
+
+// TestACancelledSavePanelWritesNothingAndIsNotAnError. Same contract as
+// PickFiles: changing your mind is an empty answer, not a failure the person
+// needs a dialog about.
+func TestACancelledSavePanelWritesNothingAndIsNotAnError(t *testing.T) {
+	svc := wailsvc.NewSystem(&platform{savePath: ""}, health{ready: true}, t.TempDir())
+
+	written, err := svc.SaveFile(ctx(), "export.csv", base64.StdEncoding.EncodeToString([]byte("x")))
+	if err != nil {
+		t.Fatalf("a cancelled panel was reported as a failure: %v", err)
+	}
+	if written != "" {
+		t.Errorf("path = %q, want nothing", written)
+	}
+}
+
+// TestUndecodableContentIsRefusedBeforeAnyPanelOpens. Opening a save panel and
+// then failing to write is the worst order to do this in: the person picks a
+// location, waits, and is told the content was never valid.
+func TestUndecodableContentIsRefusedBeforeAnyPanelOpens(t *testing.T) {
+	p := &platform{savePath: filepath.Join(t.TempDir(), "x")}
+	svc := wailsvc.NewSystem(p, health{ready: true}, t.TempDir())
+
+	_, err := svc.SaveFile(ctx(), "export.csv", "not base64 at all!!")
+	if err == nil {
+		t.Fatal("undecodable content was accepted")
+	}
+	var appErr *apperr.Error
+	if !errors.As(err, &appErr) || appErr.Code != "AOS_SYSTEM_UNDECODABLE_CONTENT" {
+		t.Errorf("error = %v, want AOS_SYSTEM_UNDECODABLE_CONTENT", err)
+	}
+	if p.saveOpts.Filename != "" {
+		t.Error("the save panel was opened before the content was checked")
 	}
 }

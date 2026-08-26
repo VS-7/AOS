@@ -205,6 +205,36 @@ func (s *Service) Delete(ctx context.Context, p string) error {
 // Diff compares a file against HEAD: the old side comes from git, the new
 // side from disk. A binary pair is reported as such rather than diffed —
 // nothing useful renders from a binary line-diff.
+// Changes lists every path the working tree differs from HEAD at.
+//
+// A workspace that is not a Git repository answers an empty list rather than a
+// failure. `workspace create` initialises one, but a directory somebody
+// registered by hand need not be one, and the panel that shows this still has
+// to open there — with nothing in it, which is the truth.
+func (s *Service) Changes(ctx context.Context) ([]Change, error) {
+	root, err := s.root(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	found, err := s.git.Changes(ctx, root)
+	if err != nil {
+		// Not a repository, or a git that would not run. Either way there is
+		// nothing to report, and refusing to draw the file tree because of it
+		// would be the wrong trade.
+		return []Change{}, nil
+	}
+
+	// Ordered by path, so two reads of an unchanged repository are identical
+	// and the list does not reshuffle under the pointer.
+	out := append([]Change(nil), found...)
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	if out == nil {
+		out = []Change{}
+	}
+	return out, nil
+}
+
 func (s *Service) Diff(ctx context.Context, in DiffInput) (Diff, error) {
 	root, real, err := s.resolve(ctx, in.Path)
 	if err != nil {

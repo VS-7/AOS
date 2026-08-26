@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/tooltip";
 import { aos } from "@/app/aos";
 import { cn, timeAgo } from "@/lib/utils";
+import { useAlert } from "@/components/ui/alert-provider";
 import { toast } from "sonner";
 import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
 import {
@@ -33,6 +34,7 @@ export const RoutineListRow = React.memo(function RoutineListRow({
   routine,
 }: RoutineListRowProps) {
   const router = useRouter();
+  const { confirm } = useAlert();
   const agents = aos.stores.agent.useState((state) => state.items);
 
   const status = RoutineHelper.getStatus(routine.status);
@@ -110,9 +112,14 @@ export const RoutineListRow = React.memo(function RoutineListRow({
   }, [routine.id]);
 
   const handleDelete = useCallback(async () => {
-    const confirmed = window.confirm(
-      `Delete routine "${routine.name}"? This cannot be undone.`,
-    );
+    // See channel-item: `window.confirm` answers false without asking inside
+    // the desktop window, so this used the application's dialog instead.
+    const confirmed = await confirm({
+      title: `Delete routine "${routine.name}"?`,
+      description: "This cannot be undone.",
+      confirmText: "Delete",
+      variant: "destructive",
+    });
     if (!confirmed) return;
 
     try {
@@ -124,7 +131,7 @@ export const RoutineListRow = React.memo(function RoutineListRow({
     } catch {
       toast.error("Failed to delete routine");
     }
-  }, [routine.id, routine.name, router]);
+  }, [confirm, routine.id, routine.name, router]);
 
   return (
     <div

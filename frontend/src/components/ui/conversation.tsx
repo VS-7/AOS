@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { saveBlob } from "@/lib/save-file";
 import type { UIMessage } from "ai";
 import { ArrowDownIcon, DownloadIcon } from "lucide-react";
 import type { ComponentProps } from "react";
@@ -171,15 +172,9 @@ export const ConversationDownload = ({
 }: ConversationDownloadProps) => {
   const handleDownload = React.useCallback(() => {
     const markdown = messagesToMarkdown(messages, formatMessage);
+    // See lib/save-file.ts: `<a download>` is inert in the desktop window.
     const blob = new Blob([markdown], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    void saveBlob(blob, filename);
   }, [messages, filename, formatMessage]);
 
   return (

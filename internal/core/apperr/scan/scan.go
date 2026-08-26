@@ -253,12 +253,19 @@ var httpStatusNames = map[string]int{
 	"StatusGone":                http.StatusGone,
 	"StatusPreconditionFailed":  http.StatusPreconditionFailed,
 	"StatusUnprocessableEntity": http.StatusUnprocessableEntity,
-	"StatusTooManyRequests":     http.StatusTooManyRequests,
-	"StatusNotImplemented":      http.StatusNotImplemented,
-	"StatusInternalServerError": http.StatusInternalServerError,
-	"StatusBadGateway":          http.StatusBadGateway,
-	"StatusServiceUnavailable":  http.StatusServiceUnavailable,
-	"StatusGatewayTimeout":      http.StatusGatewayTimeout,
+	// apperr spells these two differently from net/http, and the scanner reads
+	// `apperr.StatusX` as well as `http.StatusX` — so both names have to be
+	// here or the catalogue silently records 500. Four errors across authapi,
+	// fileapi, httpapi and wailsvc were catalogued that way.
+	"StatusPayloadTooLarge":       http.StatusRequestEntityTooLarge,
+	"StatusRequestEntityTooLarge": http.StatusRequestEntityTooLarge,
+	"StatusRequestTimeout":        http.StatusRequestTimeout,
+	"StatusTooManyRequests":       http.StatusTooManyRequests,
+	"StatusNotImplemented":        http.StatusNotImplemented,
+	"StatusInternalServerError":   http.StatusInternalServerError,
+	"StatusBadGateway":            http.StatusBadGateway,
+	"StatusServiceUnavailable":    http.StatusServiceUnavailable,
+	"StatusGatewayTimeout":        http.StatusGatewayTimeout,
 }
 
 func qualify(code string) string {

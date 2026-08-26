@@ -8,6 +8,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { toast } from "sonner";
+import { saveText } from "@/lib/save-file";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -121,15 +122,12 @@ export function DevelopersSkillMcpSection({
     }
   };
 
-  const handleDownload = () => {
-    const blob = new Blob([exportJson], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "mcp.json";
-    anchor.click();
-    URL.revokeObjectURL(url);
-    toast.success("mcp.json downloaded");
+  const handleDownload = async () => {
+    // See lib/save-file.ts: `<a download>` is inert in the desktop window, so
+    // this used to report success for a file that was never written.
+    const saved = await saveText(exportJson, "mcp.json", "application/json");
+    if (saved.status === "saved") toast.success("mcp.json downloaded");
+    if (saved.status === "failed") toast.error(saved.reason);
   };
 
   return (

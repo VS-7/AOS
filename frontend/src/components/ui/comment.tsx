@@ -45,6 +45,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { BasicMarksKit } from '@/components/editor/plugins/basic-marks-kit';
 import {
@@ -317,8 +318,11 @@ function CommentMoreDropdown(props: {
   const selectedEditCommentRef = React.useRef<boolean>(false);
 
   const onDeleteComment = React.useCallback(() => {
+    // A toast, not `alert()`. WKWebView routes `alert` to a delegate method
+    // Wails does not implement, so it drew nothing at all and this guard
+    // failed silently inside the desktop window. See lib/wails.ts.
     if (!comment.id)
-      return alert('You are operating too quickly, please try again later.');
+      return toast.error('You are operating too quickly, please try again later.');
 
     // Find and update the discussion
     const updatedDiscussions = editor
@@ -353,7 +357,7 @@ function CommentMoreDropdown(props: {
     selectedEditCommentRef.current = true;
 
     if (!comment.id)
-      return alert('You are operating too quickly, please try again later.');
+      return toast.error('You are operating too quickly, please try again later.');
 
     setEditingId(comment.id);
   }, [comment.id, setEditingId]);

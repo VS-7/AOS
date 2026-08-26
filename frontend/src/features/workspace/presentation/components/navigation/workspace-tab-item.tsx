@@ -110,7 +110,7 @@ export function WorkspaceTabItem({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
-        "group flex min-w-0 max-w-60 select-none [-webkit-app-region:no-drag] items-center gap-1.5 rounded-md border px-1.5 text-sm h-8",
+        "group flex min-w-0 max-w-60 select-none no-drag items-center gap-1.5 rounded-md border px-1.5 text-sm h-8",
         variant === "overlay"
           ? "cursor-grabbing border-input bg-background text-foreground shadow-md scale-[1.02]"
           : isDragging

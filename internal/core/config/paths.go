@@ -120,3 +120,38 @@ func (p Paths) Ensure() error {
 	}
 	return nil
 }
+
+// CanHoldWorkspace reports whether a directory is a plausible place for
+// somebody's work — the question asked of a working directory before it is
+// taken as the workspace root.
+//
+// It exists because a process nobody started from a shell is handed a working
+// directory that has nothing to do with the user: a macOS application bundle
+// opened from Finder gets "/", and launchd and the Windows service manager are
+// no better. Taking it made every workspace-relative path resolve at the top
+// of the disk, which the collection repositories then refused as escaping the
+// root — the daemon answered 403 or 500 to every workspace-scoped command for
+// the whole session, with nothing on screen to say why.
+//
+// The home directory is refused for a different reason: laying a workspace
+// skeleton into it because of a working directory nobody chose is not a change
+// to make to someone's machine uninvited. A home directory that already holds
+// the state directory was meant, and is allowed.
+func CanHoldWorkspace(dir string) bool {
+	if strings.TrimSpace(dir) == "" {
+		return false
+	}
+	dir = filepath.Clean(dir)
+
+	// A path whose parent is itself is a filesystem root: "/" on Unix, "C:\"
+	// on Windows.
+	if dir == filepath.Dir(dir) {
+		return false
+	}
+
+	if home, err := os.UserHomeDir(); err == nil && filepath.Clean(home) == dir {
+		_, err := os.Stat(filepath.Join(dir, build.StateDir))
+		return err == nil
+	}
+	return true
+}

@@ -161,12 +161,18 @@ func (f *fakeFS) Remove(_ context.Context, p string) error {
 }
 
 type fakeGit struct {
-	status map[string]string
-	head   map[string][]byte
+	status     map[string]string
+	head       map[string][]byte
+	changed    []file.Change
+	changesErr error
 }
 
 func newFakeGit() *fakeGit {
 	return &fakeGit{status: map[string]string{}, head: map[string][]byte{}}
+}
+
+func (g *fakeGit) Changes(context.Context, string) ([]file.Change, error) {
+	return g.changed, g.changesErr
 }
 
 func (g *fakeGit) Status(_ context.Context, _, path string) (string, error) {
@@ -760,4 +766,77 @@ func TestDiffReportsAGitFailureAsItsOwnCode(t *testing.T) {
 // that substitute a broken one.
 func newService2(fs file.FS, git file.Git) *file.Service {
 	return file.NewService(file.Deps{FS: fs, Git: git, Workspaces: fakeWorkspaces{}})
+}
+
+// TestChangesListsWhatDiffersFromHead.
+//
+// The Changes panel has rendered nothing since it was ported. `file.changes`
+// was `null` in the frontend's command map because this domain could answer
+// "what is the status of this one path" (Status, for a diff the user already
+// opened) and not "which paths have changed at all" — and there is no way to
+// build the second out of the first without walking the whole repository and
+// asking about every file in it.
+func TestChangesListsWhatDiffersFromHead(t *testing.T) {
+	fs := newFakeFS()
+	git := newFakeGit()
+	git.changed = []file.Change{
+		{Path: "src/app.go", Status: "modified"},
+		{Path: "README.md", Status: "added"},
+		{Path: "old.txt", Status: "deleted"},
+		{Path: "scratch.log", Status: "untracked"},
+	}
+	svc := newService(fs, git)
+
+	got, err := svc.Changes(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 4 {
+		t.Fatalf("%d changes, want 4: %+v", len(got), got)
+	}
+	// Ordered by path, so two reads of an unchanged repository are identical.
+	want := []string{"README.md", "old.txt", "scratch.log", "src/app.go"}
+	for i, w := range want {
+		if got[i].Path != w {
+			t.Fatalf("changes = %+v, want them ordered by path", got)
+		}
+	}
+	if got[3].Status != "modified" {
+		t.Errorf("src/app.go status = %q", got[3].Status)
+	}
+}
+
+// TestChangesOnARepositoryWithNothingToReportIsEmpty — an empty list, not an
+// error and not nil: the panel maps over it.
+func TestChangesOnACleanTreeIsEmpty(t *testing.T) {
+	svc := newService(newFakeFS(), newFakeGit())
+
+	got, err := svc.Changes(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil {
+		t.Fatal("a clean tree answered nil rather than an empty list")
+	}
+	if len(got) != 0 {
+		t.Fatalf("changes = %+v", got)
+	}
+}
+
+// TestChangesOutsideARepositoryIsEmptyRatherThanAFailure. A workspace does not
+// have to be a Git repository — `workspace create` initialises one, but a
+// directory somebody registered by hand need not be — and the file explorer
+// still has to open in one.
+func TestChangesOutsideARepositoryIsEmptyRatherThanAFailure(t *testing.T) {
+	git := newFakeGit()
+	git.changesErr = errors.New("not a git repository")
+	svc := newService(newFakeFS(), git)
+
+	got, err := svc.Changes(context.Background())
+	if err != nil {
+		t.Fatalf("a workspace that is not a repository is not an error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("changes = %+v", got)
+	}
 }

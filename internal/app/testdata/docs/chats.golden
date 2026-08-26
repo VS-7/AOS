@@ -15,7 +15,7 @@ transcript of an autonomous run is the same structure in a different place.
 - Not to store what you learned — that is a memory
 - Not to track work — that is a task
 
-Composite tool `Chat` with 4 actions: create, get, list, send.
+Composite tool `Chat` with 7 actions: clear, create, delete, get, list, send, update.
 
 Address a specific agent with @slug. With no mention, a direct message goes to
 the one agent in it, and anything else goes to the workspace orchestrator — the
@@ -27,6 +27,42 @@ Call as `Chat({ action: "<action>", input: { ... }, _reasoning: "..." })`.
 Set `schema: true` on the same level as `action` to receive the full action detail (description, examples, input schema, token estimate) instead of executing.
 
 ## actions
+
+### chats_clear
+
+Empty a conversation, keeping the conversation.
+
+Throw away what was said, and keep the room.
+
+This is the "start over" of a long thread: the conversation, its participants
+and its bindings survive; the transcript does not. It is separate from
+`chats update` on purpose — a rename that could drop a transcript by
+carrying one field too many is a rename nobody can use safely.
+
+Clearing one that is already empty is not an error. You asked for a state, and
+that state holds.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "chat": {
+      "type": "string",
+      "description": "Conversation to empty."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "chat",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
 
 ### chats_create
 
@@ -133,6 +169,39 @@ is not something anyone means to make.
   },
   "required": [
     "title",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### chats_delete
+
+Remove a conversation and its transcript.
+
+Delete a conversation. The messages go with it.
+
+The conversation has to exist. Reporting success for an identifier this
+workspace has never had would hide the case that actually happens — a caller
+deleting against the wrong workspace — behind an answer that reads like it
+worked.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "chat": {
+      "type": "string",
+      "description": "Conversation to remove."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "chat",
     "_reasoning"
   ],
   "additionalProperties": false
@@ -252,6 +321,50 @@ waiting through.
   "required": [
     "chat",
     "text",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### chats_update
+
+Rename a conversation, or change who can read it.
+
+Change a conversation's name or its visibility.
+
+Only what you name changes. There is no way to send a whole conversation back
+and have it written, because that would let a rename drop the transcript or
+reopen a private thread to the workspace without anybody asking for it.
+
+Visibility has a consequence worth stating: `workspace` makes the
+transcript readable by every member, and there is no undo for what somebody has
+already read.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "chat": {
+      "type": "string",
+      "description": "Conversation to change."
+    },
+    "title": {
+      "type": "string",
+      "description": "New name. Leave empty to keep the current one."
+    },
+    "visibility": {
+      "type": "string",
+      "description": "private restricts to the participants; workspace opens it to every member. Leave empty to keep the current one."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "chat",
     "_reasoning"
   ],
   "additionalProperties": false

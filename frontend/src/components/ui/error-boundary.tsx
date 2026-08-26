@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { isDesktop, system } from "@/lib/client";
+import { openExternal } from "@/lib/wails";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -164,12 +164,10 @@ function ErrorFallback({ error, section, copied, onReset, onCopy }: ErrorFallbac
   }
 
   function handleOpenBrowser() {
-    const url = window.location.href;
-    if (isDesktop()) {
-      void system.openExternal(url);
-    } else {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
+    // `openExternal` already picks the right mechanism per host: the
+    // operating system's browser inside the desktop window, a new tab in a
+    // browser. `window.open` on its own opens nothing in a WebView.
+    void openExternal(window.location.href);
   }
 
   return (

@@ -34,6 +34,20 @@ type Content struct {
 
 // Diff is one file's change against HEAD, powering the task worktree review
 // screen.
+// Change is one path the working tree differs from HEAD at.
+//
+// It carries no content. The Changes panel lists what moved; opening one of
+// them is a Diff, which is where the two versions come from — and loading
+// every version to draw a list of filenames would make the panel the most
+// expensive screen in the application.
+type Change struct {
+	Path   string `json:"path"`
+	Status string `json:"status"` // added, modified, deleted, untracked, renamed
+
+	// OldPath is where a renamed entry came from. Empty for everything else.
+	OldPath string `json:"oldPath,omitempty"`
+}
+
 type Diff struct {
 	Path     string  `json:"path"`
 	Status   string  `json:"status"` // added, modified, deleted, untracked, unchanged

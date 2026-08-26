@@ -12,7 +12,26 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   base: "/",
   resolve: {
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+
+      // The icon set, resolved to the barrel instead of the pre-minified
+      // bundle its own exports map picks for a production build.
+      //
+      // @hugeicons/core-free-icons publishes two entry points behind the
+      // `development`/`production` export conditions: `index.js`, a 498 kB
+      // barrel that re-exports one file per icon, and `index.min.js`, a
+      // single 4.7 MB module with every icon inlined into one scope. Rollup
+      // can tree-shake the first and cannot tree-shake the second, and a
+      // production build resolves to the second — so all 4,000-odd icons
+      // ended up in the startup bundle, a fifth of the whole application, to
+      // draw the forty this interface actually names.
+      //
+      // Both entry points export the same names, so nothing else changes.
+      "@hugeicons/core-free-icons": fileURLToPath(
+        new URL("./node_modules/@hugeicons/core-free-icons/dist/esm/index.js", import.meta.url),
+      ),
+    },
   },
   // Monaco ships from node_modules, in the bundle, rather than served from
   // the daemon the way the original does — see docs/05 - Transporte/Artifacts

@@ -17,6 +17,7 @@ import { useRealtime } from "@/hooks/use-realtime";
 import { aos } from "@/app/aos";
 import { useNotification } from "@/hooks/use-notification";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useCoalescedInvalidate } from "@/hooks/use-coalesced-invalidate";
 import { WorkspaceNavControlsShell } from "../sidebar/components/workspace-nav-controls-shell";
 
 export function WorkspaceLayout() {
@@ -37,6 +38,10 @@ export function WorkspaceLayout() {
   const isChangesActive = activeTab?.type === "changes";
   const isChatActive = activeTab?.type === "chat";
   const { notify } = useNotification();
+  // Every realtime handler below refetches the visible screen through this
+  // rather than calling router.invalidate() directly — see the hook's own
+  // comment on the freeze that caused.
+  const invalidate = useCoalescedInvalidate();
 
   // In-app route changes (Tasks, Goals, …) reveal the Outlet by focusing the
   // "aos" tab. Sidebar chat opens call openChatTab without changing
@@ -76,11 +81,11 @@ export function WorkspaceLayout() {
     "activity:created",
     async (event) => {
       await notify(event);
-      await router.invalidate();
+      invalidate();
 
       aos.stores.activity.actions.refresh();
     },
-    [],
+    [invalidate],
   );
 
   const { setProcessing } = aos.stores.agent.useActions();
@@ -108,7 +113,7 @@ export function WorkspaceLayout() {
   // completion, clear, reaction) require a full reconciliation.
   useRealtime("chat:refresh", async (payload) => {
     if (!payload.message) {
-      void router.invalidate();
+      invalidate();
     }
   });
 

@@ -1,6 +1,7 @@
 import { Call } from "@wailsio/runtime";
 import { DomainError, unwrap } from "./client";
 import { desktopRetryDelays, markDesktopConfirmed, sleep } from "./desktop-transport";
+import { daemonURL } from "./daemon-origin";
 
 /** Mirrors internal/transport/wailsvc.PublicUser / internal/domain/auth.Public. */
 export interface PublicUser {
@@ -59,7 +60,9 @@ async function desktopCall<T>(method: string, ...args: unknown[]): Promise<T> {
 async function httpRequest<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(path, init);
+    // Absolute inside the desktop window, where a relative path reaches the
+    // application's own asset host rather than the daemon — see daemon-origin.
+    response = await fetch(daemonURL(path), init);
   } catch (err) {
     throw new DomainError({
       code: "TRANSPORT_UNREACHABLE",
@@ -133,6 +136,18 @@ export function onboarding(name: string, email: string, password: string): Promi
 /** Ends the current session. */
 export async function logout(): Promise<void> {
   await call<Record<string, never>>("Logout", [], "/api/auth/logout", { method: "POST", headers: jsonHeaders, body: "{}" });
+}
+
+/**
+ * The accounts on this installation.
+ *
+ * HTTP only: AuthService binds five methods over the Wails bridge and this is
+ * not one of them, so asking the desktop first would pay the whole cold-start
+ * retry budget before falling back — see `call`'s own doc on the `null`
+ * argument.
+ */
+export function users(): Promise<{ users: PublicUser[] }> {
+  return call<{ users: PublicUser[] }>(null, [], "/api/auth/users");
 }
 
 /** Reads the account the current session belongs to. */
