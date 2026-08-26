@@ -54,7 +54,7 @@ func inWorkspace(id string) context.Context {
 	return identity.With(context.Background(), identity.Identity{WorkspaceID: id})
 }
 
-func invokeIn(t *testing.T, a *app.App, ctx context.Context, key, payload string) json.RawMessage {
+func invokeIn(ctx context.Context, t *testing.T, a *app.App, key, payload string) json.RawMessage {
 	t.Helper()
 	d, _, ok := a.Registry.Lookup(key)
 	if !ok {
@@ -82,7 +82,7 @@ func invokeIn(t *testing.T, a *app.App, ctx context.Context, key, payload string
 func TestACommandWritesIntoTheWorkspaceItNames(t *testing.T) {
 	a, first, second := twoWorkspaces(t)
 
-	invokeIn(t, a, inWorkspace("second"), "agents_create", `{
+	invokeIn(inWorkspace("second"), t, a, "agents_create", `{
 		"_reasoning": "a test is checking which directory this lands in",
 		"id": "only-in-second",
 		"name": "OnlyInSecond",
@@ -104,14 +104,14 @@ func TestACommandWritesIntoTheWorkspaceItNames(t *testing.T) {
 func TestAListOnlySeesItsOwnWorkspace(t *testing.T) {
 	a, _, _ := twoWorkspaces(t)
 
-	invokeIn(t, a, inWorkspace("second"), "agents_create", `{
+	invokeIn(inWorkspace("second"), t, a, "agents_create", `{
 		"_reasoning": "a test is checking which directory this lands in",
 		"id": "only-in-second", "name": "OnlyInSecond", "role": "tester",
 		"description": "an agent that must exist in the second workspace and nowhere else"
 	}`)
 
 	list := func(id string) string {
-		return string(invokeIn(t, a, inWorkspace(id), "agents_list",
+		return string(invokeIn(inWorkspace(id), t, a, "agents_list",
 			`{"_reasoning":"a test is checking what this workspace holds"}`))
 	}
 
@@ -130,7 +130,7 @@ func TestTheSameWorkspaceIsServedByOneSetOfServices(t *testing.T) {
 	a, _, _ := twoWorkspaces(t)
 
 	for i := 0; i < 3; i++ {
-		invokeIn(t, a, inWorkspace("second"), "agents_list",
+		invokeIn(inWorkspace("second"), t, a, "agents_list",
 			`{"_reasoning":"a test is warming the workspace"}`)
 	}
 	// Nothing to assert beyond not having leaked: Close reports a failure to
@@ -148,7 +148,7 @@ func TestTheSameWorkspaceIsServedByOneSetOfServices(t *testing.T) {
 func TestAWorkspaceThisInstallationDoesNotHaveFallsBackToThePrimary(t *testing.T) {
 	a, _, _ := twoWorkspaces(t)
 
-	out := invokeIn(t, a, inWorkspace("never-registered"), "agents_list",
+	out := invokeIn(inWorkspace("never-registered"), t, a, "agents_list",
 		`{"_reasoning":"a test is checking a stale workspace cookie"}`)
 	if len(out) == 0 {
 		t.Fatal("a stale workspace id made a workspace-independent command fail")

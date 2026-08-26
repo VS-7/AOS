@@ -228,3 +228,81 @@ func TestAuditSecretsReportsAStatFailure(t *testing.T) {
 		t.Fatalf("expected a reported stat failure, got %+v", repairs)
 	}
 }
+
+// TestAFilesystemRootCannotHoldAWorkspace is the defect this predicate exists
+// for.
+//
+// A process nobody started from a shell inherits a working directory that has
+// nothing to do with the person using it: an application bundle opened from
+// Finder gets "/". Taking that as the workspace made every workspace-relative
+// path resolve at the top of the disk, which the collection repositories then
+// refused as escaping the root — every workspace-scoped command in the
+// application answered 403 or 500 for the whole session, with nothing on
+// screen saying why.
+func TestAFilesystemRootCannotHoldAWorkspace(t *testing.T) {
+	root := "/"
+	if runtime.GOOS == "windows" {
+		root = filepath.VolumeName(os.Getenv("SystemDrive")) + string(filepath.Separator)
+		if root == string(filepath.Separator) {
+			root = `C:\`
+		}
+	}
+	if config.CanHoldWorkspace(root) {
+		t.Errorf("%q was accepted as a workspace root", root)
+	}
+}
+
+// TestAnEmptyDirectoryNameIsNotAWorkspace. filepath.Clean("") is ".", the
+// process's own working directory — so an unset value that reached this
+// unchecked would be answered for a directory nobody named.
+func TestAnEmptyDirectoryNameIsNotAWorkspace(t *testing.T) {
+	for _, dir := range []string{"", "   ", "\t"} {
+		if config.CanHoldWorkspace(dir) {
+			t.Errorf("%q was accepted as a workspace root", dir)
+		}
+	}
+}
+
+// TestTheBareHomeDirectoryIsRefusedUntilItHasBeenUsedBefore.
+//
+// Laying a workspace skeleton into someone's home directory because of a
+// working directory they did not choose is not a change to make to a machine
+// uninvited. A home that already holds the state directory was meant.
+func TestTheBareHomeDirectoryIsRefusedUntilItHasBeenUsedBefore(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.UserHomeDir reads USERPROFILE on Windows; HOME does not move it")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	if config.CanHoldWorkspace(home) {
+		t.Error("a bare home directory was accepted as a workspace root")
+	}
+
+	if err := os.MkdirAll(filepath.Join(home, build.StateDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !config.CanHoldWorkspace(home) {
+		t.Errorf("a home directory already holding %s was refused", build.StateDir)
+	}
+}
+
+// TestAnOrdinaryDirectoryCanHoldAWorkspace — the answer that has to stay yes,
+// or the check would have replaced one broken default with another.
+func TestAnOrdinaryDirectoryCanHoldAWorkspace(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Setenv("HOME", t.TempDir())
+	}
+	dir := t.TempDir()
+	if !config.CanHoldWorkspace(dir) {
+		t.Errorf("%q was refused as a workspace root", dir)
+	}
+	// A directory under the home directory is not the home directory.
+	nested := filepath.Join(dir, "projects", "thing")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !config.CanHoldWorkspace(nested) {
+		t.Errorf("%q was refused as a workspace root", nested)
+	}
+}
