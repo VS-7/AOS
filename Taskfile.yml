@@ -196,8 +196,14 @@ tasks:
       # is a compile error when the pattern matches nothing), and an `rm -rf`
       # on the directory would leave every build with a deletion to explain in
       # `git status`.
+      #
+      # `git clean` rather than find: go-task runs commands through its own
+      # shell, whose built-in find has neither -delete nor -mindepth, so the
+      # obvious spelling worked everywhere except the platform that needed it.
+      # This says the same thing in fewer moving parts — remove what Git does
+      # not track — and .gitkeep is tracked, which is the whole point.
       - mkdir -p cmd/aos-desktop/dist
-      - find cmd/aos-desktop/dist -mindepth 1 ! -name .gitkeep -delete
+      - git clean -xdfq cmd/aos-desktop/dist
       #
       # tar rather than rsync: rsync is not on a Windows runner, and this task
       # has to produce the same bundle on all three platforms. The pipe also
@@ -258,7 +264,7 @@ tasks:
       - task: "package:desktop:{{OS}}"
 
   package:desktop:darwin:
-    internal: true
+    desc: Assemble the macOS .app from binaries already built
     cmds:
       - task: darwin:create:app:bundle
 
@@ -267,15 +273,19 @@ tasks:
   # generated `build` that runs `go build` from the project root, and this
   # module's main package is cmd/aos-desktop. Only the assembly is reused.
   package:desktop:windows:
-    internal: true
+    desc: Assemble the Windows installer from binaries already built
     cmds:
       - wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}/build/windows/nsis"
       # ARG_AOS_DAEMON_BINARY is ours; project.nsi installs it beside the
       # application. The WAILS_*_BINARY names are the scaffolding's own.
       - cd build/windows/nsis && makensis -DARG_WAILS_AMD64_BINARY="{{.ROOT_DIR}}/dist/aos-desktop.exe" -DARG_AOS_DAEMON_BINARY="{{.ROOT_DIR}}/dist/aosd.exe" project.nsi
 
+  # Public, not internal, and the three are alike on purpose: the release
+  # workflow invokes the Linux one on its own so that a linuxdeploy failure
+  # costs the AppImage and not the whole release, and go-task refuses to run
+  # an internal task from the command line.
   package:desktop:linux:
-    internal: true
+    desc: Assemble the Linux AppImage from binaries already built
     cmds:
       - task: linux:generate:dotdesktop
       # build.sh assembles the AppDir by hand, which is what lets the daemon
