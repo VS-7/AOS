@@ -285,7 +285,11 @@ tasks:
       - wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}/build/windows/nsis"
       # ARG_AOS_DAEMON_BINARY is ours; project.nsi installs it beside the
       # application. The WAILS_*_BINARY names are the scaffolding's own.
-      - cd build/windows/nsis && makensis -DARG_WAILS_AMD64_BINARY="{{.ROOT_DIR}}/dist/aos-desktop.exe" -DARG_AOS_DAEMON_BINARY="{{.ROOT_DIR}}/dist/aosd.exe" project.nsi
+      # Relative, and with backslashes, because NSIS is a Windows tool that
+      # does not take `/` in a File path — it reported "no files found" for a
+      # binary that was sitting right there. project.nsi's own OutFile is
+      # written the same way, relative to this directory.
+      - cd build/windows/nsis && makensis -DARG_WAILS_AMD64_BINARY="..\..\..\dist\aos-desktop.exe" -DARG_AOS_DAEMON_BINARY="..\..\..\dist\aosd.exe" project.nsi
 
   # Public, not internal, and the three are alike on purpose: the release
   # workflow invokes the Linux one on its own so that a linuxdeploy failure
@@ -305,7 +309,11 @@ tasks:
         APP_DAEMON="{{.ROOT_DIR}}/dist/aosd" \
         ICON_PATH="{{.ROOT_DIR}}/build/appicon.png" \
         DESKTOP_FILE="{{.ROOT_DIR}}/build/linux/aos-desktop.desktop" \
-        sh ./build.sh
+        # bash, not sh: the script asks for `set -o pipefail`, and sh on
+        # Ubuntu is dash, which has no such option. Its shebang says bash for
+        # the same reason; only the mode bit it lacks made calling it
+        # directly impossible.
+        bash ./build.sh
 
   run:
     desc: Run the desktop application
