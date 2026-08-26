@@ -205,9 +205,11 @@ jobs:
   desktop-linux:
     runs-on: ubuntu-24.04
     env:
-      # linuxdeploy ships as an AppImage and an AppImage needs FUSE, which a
+      # appimagetool ships as an AppImage and an AppImage needs FUSE, which a
       # runner does not have. Extracting instead of mounting is the documented
-      # way around that and costs only disk.
+      # way around that and costs only disk. Still load-bearing after
+      # linuxdeploy was dropped: the tool that replaced it is packaged the
+      # same way.
       APPIMAGE_EXTRACT_AND_RUN: "1"
     steps:
       - uses: actions/checkout@v4
@@ -239,20 +241,23 @@ jobs:
           task build:desktop
           task build:cli
       - name: the tarball
-        # The certain artifact: three binaries beside each other, which is all
-        # supervise.Resolver needs. It expects GTK4 and WebKitGTK to be
-        # installed on the machine — the AppImage below is what would carry
-        # them, when it works.
+        # Three binaries beside each other, which is all supervise.Resolver
+        # needs. Like the AppImage below, it expects GTK4 and WebKitGTK to be
+        # installed on the machine: bundling them is an open problem for this
+        # stack rather than a step nobody got round to — see
+        # build/linux/appimage/build.sh.
         run: |
           set -euo pipefail
           mkdir -p release stage/AOS
           cp dist/aos-desktop dist/aosd dist/aos stage/AOS/
           tar -C stage -czf "release/AOS-${VERSION}-linux-amd64.tar.gz" AOS
       - name: the AppImage
-        # continue-on-error, and deliberately visible: linuxdeploy bundling
-        # WebKitGTK is the least certain thing in this workflow, and it is not
-        # worth failing a release over when the tarball above already ships.
-        # A failure here shows as a warned step rather than as nothing.
+        # continue-on-error, and deliberately visible. It no longer guards
+        # against linuxdeploy — nothing is bundled now, so this step is an
+        # AppDir and one call to appimagetool. What is left to fail is the
+        # download of appimagetool itself from a `continuous` tag, and that is
+        # not worth failing a release over when the tarball above already
+        # ships. A failure here shows as a warned step rather than as nothing.
         continue-on-error: true
         run: task package:desktop:linux
       - name: collect the AppImage if there is one

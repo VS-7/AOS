@@ -55,31 +55,45 @@ pasta** — a próxima seção explica por quê.
 
 ### Linux
 
-O caminho mais simples é o **AppImage**: um arquivo só, sem instalar nada,
-sem root.
+As duas formas contam com **GTK4 e WebKitGTK já instalados** na máquina. Essa
+é a única dependência, e ela vem primeiro:
+
+```sh
+# Ubuntu 24.04+ / Debian 13+
+sudo apt install libgtk-4-1 libwebkitgtk-6.0-4
+
+# Fedora 39+
+sudo dnf install gtk4 webkitgtk6.0
+
+# Arch
+sudo pacman -S gtk4 webkitgtk-6.0
+```
+
+Com isso resolvido, o caminho mais simples é o **AppImage**: um arquivo só,
+sem instalar nada, sem root.
 
 ```sh
 chmod +x AOS-<versão>-linux-x86_64.AppImage
 ./AOS-<versão>-linux-x86_64.AppImage
 ```
 
-Ele carrega o GTK e o WebKit dentro, e é por isso que é bem maior que o
-`.tar.gz` (~100 MB contra ~35 MB). Se preferir o menor:
+Ou o `.tar.gz`, se preferir os três binários soltos:
 
 ```sh
 tar xzf AOS-<versão>-linux-amd64.tar.gz
 cd AOS && ./aos-desktop
 ```
 
-O `.tar.gz` conta com GTK4 e WebKitGTK já instalados na máquina. Os nomes dos
-pacotes variam por distribuição; no Debian e no Ubuntu costumam ser:
+O AppImage **não** carrega o GTK e o WebKit dentro. Ele já tentou: o WebKitGTK
+não é uma biblioteca só — ele executa `WebKitWebProcess` e
+`WebKitNetworkProcess` a partir de um caminho compilado dentro dele, e nenhum
+dos dois é dependência de link, então nenhum dos dois era copiado junto. O
+resultado era um AppImage que fechava na hora. É um problema em aberto para
+esse conjunto ([wails#4313](https://github.com/wailsapp/wails/issues/4313)),
+não um descuido.
 
-```sh
-sudo apt install libgtk-4-1 libwebkitgtk-6.0-4
-```
-
-Se o `aos-desktop` reclamar de uma biblioteca ausente, o nome dela na mensagem
-é o que procurar no gerenciador de pacotes da sua distribuição.
+Se faltar alguma biblioteca, o AppImage diz **qual** e qual comando instala,
+em vez de simplesmente não abrir.
 
 ## Como o sistema funciona
 

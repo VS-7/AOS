@@ -295,16 +295,17 @@ tasks:
       - cd build/windows/nsis && makensis -DARG_WAILS_AMD64_BINARY="..\..\..\dist\aos-desktop.exe" -DARG_AOS_DAEMON_BINARY="..\..\..\dist\aosd.exe" project.nsi
 
   # Public, not internal, and the three are alike on purpose: the release
-  # workflow invokes the Linux one on its own so that a linuxdeploy failure
-  # costs the AppImage and not the whole release, and go-task refuses to run
-  # an internal task from the command line.
+  # workflow invokes the Linux one on its own, and go-task refuses to run an
+  # internal task from the command line.
   package:desktop:linux:
     desc: Assemble the Linux AppImage from binaries already built
     cmds:
-      - task: linux:generate:dotdesktop
-      # build.sh assembles the AppDir by hand, which is what lets the daemon
-      # in: `wails3 generate appimage` takes one -binary and nothing else.
-      # APP_DAEMON is the variable build.sh reads for it.
+      # No dependency on `linux:generate:dotdesktop` any more: build.sh writes
+      # the AppImage's own .desktop file, because that one has to name a bare
+      # `Exec=aos-desktop` while the generated one names the absolute path the
+      # .deb and .rpm install to. Sharing a file between the two was wrong in
+      # one of them whichever way it was written.
+      #
       # Exported one per line rather than prefixed on the command: a comment
       # in the middle of a backslash chain ends it, and the assignments after
       # it silently stopped reaching the script, which then died on `set -u`.
@@ -315,10 +316,12 @@ tasks:
       - |
         cd build/linux/appimage
         export APP_NAME=aos-desktop
+        export APP_DISPLAY_NAME=AOS
+        export APP_COMMENT="An operating system for AI agents."
         export APP_BINARY="{{.ROOT_DIR}}/dist/aos-desktop"
         export APP_DAEMON="{{.ROOT_DIR}}/dist/aosd"
+        export APP_CLI="{{.ROOT_DIR}}/dist/aos"
         export ICON_PATH="{{.ROOT_DIR}}/build/appicon.png"
-        export DESKTOP_FILE="{{.ROOT_DIR}}/build/linux/aos-desktop.desktop"
         bash ./build.sh
 
   run:

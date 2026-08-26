@@ -111,20 +111,18 @@ tasks:
 
   create:appimage:
     summary: Creates an AppImage
-    dir: build/linux/appimage
-    deps:
-      - task: build
-      - task: generate:dotdesktop
+    # Delegates rather than duplicating. What was here was the scaffolding's
+    # own version, and it was wrong twice over: `wails3 generate appimage`
+    # takes one -binary, so the daemon never went in and the window had
+    # nothing to talk to; and its `build` dependency compiles the module root
+    # rather than cmd/aos-desktop, which is the same reason the root Taskfile
+    # does not use linux:package either.
+    #
+    # It also produced the AppImage that bundled GTK and WebKit and exited on
+    # launch. One way to build one is the point — see
+    # build/linux/appimage/build.sh.
     cmds:
-      - cp "{{.APP_BINARY}}" "{{.APP_NAME}}"
-      - cp ../../appicon.png "{{.APP_NAME}}.png"
-      - wails3 generate appimage -binary "{{.APP_NAME}}" -icon {{.ICON}} -desktopfile {{.DESKTOP_FILE}} -outputdir {{.OUTPUT_DIR}} -builddir {{.ROOT_DIR}}/build/linux/appimage/build
-    vars:
-      APP_NAME: '{{.APP_NAME}}'
-      APP_BINARY: '../../../bin/{{.APP_NAME}}'
-      ICON: '{{.APP_NAME}}.png'
-      DESKTOP_FILE: '../{{.APP_NAME}}.desktop'
-      OUTPUT_DIR: '../../../bin'
+      - task: :package:desktop:linux
 
   create:deb:
     summary: Creates a deb package
