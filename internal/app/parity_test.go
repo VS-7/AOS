@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -53,6 +55,19 @@ import (
 )
 
 var refTime = time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
+
+// emptyOutside clears what the previous surface left in the one directory a
+// scenario writes to outside its installation, so each of the five starts
+// from the same state the first one found: nothing there.
+func emptyOutside(t *testing.T, sc scenario) {
+	t.Helper()
+	if sc.Outside == "" {
+		return
+	}
+	if err := os.RemoveAll(sc.Outside); err != nil {
+		t.Fatal(err)
+	}
+}
 
 // newApp builds an isolated installation: its own state directory, its own
 // workspace, and a frozen clock so two runs of the same command are byte-equal.
@@ -148,6 +163,21 @@ type scenario struct {
 	// Seed prepares the state the command needs. Every surface gets a fresh
 	// installation, so a mutating command does not disturb the next surface.
 	Seed func(t *testing.T, a *app.App)
+
+	// PayloadIn builds the payload around a directory the command writes to
+	// *outside* the installation, and replaces Payload when it is set.
+	//
+	// The isolation Seed's comment describes stops at the state directory.
+	// workspace_create makes a directory wherever it is told, and all five
+	// surfaces are told the same place — so the first one scaffolds it and
+	// the four after it are answering a different question, about a
+	// directory that already exists. This is what that path is threaded
+	// through, so it can be a place this subtest owns and empties.
+	PayloadIn func(dir string) any
+
+	// Outside is that directory, filled in per subtest. Empty for the
+	// scenarios that stay inside their installation, which is most of them.
+	Outside string
 }
 
 const activeWorkspace = "parity"
@@ -269,7 +299,12 @@ var scenarios = map[string]scenario{
 		Seed:    seedWorkspace,
 	},
 	"workspace_create": {
-		Payload: workspace.CreateInput{Name: "Another", Path: "/tmp/aos-parity-another", Reasoning: reason()},
+		// Not a fixed /tmp path: that one was shared by all five surfaces
+		// *and* by every other run on the machine, so this passed only once
+		// the directory already existed and failed on any clean checkout.
+		PayloadIn: func(dir string) any {
+			return workspace.CreateInput{Name: "Another", Path: dir, Reasoning: reason()}
+		},
 	},
 	"workspace_update": {
 		Payload: workspace.UpdateInput{
@@ -1005,6 +1040,13 @@ func TestEveryCommandHasAParityScenario(t *testing.T) {
 func TestSurfaceParity(t *testing.T) {
 	for key, sc := range scenarios {
 		t.Run(key, func(t *testing.T) {
+			if sc.PayloadIn != nil {
+				// Owned by this subtest and removed with it, so the five
+				// surfaces neither inherit each other's work nor outlive the
+				// run the way the old /tmp path did.
+				sc.Outside = filepath.Join(t.TempDir(), "outside")
+				sc.Payload = sc.PayloadIn(sc.Outside)
+			}
 			payload, err := json.Marshal(sc.Payload)
 			if err != nil {
 				t.Fatal(err)
@@ -1038,6 +1080,7 @@ func TestSurfaceParity(t *testing.T) {
 // with no transport at all.
 func runInternal(t *testing.T, sc scenario, key string, payload json.RawMessage) string {
 	t.Helper()
+	emptyOutside(t, sc)
 	a := newApp(t)
 	if sc.Seed != nil {
 		sc.Seed(t, a)
@@ -1055,6 +1098,7 @@ func runInternal(t *testing.T, sc scenario, key string, payload json.RawMessage)
 
 func runCLI(t *testing.T, sc scenario, key string, payload json.RawMessage) string {
 	t.Helper()
+	emptyOutside(t, sc)
 	a := newApp(t)
 	if sc.Seed != nil {
 		sc.Seed(t, a)
@@ -1098,6 +1142,7 @@ func runCLI(t *testing.T, sc scenario, key string, payload json.RawMessage) stri
 // locked is the HTTP transport's own suite.
 func runHTTP(t *testing.T, sc scenario, key string, payload json.RawMessage) string {
 	t.Helper()
+	emptyOutside(t, sc)
 	a := newApp(t)
 	if sc.Seed != nil {
 		sc.Seed(t, a)
@@ -1150,6 +1195,7 @@ func runHTTP(t *testing.T, sc scenario, key string, payload json.RawMessage) str
 
 func runMCP(t *testing.T, sc scenario, key string, payload json.RawMessage, shape mcpserver.Shape) string {
 	t.Helper()
+	emptyOutside(t, sc)
 	a := newApp(t)
 	if sc.Seed != nil {
 		sc.Seed(t, a)

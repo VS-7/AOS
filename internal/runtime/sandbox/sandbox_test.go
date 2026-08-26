@@ -317,6 +317,85 @@ func TestTheSameBinaryUnderTwoNamesIsOneTarget(t *testing.T) {
 	}
 }
 
+// TestADistributionSymlinkDoesNotVoidTheAllowlist: a name the system ships as
+// a link to a differently named binary is still the name a person writes on
+// the allowlist. /usr/bin/vi points at vim, and on Debian and Ubuntu
+// /usr/bin/sh points at dash.
+//
+// This is the defect that kept the suite red on Linux once CI could finally
+// reach it: resolving to the canonical file and then comparing only that name
+// made `allow: [sh]` unsatisfiable there, while the same agent frontmatter
+// worked on macOS and said nothing about why.
+func TestADistributionSymlinkDoesNotVoidTheAllowlist(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the controlled PATH and its links are POSIX here")
+	}
+	name, target := aliasedBinary(t)
+	if name == "" {
+		t.Skip("this system ships no aliased binary on the controlled PATH")
+	}
+
+	// AllowShell because the alias found may well be a shell — on Debian the
+	// first one is sh — and this test is about the allowlist, not about the
+	// separate opt-in a shell needs.
+	s, _, _ := build(t, sandbox.Options{
+		Exec: sandbox.ExecPolicy{
+			Policy: sandbox.PolicyAllowlist, Allow: []string{name}, AllowShell: true,
+		},
+	})
+	resolved, err := s.VerifyExec(name, nil)
+	if err != nil {
+		t.Fatalf("%q is on the allowlist by that name and was refused: %v", name, err)
+	}
+	// And what would run is still the file the link points at, not the link:
+	// the allowlist got more forgiving, the resolution did not.
+	if resolved != target {
+		t.Errorf("resolved to %q; the canonical target is %q", resolved, target)
+	}
+}
+
+// aliasedBinary finds a binary the controlled PATH reaches under a name that
+// differs from the name of the file it resolves to, and returns both. Which
+// one it is varies by system, and a system that ships none has nothing to
+// prove here.
+func aliasedBinary(t *testing.T) (string, string) {
+	t.Helper()
+	// The same directories, in the same order, that the sandbox searches.
+	dirs := []string{"/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin"}
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.Type()&os.ModeSymlink == 0 {
+				continue
+			}
+			link := filepath.Join(dir, e.Name())
+			target, err := filepath.EvalSymlinks(link)
+			if err != nil || filepath.Base(target) == e.Name() {
+				continue
+			}
+			// Only useful if this is the file the sandbox itself would find
+			// for that bare name; an earlier directory may carry the name too.
+			if firstOnPath(dirs, e.Name()) != link {
+				continue
+			}
+			return e.Name(), target
+		}
+	}
+	return "", ""
+}
+
+func firstOnPath(dirs []string, name string) string {
+	for _, dir := range dirs {
+		if found, err := exec.LookPath(filepath.Join(dir, name)); err == nil {
+			return found
+		}
+	}
+	return ""
+}
+
 // TestAShellNeedsItsOwnPermission, and is still subject to the denied
 // patterns once it has it.
 func TestAShellNeedsItsOwnPermission(t *testing.T) {

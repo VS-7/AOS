@@ -93,30 +93,47 @@ func DefaultExecPolicy() ExecPolicy { return ExecPolicy{Policy: PolicyDenyAll} }
 
 // allows reports whether a resolved binary is on the list.
 //
-// The comparison is against the canonical path on disk and against the name of
-// the file that path ends in — never against what the caller typed. `./rm` and
-// `/bin/rm` are the same target and are treated as one.
-func (p ExecPolicy) allows(resolved string) bool {
+// Two names are offered and either one satisfies the list: the file the
+// controlled PATH found, and the canonical file that one points at. The
+// comparison is still never against what the caller typed — `./rm` and
+// `/bin/rm` are the same target and are treated as one, which is the second
+// layer of ADR-0006 and is unchanged.
+//
+// The found name is accepted because a distribution's own symlinks are not an
+// attack. On Debian and Ubuntu /usr/bin/sh points at dash, so matching the
+// canonical name alone made `allow: [sh]` unsatisfiable there while the same
+// frontmatter worked on macOS — one agent, two behaviours, and no diagnostic
+// saying so. vi, python and awk are shipped the same way. Nothing is given up
+// by it: lookPath searches minimalPath and nowhere else, so a link that lies
+// about where it goes had to be written into /usr/bin by root, who never
+// needed a symlink to replace the binary outright.
+func (p ExecPolicy) allows(found, canonical string) bool {
 	if p.Policy != PolicyAllowlist {
 		return false
 	}
-	base := strings.ToLower(strings.TrimSuffix(filepath.Base(resolved), ".exe"))
 	for _, entry := range p.Allow {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
 			continue
 		}
 		if filepath.IsAbs(entry) {
-			if sameFile(entry, resolved) {
+			if sameFile(entry, canonical) || sameFile(entry, found) {
 				return true
 			}
 			continue
 		}
-		if strings.EqualFold(strings.TrimSuffix(entry, ".exe"), base) {
+		entry = strings.TrimSuffix(entry, ".exe")
+		if strings.EqualFold(entry, execBase(canonical)) || strings.EqualFold(entry, execBase(found)) {
 			return true
 		}
 	}
 	return false
+}
+
+// execBase is the name a binary is known by: its last path element, without
+// the extension Windows carries, lowercased so the list is not case bait.
+func execBase(path string) string {
+	return strings.ToLower(strings.TrimSuffix(filepath.Base(path), ".exe"))
 }
 
 func sameFile(a, b string) bool {
@@ -139,9 +156,13 @@ var shells = map[string]bool{
 	"cmd": true, "powershell": true, "pwsh": true,
 }
 
-func isShell(resolved string) bool {
-	base := strings.ToLower(strings.TrimSuffix(filepath.Base(resolved), ".exe"))
-	return shells[base]
+// isShell reports whether either name names a shell — either, not both. A
+// binary reached under a shell's name is a shell here even when the file it
+// resolves to is called something else, and the reverse too. AllowShell is an
+// opt-in on top of being allowed at all, and a spelling must not be able to
+// step around it.
+func isShell(found, canonical string) bool {
+	return shells[execBase(canonical)] || shells[execBase(found)]
 }
 
 // minimalPath is the PATH a resolved binary is looked up in and a child process

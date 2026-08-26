@@ -33,15 +33,15 @@ func (s *Sandbox) VerifyExec(name string, args []string) (string, error) {
 		return "", errExecNotFound(name)
 	}
 
-	resolved, err := s.lookPath(name)
+	found, resolved, err := s.lookPath(name)
 	if err != nil {
 		return "", errExecNotFound(name)
 	}
 
-	if !s.exec.allows(resolved) {
+	if !s.exec.allows(found, resolved) {
 		return "", errExecNotAllowed(name, resolved)
 	}
-	if isShell(resolved) && !s.exec.AllowShell {
+	if isShell(found, resolved) && !s.exec.AllowShell {
 		return "", errShellNotAllowed(name, resolved)
 	}
 
@@ -92,31 +92,51 @@ func matchLine(pattern, line string) bool {
 
 // lookPath resolves a binary against the controlled PATH, then follows links.
 //
+// It returns both files: the one the PATH found and the canonical one that
+// points at. They differ wherever a distribution ships a name as a symlink —
+// /usr/bin/sh to dash on Debian — and the allowlist accepts either, while what
+// actually runs is always the canonical one. ExecPolicy.allows says why.
+//
 // An allowlist entry given as an absolute path is honoured even when it is
 // outside that PATH: naming the exact binary is a stronger statement than
 // leaving it discoverable, and refusing it would make the allowlist unable to
 // express "this one, in this place".
-func (s *Sandbox) lookPath(name string) (string, error) {
+func (s *Sandbox) lookPath(name string) (string, string, error) {
 	if strings.ContainsAny(name, `/\`) {
+		// A path the caller typed earns no second name. Collapsing it to the
+		// one file it names is the whole point of the layer, and offering the
+		// spelling back would be the hole this closes.
 		abs := name
 		if !filepath.IsAbs(abs) {
 			abs = filepath.Join(s.root, name)
 		}
-		return filepath.EvalSymlinks(abs)
+		canonical, err := filepath.EvalSymlinks(abs)
+		if err != nil {
+			return "", "", err
+		}
+		return canonical, canonical, nil
 	}
 	for _, dir := range filepath.SplitList(minimalPath()) {
 		candidate := filepath.Join(dir, name)
-		if resolved, err := exec.LookPath(candidate); err == nil {
-			return filepath.EvalSymlinks(resolved)
+		if found, err := exec.LookPath(candidate); err == nil {
+			canonical, err := filepath.EvalSymlinks(found)
+			if err != nil {
+				return "", "", err
+			}
+			return found, canonical, nil
 		}
 	}
 	// The allowlist may name an absolute path outside the controlled PATH.
 	for _, entry := range s.exec.Allow {
 		if filepath.IsAbs(entry) && strings.EqualFold(filepath.Base(entry), name) {
-			return filepath.EvalSymlinks(entry)
+			canonical, err := filepath.EvalSymlinks(entry)
+			if err != nil {
+				return "", "", err
+			}
+			return entry, canonical, nil
 		}
 	}
-	return "", exec.ErrNotFound
+	return "", "", exec.ErrNotFound
 }
 
 // Run executes a command and returns what it produced, bounded.
