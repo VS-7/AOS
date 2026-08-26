@@ -205,11 +205,18 @@ tasks:
       - mkdir -p cmd/aos-desktop/dist
       - git clean -xdfq cmd/aos-desktop/dist
       #
-      # tar rather than rsync: rsync is not on a Windows runner, and this task
-      # has to produce the same bundle on all three platforms. The pipe also
-      # copies the tree in one pass instead of forking once per file, which
-      # this bundle's 1686 of them make worth caring about.
-      - cd frontend/dist && tar cf - --exclude='*.map' . | (cd ../../cmd/aos-desktop/dist && tar xf -)
+      # Plain cp and a flat glob, and nothing cleverer, because on Windows
+      # go-task runs these through its own coreutils rather than the system's:
+      # rsync is absent there, and its built-in tar rejected `tar cf -`. Both
+      # spellings worked on macOS and Linux and failed on the one platform the
+      # change existed for.
+      #
+      # This leans on vite's output being two entries — assets/ and
+      # index.html — with every one of the 811 source maps flat inside
+      # assets/. That is what makes a single-level glob enough to drop them.
+      - cp -r frontend/dist/assets cmd/aos-desktop/dist/assets
+      - cp frontend/dist/index.html cmd/aos-desktop/dist/index.html
+      - rm -f cmd/aos-desktop/dist/assets/*.map
       # CGO on macOS and Linux, where Wails links Cocoa and GTK. Windows
       # reaches WebView2 through go-winloader and needs no C toolchain, which
       # is why it is the one platform this builds with cgo off.
@@ -298,7 +305,7 @@ tasks:
         APP_DAEMON="{{.ROOT_DIR}}/dist/aosd" \
         ICON_PATH="{{.ROOT_DIR}}/build/appicon.png" \
         DESKTOP_FILE="{{.ROOT_DIR}}/build/linux/aos-desktop.desktop" \
-        ./build.sh
+        sh ./build.sh
 
   run:
     desc: Run the desktop application
