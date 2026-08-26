@@ -55,8 +55,8 @@ pasta** — a próxima seção explica por quê.
 
 ### Linux
 
-As duas formas contam com **GTK4 e WebKitGTK já instalados** na máquina. Essa
-é a única dependência, e ela vem primeiro:
+O AOS conta com **GTK4 e WebKitGTK já instalados** na máquina. Essa é a única
+dependência, e ela vem primeiro:
 
 ```sh
 # Ubuntu 24.04+ / Debian 13+
@@ -69,15 +69,28 @@ sudo dnf install gtk4 webkitgtk6.0
 sudo pacman -S gtk4 webkitgtk-6.0
 ```
 
-Com isso resolvido, o caminho mais simples é o **AppImage**: um arquivo só,
-sem instalar nada, sem root.
+Com isso resolvido, o mesmo comando do macOS:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/VS-7/AOS/main/install.sh | sh
+```
+
+Isso põe `aos-desktop`, `aosd` e `aos` em `~/.local/bin` e cria a entrada no
+menu de aplicativos. Se alguma biblioteca estiver faltando, ele diz **qual** e
+qual comando instala, em vez de deixar você com uma janela que não abre.
+
+Em `arm64` o instalador traz só os comandos: a janela é compilada para
+`amd64`.
+
+Se preferir não passar um script pelo `sh`, as duas outras formas continuam
+publicadas. O **AppImage** é um arquivo só, sem instalar nada, sem root:
 
 ```sh
 chmod +x AOS-<versão>-linux-x86_64.AppImage
 ./AOS-<versão>-linux-x86_64.AppImage
 ```
 
-Ou o `.tar.gz`, se preferir os três binários soltos:
+Ou o `.tar.gz`, com os três binários soltos:
 
 ```sh
 tar xzf AOS-<versão>-linux-amd64.tar.gz
