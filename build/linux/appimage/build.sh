@@ -18,7 +18,11 @@ cp -r "${APP_BINARY}" "${APP_DIR}/usr/bin/"
 if [ -n "${APP_DAEMON:-}" ]; then
     cp "${APP_DAEMON}" "${APP_DIR}/usr/bin/"
 fi
-cp "${ICON_PATH}" "${APP_DIR}/"
+# Renamed on the way in: the .desktop file names its icon after the
+# application, and appimagetool looks for exactly ${APP_NAME}.png at the
+# AppDir root. Copying the source name through left it looking for an icon
+# that was sitting right there under another name.
+cp "${ICON_PATH}" "${APP_DIR}/${APP_NAME}.png"
 cp "${DESKTOP_FILE}" "${APP_DIR}/"
 
 if [[ $(uname -m) == *x86_64* ]]; then
