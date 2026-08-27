@@ -1,190 +1,84 @@
 # AOS
 
-Um sistema operacional para agentes de IA.
+**Um sistema operacional para agentes de IA.**
 
-> **Beta.** Os binários não são assinados com certificado de desenvolvedor, e
-> ainda não existe canal de atualização automática. O que isso significa na
-> prática está em [Limitações do beta](#limitações-do-beta) — leia antes de
-> instalar, são dois parágrafos.
+Você define agentes — cada um com papel, instruções e memória própria — e eles
+trabalham no seu repositório. Cada tarefa roda isolada em seu próprio worktree
+do Git, então nada é sobrescrito enquanto você continua trabalhando.
 
-## Como baixar
+Tudo fica na sua máquina. O workspace são arquivos no seu disco, em Markdown,
+versionáveis junto com o código. Não há serviço no meio.
 
-Os arquivos ficam em **[Releases](https://github.com/VS-7/AOS/releases/latest)**.
+Três formas de usar, sobre o mesmo sistema: **aplicativo**, **terminal** e
+**navegador**.
 
-### macOS
+> **Beta.** Os binários ainda não têm assinatura de desenvolvedor e não há
+> atualização automática. [O que isso muda para você](#limitações-do-beta).
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/VS-7/AOS/main/install.sh | sh
-```
+---
 
-Isso instala `AOS.app` em `/Applications` e os comandos `aos` e `aosd` em
-`~/.local/bin`. Depois, abra pelo Launchpad ou com `open -a AOS`.
-
-**Instale por aqui, não pelo navegador.** O macOS marca tudo que um navegador
-baixa com `com.apple.quarantine`, e um aplicativo não assinado com essa marca
-não abre — desde o macOS 15 nem pelo botão direito → Abrir, só por uma visita
-aos Ajustes. O `curl` não põe essa marca, então o que este comando instala
-simplesmente roda. Se você já baixou o `.zip` pelo navegador, dá para desfazer:
-
-```sh
-xattr -dr com.apple.quarantine /Applications/AOS.app
-```
-
-Variáveis que o instalador aceita: `AOS_VERSION` para fixar uma versão,
-`AOS_PREFIX` para escolher onde os comandos vão, `AOS_NO_CLI=1` para instalar
-só o aplicativo.
-
-> Hoje só há build para **Apple Silicon** (`darwin-arm64`). Em um Mac Intel o
-> instalador para com uma mensagem dizendo que não encontrou o arquivo.
-
-### Windows
-
-Baixe um dos dois em [Releases](https://github.com/VS-7/AOS/releases/latest):
-
-- `AOS-setup-<versão>-windows-amd64.exe` — instalador, com atalho no Menu
-  Iniciar e desinstalação.
-- `AOS-<versão>-windows-amd64.zip` — os três executáveis lado a lado, para
-  quem prefere não rodar um instalador não assinado.
-
-Em ambos os casos o **SmartScreen vai avisar** que o publicador é
-desconhecido: é o que ele faz com qualquer binário sem certificado de
-assinatura de código. Em "Mais informações" → "Executar assim mesmo".
-
-Se usar o `.zip`, mantenha `aos-desktop.exe`, `aosd.exe` e `aos.exe` **na mesma
-pasta** — a próxima seção explica por quê.
-
-### Linux
-
-O AOS conta com **GTK4 e WebKitGTK já instalados** na máquina. Essa é a única
-dependência, e ela vem primeiro:
-
-```sh
-# Ubuntu 24.04+ / Debian 13+
-sudo apt install libgtk-4-1 libwebkitgtk-6.0-4
-
-# Fedora 39+
-sudo dnf install gtk4 webkitgtk6.0
-
-# Arch
-sudo pacman -S gtk4 webkitgtk-6.0
-```
-
-Com isso resolvido, o mesmo comando do macOS:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/VS-7/AOS/main/install.sh | sh
-```
-
-Isso põe `aos-desktop`, `aosd` e `aos` em `~/.local/bin` e cria a entrada no
-menu de aplicativos. Se alguma biblioteca estiver faltando, ele diz **qual** e
-qual comando instala, em vez de deixar você com uma janela que não abre.
-
-Em `arm64` o instalador traz só os comandos: a janela é compilada para
-`amd64`.
-
-Se preferir não passar um script pelo `sh`, as duas outras formas continuam
-publicadas. O **AppImage** é um arquivo só, sem instalar nada, sem root:
-
-```sh
-chmod +x AOS-<versão>-linux-x86_64.AppImage
-./AOS-<versão>-linux-x86_64.AppImage
-```
-
-Ou o `.tar.gz`, com os três binários soltos:
-
-```sh
-tar xzf AOS-<versão>-linux-amd64.tar.gz
-cd AOS && ./aos-desktop
-```
-
-O AppImage **não** carrega o GTK e o WebKit dentro. Ele já tentou: o WebKitGTK
-não é uma biblioteca só — ele executa `WebKitWebProcess` e
-`WebKitNetworkProcess` a partir de um caminho compilado dentro dele, e nenhum
-dos dois é dependência de link, então nenhum dos dois era copiado junto. O
-resultado era um AppImage que fechava na hora. É um problema em aberto para
-esse conjunto ([wails#4313](https://github.com/wailsapp/wails/issues/4313)),
-não um descuido.
-
-Se faltar alguma biblioteca, o AppImage diz **qual** e qual comando instala,
-em vez de simplesmente não abrir.
-
-## Como o sistema funciona
-
-Três programas, um de cada vez fazendo uma coisa só:
+## O que dá para fazer
 
 | | |
 |---|---|
-| **`aosd`** | O daemon. É quem **é dono do workspace** — os arquivos, a fila de trabalho, o índice de busca. Roda em segundo plano e é o único processo que escreve. |
-| **`aos-desktop`** | A janela. Não é uma segunda cópia do sistema: é uma interface que conversa com o daemon. |
-| **`aos`** | O terminal. Mesma coisa: pergunta ao daemon. |
+| **Agentes** | Papel, instruções e memória por agente. Eles lembram entre sessões. |
+| **Tarefas** | O trabalho que os agentes executam, cada uma em um worktree isolado. |
+| **Conversas** | Canais para falar com os agentes, com histórico e anexos. |
+| **Rotinas** | Automações por agenda ou por gatilho — inclusive webhook. |
+| **Coleções** | Registros estruturados, guardados como Markdown no seu repositório. |
+| **Metas e projetos** | O que os agentes perseguem, e sob o que está agrupado. |
+| **Skills e ferramentas** | O que cada agente pode usar, declarado e permissionado. |
+| **Marketplace** | Plugins e skills prontos para instalar. |
+| **MCP** | Seus agentes ficam disponíveis para qualquer cliente que fale MCP. |
 
-Por que separado? Porque um workspace tem um dono. Se cada janela e cada
-terminal carregasse o sistema inteiro, todos escreveriam nos mesmos arquivos
-ao mesmo tempo. Com um daemon, há um escritor e nenhuma corrida.
+---
 
-Uma consequência prática: **o daemon precisa estar ao lado de quem o chama.**
-O aplicativo procura um `aosd` na mesma pasta que ele, e é por isso que os
-pacotes o trazem dentro — o `.app` no macOS, o instalador no Windows, a pasta
-no `.tar.gz`. Separar os arquivos quebra isso.
+## Instalar
 
-Outra: como tudo passa por HTTP, o cliente não precisa estar na mesma máquina
-que o daemon. É o que torna possível o [modo servidor](#no-navegador-e-em-um-servidor).
-
-## Primeiro uso
-
-Abra o aplicativo. Ele sobe o daemon sozinho e mostra a tela de criação de
-conta. É só preencher — a conta fica na sua máquina, em `~/.aos`, e nada é
-enviado para lugar nenhum.
-
-Feito isso, o terminal também funciona, sem login separado:
+### macOS e Linux
 
 ```sh
-aos gateway status      # o daemon está de pé?
-aos workspace list
-aos tasks list
-aos --help              # a árvore inteira de comandos
+curl -fsSL https://raw.githubusercontent.com/VS-7/AOS/main/install.sh | sh
 ```
 
-> Se `aos --help` mostrar só quatro comandos (`completion`, `gateway`, `help`,
-> `self`), é porque ainda não há conta: o `aos` monta a árvore de comandos a
-> partir do daemon, e sem conta o daemon não publica nada. Crie a conta pelo
-> aplicativo e rode de novo.
+No Linux o AOS precisa de **GTK4 e WebKitGTK** instalados. Se faltar, o
+instalador diz qual pacote e qual comando da sua distribuição — ele não deixa
+você com uma janela que não abre.
 
-Para operar o daemon sem a interface:
+> Instale por este comando, não baixando pelo navegador: o macOS bloqueia
+> aplicativos sem assinatura que vieram de download. O `curl` não recebe essa
+> marca. [Por quê](INSTALL.md#macos).
 
-```sh
-aos gateway start
-aos gateway stop
-aos gateway restart
-```
+### Windows
 
-## Em uma VPS
+Baixe em [Releases](https://github.com/VS-7/AOS/releases/latest):
 
-Numa VPS o `aosd` carrega a interface dentro dele: você acessa pelo navegador,
-sem instalar nada gráfico no servidor. É Go puro — sem GTK, sem WebKit.
+- **`AOS-setup-<versão>-windows-amd64.exe`** — instalador, com atalho no Menu
+  Iniciar.
+- `AOS-<versão>-windows-amd64.zip` — os executáveis soltos.
+
+O SmartScreen vai avisar que o publicador é desconhecido. Em **Mais
+informações → Executar assim mesmo**.
+
+### Servidor (VPS)
+
+Sem nada gráfico no servidor: o daemon carrega a interface dentro dele e você
+acessa pelo navegador.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/VS-7/AOS/main/install.sh | AOS_SERVER=1 sh
 ```
 
-Isso instala `aosd` e `aos` em `~/.local/bin`, cria o workspace em `~/aos` e
-escreve uma unit de usuário do systemd. Nada disso precisa de root — para
-outro diretório, `AOS_WORKSPACE=/srv/aos`. Depois:
+Ele instala os binários, cria o workspace e escreve um serviço do systemd —
+nada disso precisa de root. Depois:
 
 ```sh
 systemctl --user enable --now aos
-loginctl enable-linger "$USER"     # continua rodando depois que você sair
+loginctl enable-linger "$USER"
 ```
 
-O `enable-linger` é o que impede o serviço de morrer quando sua sessão SSH
-fecha.
-
-### Colocando na internet
-
-O daemon escuta em `127.0.0.1:5326` e **fica lá**. Isso é de propósito: expor
-direto exige ligar a segurança antes, e sem isso ele aborta no boot em vez de
-servir um workspace aberto para a rede. O caminho recomendado é um proxy
-reverso terminando TLS na frente. Com Caddy é um arquivo inteiro:
+O daemon escuta em `127.0.0.1:5326` e fica lá. Para abrir na internet, um
+proxy reverso na frente — com Caddy é uma linha:
 
 ```caddyfile
 aos.example.com {
@@ -192,54 +86,64 @@ aos.example.com {
 }
 ```
 
-O Caddy resolve o certificado sozinho. A primeira página pede para criar a
-conta, e enquanto ela não existir nada mais responde.
+📖 **[Guia de instalação completo](INSTALL.md)** — requisitos por
+distribuição, AppImage, verificação de checksums, variáveis do instalador e
+solução de problemas.
 
-Se preferir não abrir porta nenhuma nem apontar DNS, o grupo `aos tunnel`
-publica o daemon por Cloudflare Tunnel.
+---
 
-### O que é diferente do desktop
+## Primeiro uso
 
-O binário de servidor é o mesmo `aosd`, com a interface compilada dentro — por
-isso ele vem num arquivo separado nos Releases (`AOS-server-…`). O `aosd` que
-acompanha o desktop **não** tem a interface: a janela já carrega a sua própria
-cópia, e uma segunda no mesmo pacote seriam 14 MB repetidos.
+Abra o aplicativo. Ele sobe o daemon sozinho e mostra a tela de criação de
+conta. A conta fica em `~/.aos`, na sua máquina, e nada é enviado para lugar
+nenhum.
 
-O bundle vai comprimido: 53 MB de interface viram 14 MB dentro do binário, e é
-assim que ele chega ao navegador — o pedaço principal são 2 MB na rede em vez
-de 7,6 MB. Numa VPS isso é a diferença que se sente.
-
-Servidor existe para `amd64` e `arm64`.
-
-## Verificando o que você baixou
-
-Todo release traz um `checksums.txt` cobrindo todos os arquivos:
+Feito isso, o terminal funciona sem login separado:
 
 ```sh
-shasum -a 256 -c --ignore-missing checksums.txt   # macOS
-sha256sum -c --ignore-missing checksums.txt       # Linux
+aos tasks list
+aos agents list
+aos --help          # a árvore inteira de comandos
 ```
 
-O instalador do macOS já faz isso, e também confere a assinatura do bundle
-antes de instalar.
+---
+
+## Como é montado
+
+Três programas, cada um com uma função:
+
+| | |
+|---|---|
+| **`aosd`** | O daemon. É o dono do workspace — os arquivos, a fila de trabalho, a busca. Roda em segundo plano e é o único que escreve. |
+| **`aos-desktop`** | A janela. Uma interface que conversa com o daemon. |
+| **`aos`** | O terminal. Mesma coisa, pela linha de comando. |
+
+Um workspace tem um dono só. Se cada janela e cada terminal carregasse o
+sistema inteiro, todos escreveriam nos mesmos arquivos ao mesmo tempo — com um
+daemon, há um escritor e nenhuma disputa.
+
+Como tudo passa por HTTP, o cliente não precisa estar na mesma máquina que o
+daemon. É o que torna possível o modo servidor acima.
+
+> Os pacotes trazem o `aosd` junto com o aplicativo, e ele precisa estar **na
+> mesma pasta**. Separar os arquivos quebra isso.
+
+---
 
 ## Limitações do beta
 
 **Sem assinatura.** Nenhum binário tem certificado de desenvolvedor. No macOS
-o instalador contorna isso (o Gatekeeper só barra o que veio com quarentena);
-no Windows o SmartScreen vai avisar toda vez. Isso é uma escolha consciente
-desta fase, não um descuido — mas significa que você deve baixar apenas do
-repositório oficial e conferir os checksums.
+o instalador contorna; no Windows o SmartScreen avisa toda vez. Baixe apenas
+do repositório oficial e [confira os checksums](INSTALL.md#verificando-o-download).
 
-**Sem atualização automática.** O sistema tem a maquinaria de auto-update
-pronta, mas nenhum canal publicado, e a chave de assinatura de release em uso
-ainda é de desenvolvimento. Atualizar hoje é rodar o instalador de novo. Uma
-consequência a registrar: instalações feitas neste beta carregam essa chave, e
-quando ela for rotacionada elas não conseguirão verificar releases assinados —
-vai ser preciso reinstalar uma vez.
+**Sem atualização automática.** Atualizar hoje é rodar o instalador de novo.
+Instalações feitas neste beta carregam uma chave de assinatura de
+desenvolvimento; quando ela for rotacionada, será preciso reinstalar uma vez.
 
-**Plataformas.** A janela: macOS só em Apple Silicon, Windows e Linux só em
-x86-64. O servidor e os comandos de terminal também em `arm64` no Linux.
+**Plataformas.** A janela: macOS em Apple Silicon, Windows e Linux em x86-64.
+O servidor e o terminal também em `arm64` no Linux.
+
+---
 
 ## Licença
 
