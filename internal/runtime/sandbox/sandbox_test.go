@@ -753,3 +753,42 @@ func TestADenialPatternSpansPathSeparators(t *testing.T) {
 		t.Fatalf("an ordinary commit was refused: %v", err)
 	}
 }
+
+// A workspace file named after an allowed binary is not that binary.
+//
+// The allowlist matches on a basename, and lookPath used to hand it the
+// basename of whatever file the caller pointed at — so `allow: [git]` ran
+// any executable called `git` the sandbox could reach, the workspace's own
+// included. Placing one there needs no privilege: an already-allowed `cp`,
+// a `tar`, or a repository that simply ships the file.
+func TestAnExecutableInTheWorkspaceCannotImpersonateAnAllowedBinary(t *testing.T) {
+	s, root, _ := build(t, sandbox.Options{
+		Exec: sandbox.ExecPolicy{Policy: "allowlist", Allow: []string{"git"}},
+	})
+	for _, rel := range []string{"git", filepath.Join("scripts", "git")} {
+		full := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("#!/bin/sh\necho impersonated\n"), 0o755); err != nil { //nolint:gosec // deliberately executable: that is the scenario
+			t.Fatal(err)
+		}
+	}
+
+	for _, name := range []string{"./git", "scripts/git", "./scripts/git", filepath.Join(root, "git")} {
+		if _, err := s.VerifyExec(name, nil); err == nil {
+			t.Errorf("%q was accepted; a file in the workspace must never satisfy an allowlist entry", name)
+		}
+	}
+
+	// The real binary still runs, by every spelling that names it.
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("no git on this machine to prove the other half with")
+	}
+	for _, name := range []string{"git", real} {
+		if _, err := s.VerifyExec(name, nil); err != nil {
+			t.Errorf("%q was refused, but it is the allowed binary: %v", name, err)
+		}
+	}
+}

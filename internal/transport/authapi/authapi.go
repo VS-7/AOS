@@ -154,8 +154,21 @@ func (s *server) onboarding(w http.ResponseWriter, r *http.Request) {
 	// comment. A failure here is logged, not returned: the account exists
 	// and the browser session below still works regardless of whether the
 	// CLI's own bootstrap credential landed on disk.
+	//
+	// A credential of its own, not the one this response carries. They used
+	// to be the same string, and logging out of the window then revoked the
+	// terminal's only credential too — permanently, since nothing writes
+	// this file a second time: `aos agents list` went back to answering with
+	// four built-in commands and no explanation, and reinstalling did not
+	// help. They are two credentials for two clients, and one signing out
+	// says nothing about the other.
 	if s.paths.Root != "" {
-		if err := corecfg.WriteSecret(s.paths.LocalToken(), []byte(out.Token)); err != nil {
+		_, cli, err := s.svc.IssueToken(r.Context(), auth.IssueTokenInput{
+			UserID: out.User.ID, Name: "cli",
+		})
+		if err != nil {
+			s.log.Warn("could not mint the terminal's credential", "err", err)
+		} else if err := corecfg.WriteSecret(s.paths.LocalToken(), []byte(cli)); err != nil {
 			s.log.Warn("could not write local.token", "err", err)
 		}
 	}

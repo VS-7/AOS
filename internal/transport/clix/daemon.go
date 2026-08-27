@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/OWNER/aos/internal/core/apperr"
+	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/transport/wailsvc"
 )
@@ -30,10 +31,13 @@ const (
 // authenticated against leaves root exactly as NewRoot built it. That matters
 // most for the one command whose entire job is to start the daemon this would
 // otherwise depend on — `aos gateway start` must work with nothing attached.
-func AttachDaemon(ctx context.Context, root *cobra.Command, client wailsvc.Caller, cfg Config) {
+func AttachDaemon(ctx context.Context, root *cobra.Command, client wailsvc.Caller, cfg Config) error {
 	infos, err := client.Commands(ctx)
-	if err != nil || len(infos) == 0 {
-		return
+	if err != nil {
+		return err
+	}
+	if len(infos) == 0 {
+		return errNoPublishedSurface()
 	}
 
 	groups := map[string]*cobra.Command{}
@@ -48,8 +52,78 @@ func AttachDaemon(ctx context.Context, root *cobra.Command, client wailsvc.Calle
 			root.AddCommand(g)
 			groups[info.Group] = g
 		}
+		// A group this binary already builds locally keeps its own commands.
+		// `gateway` is the whole of that case: it is linked in here because
+		// supervising a process cannot be delegated to the process being
+		// supervised, and the daemon publishes it too — so `aos gateway
+		// --help` listed start, stop, status and restart twice, and the
+		// second of each pair reached the daemon to ask it to start itself.
+		if existing := findSubcommand(g, info.Name); existing != nil {
+			continue
+		}
 		g.AddCommand(buildDaemonCommand(info, client, cfg))
 	}
+	return nil
+}
+
+// findSubcommand looks a name up among a group's own commands, aliases
+// included.
+func findSubcommand(group *cobra.Command, name string) *cobra.Command {
+	for _, c := range group.Commands() {
+		if c.Name() == name {
+			return c
+		}
+		for _, alias := range c.Aliases {
+			if alias == name {
+				return c
+			}
+		}
+	}
+	return nil
+}
+
+// ExplainMissingTree turns cobra's "unknown command" into the answer the
+// person actually needs when the command tree could not be fetched.
+//
+// The tree is not compiled into this binary: it arrives from a running,
+// authenticated daemon. When that fetch fails — nothing listening, or no
+// account yet — every domain command is simply absent, and cobra says
+// `unknown command "agents"`, which reads like the command does not exist
+// rather than like this binary could not ask. cause is what AttachDaemon
+// reported.
+func ExplainMissingTree(err, cause error) error {
+	if err == nil || cause == nil {
+		return err
+	}
+	if !strings.Contains(err.Error(), "unknown command") {
+		return err
+	}
+	return apperr.New("CLI_SURFACE_UNAVAILABLE").
+		Causer("clix.AttachDaemon").
+		Msgf("this command is published by the daemon, and the daemon could not be reached").
+		Issue("cause", cause.Error()).
+		Status(apperr.StatusServiceUnavailable).
+		Wrap(err).
+		CTA(
+			apperr.CallToAction{
+				Label:   "start the daemon, then run this again",
+				Command: build.Name + " gateway start",
+				Tool:    "gateway_start",
+			},
+			apperr.CallToAction{
+				Label: "if it is running, this installation has no account yet — create one in the application, which also writes the credential this terminal reads",
+			},
+		)
+}
+
+func errNoPublishedSurface() error {
+	return apperr.New("CLI_EMPTY_SURFACE").
+		Causer("clix.AttachDaemon").
+		Msgf("the daemon answered, but published no commands").
+		Status(apperr.StatusServiceUnavailable).
+		CTA(apperr.CallToAction{
+			Label: "the window and the terminal are usually different versions when this happens",
+		})
 }
 
 // buildDaemonCommand wraps one manifest entry. Unlike BuildCommand, it cannot

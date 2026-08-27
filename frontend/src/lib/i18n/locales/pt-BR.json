@@ -1016,5 +1016,11 @@
   "Zero-Knowledge — Credentials remain exclusively on your local device.": "Zero-Knowledge — as credenciais ficam exclusivamente no seu dispositivo.",
   "Zero-knowledge — this password is hashed on this machine and never leaves it.": "Zero-knowledge — esta senha é convertida em hash nesta máquina e nunca sai dela.",
   "Zoom in": "Ampliar",
-  "Zoom out": "Reduzir"
+  "Zoom out": "Reduzir",
+  "Skill installed": "Skill instalada",
+  "Skipped {{dir}}": "Ignorado: {{dir}}",
+  "Install command copied": "Comando de instalação copiado",
+  "Run it in a terminal where the aos command is installed.": "Execute em um terminal onde o comando aos esteja instalado.",
+  "Could not install the skill for {{agent}}": "Não foi possível instalar a skill para {{agent}}",
+  "Not detected on this machine": "Não detectado nesta máquina"
 }

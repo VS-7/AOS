@@ -88,3 +88,49 @@ func TestRemoveDeletesTheArtifactDirectoryAndIsIdempotent(t *testing.T) {
 		t.Fatalf("second Remove failed: %v", err)
 	}
 }
+
+// The artifact id is a directory name, and it is checked as one.
+//
+// `filepath.Join` cleans, so an id of ".." resolved to the workspace's whole
+// .aos directory — agents, tasks, chats, memories, collections, every record
+// the workspace has — and Remove took os.RemoveAll to it. No symlink, nothing
+// for pathx.Root or ResolveInside to catch: the path was ordinary, it was
+// simply not the artifact's.
+func TestAnIdThatIsNotOneSegmentIsRefusedRatherThanResolved(t *testing.T) {
+	root := t.TempDir()
+	state := filepath.Join(root, ".aos")
+	if err := os.MkdirAll(filepath.Join(state, "agents", "atlas"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(state, "agents", "atlas", "AGENT.md"), []byte("# Atlas"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(state, "artifacts", "real"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	files := artifactfiles.New(root)
+	for _, id := range []string{"..", ".", "../..", "a/b", "/etc"} {
+		if err := files.Remove(context.Background(), id); err == nil {
+			t.Errorf("Remove(%q) was carried out", id)
+		}
+		if _, err := files.Resolve(id, "index.html"); err == nil {
+			t.Errorf("Resolve(%q) resolved to something", id)
+		}
+		if _, err := files.Ensure(context.Background(), id, "index.html"); err == nil {
+			t.Errorf("Ensure(%q) wrote something", id)
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(state, "agents", "atlas", "AGENT.md")); err != nil {
+		t.Fatalf("the workspace's own records were deleted: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(state, "artifacts", "real")); err != nil {
+		t.Fatalf("another artifact was deleted: %v", err)
+	}
+
+	// A real id still works, which is the other half of the guard.
+	if _, err := files.Ensure(context.Background(), "real", "index.html"); err != nil {
+		t.Fatalf("a legitimate artifact was refused: %v", err)
+	}
+}

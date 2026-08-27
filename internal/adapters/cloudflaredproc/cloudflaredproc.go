@@ -60,15 +60,37 @@ func (r Runner) Spawn(ctx context.Context, hostname, token string, timeout time.
 	ready := make(chan struct{})
 	exited := make(chan error, 1)
 
+	// The reader does not stop at the marker. It used to, and then nothing
+	// read that pipe again for as long as the tunnel lived: cloudflared logs
+	// steadily, the pipe's buffer is finite, and once it filled the process
+	// blocked on its next write to stderr — the tunnel stopped forwarding and
+	// nothing said why. Reading for as long as there is anything to read
+	// costs one goroutine and is the whole fix.
 	go func() {
 		scanner := bufio.NewScanner(stderr)
+		// cloudflared's own lines are short; the ceiling is for a stack trace
+		// or a wrapped error, which would otherwise stop the scan and put us
+		// right back in the blocked-writer case.
+		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		signalled := false
 		for scanner.Scan() {
-			if strings.Contains(scanner.Text(), readyMarker) {
+			if !signalled && strings.Contains(scanner.Text(), readyMarker) {
+				signalled = true
 				close(ready)
-				return
 			}
 		}
 	}()
+	// Wait runs independently of that drain, and deliberately.
+	//
+	// os/exec asks callers to finish reading a StderrPipe before calling
+	// Wait, and gating Wait on the read reaching EOF is the obvious way to
+	// honour it — but it does not terminate here: cloudflared's own children
+	// inherit the descriptor, so a grandchild that outlives its parent holds
+	// the pipe open and EOF never comes. Stop would then signal a process
+	// that had already gone while Wait blocked forever. The documented risk
+	// of the other order is that Wait closes the pipe under an in-flight
+	// read; the scan simply ends, which is exactly what it should do when the
+	// process it was reading has exited.
 	go func() { exited <- cmd.Wait() }()
 
 	select {

@@ -1,5 +1,5 @@
 import { Call } from "@wailsio/runtime";
-import { DomainError, unwrap } from "./client";
+import { DomainError, bridgeFetch, unwrap } from "./client";
 import { desktopRetryDelays, markDesktopConfirmed, sleep } from "./desktop-transport";
 import { daemonURL } from "./daemon-origin";
 
@@ -58,6 +58,34 @@ async function desktopCall<T>(method: string, ...args: unknown[]): Promise<T> {
 }
 
 async function httpRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  // The bridge first, for the same reason lib/file.ts takes it: inside the
+  // desktop window this request is cross-origin and carries no credential,
+  // so the account roster, the profile form and the password change were all
+  // refused there. `Call.ByName` rejecting means there is no bridge — a
+  // browser tab, where the fetch below is same-origin and the session cookie
+  // travels with it.
+  try {
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    const answer = await bridgeFetch(
+      init?.method ?? "GET",
+      path,
+      headers["content-type"] ?? "",
+      typeof init?.body === "string" ? init.body : "",
+    );
+    try {
+      return unwrap(JSON.parse(answer.body));
+    } catch (err) {
+      if (err instanceof DomainError) throw err;
+      throw new DomainError({
+        code: "TRANSPORT_UNREADABLE",
+        message: `the daemon answered ${answer.status} with something that is not JSON`,
+        status: answer.status,
+      });
+    }
+  } catch (err) {
+    if (err instanceof DomainError) throw err;
+  }
+
   let response: Response;
   try {
     // Absolute inside the desktop window, where a relative path reaches the

@@ -1,6 +1,15 @@
 package telegramapi
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+)
+
+// size is the length Telegram measures a message by: characters, not bytes.
+// Counting bytes made every accented or emoji-bearing message split far
+// earlier than it had to, and — with the old, wrong ceiling — did not stop a
+// single one from being rejected.
+func size(s string) int { return utf8.RuneCountInString(s) }
 
 // split breaks text into chunks of at most limit characters, on a block
 // boundary — a blank line between paragraphs — and never inside a fenced
@@ -9,7 +18,7 @@ import "strings"
 // it, which is an honest failure Send reports, not a corrupted message this
 // package produced by slicing through the middle of it.
 func split(text string, limit int) []string {
-	if len(text) <= limit {
+	if size(text) <= limit {
 		return []string{text}
 	}
 
@@ -29,9 +38,9 @@ func split(text string, limit int) []string {
 		if cur.Len() > 0 {
 			sep = "\n\n"
 		}
-		if cur.Len()+len(sep)+len(b) > limit {
+		if size(cur.String())+size(sep)+size(b) > limit {
 			flush()
-			if len(b) > limit {
+			if size(b) > limit {
 				// One block alone exceeds the limit — nothing to break it on
 				// without risking a mid-fence cut. Ship it as its own chunk.
 				chunks = append(chunks, b)

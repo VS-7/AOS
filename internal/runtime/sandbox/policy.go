@@ -104,9 +104,13 @@ func DefaultExecPolicy() ExecPolicy { return ExecPolicy{Policy: PolicyDenyAll} }
 // canonical name alone made `allow: [sh]` unsatisfiable there while the same
 // frontmatter worked on macOS — one agent, two behaviours, and no diagnostic
 // saying so. vi, python and awk are shipped the same way. Nothing is given up
-// by it: lookPath searches minimalPath and nowhere else, so a link that lies
-// about where it goes had to be written into /usr/bin by root, who never
-// needed a symlink to replace the binary outright.
+// by it: lookPath only ever produces a file the controlled PATH resolved (or
+// one an absolute allowlist entry names — see lookExplicitPath), so a link
+// that lies about where it goes had to be written into /usr/bin by root, who
+// never needed a symlink to replace the binary outright. What this comment
+// used to claim — that lookPath "searches minimalPath and nowhere else" — was
+// not true of a name written as a path, and that gap is the bypass
+// lookExplicitPath now closes.
 func (p ExecPolicy) allows(found, canonical string) bool {
 	if p.Policy != PolicyAllowlist {
 		return false

@@ -199,8 +199,16 @@ func presentedToken(ctx context.Context) string {
 func authenticate(a Authenticator, enabled func() bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if a == nil || !enabled() {
+			if !enabled() {
 				next.ServeHTTP(w, r)
+				return
+			}
+			// Security is on and there is nobody to ask. Letting the request
+			// through here would mean an unauthenticated surface precisely
+			// when the installation asked for an authenticated one — a
+			// misconfiguration must fail closed.
+			if a == nil {
+				writeError(w, r, errNoAuthenticator())
 				return
 			}
 			token := presentedToken(r.Context())

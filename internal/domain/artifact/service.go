@@ -7,6 +7,7 @@ import (
 
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/command"
+	"github.com/OWNER/aos/internal/core/pathx"
 )
 
 // defaultEntrypoint is what Create scaffolds when none is given — Files.Ensure
@@ -226,6 +227,14 @@ type DeleteOutput struct {
 // idempotent: deleting what is already gone succeeds rather than erroring.
 func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, error) {
 	id := strings.TrimSpace(in.ID)
+	// An id that is not a name is refused here rather than resolved
+	// somewhere surprising. The adapter guards its own joins too — that is
+	// the layer that actually stops ".." from reaching the workspace's whole
+	// .aos — but reporting "deleted" for an id that never named an artifact
+	// is an answer nobody can act on.
+	if _, err := pathx.Segment(id); err != nil {
+		return DeleteOutput{}, errUnsafeID(id)
+	}
 	if err := s.repo.Delete(ctx, collections.Key{"id": id}); err != nil {
 		return DeleteOutput{}, errWriteFailed("Delete", err)
 	}

@@ -645,3 +645,34 @@ func TestAMoveToWhereItAlreadyIsIsAcceptedAndRunsNoGuard(t *testing.T) {
 		t.Fatalf("out = %+v", out)
 	}
 }
+
+// A worktree the person cut by hand is not the pruner's to take.
+//
+// `git worktree list` reports every checkout of the repository, and one nobody
+// made a task for is exactly the shape of somebody's own branch with
+// uncommitted work in it. The pruner used to call that "the safest thing to
+// remove" and remove it with --force. Only what sits under the directory this
+// workspace places its own checkouts in is a candidate.
+func TestThePruneLeavesAWorktreeTheWorkspaceDidNotPlace(t *testing.T) {
+	h := newHarness(t, func(d *Deps) {
+		d.Policy = policy{worktrees: WorktreePolicy{
+			BranchPrefix: "aos", Limit: 1, DeleteOld: true, Root: "/tmp/wt",
+		}}
+	})
+	// Two checkouts git knows about and no task claims: one of ours, left
+	// behind by a run that did not finish, and one of the person's own.
+	h.worktrees.existing = []string{"/tmp/wt/leftover", "/home/someone/my-own-branch"}
+
+	next := h.create(t, CreateInput{Name: "New work", Status: Todo, Worktree: true})
+	if _, err := h.svc.Branch(ctx(), BranchInput{ID: next.ID}); err != nil {
+		t.Fatalf("the prune could not make room from its own leftovers: %v", err)
+	}
+	for _, removed := range h.worktrees.removed {
+		if removed == "/home/someone/my-own-branch" {
+			t.Fatal("a worktree outside the workspace's own root was removed")
+		}
+	}
+	if len(h.worktrees.removed) != 1 || h.worktrees.removed[0] != "/tmp/wt/leftover" {
+		t.Fatalf("removed = %v, want only the leftover under the workspace's root", h.worktrees.removed)
+	}
+}

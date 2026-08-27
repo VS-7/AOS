@@ -103,28 +103,10 @@ func matchLine(pattern, line string) bool {
 // express "this one, in this place".
 func (s *Sandbox) lookPath(name string) (string, string, error) {
 	if strings.ContainsAny(name, `/\`) {
-		// A path the caller typed earns no second name. Collapsing it to the
-		// one file it names is the whole point of the layer, and offering the
-		// spelling back would be the hole this closes.
-		abs := name
-		if !filepath.IsAbs(abs) {
-			abs = filepath.Join(s.root, name)
-		}
-		canonical, err := filepath.EvalSymlinks(abs)
-		if err != nil {
-			return "", "", err
-		}
-		return canonical, canonical, nil
+		return s.lookExplicitPath(name)
 	}
-	for _, dir := range filepath.SplitList(minimalPath()) {
-		candidate := filepath.Join(dir, name)
-		if found, err := exec.LookPath(candidate); err == nil {
-			canonical, err := filepath.EvalSymlinks(found)
-			if err != nil {
-				return "", "", err
-			}
-			return found, canonical, nil
-		}
+	if found, canonical, err := s.lookOnPath(name); err == nil {
+		return found, canonical, nil
 	}
 	// The allowlist may name an absolute path outside the controlled PATH.
 	for _, entry := range s.exec.Allow {
@@ -134,6 +116,63 @@ func (s *Sandbox) lookPath(name string) (string, string, error) {
 				return "", "", err
 			}
 			return entry, canonical, nil
+		}
+	}
+	return "", "", exec.ErrNotFound
+}
+
+// lookExplicitPath resolves a name the caller wrote as a path, and accepts it
+// only when it turns out to be a binary the allowlist could have named
+// anyway.
+//
+// This branch used to return the resolved file as both names, which handed
+// ExecPolicy.allows a basename the caller chose: with `allow: [git]`, any
+// executable file named `git` anywhere the sandbox could reach ran — starting
+// with one inside the workspace. Writing it took an already-allowed tool
+// (`cp /bin/sh ./git`) or a repository that simply ships an executable with
+// that name, and the shell check was defeated too, because the copy is not
+// named like a shell. So the allowlist was a suggestion, which is exactly
+// what ADR-0006 says it must not be.
+//
+// Two ways an explicit path is still honoured, and no third:
+//
+//   - it is the same file an absolute allowlist entry names, which is how
+//     "this one, in this place" stays expressible;
+//   - it is the same file the controlled PATH resolves its own basename to,
+//     which keeps `/bin/rm`, `./rm` inside /bin and `rm` meaning one thing.
+//
+// Anything else — a file in the workspace, a worktree, /tmp, or any directory
+// outside the controlled PATH — is not found, and the caller is told so.
+func (s *Sandbox) lookExplicitPath(name string) (string, string, error) {
+	abs := name
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(s.root, name)
+	}
+	canonical, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", "", err
+	}
+	for _, entry := range s.exec.Allow {
+		if filepath.IsAbs(entry) && sameFile(entry, canonical) {
+			return entry, canonical, nil
+		}
+	}
+	if found, viaPath, err := s.lookOnPath(filepath.Base(name)); err == nil && sameFile(viaPath, canonical) {
+		return found, viaPath, nil
+	}
+	return "", "", exec.ErrNotFound
+}
+
+// lookOnPath resolves a bare binary name against the controlled PATH.
+func (s *Sandbox) lookOnPath(name string) (string, string, error) {
+	for _, dir := range filepath.SplitList(minimalPath()) {
+		candidate := filepath.Join(dir, name)
+		if found, err := exec.LookPath(candidate); err == nil {
+			canonical, err := filepath.EvalSymlinks(found)
+			if err != nil {
+				return "", "", err
+			}
+			return found, canonical, nil
 		}
 	}
 	return "", "", exec.ErrNotFound

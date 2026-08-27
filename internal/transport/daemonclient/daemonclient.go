@@ -25,6 +25,7 @@ type Client struct {
 	base      string
 	token     atomic.Pointer[string]
 	workspace atomic.Pointer[string]
+	agent     atomic.Pointer[string]
 	http      *http.Client
 }
 
@@ -41,6 +42,15 @@ type Options struct {
 	// the original: a cookie is attached by the browser to a WebSocket upgrade
 	// whether or not the page meant it to.
 	Workspace string
+
+	// Agent is who is calling, when the caller is one of the workspace's own
+	// agents rather than the person. An external coding agent operating this
+	// installation through `aos` or `aos --mcp` sets AOS_AGENT_ID and is that
+	// agent: without it every call arrives anonymous, `agents_me` has nobody
+	// to answer with, and a memory — which belongs to an agent — cannot be
+	// stored at all. The daemon reads it from this header (httpapi's
+	// ambientIdentity).
+	Agent string
 
 	// Timeout bounds one call. A turn is not taken here — the daemon runs it
 	// and the answer arrives over the realtime channel — so this is short.
@@ -59,6 +69,7 @@ func New(opts Options) *Client {
 	}
 	c.SetToken(opts.Token)
 	c.SetWorkspace(opts.Workspace)
+	c.SetAgent(opts.Agent)
 	return c
 }
 
@@ -100,6 +111,16 @@ func (c *Client) currentWorkspace() string {
 	return ""
 }
 
+// SetAgent replaces the agent identity later calls are made as.
+func (c *Client) SetAgent(id string) { c.agent.Store(&id) }
+
+func (c *Client) currentAgent() string {
+	if v := c.agent.Load(); v != nil {
+		return *v
+	}
+	return ""
+}
+
 // Invoke runs one command.
 //
 // The command key maps to the path the HTTP surface publishes: memories_store
@@ -119,6 +140,9 @@ func (c *Client) Invoke(ctx context.Context, key string, input json.RawMessage) 
 	}
 	if workspace := c.currentWorkspace(); workspace != "" {
 		req.Header.Set("x-workspace-id", workspace)
+	}
+	if agent := c.currentAgent(); agent != "" {
+		req.Header.Set("x-agent-id", agent)
 	}
 
 	res, err := c.http.Do(req)
@@ -315,7 +339,10 @@ func (c *Client) Commands(ctx context.Context) ([]wailsvc.CommandInfo, error) {
 
 // Ready reports whether the daemon is answering its health check.
 func (c *Client) Ready(ctx context.Context) (bool, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/health", nil)
+	// /api/health, which is where the daemon answers it (see httpapi.New): the
+	// bare /health this used to ask for reached the not-found handler, so the
+	// answer was always "not ready" no matter what the daemon was doing.
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/api/health", nil)
 	if err != nil {
 		return false, nil //nolint:nilerr // a malformed address is "not ready", not an incident
 	}
@@ -352,3 +379,61 @@ func errUnreadable(base string, cause error) error {
 			Label: "the window and the daemon are usually different versions when this happens",
 		})
 }
+
+// Fetch performs one authenticated request against a daemon path that is not
+// a command route.
+//
+// Two surfaces are not in the command registry by backend decision — the file
+// explorer (/api/file) and the account endpoints /api/auth — and the window
+// used to call them with a bare fetch from the page. That could not work:
+// the page's origin is the application's own scheme, so those requests were
+// cross-origin, carried no cookie and no bearer, and were refused with 401
+// (or blocked before they left, by CORS). The file tree, the editor, the
+// diffs and the account roster were all empty in the desktop for that reason.
+//
+// This is the same credential every other call from the window already uses,
+// applied to the two surfaces that had no bridge of their own. The token
+// never reaches the page: it is held here, in the process that owns it.
+func (c *Client) Fetch(ctx context.Context, method, path, contentType string, body []byte) (int, []byte, error) {
+	var reader io.Reader
+	if len(body) > 0 {
+		reader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.base+path, reader)
+	if err != nil {
+		return 0, nil, errUnreachable(c.base, err)
+	}
+	if contentType != "" {
+		req.Header.Set("content-type", contentType)
+	}
+	if token := c.currentToken(); token != "" {
+		req.Header.Set("authorization", "Bearer "+token)
+	}
+	if workspace := c.currentWorkspace(); workspace != "" {
+		req.Header.Set("x-workspace-id", workspace)
+	}
+	if agent := c.currentAgent(); agent != "" {
+		req.Header.Set("x-agent-id", agent)
+	}
+
+	res, err := c.http.Do(req)
+	if err != nil {
+		return 0, nil, errUnreachable(c.base, err)
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	raw, err := io.ReadAll(res.Body)
+	if err != nil {
+		return res.StatusCode, nil, errUnreachable(c.base, err)
+	}
+	return res.StatusCode, raw, nil
+}
+
+// Token is the credential this client currently authenticates with.
+//
+// It exists for the one caller that has to make its own connection rather
+// than go through Invoke: the desktop's realtime relay, which dials the
+// daemon's WebSocket directly (cmd/aos-desktop) and has to present the same
+// credential every other call does. It stays inside this process — nothing
+// exposes it to the page.
+func (c *Client) Token() string { return c.currentToken() }

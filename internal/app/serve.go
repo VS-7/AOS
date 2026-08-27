@@ -125,8 +125,16 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 		}),
 		SecurityEnabled: securityEnabled,
 		DocsEnabled:     !resolver.IsProduction(),
-		AllowedOrigins:  origins,
-		Log:             log,
+		// The window's own origins belong here as much as they do on the
+		// event channel. The interface reaches two surfaces by plain fetch
+		// rather than through the Wails bridge — the file explorer and the
+		// account endpoints AuthService does not bind — and from inside the
+		// window those are cross-origin requests to this daemon. Without the
+		// origins the preflight came back with no allow header and the
+		// WebView refused the call before it was ever made, which is why the
+		// file tree and the user list were empty there.
+		AllowedOrigins: append(desktopOrigins(), origins...),
+		Log:            log,
 	})
 
 	// Only the daemon runs the watcher: a one-shot CLI process exits before a

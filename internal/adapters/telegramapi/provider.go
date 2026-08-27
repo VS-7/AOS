@@ -21,12 +21,18 @@ import (
 
 const defaultBaseURL = "https://api.telegram.org"
 
-// maxChars is the design doc's own character limit on one logical message
-// before Send must split it — see split.go. The design doc also names a
-// 500-block cap; this build enforces only the character limit, since
-// nothing in the split algorithm currently needs a block count independent
-// of the characters those blocks already carry — see split.go's own doc.
-const maxChars = 32768
+// maxChars is what sendMessage actually accepts: 4096 characters, per
+// https://core.telegram.org/bots/api#sendmessage. It used to be 32768 — the
+// design doc's number, which is the limit on a *caption*, not on a message —
+// so anything between the two was never split, was rejected by Telegram, and
+// the agent's answer simply never arrived. A long reply is exactly the kind
+// this happens to.
+//
+// Characters, not bytes: the limit is on UTF-16 code units, and counting
+// bytes would cut a Portuguese sentence a fifth short of the real ceiling
+// while an emoji-heavy one could still overshoot. Runes are the closest
+// cheap approximation, and the margin below absorbs the difference.
+const maxChars = 4000
 
 // SecretHeader is the header Telegram carries the secret_token on, and the
 // header the integrator's HTTP handler must read before calling Parse — see

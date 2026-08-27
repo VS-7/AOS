@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/OWNER/aos/internal/core/clockx"
+	corecfg "github.com/OWNER/aos/internal/core/config"
 	"github.com/OWNER/aos/internal/core/ids"
 	"github.com/OWNER/aos/internal/domain/auth"
 	"github.com/OWNER/aos/internal/transport/authapi"
@@ -415,5 +417,69 @@ func TestProfileRefusesABlankName(t *testing.T) {
 	}
 	if body.Error == nil || body.Error.Code != "AOS_AUTH_NAME_REQUIRED" {
 		t.Errorf("error = %+v, want AOS_AUTH_NAME_REQUIRED", body.Error)
+	}
+}
+
+// newServerWithState is newServer plus a state directory, so a test can read
+// the credential onboarding writes for the terminal.
+func newServerWithState(t *testing.T) (*httptest.Server, corecfg.Paths) {
+	t.Helper()
+	svc := auth.NewService(auth.Deps{
+		Store: &fakeStore{},
+		Clock: clockx.Fixed{At: time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)},
+		IDs:   &ids.Sequence{Prefix: "u"},
+	})
+	paths := corecfg.Paths{Root: t.TempDir()}
+	if err := paths.Ensure(); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(authapi.New(authapi.Config{Service: svc, Paths: paths}))
+	t.Cleanup(srv.Close)
+	return srv, paths
+}
+
+// Signing out of one client must not disarm another.
+//
+// Onboarding writes the terminal's credential to local.token and hands the
+// window a session of its own. They used to be the same string, so the first
+// logout revoked both — and nothing ever writes local.token again, so `aos`
+// stayed broken for good: every domain command came back "unknown command".
+func TestLoggingOutDoesNotRevokeTheTerminalsCredential(t *testing.T) {
+	srv, paths := newServerWithState(t)
+
+	res, env := post(t, srv, "/onboarding", map[string]string{
+		"name": "A", "email": "a@b.c", "password": "a-good-long-password",
+	}, "")
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("onboarding = %d", res.StatusCode)
+	}
+	var session struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(env.Data, &session); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := os.ReadFile(paths.LocalToken())
+	if err != nil {
+		t.Fatalf("local.token was not written: %v", err)
+	}
+	cliToken := strings.TrimSpace(string(raw))
+	if cliToken == "" {
+		t.Fatal("local.token is empty")
+	}
+	if cliToken == session.Token {
+		t.Fatal("the window and the terminal hold the same credential; revoking one revokes the other")
+	}
+
+	if res, _ := post(t, srv, "/logout", map[string]string{}, session.Token); res.StatusCode != http.StatusOK {
+		t.Fatalf("logout = %d", res.StatusCode)
+	}
+
+	if res, _ := get(t, srv, "/session", session.Token); res.StatusCode == http.StatusOK {
+		t.Error("the window's own token survived its logout")
+	}
+	if res, _ := get(t, srv, "/session", cliToken); res.StatusCode != http.StatusOK {
+		t.Errorf("the terminal's credential was revoked by the window's logout: %d", res.StatusCode)
 	}
 }

@@ -178,9 +178,18 @@ func New(cfg Config) *Server {
 	})
 
 	if cfg.Realtime != nil {
-		// Outside /api because it is not one: it takes no payload, returns no
-		// envelope, and authorises itself.
-		r.Handle("/ws", cfg.Realtime)
+		// Outside /api because it is not one: it takes no payload and returns
+		// no envelope. It does authorise itself — but only by *workspace*,
+		// and a workspace with no explicit members admits everybody
+		// (workspace.Service.AuthorizeWorkspace), which is every workspace
+		// this system creates. Mounted bare, as it was, `curl` completed the
+		// upgrade with no credential at all and read the whole event stream:
+		// messages, task changes, approvals. The same middleware every /api
+		// route answers to runs here too, so the caller is a known user
+		// before realtime.Upgrade decides which workspace they may attach to.
+		// A browser sends the session cookie on the handshake automatically;
+		// the desktop's relay sends its bearer token (cmd/aos-desktop).
+		r.With(authenticate(cfg.Auth, cfg.SecurityEnabled)).Handle("/ws", cfg.Realtime)
 	}
 	if cfg.Artifacts != nil {
 		// Outside /api for the same reason /ws is: no envelope, and its own

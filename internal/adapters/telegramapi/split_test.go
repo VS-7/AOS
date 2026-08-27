@@ -3,7 +3,12 @@ package telegramapi
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
+
+// splitForTest is split at the real ceiling, named so the assertions below
+// read as what they check rather than as a call with a constant in it.
+func splitForTest(text string) []string { return split(text, maxChars) }
 
 func TestSplitLeavesAShortMessageWhole(t *testing.T) {
 	got := split("hello", maxChars)
@@ -68,4 +73,27 @@ func lens(ss []string) []int {
 		out[i] = len(s)
 	}
 	return out
+}
+
+// The ceiling is the one sendMessage enforces, and it is measured the way
+// Telegram measures it. A reply longer than that used to be shipped whole and
+// refused by the API, so the person waiting on it got nothing at all.
+func TestNoChunkExceedsWhatTheAPIAccepts(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < 400; i++ {
+		b.WriteString("Uma frase razoavelmente longa em português, com acentuação.\n\n")
+	}
+	for _, chunk := range splitForTest(b.String()) {
+		if n := utf8.RuneCountInString(chunk); n > 4096 {
+			t.Fatalf("a chunk of %d characters would be refused by sendMessage", n)
+		}
+	}
+
+	// Accents do not cost a chunk boundary they should not: the same text in
+	// ASCII splits into the same number of pieces.
+	accented := strings.Repeat("ção ção ção ção\n\n", 500)
+	plain := strings.Repeat("cao cao cao cao\n\n", 500)
+	if a, p := len(splitForTest(accented)), len(splitForTest(plain)); a != p {
+		t.Errorf("accented text split into %d chunks and plain into %d; the limit is characters, not bytes", a, p)
+	}
 }

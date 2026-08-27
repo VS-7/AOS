@@ -244,3 +244,44 @@ func TestACancelledContextIsRefused(t *testing.T) {
 		t.Error("Delete ignored a cancelled context")
 	}
 }
+
+// An id is a directory name, and it is checked as one.
+//
+// `filepath.Join(root, "..")` is the parent of the root, with no symlink
+// involved and nothing for a containment check to catch — the result is an
+// ordinary path that simply is not the one the caller meant. Get read
+// ~/.aos/config.json and parsed it as a workspace record (unknown JSON fields
+// are ignored), so the service's own existence check waved it through, and
+// Delete then took os.RemoveAll to the whole installation: config.json,
+// users.json, local.token, the job database and every other workspace.
+func TestAnIdThatIsNotOneSegmentIsRefusedRatherThanResolved(t *testing.T) {
+	state := t.TempDir()
+	// The installation's own files, one level above the workspaces directory.
+	if err := os.WriteFile(filepath.Join(state, "config.json"), []byte(`{"id":"not-a-workspace"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(state, "users.json"), []byte(`[]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	workspaces := filepath.Join(state, "workspaces")
+	if err := os.MkdirAll(workspaces, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	store := fsworkspace.NewStore(workspaces)
+
+	for _, id := range []string{"..", ".", "../..", "a/b", "/etc"} {
+		if _, err := store.Get(context.Background(), id); err == nil {
+			t.Errorf("Get(%q) resolved to something", id)
+		}
+		if err := store.Delete(context.Background(), id); err == nil {
+			t.Errorf("Delete(%q) was carried out", id)
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(state, "config.json")); err != nil {
+		t.Fatalf("the installation's own state was deleted: %v", err)
+	}
+	if _, err := os.Stat(workspaces); err != nil {
+		t.Fatalf("the workspaces directory was deleted: %v", err)
+	}
+}

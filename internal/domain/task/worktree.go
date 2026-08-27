@@ -113,9 +113,26 @@ func (s *Service) pruneToLimit(ctx context.Context, policy WorktreePolicy) error
 	if !policy.DeleteOld {
 		return nil
 	}
-	existing, err := s.worktrees.List(ctx)
+	listed, err := s.worktrees.List(ctx)
 	if err != nil {
 		return errWorktreeFailed("", "", err)
+	}
+
+	// Only this workspace's own checkouts, when it says where it puts them.
+	// `git worktree list` reports every worktree of the repository, the
+	// person's own branches included — and counting those against a limit
+	// that exists to bound *this system's* checkouts made an unrelated
+	// worktree consume the budget, then made the pruner reach for it. Both
+	// halves of that are wrong, and this is the line that fixes both.
+	root := strings.TrimSpace(policy.Root)
+	existing := listed
+	if root != "" {
+		existing = existing[:0:0]
+		for _, path := range listed {
+			if underRoot(root, path) {
+				existing = append(existing, path)
+			}
+		}
 	}
 	if len(existing) < policy.Limit {
 		return nil
@@ -140,8 +157,11 @@ func (s *Service) pruneToLimit(ctx context.Context, policy WorktreePolicy) error
 	for _, path := range existing {
 		owner, ok := held[path]
 		if !ok {
-			// A checkout no task claims is the safest thing to remove: nothing
-			// is executing in it and nothing points at it.
+			// A checkout of ours that no task claims: a leftover from a run
+			// that did not finish. Nothing is executing in it and nothing
+			// points at it. (`existing` is already confined to the
+			// workspace's own root above, so this can no longer be
+			// somebody's own worktree.)
 			removable = append(removable, candidate{path: path})
 			continue
 		}
@@ -197,4 +217,15 @@ func (s *Service) worktreePolicy(ctx context.Context) (WorktreePolicy, error) {
 		policy.BranchPrefix = DefaultBranchPrefix
 	}
 	return policy, nil
+}
+
+// underRoot reports whether a checkout sits inside the directory the workspace
+// places its worktrees in. Compared as a relative path rather than a string
+// prefix, so "/w/trees-of-mine" is not inside "/w/trees".
+func underRoot(root, path string) bool {
+	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path))
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

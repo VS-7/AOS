@@ -28,6 +28,7 @@ func selfCommand(cfg Config) *cobra.Command {
 	self.AddCommand(completionsCommand())
 	self.AddCommand(toolsCommand(cfg))
 	self.AddCommand(llmsCommand(cfg))
+	self.AddCommand(skillCommand(cfg))
 	return self
 }
 

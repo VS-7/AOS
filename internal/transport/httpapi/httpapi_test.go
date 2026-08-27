@@ -655,3 +655,59 @@ func TestMCPMountFollowsSecurityEnabledTheSameWayTheGuardedAPIGroupDoes(t *testi
 		t.Fatalf("status = %d, want /mcp reachable with no credential once security is off, like /api/records/touch already is", res.StatusCode)
 	}
 }
+
+// The event channel carries the workspace's whole life — every message, every
+// task move, every approval request — and it used to be mounted bare.
+//
+// realtime.Upgrade does authorise, but only by workspace, and a workspace
+// with no explicit members admits everybody (workspace.Service.
+// AuthorizeWorkspace) — which is every workspace this system creates. So the
+// upgrade completed for a caller with no credential at all: `curl` on the
+// loopback interface, or any page on the same origin in the browser flavour,
+// read the stream. It answers to the same middleware the API does now.
+func TestTheEventChannelRequiresACredential(t *testing.T) {
+	h := newHarness(t, func(c *httpapi.Config) { c.Realtime = stubHandler(http.StatusOK) })
+
+	res := h.do(t, http.MethodGet, "/ws", nil, func(r *http.Request) {
+		r.Header.Del("Authorization")
+	})
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated /ws, status = %d, want 401", res.StatusCode)
+	}
+
+	res = h.do(t, http.MethodGet, "/ws", nil)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("authenticated /ws, status = %d", res.StatusCode)
+	}
+}
+
+// With security off, /ws is reachable without one — the same posture every
+// other surface takes, and the reason guardExposure refuses to bind beyond
+// loopback in that configuration.
+func TestTheEventChannelFollowsSecurityEnabled(t *testing.T) {
+	h := newHarness(t, func(c *httpapi.Config) {
+		c.Realtime = stubHandler(http.StatusOK)
+		c.SecurityEnabled = func() bool { return false }
+	})
+	res := h.do(t, http.MethodGet, "/ws", nil, func(r *http.Request) {
+		r.Header.Del("Authorization")
+	})
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want /ws reachable with security off", res.StatusCode)
+	}
+}
+
+// A daemon that requires authentication and has nobody to perform it must
+// refuse, not wave everything through. The check used to read
+// `a == nil || !enabled()`, so a wiring fault produced an open API rather
+// than a loud failure.
+func TestAMissingAuthenticatorFailsClosedWhileSecurityIsOn(t *testing.T) {
+	h := newHarness(t, func(c *httpapi.Config) {
+		c.Auth = nil
+		c.SecurityEnabled = func() bool { return true }
+	})
+	res := h.do(t, http.MethodPost, "/api/records/touch", map[string]any{"id": "r-1", "_reasoning": "why"})
+	if res.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want the request refused rather than served", res.StatusCode)
+	}
+}

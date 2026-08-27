@@ -18,7 +18,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"syscall"
 	"time"
 
 	"github.com/gofrs/flock"
@@ -98,17 +97,18 @@ func (Processes) Start(ctx context.Context, cmd gateway.Command) (int, error) {
 
 // Alive reports whether a process exists.
 //
-// On Unix this is signal 0, which performs the permission and existence checks
-// without delivering anything.
+// How that question is asked differs enough by platform that the answer lives
+// beside detach and terminate rather than here — see alive in platform_unix.go
+// and platform_windows.go. Asking it the Unix way everywhere is what this used
+// to do, and on Windows os.Process.Signal answers "not supported" for every
+// signal but Kill: Alive was false for a daemon that was running perfectly,
+// which made `gateway start` believe every daemon it launched had died on the
+// spot, and `gateway stop` believe there was nothing to stop.
 func (Processes) Alive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return p.Signal(syscall.Signal(0)) == nil
+	return alive(pid)
 }
 
 // Terminate asks a process to stop.

@@ -57,6 +57,13 @@ var floors = map[string]float64{
 	"github.com/OWNER/aos/internal/architecture": 0,
 }
 
+// minimumPackages is how many packages a complete run reports. It is a floor
+// on the *run*, not on any package: well under the real count (125 at the
+// time of writing) so that adding or removing a package does not touch it,
+// and far enough above zero that a truncated run cannot be mistaken for a
+// clean one.
+const minimumPackages = 100
+
 func main() {
 	type result struct {
 		pkg      string
@@ -88,6 +95,21 @@ func main() {
 	}
 	if err := sc.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, "covercheck:", err)
+		os.Exit(1)
+	}
+
+	// A run that measured almost nothing must not pass for a run that
+	// measured everything. `go test -cover ./...` can end early — a package
+	// that fails to build, a full disk, an interrupted run — and every line
+	// covercheck never saw is a floor it never enforced. It reported
+	// "1 packages, all at or above their floor" and exited 0 while the tree
+	// has more than a hundred, which is a gate saying yes to a question it
+	// was not asked.
+	if checked < minimumPackages {
+		fmt.Fprintf(os.Stderr,
+			"covercheck: only %d packages reported coverage, and this tree has at least %d — "+
+				"the test run did not finish, so nothing here was actually checked\n",
+			checked, minimumPackages)
 		os.Exit(1)
 	}
 

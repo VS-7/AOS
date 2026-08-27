@@ -1,6 +1,9 @@
 package artifact
 
-import "github.com/OWNER/aos/internal/core/apperr"
+import (
+	"github.com/OWNER/aos/internal/core/apperr"
+	"github.com/OWNER/aos/internal/core/build"
+)
 
 // errNotFound fires when no artifact has this ID.
 func errNotFound(id string) error {
@@ -98,4 +101,18 @@ func errWriteFailed(op string, cause error) error {
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause).
 		CTA(apperr.CallToAction{Label: "retry; if it persists, this is a bug"})
+}
+
+// errUnsafeID refuses an identifier that could not name an artifact.
+func errUnsafeID(id string) error {
+	return apperr.New("ARTIFACT_UNSAFE_ID").
+		Causer("artifact.Service").
+		Msgf("%q is not a usable artifact identifier", id).
+		Issue("id", id).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{
+			Label:   "an artifact id is a single name, with no path separators and no \"..\"",
+			Command: build.Name + " artifacts list",
+			Tool:    "artifacts_list",
+		})
 }

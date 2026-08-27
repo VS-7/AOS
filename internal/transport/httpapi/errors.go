@@ -60,3 +60,16 @@ func errWrongMethod(method, path string) error {
 			Label: "every command is a POST carrying its payload as a JSON body",
 		})
 }
+
+// errNoAuthenticator is what a request gets when the installation asked for
+// authentication and this build has nobody to perform it. It is a server
+// fault, not the caller's, and it is answered rather than waved through.
+func errNoAuthenticator() error {
+	return apperr.New("HTTP_NO_AUTHENTICATOR").
+		Causer("httpapi.authenticate").
+		Msgf("authentication is required here but this daemon has no identity service wired").
+		Status(apperr.StatusInternalServerError).
+		CTA(apperr.CallToAction{
+			Label: "this is a build or wiring fault; the daemon cannot verify anybody while security is enabled",
+		})
+}

@@ -91,7 +91,14 @@ func TestStopSignalsTheProcess(t *testing.T) {
 sleep 30
 `)
 	r := Runner{Binary: filepath.Join(dir, "cloudflared")}
-	proc, err := r.Spawn(context.Background(), "example.com", "tok", 3*time.Second)
+	// A ceiling, not the assertion — the same reason
+	// TestSpawnSucceedsWhenCloudflaredReportsReady carries thirty seconds.
+	// Three was enough alone and not under `go test -race ./...`, where the
+	// whole tree competes for the same cores and a fork plus an exec plus the
+	// first line of stderr can take longer than the wait. What this test
+	// claims is that Stop reaches the process, which the timeout below is
+	// what actually bounds.
+	proc, err := r.Spawn(context.Background(), "example.com", "tok", 30*time.Second)
 	if err != nil {
 		t.Fatalf("spawn: %v", err)
 	}
@@ -107,4 +114,38 @@ sleep 30
 		t.Fatal("process did not exit after Stop")
 	}
 	_ = syscall.SIGTERM // documents which signal Stop sends, for the reader
+}
+
+// The pipe keeps being read after readiness.
+//
+// It used to be abandoned at the marker, so cloudflared's own logging filled
+// the pipe's buffer and then blocked on its next write — the tunnel stalled,
+// with nothing in any log to say so, after however many minutes of output it
+// took to fill 64 KiB. A binary that keeps talking must keep being heard.
+func TestStderrKeepsBeingReadAfterReadiness(t *testing.T) {
+	// Well past any pipe buffer: 4000 lines of 200 characters is ~800 KB.
+	dir := fakeCloudflared(t, `echo "Registered tunnel connection" >&2
+i=0
+while [ $i -lt 4000 ]; do
+  echo "2026-08-27T00:00:00Z INF a log line that is long enough to matter, repeated until the pipe would have filled and the writer would have blocked forever" >&2
+  i=$((i+1))
+done
+echo "done" >&2
+`)
+	r := Runner{Binary: filepath.Join(dir, "cloudflared")}
+	proc, err := r.Spawn(context.Background(), "example.com", "tok", 30*time.Second)
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	defer func() { _ = proc.Stop() }()
+
+	// The fake exits on its own once it has written everything. If the reader
+	// stopped at the marker, the writer blocks and this never returns.
+	done := make(chan error, 1)
+	go func() { done <- proc.Wait() }()
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("cloudflared never finished writing: the stderr pipe filled and the process blocked on it")
+	}
 }

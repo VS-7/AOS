@@ -714,3 +714,53 @@ func TestSessionReportsTheFailureRatherThanAnEmptyUser(t *testing.T) {
 		t.Errorf("a failed session check carried a user: %+v", got.User)
 	}
 }
+
+func TestInstallSkillWritesIntoTheNamedAgentAndListsIt(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	svc := wailsvc.NewSystem(&platform{}, health{ready: true}, "")
+
+	result, err := svc.InstallSkill(ctx(), "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, ".codex", "skills", "aos")
+	if len(result.Installed) != 1 || result.Installed[0] != want {
+		t.Fatalf("installed = %v, want %s", result.Installed, want)
+	}
+	if _, err := os.Stat(filepath.Join(want, "SKILL.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	targets, err := svc.SkillTargets(ctx())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, target := range targets {
+		if target.ID == "codex" {
+			found = true
+			if !target.Present || !target.Installed {
+				t.Fatalf("codex = %+v, want present and installed", target)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("codex is not among the targets")
+	}
+}
+
+func TestInstallSkillRefusesAnUnknownAgentAndAnEmptyMachine(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	svc := wailsvc.NewSystem(&platform{}, health{ready: true}, "")
+
+	if _, err := svc.InstallSkill(ctx(), "vim"); err == nil {
+		t.Fatal("an unknown agent was accepted")
+	} else if e, ok := apperr.As(err); !ok || e.Code != "AOS_SKILL_UNKNOWN_TARGET" {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := svc.InstallSkill(ctx(), "all"); err == nil {
+		t.Fatal("a machine with no agents installed somewhere")
+	}
+}

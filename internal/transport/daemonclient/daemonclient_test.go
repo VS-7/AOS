@@ -167,7 +167,7 @@ func TestAnAnswerThisBuildCannotReadIsNamedAsSuch(t *testing.T) {
 func TestReadyIsWhatTheSplashWaitsOn(t *testing.T) {
 	healthy := true
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/health" {
+		if r.URL.Path != "/api/health" {
 			t.Errorf("health was asked for at %s", r.URL.Path)
 		}
 		if !healthy {

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/transport/clix"
@@ -52,7 +54,7 @@ func runWithDaemon(t *testing.T, client wailsvc.Caller, args ...string) (string,
 		IsTTY: func() bool { return false },
 	}
 	root := clix.NewRoot(cfg)
-	clix.AttachDaemon(context.Background(), root, client, cfg)
+	_ = clix.AttachDaemon(context.Background(), root, client, cfg)
 	root.SetArgs(args)
 	err := root.ExecuteContext(context.Background())
 	return out.String(), errOut.String(), err
@@ -81,7 +83,9 @@ func TestAttachDaemonIsBestEffortWhenCommandsFails(t *testing.T) {
 	cfg := clix.Config{Registry: command.NewRegistry(), Out: &out, Err: &errOut, IsTTY: func() bool { return false }}
 	root := clix.NewRoot(cfg)
 	before := len(root.Commands())
-	clix.AttachDaemon(context.Background(), root, client, cfg)
+	if err := clix.AttachDaemon(context.Background(), root, client, cfg); err == nil {
+		t.Fatal("an unreachable daemon was reported as a success")
+	}
 	if len(root.Commands()) != before {
 		t.Fatalf("root grew from an unreachable daemon: %d -> %d", before, len(root.Commands()))
 	}
@@ -93,7 +97,9 @@ func TestAttachDaemonIsBestEffortWhenCommandsIsEmpty(t *testing.T) {
 	cfg := clix.Config{Registry: command.NewRegistry(), Out: &out, Err: &errOut, IsTTY: func() bool { return false }}
 	root := clix.NewRoot(cfg)
 	before := len(root.Commands())
-	clix.AttachDaemon(context.Background(), root, client, cfg)
+	if err := clix.AttachDaemon(context.Background(), root, client, cfg); err == nil {
+		t.Fatal("an unreachable daemon was reported as a success")
+	}
 	if len(root.Commands()) != before {
 		t.Fatalf("root grew from an empty manifest: %d -> %d", before, len(root.Commands()))
 	}
@@ -121,7 +127,7 @@ func TestAttachDaemonSharesAnExistingGroupCommand(t *testing.T) {
 		t.Fatalf("precondition: expected exactly one self command, got %d", selfCount)
 	}
 
-	clix.AttachDaemon(context.Background(), root, client, cfg)
+	_ = clix.AttachDaemon(context.Background(), root, client, cfg)
 
 	selfCount = 0
 	for _, c := range root.Commands() {
@@ -276,5 +282,86 @@ func TestDaemonCommandTokenCountReportsSizeInsteadOfResult(t *testing.T) {
 	}
 	if strings.Contains(out, "{") {
 		t.Errorf("--token-count should print a number, not the result: %s", out)
+	}
+}
+
+// The daemon publishes `gateway` too, and this binary builds it locally
+// because supervising a process cannot be delegated to the process being
+// supervised. Attaching both put start, stop, status and restart in the group
+// twice — and the daemon's copy of `start` asked the daemon to start itself.
+func TestALocalGroupIsNotDuplicatedByTheDaemonsCopy(t *testing.T) {
+	reg := command.NewRegistry()
+	if err := command.Register(reg, command.Command[demoInput, demoOutput]{
+		Group: "gateway", Name: "start", Summary: "Start the daemon.", Local: true,
+		Handler: func(context.Context, demoInput) (demoOutput, error) { return demoOutput{}, nil },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	reg.DescribeGroup(command.GroupDoc{Name: "gateway", Summary: "The daemon."})
+
+	root := clix.NewRoot(clix.Config{Registry: reg, IsTTY: func() bool { return false }})
+	caller := &fakeCaller{infos: []wailsvc.CommandInfo{
+		{Key: "gateway_start", Group: "gateway", Name: "start", Summary: "Start the daemon."},
+		{Key: "agents_list", Group: "agents", Name: "list", Summary: "List agents."},
+	}}
+	if err := clix.AttachDaemon(context.Background(), root, caller, clix.Config{Registry: reg}); err != nil {
+		t.Fatal(err)
+	}
+
+	var gateway *cobra.Command
+	for _, c := range root.Commands() {
+		if c.Name() == "gateway" {
+			gateway = c
+		}
+	}
+	if gateway == nil {
+		t.Fatal("the gateway group is gone")
+	}
+	starts := 0
+	for _, c := range gateway.Commands() {
+		if c.Name() == "start" {
+			starts++
+		}
+	}
+	if starts != 1 {
+		t.Fatalf("gateway has %d start commands, want the local one only", starts)
+	}
+	// The daemon's own groups still arrive.
+	found := false
+	for _, c := range root.Commands() {
+		if c.Name() == "agents" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("a group only the daemon publishes was not attached")
+	}
+}
+
+// A domain command with no daemon behind it reads as "unknown command",
+// which sounds like the command does not exist. It does — this binary just
+// could not ask for it.
+func TestAMissingTreeExplainsItself(t *testing.T) {
+	cause := errors.New("the daemon at http://127.0.0.1:5326 did not answer")
+	explained := clix.ExplainMissingTree(errors.New(`unknown command "agents" for "aos"`), cause)
+
+	e, ok := apperr.As(explained)
+	if !ok {
+		t.Fatalf("the failure was not classified: %v", explained)
+	}
+	if e.Code != "AOS_CLI_SURFACE_UNAVAILABLE" {
+		t.Errorf("code = %s", e.Code)
+	}
+	if len(e.Actions) == 0 {
+		t.Error("no call to action to follow")
+	}
+
+	// Anything else passes through untouched, and so does success.
+	other := errors.New("required flag(s) \"id\" not set")
+	if got := clix.ExplainMissingTree(other, cause); !errors.Is(got, other) {
+		t.Errorf("an unrelated failure was rewritten: %v", got)
+	}
+	if got := clix.ExplainMissingTree(nil, cause); got != nil {
+		t.Errorf("success became a failure: %v", got)
 	}
 }

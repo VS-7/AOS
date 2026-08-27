@@ -19,6 +19,7 @@ import (
 	"github.com/OWNER/aos/internal/core/atomicfs"
 	"github.com/OWNER/aos/internal/core/build"
 	corecfg "github.com/OWNER/aos/internal/core/config"
+	"github.com/OWNER/aos/internal/core/pathx"
 	"github.com/OWNER/aos/internal/domain/workspace"
 )
 
@@ -44,23 +45,50 @@ func NewStore(root string) *Store { return &Store{root: filepath.Clean(root)} }
 // FromPaths builds a store over the installation layout.
 func FromPaths(p corecfg.Paths) *Store { return NewStore(p.Workspaces()) }
 
-func (s *Store) fileFor(id string) string { return filepath.Join(s.root, id, recordName) }
+// dirFor is the one place a workspace id becomes a path, and it refuses an id
+// that is not a single path segment.
+//
+// Without the guard, `workspace delete ..` resolved to the parent of the
+// workspace directory — the installation's whole state directory — and
+// os.RemoveAll took it: config.json, users.json, local.token, the job
+// database and every other workspace, gone. Get read ~/.aos/config.json,
+// parsed it as a workspace record (unknown JSON fields are ignored), and
+// answered "found", so the service's own existence check waved it through.
+func (s *Store) dirFor(id string) (string, error) {
+	safe, err := pathx.Segment(id)
+	if err != nil {
+		return "", errUnsafeID(id)
+	}
+	return filepath.Join(s.root, safe), nil
+}
+
+func (s *Store) fileFor(id string) (string, error) {
+	dir, err := s.dirFor(id)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, recordName), nil
+}
 
 // Get reads one workspace record.
 func (s *Store) Get(ctx context.Context, id string) (*workspace.Workspace, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	raw, err := os.ReadFile(s.fileFor(id))
+	file, err := s.fileFor(id)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := os.ReadFile(file)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, errRecordMissing(id)
 	}
 	if err != nil {
-		return nil, errUnreadable(s.fileFor(id), err)
+		return nil, errUnreadable(file, err)
 	}
 	var w workspace.Workspace
 	if err := json.Unmarshal(raw, &w); err != nil {
-		return nil, errMalformed(s.fileFor(id), err)
+		return nil, errMalformed(file, err)
 	}
 	// The directory name is the identity. A record whose id field drifted from
 	// its location — hand-edited, or copied from another installation — is
@@ -107,7 +135,10 @@ func (s *Store) Save(ctx context.Context, w *workspace.Workspace) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	dir := filepath.Join(s.root, w.ID)
+	dir, err := s.dirFor(w.ID)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return errUnwritable(dir, err)
 	}
@@ -116,8 +147,9 @@ func (s *Store) Save(ctx context.Context, w *workspace.Workspace) error {
 		return err
 	}
 	raw = append(raw, '\n')
-	if err := atomicfs.WriteFile(s.fileFor(w.ID), raw, fileMode); err != nil {
-		return errUnwritable(s.fileFor(w.ID), err)
+	file := filepath.Join(dir, recordName)
+	if err := atomicfs.WriteFile(file, raw, fileMode); err != nil {
+		return errUnwritable(file, err)
 	}
 	return nil
 }
@@ -131,7 +163,10 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	dir := filepath.Join(s.root, id)
+	dir, err := s.dirFor(id)
+	if err != nil {
+		return err
+	}
 	if err := os.RemoveAll(dir); err != nil {
 		return errUnwritable(dir, err)
 	}
@@ -198,4 +233,20 @@ func errUnwritable(path string, cause error) error {
 		Issue("path", path).
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)
+}
+
+// errUnsafeID refuses an identifier that would not stay inside the store's own
+// directory. It is a caller error, not a missing record: saying "not found"
+// would hide a traversal attempt behind an ordinary-looking answer.
+func errUnsafeID(id string) error {
+	return apperr.New("WORKSPACE_UNSAFE_ID").
+		Causer("fsworkspace.Store").
+		Msgf("%q is not a usable workspace identifier", id).
+		Issue("id", id).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{
+			Label:   "a workspace id is a single name, with no path separators and no \"..\"",
+			Command: build.Name + " workspace list",
+			Tool:    "workspace_list",
+		})
 }

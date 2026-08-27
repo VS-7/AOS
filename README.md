@@ -1,149 +1,160 @@
-# AOS
+<div align="center">
+
+```
+     █████╗  ██████╗ ███████╗
+    ██╔══██╗██╔═══██╗██╔════╝
+    ███████║██║   ██║███████╗
+    ██╔══██║██║   ██║╚════██║
+    ██║  ██║╚██████╔╝███████║
+    ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+```
 
 **Um sistema operacional para agentes de IA.**
 
-Você define agentes — cada um com papel, instruções e memória própria — e eles
-trabalham no seu repositório. Cada tarefa roda isolada em seu próprio worktree
-do Git, então nada é sobrescrito enquanto você continua trabalhando.
+[![CI](https://github.com/VS-7/AOS/actions/workflows/ci.yml/badge.svg)](https://github.com/VS-7/AOS/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/VS-7/AOS?sort=semver)](https://github.com/VS-7/AOS/releases/latest)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](go.mod)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Tudo fica na sua máquina. O workspace são arquivos no seu disco, em Markdown,
-versionáveis junto com o código. Não há serviço no meio.
+[Instalar](#instalar) · [Primeiro uso](#primeiro-uso) · [Documentação](docs/README.md) · [Agentes de código](docs/system/07-agentes-de-codigo.md) · [Releases](https://github.com/VS-7/AOS/releases)
 
-Três formas de usar, sobre o mesmo sistema: **aplicativo**, **terminal** e
-**navegador**.
-
-> **Beta.** Os binários ainda não têm assinatura de desenvolvedor e não há
-> atualização automática. [O que isso muda para você](#limitações-do-beta).
+</div>
 
 ---
+
+Você define agentes — cada um com papel, instruções, memória e permissões
+próprias — e eles trabalham no seu repositório. Cada tarefa roda isolada em
+um worktree do Git; cada decisão vira memória que sobrevive à sessão; cada
+capacidade é a **mesma definição** publicada como comando de terminal, tool
+MCP, rota HTTP e tela do aplicativo.
+
+Tudo fica na sua máquina, em Markdown, versionável junto com o código. Não há
+serviço no meio.
+
+> **Beta.** Binários sem assinatura de desenvolvedor e sem atualização
+> automática. [O que isso muda](docs/system/08-operacao.md#limitações-do-beta).
+
+## Por que
+
+| | |
+|---|---|
+| **Continuidade** | Memória persistente com grafo, confiança calibrada e um *subconsciente* que forma memórias sozinho. Agentes lembram entre sessões — e entre instâncias paralelas. |
+| **Isolamento** | Cada tarefa executa em um worktree próprio. Nada é sobrescrito enquanto você continua trabalhando. |
+| **Uma definição, cinco superfícies** | CLI, MCP, HTTP, tool interna do agente e documentação derivam de um único registro de comandos. Nada diverge. |
+| **Contenção** | Sandbox por *allowlist*, aprovação humana real para ações sensíveis, segredos com permissão restrita, loopback por padrão. |
+| **Seu disco, seu Git** | Agentes, tarefas, memórias e coleções são arquivos `.md`/`.json` em `.aos/` dentro do repositório. |
 
 ## O que dá para fazer
 
 | | |
 |---|---|
-| **Agentes** | Papel, instruções e memória por agente. Eles lembram entre sessões. |
-| **Tarefas** | O trabalho que os agentes executam, cada uma em um worktree isolado. |
-| **Conversas** | Canais para falar com os agentes, com histórico e anexos. |
-| **Rotinas** | Automações por agenda ou por gatilho — inclusive webhook. |
-| **Coleções** | Registros estruturados, guardados como Markdown no seu repositório. |
-| **Metas e projetos** | O que os agentes perseguem, e sob o que está agrupado. |
-| **Skills e ferramentas** | O que cada agente pode usar, declarado e permissionado. |
-| **Marketplace** | Plugins e skills prontos para instalar. |
-| **MCP** | Seus agentes ficam disponíveis para qualquer cliente que fale MCP. |
-
----
+| **Agentes** | Papel, instruções, modelo, sandbox e canais por agente. Um orquestrador delega a especialistas. |
+| **Tarefas** | Ciclo de vida de 8 estados, *todos* com evidência, comentários, worktree por tarefa. |
+| **Conversas** | DMs, canais, threads de tarefa, transcrições de execução — com anexos e streaming. |
+| **Rotinas** | Automações por agenda, por webhook ou por gatilho de atividade. |
+| **Coleções e views** | Registros estruturados em Markdown + `schema.json`, com interfaces declarativas sobre eles. |
+| **Skills, toolsets e marketplace** | Capacidades declaradas e permissionadas, ferramentas externas (OpenAPI, MCP), plugins prontos para instalar. |
+| **Metas, projetos, artefatos** | O que os agentes perseguem, como se agrupa, e o que publicam (apps estáticos servidos pelo daemon). |
+| **Fora da janela** | Telegram, Cloudflare Tunnel, e qualquer cliente MCP. |
 
 ## Instalar
 
-### macOS e Linux
+**macOS e Linux**
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/VS-7/AOS/main/install.sh | sh
 ```
 
-No Linux o AOS precisa de **GTK4 e WebKitGTK** instalados. Se faltar, o
-instalador diz qual pacote e qual comando da sua distribuição — ele não deixa
-você com uma janela que não abre.
+**Windows** — baixe `AOS-setup-<versão>-windows-amd64.exe` em
+[Releases](https://github.com/VS-7/AOS/releases/latest).
 
-> Instale por este comando, não baixando pelo navegador: o macOS bloqueia
-> aplicativos sem assinatura que vieram de download. O `curl` não recebe essa
-> marca. [Por quê](INSTALL.md#macos).
-
-### Windows
-
-Baixe em [Releases](https://github.com/VS-7/AOS/releases/latest):
-
-- **`AOS-setup-<versão>-windows-amd64.exe`** — instalador, com atalho no Menu
-  Iniciar.
-- `AOS-<versão>-windows-amd64.zip` — os executáveis soltos.
-
-O SmartScreen vai avisar que o publicador é desconhecido. Em **Mais
-informações → Executar assim mesmo**.
-
-### Servidor (VPS)
-
-Sem nada gráfico no servidor: o daemon carrega a interface dentro dele e você
-acessa pelo navegador.
+**Servidor (VPS), sem interface gráfica** — o daemon carrega a interface e
+você acessa pelo navegador:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/VS-7/AOS/main/install.sh | AOS_SERVER=1 sh
+systemctl --user enable --now aos && loginctl enable-linger "$USER"
 ```
 
-Ele instala os binários, cria o workspace e escreve um serviço do systemd —
-nada disso precisa de root. Depois:
-
-```sh
-systemctl --user enable --now aos
-loginctl enable-linger "$USER"
-```
-
-O daemon escuta em `127.0.0.1:5326` e fica lá. Para abrir na internet, um
-proxy reverso na frente — com Caddy é uma linha:
-
-```caddyfile
-aos.example.com {
-    reverse_proxy 127.0.0.1:5326
-}
-```
-
-📖 **[Guia de instalação completo](INSTALL.md)** — requisitos por
-distribuição, AppImage, verificação de checksums, variáveis do instalador e
-solução de problemas.
-
----
+📖 [Guia de instalação completo](INSTALL.md) — requisitos por distribuição,
+AppImage, checksums, variáveis do instalador, solução de problemas.
 
 ## Primeiro uso
 
-Abra o aplicativo. Ele sobe o daemon sozinho e mostra a tela de criação de
-conta. A conta fica em `~/.aos`, na sua máquina, e nada é enviado para lugar
-nenhum.
+1. Abra o aplicativo. Ele sobe o daemon e pede para criar a conta local.
+2. Aponte para um repositório: ele vira o workspace, com um `.aos/` dentro.
+3. Converse com o **Atlas**, o orquestrador padrão — ou crie o seu.
 
-Feito isso, o terminal funciona sem login separado:
+O terminal funciona sem login separado:
 
 ```sh
-aos tasks list
 aos agents list
-aos --help          # a árvore inteira de comandos
+aos tasks create --set title="Revisar o README" --reason "primeira tarefa"
+aos --help                 # a árvore inteira de comandos, vinda do daemon
 ```
 
----
+## Use com o seu agente de código
+
+O AOS ensina qualquer agente — Claude Code, Codex, Cursor, Gemini CLI,
+OpenCode — a operá-lo, por **skill** e por **MCP**:
+
+```sh
+aos self skill install --all     # a skill, em cada agente detectado na máquina
+aos --mcp                        # servidor MCP em stdio, roteado ao daemon
+```
+
+Ou, para clientes que falam HTTP: `http://127.0.0.1:5326/mcp` com o seu token.
+Detalhes em [Agentes de código](docs/system/07-agentes-de-codigo.md).
 
 ## Como é montado
 
-Três programas, cada um com uma função:
+```mermaid
+flowchart LR
+    subgraph clients["Clientes (sem domínio)"]
+        D["aos-desktop<br/>Wails3 + React"]
+        C["aos<br/>CLI · --mcp"]
+        B["Navegador<br/>modo servidor"]
+        M["Cliente MCP<br/>Claude Code, Codex…"]
+    end
+    subgraph daemon["aosd — o dono do workspace"]
+        H["/api · /ws · /mcp · /v"]
+        R["Registro de comandos"]
+        DOM["Domínio · runtime do agente · fila · watcher"]
+        H --> R --> DOM
+    end
+    D & C & B & M -- HTTP :5326 --> H
+    DOM --> FS[(".aos/ · ~/.aos")]
+```
+
+Três programas: **`aosd`** (o daemon, único escritor), **`aos`** (terminal e
+MCP) e **`aos-desktop`** (a janela). Tudo passa por HTTP, então o cliente
+não precisa estar na mesma máquina que o daemon.
+
+## Documentação
 
 | | |
 |---|---|
-| **`aosd`** | O daemon. É o dono do workspace — os arquivos, a fila de trabalho, a busca. Roda em segundo plano e é o único que escreve. |
-| **`aos-desktop`** | A janela. Uma interface que conversa com o daemon. |
-| **`aos`** | O terminal. Mesma coisa, pela linha de comando. |
+| [Visão geral](docs/system/01-visao-geral.md) | O problema, o produto, conceitos e glossário |
+| [Requisitos](docs/system/02-requisitos.md) | Requisitos funcionais, não funcionais e restrições |
+| [Casos de uso](docs/system/03-casos-de-uso.md) | Atores, fluxos e diagramas de sequência |
+| [Arquitetura](docs/system/04-arquitetura.md) | Binários, camadas, fluxo de uma chamada, dados em disco |
+| [Domínio](docs/system/05-dominio.md) | Entidades, estados, relações e onde cada coisa vive |
+| [Canais](docs/system/06-canais.md) | App, terminal, navegador, MCP, Telegram, webhooks, túnel |
+| [Agentes de código](docs/system/07-agentes-de-codigo.md) | Skill e MCP para Claude Code, Codex, Cursor, Gemini, OpenCode |
+| [Operação](docs/system/08-operacao.md) | Instalação, estado, variáveis, segurança, diagnóstico |
+| [Desenvolvimento](docs/system/09-desenvolvimento.md) | Build, gates, layout, como adicionar um comando |
+| [Release](docs/system/10-release.md) | Versionamento, CI, artefatos, checksums |
+| [Vault de especificação](docs/00%20-%20Índice/AOS.md) | 82 notas de engenharia: ADRs, peças críticas, um doc por domínio |
 
-Um workspace tem um dono só. Se cada janela e cada terminal carregasse o
-sistema inteiro, todos escreveriam nos mesmos arquivos ao mesmo tempo — com um
-daemon, há um escritor e nenhuma disputa.
+## Contribuir
 
-Como tudo passa por HTTP, o cliente não precisa estar na mesma máquina que o
-daemon. É o que torna possível o modo servidor acima.
+```sh
+task check        # todos os gates: gen, vet, lint, testes (-race), cobertura, arquitetura, grafo
+task dev          # a janela, com hot reload
+```
 
-> Os pacotes trazem o `aosd` junto com o aplicativo, e ele precisa estar **na
-> mesma pasta**. Separar os arquivos quebra isso.
-
----
-
-## Limitações do beta
-
-**Sem assinatura.** Nenhum binário tem certificado de desenvolvedor. No macOS
-o instalador contorna; no Windows o SmartScreen avisa toda vez. Baixe apenas
-do repositório oficial e [confira os checksums](INSTALL.md#verificando-o-download).
-
-**Sem atualização automática.** Atualizar hoje é rodar o instalador de novo.
-Instalações feitas neste beta carregam uma chave de assinatura de
-desenvolvimento; quando ela for rotacionada, será preciso reinstalar uma vez.
-
-**Plataformas.** A janela: macOS em Apple Silicon, Windows e Linux em x86-64.
-O servidor e o terminal também em `arm64` no Linux.
-
----
+O [guia de desenvolvimento](docs/system/09-desenvolvimento.md) tem o resto.
+Agentes de código que trabalham *neste* repositório leem [AGENTS.md](AGENTS.md).
 
 ## Licença
 

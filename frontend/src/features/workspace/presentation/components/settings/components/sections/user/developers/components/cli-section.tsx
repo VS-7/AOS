@@ -19,13 +19,14 @@ import {
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/i18n";
 
-// No npm distribution (see docs/08 - Entrega/Build e Cross-Compile.md's "Sem
-// distribuição via npm" decision) — the original's Node shim existed only to
-// ship binaries through a JS package manager, which a native Go binary
-// doesn't need. `go install` is the one install path that needs no download
-// host of its own.
-const CLI_INSTALL_COMMAND = "go install github.com/OWNER/aos/cmd/aos@latest";
-const CLI_VERSION_LABEL = "AOS CLI, installed with Go.";
+// The installer is the one path that puts `aos` (and the daemon it drives) on
+// a machine: it downloads the release, verifies the checksums and, on macOS,
+// sidesteps the quarantine mark that stops an unsigned download from opening.
+// There is no npm distribution and no `go install` — the module path is a
+// placeholder until the product is named (ADR-0000), and `go install` of it
+// would fail on every machine. Windows downloads from the Releases page.
+const CLI_INSTALL_COMMAND = "curl -fsSL https://raw.githubusercontent.com/VS-7/AOS/main/install.sh | sh";
+const CLI_VERSION_LABEL = "AOS CLI, installed with the application (macOS, Linux).";
 
 const CLI_CAPABILITIES: {
   icon: IconSvgElement;
@@ -48,9 +49,9 @@ const CLI_CAPABILITIES: {
   },
   {
     icon: StartUp01Icon,
-    title: "Onboarding",
-    command: "aos onboarding",
-    description: "Run the AOS onboarding flow to set up a workspace.",
+    title: "Skill",
+    command: "aos self skill install --all",
+    description: "Install the AOS skill into every coding agent on this machine.",
   },
 ];
 

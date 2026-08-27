@@ -21,8 +21,12 @@ var secretKeys = []string{
 
 // secretValues matches values that look like a credential regardless of the key
 // they were logged under.
+// aos_ tokens are base64url, not hex — mintToken encodes random bytes with
+// base64.RawURLEncoding. The old `aos_[0-9a-f]{16,}` matched a shape this
+// product has never produced, so the one credential most likely to appear in
+// its own logs was the one pattern that never fired.
 var secretValues = regexp.MustCompile(
-	`(?i)\b(?:aos_[0-9a-f]{16,}|sk-[A-Za-z0-9_\-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|Bearer\s+[A-Za-z0-9._\-]{16,})`,
+	`(?i)\b(?:aos_[A-Za-z0-9_\-]{16,}|sk-[A-Za-z0-9_\-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|Bearer\s+[A-Za-z0-9._\-]{16,})`,
 )
 
 type redacting struct{ next slog.Handler }

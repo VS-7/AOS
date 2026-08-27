@@ -1,5 +1,5 @@
 import { AosStore } from "./builders/store";
-import { client, setWorkspace } from "@/lib/client";
+import { client, rememberedWorkspace, setWorkspace } from "@/lib/client";
 import { session, status, login, logout, updateProfile, changePassword } from "@/lib/auth";
 import type {
   WorkspaceDirectoryAgent,
@@ -217,7 +217,12 @@ const workspaceStore = AosStore.create("workspace")
   })
   .withPreload(async (ctx) => {
     try {
-      const resolved = await resolveWorkspaces(ctx.state.get().current?.id);
+      // The remembered id, not just whatever this store already holds —
+      // which at boot is `null`, so the preload always fell through to
+      // `workspaces[0]` and a switched workspace reverted on every reload.
+      const resolved = await resolveWorkspaces(
+        ctx.state.get().current?.id ?? rememberedWorkspace() ?? undefined,
+      );
       if (!resolved) return ctx.state.get();
       return { ...ctx.state.get(), current: resolved.current, options: resolved.options };
     } catch {
@@ -322,10 +327,17 @@ const workspaceStore = AosStore.create("workspace")
        */
       async (workspaceId: string) => {
         try {
+          // `workspace`, not `id`: that is what workspace_delete's own
+          // DeleteInput names it (internal/domain/workspace/schema.go), and
+          // the `as never` cast below is what let the wrong name through the
+          // typechecker. Sending `id` meant the required field was absent,
+          // the command was refused by validation — and the catch below
+          // reported the refusal while the store went on to re-read the list
+          // and show the workspace still there.
           await client.invoke("workspace_delete", {
-            id: workspaceId,
+            workspace: workspaceId,
             _reasoning: "the person asked to remove this workspace from the installation",
-          } as never);
+          });
         } catch (err) {
           return {
             error: { message: err instanceof Error ? err.message : "Could not delete workspace." },

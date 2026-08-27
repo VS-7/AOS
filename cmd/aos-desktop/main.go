@@ -147,19 +147,41 @@ func main() {
 	// call it is started — the `go ensureDaemon` below and AuthService's
 	// afterAuth both happen after.
 	var emitRealtime func(event any)
-	var realtimeOnce sync.Once
+	// The relay follows the workspace. It used to be started once and never
+	// again (sync.Once), so switching workspace in the interface left the
+	// window listening to the events of the one it opened with: the board
+	// and the conversations of the workspace you were actually looking at
+	// never updated on their own. Re-pointing means dropping the old socket
+	// and opening one for the new id.
+	var realtimeMu sync.Mutex
+	realtimeWorkspace := ""
+	var stopCurrentRealtime context.CancelFunc
 	startRealtime := func(workspaceID string) {
 		if workspaceID == "" {
 			return
 		}
-		realtimeOnce.Do(func() {
-			go forwardRealtime(realtimeCtx, address, workspaceID, func(event any) {
-				if emitRealtime != nil {
-					emitRealtime(event)
-				}
-			}, log)
-		})
+		realtimeMu.Lock()
+		defer realtimeMu.Unlock()
+		if workspaceID == realtimeWorkspace {
+			return
+		}
+		if stopCurrentRealtime != nil {
+			stopCurrentRealtime()
+		}
+		streamCtx, cancel := context.WithCancel(realtimeCtx)
+		realtimeWorkspace, stopCurrentRealtime = workspaceID, cancel
+		go forwardRealtime(streamCtx, address, workspaceID, daemon.Token, func(event any) {
+			if emitRealtime != nil {
+				emitRealtime(event)
+			}
+		}, log)
 	}
+
+	// The interface's own workspace choice, applied to the client every call
+	// goes through and to the relay. Without this the bridge kept addressing
+	// the workspace the window opened with, whatever the person picked.
+	domainSvc := wailsvc.NewDomain(daemon)
+	domainSvc.OnWorkspaceChange(func(id string) { startRealtime(id) })
 
 	platform := &wailsPlatform{}
 	// The system service starts without a workspace and is told which one it
@@ -183,7 +205,7 @@ func main() {
 		Description: "An operating system for AI agents.",
 		Services: []application.Service{
 			application.NewService(systemSvc),
-			application.NewService(wailsvc.NewDomain(daemon)),
+			application.NewService(domainSvc),
 			application.NewService(wailsvc.NewAuth(daemon, func(ctx context.Context) {
 				// A successful login or onboarding is the first moment this
 				// client can call anything past /api/auth — workspace

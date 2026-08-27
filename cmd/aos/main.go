@@ -34,6 +34,7 @@ import (
 	"github.com/OWNER/aos/internal/domain/gateway"
 	"github.com/OWNER/aos/internal/transport/clix"
 	"github.com/OWNER/aos/internal/transport/daemonclient"
+	"github.com/OWNER/aos/internal/transport/mcpproxy"
 )
 
 func main() { os.Exit(exitCode()) }
@@ -81,8 +82,19 @@ func run(ctx context.Context, args []string) error {
 	ctx = logging.Into(ctx, logger)
 
 	reg := command.NewRegistry()
-	gateway.Register(reg, newGateway(resolver, paths, logger))
+	supervisor := newGateway(resolver, paths, logger)
+	gateway.Register(reg, supervisor)
 	reg.Freeze()
+
+	// `aos --mcp` is what an MCP client is configured to spawn. This binary
+	// cannot host the tool surface itself — the registry needs the domain,
+	// and the domain is in the daemon — so it forwards: the daemon's own
+	// /mcp mount, mirrored on stdio, with the daemon started first if nothing
+	// is answering. See internal/transport/mcpproxy for why this is a proxy
+	// rather than `aosd --mcp` in disguise.
+	if isMCPMode(args) {
+		return serveMCP(ctx, resolver, paths, supervisor, logger)
+	}
 
 	cfg := clix.Config{Registry: reg, IsTTY: isTTY, Out: os.Stdout, Err: os.Stderr}
 	root := clix.NewRoot(cfg)
@@ -94,11 +106,16 @@ func run(ctx context.Context, args []string) error {
 	// run with nothing attached.
 	daemon := newDaemonClient(resolver, paths)
 	discover, cancel := context.WithTimeout(ctx, 3*time.Second)
-	clix.AttachDaemon(discover, root, daemon, cfg)
+	attachErr := clix.AttachDaemon(discover, root, daemon, cfg)
 	cancel()
 
 	root.SetArgs(args)
-	return root.ExecuteContext(ctx)
+	// A failed discovery is not reported here — `gateway start` has to work
+	// with nothing attached, and printing a warning before every one of those
+	// would be noise. It is reported at the only moment it explains anything:
+	// when the command somebody asked for turns out to be one of the missing
+	// ones.
+	return clix.ExplainMissingTree(root.ExecuteContext(ctx), attachErr)
 }
 
 // newDaemonClient points at the daemon this installation's gateway would
@@ -122,6 +139,10 @@ func newDaemonClient(resolver *env.Resolver, paths corecfg.Paths) *daemonclient.
 		BaseURL:   address,
 		Token:     token,
 		Workspace: resolver.String(env.KeyWorkspaceID, ""),
+		// An external agent operating this installation through the terminal
+		// says so with AOS_AGENT_ID, and is then that agent for every call —
+		// which is what `agents_me` answers and what a memory belongs to.
+		Agent: resolver.String(env.KeyAgentID, ""),
 	})
 }
 
@@ -144,6 +165,53 @@ func newGateway(resolver *env.Resolver, paths corecfg.Paths, logger *slog.Logger
 		Log:     logger,
 		Host:    resolver.String(env.KeyServerHost, env.DefaultServerHost),
 		Port:    resolver.Int(env.KeyServerPort, build.Port),
+	})
+}
+
+// isMCPMode reports whether the process should speak MCP on stdio. A flag
+// rather than a subcommand because that is how every MCP client is
+// configured to launch a server, and it is the same spelling `aosd` accepts.
+func isMCPMode(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		if a == "--mcp" {
+			return true
+		}
+	}
+	return false
+}
+
+// serveMCP runs the stdio proxy over the daemon this installation's gateway
+// supervises, starting the daemon when nothing is answering yet — an editor
+// that spawns `aos --mcp` on a machine where the application is not open
+// should get the workspace, not an error about a process it has never heard
+// of. Nothing here writes to stdout: that stream is the MCP channel.
+func serveMCP(ctx context.Context, resolver *env.Resolver, paths corecfg.Paths, supervisor *gateway.Service, logger *slog.Logger) error {
+	probe, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if state, err := supervisor.Status(probe, gateway.StatusInput{}); err != nil || !state.Healthy {
+		if _, err := supervisor.Start(probe, gateway.StartInput{}); err != nil {
+			logger.Warn("the daemon is not running and could not be started", "err", err)
+		}
+	}
+
+	host := resolver.String(env.KeyServerHost, env.DefaultServerHost)
+	port := resolver.Int(env.KeyServerPort, build.Port)
+	token := resolver.String(env.KeyToken, "")
+	if token == "" {
+		if raw, err := os.ReadFile(paths.LocalToken()); err == nil {
+			token = strings.TrimSpace(string(raw))
+		}
+	}
+	return mcpproxy.Serve(ctx, mcpproxy.Options{
+		Endpoint:  fmt.Sprintf("http://%s:%d/mcp", host, port),
+		Token:     token,
+		Workspace: resolver.String(env.KeyWorkspaceID, ""),
+		Agent:     resolver.String(env.KeyAgentID, ""),
+		Name:      build.Name,
+		Version:   build.Current().Version,
 	})
 }
 

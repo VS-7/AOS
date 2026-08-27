@@ -34,13 +34,37 @@ const scaffoldHTML = `<!doctype html>
 type Files struct{ root string }
 
 // New builds the adapter over one workspace root.
-func New(root string) *Files { return &Files{root: filepath.Clean(root)} }
+//
+// The root is resolved through symlinks once, here, which is what pathx.Root's
+// own doc asks of every caller: Resolve returns a real path, and comparing one
+// against a root that is still a symlink rejects everything underneath it.
+// That was invisible while an artifact's own directory did not exist yet —
+// Resolve gave up and handed back the uncollapsed path, which happened to
+// compare equal — and became visible the moment Resolve started resolving
+// through the nearest ancestor that does exist. Doing it at construction is
+// both the documented shape and the cheap one: once per workspace, not once
+// per file.
+func New(root string) *Files {
+	cleaned := filepath.Clean(root)
+	if real, err := pathx.Root(cleaned); err == nil {
+		cleaned = real
+	}
+	return &Files{root: cleaned}
+}
 
 // artifactRoot resolves the directory one artifact's files live under,
 // through any symlink in the path. It does not require the directory to
 // already exist — see pathx.Root's own doc.
 func (f *Files) artifactRoot(id string) (string, error) {
-	dir := filepath.Join(f.root, collections.Root, "artifacts", id)
+	// The id is a path segment, and it is checked as one. `filepath.Join`
+	// cleans, so an id of ".." resolved to the workspace's whole .aos
+	// directory and Remove took it — no symlink involved, nothing for Root or
+	// ResolveInside to catch, because the result was a perfectly ordinary
+	// path that simply was not the artifact's.
+	dir, err := pathx.JoinSegment(filepath.Join(f.root, collections.Root, "artifacts"), id)
+	if err != nil {
+		return "", err
+	}
 	return pathx.Root(dir)
 }
 

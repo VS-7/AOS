@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -51,11 +52,34 @@ func Resolve(root, p string) (string, error) {
 		return "", err
 	}
 
-	parent, perr := filepath.EvalSymlinks(filepath.Dir(abs))
-	if perr != nil {
-		return abs, nil //nolint:nilerr // the parent does not exist either; containment still decides
+	// Walk up to the nearest ancestor that does exist and resolve *that*,
+	// then re-append what was missing. Resolving only the immediate parent
+	// was not enough: for "root/link/new/file", where link is a symlink out
+	// of the root and "new" does not exist yet, the parent does not resolve
+	// either — and returning `abs` unresolved handed Contains a path that
+	// looks inside the root, while a MkdirAll on it would follow the symlink
+	// and write outside. Two missing components were all it took.
+	missing := []string{filepath.Base(abs)}
+	dir := filepath.Dir(abs)
+	for {
+		real, err := filepath.EvalSymlinks(dir)
+		if err == nil {
+			slices.Reverse(missing)
+			return filepath.Join(append([]string{real}, missing...)...), nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached the root of the volume without finding anything that
+			// exists. Nothing to resolve through, so the cleaned path is as
+			// good as it gets; containment still decides.
+			return abs, nil
+		}
+		missing = append(missing, filepath.Base(dir))
+		dir = parent
 	}
-	return filepath.Join(parent, filepath.Base(abs)), nil
 }
 
 // Contains reports whether p is inside root.
@@ -107,4 +131,52 @@ func ResolveInside(root, p string) (string, error) {
 		return "", ErrOutside
 	}
 	return real, nil
+}
+
+// ErrUnsafeSegment is returned by Segment for an identifier that cannot be
+// used as one path component.
+var ErrUnsafeSegment = errors.New("pathx: identifier is not a single safe path segment")
+
+// Segment validates an identifier that a caller is about to join into a file
+// path, and returns it unchanged when it is safe.
+//
+// This exists because "join the id onto the root" is written in a dozen
+// adapters, and `filepath.Join(root, "..")` is the parent of the root — with
+// no symlink involved and nothing for Resolve or Contains to catch, because
+// the result is a perfectly ordinary path that simply is not the one the
+// caller meant. Two of those joins were, before this: `workspace delete ..`
+// removed the whole installation state directory, and `artifacts delete ..`
+// removed a workspace's entire .aos.
+//
+// The rule is deliberately strict — one component, no separators, no
+// traversal, no volume name, no NUL, not empty and not hidden-relative. Ids
+// in this system are slugs and UUIDs; anything else is a caller mistake or an
+// attack, and both are better refused here than resolved somewhere surprising.
+func Segment(id string) (string, error) {
+	if id == "" || id == "." || id == ".." {
+		return "", ErrUnsafeSegment
+	}
+	if strings.ContainsAny(id, "/\\") || strings.ContainsRune(id, 0) {
+		return "", ErrUnsafeSegment
+	}
+	// filepath.Clean is the second opinion: anything it rewrites (a trailing
+	// dot component, a Windows volume like "C:") was not a plain segment.
+	if filepath.Clean(id) != id || filepath.VolumeName(id) != "" {
+		return "", ErrUnsafeSegment
+	}
+	return id, nil
+}
+
+// JoinSegment is Segment plus the join every caller does next, so the guard
+// cannot be skipped by accident at a new call site.
+func JoinSegment(root string, segments ...string) (string, error) {
+	out := root
+	for _, s := range segments {
+		safe, err := Segment(s)
+		if err != nil {
+			return "", err
+		}
+		out = filepath.Join(out, safe)
+	}
+	return out, nil
 }

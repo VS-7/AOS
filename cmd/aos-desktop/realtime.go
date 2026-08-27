@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -35,7 +36,7 @@ const FilesDroppedEventName = "aos:files-dropped"
 //
 // This process has no such restriction, and it is already the window's client
 // for everything else. So it holds the socket and relays.
-func forwardRealtime(ctx context.Context, address, workspaceID string, emit func(any), log *slog.Logger) {
+func forwardRealtime(ctx context.Context, address, workspaceID string, token func() string, emit func(any), log *slog.Logger) {
 	backoff := []time.Duration{250 * time.Millisecond, time.Second, 2 * time.Second, 5 * time.Second, 10 * time.Second}
 	attempt := 0
 	// Whether this has ever worked. A channel that drops and reconnects is
@@ -45,7 +46,7 @@ func forwardRealtime(ctx context.Context, address, workspaceID string, emit func
 	opened := false
 
 	for ctx.Err() == nil {
-		err := streamRealtime(ctx, address, workspaceID, func() {
+		err := streamRealtime(ctx, address, workspaceID, token, func() {
 			if !opened {
 				opened = true
 				log.Info("the event channel is open", "workspace", workspaceID)
@@ -69,14 +70,30 @@ func forwardRealtime(ctx context.Context, address, workspaceID string, emit func
 	}
 }
 
-func streamRealtime(ctx context.Context, address, workspaceID string, onOpen func(), emit func(any)) error {
+func streamRealtime(ctx context.Context, address, workspaceID string, token func() string, onOpen func(), emit func(any)) error {
 	endpoint := strings.Replace(strings.TrimRight(address, "/"), "http", "ws", 1) +
 		"/ws?workspace=" + url.QueryEscape(workspaceID)
 
-	// No credential: the channel authorises by workspace, not by user
-	// (internal/transport/realtime.Upgrade), and a token nothing reads would
-	// be a second credential path to keep in step for no gain.
-	conn, _, err := websocket.Dial(ctx, endpoint, nil)
+	// The credential the rest of this window's calls already carry. The
+	// channel used to be dialled without one, on the reasoning that it
+	// authorises by workspace rather than by user — but a workspace with no
+	// explicit members admits everybody, so that made the whole event stream
+	// readable by anything that could reach the port. The daemon now requires
+	// a credential here like it does everywhere else, and this is where the
+	// window presents it. It never reaches the page.
+	var opts *websocket.DialOptions
+	if token != nil {
+		if t := token(); t != "" {
+			opts = &websocket.DialOptions{HTTPHeader: http.Header{"Authorization": []string{"Bearer " + t}}}
+		}
+	}
+	conn, res, err := websocket.Dial(ctx, endpoint, opts)
+	// The handshake response is only interesting when the dial failed — a
+	// 401 from the daemon arrives here rather than as a socket. Closed either
+	// way: a rejected upgrade leaves a body nobody else will.
+	if res != nil && res.Body != nil {
+		_ = res.Body.Close()
+	}
 	if err != nil {
 		return err
 	}

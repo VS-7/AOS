@@ -215,8 +215,20 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // latent instance of the same bug `todo.getById` was, caught by the
   // full-map sweep the round-2 review asked for rather than by a live
   // failure.
-  "agent.create": { key: "agents_create", wrapOut: "agent" },
-  "agent.delete": "agents_delete",
+  // No `wrapOut` on create and update, unlike `getById` below: their call
+  // site (`agents.context.tsx`) reads `result?.data` and then `.id` on it —
+  // the bare agent. Wrapping put the agent under `data.agent`, so `.id` was
+  // always undefined and every successful save reported "Unable to save this
+  // agent". `getById`'s caller really does read `data.agent`, which is why
+  // that one keeps it.
+  "agent.create": "agents_create",
+  // `agents_delete` and `agents_update` both name the agent `id`
+  // (internal/domain/agent/schema.go); every call site in the interface
+  // sends `params: { agent }`, the name the ported UI uses. Without the
+  // rename the payload reached Go with no `id` at all and the command was
+  // refused by validation — the Agents settings page could neither save nor
+  // delete.
+  "agent.delete": { key: "agents_delete", renameIn: { agent: "id" } },
   // Found by the final-review sweep's corrected pattern (`client.<feature>.
   // <action>` alone, not requiring `.query`/`.mutate` on the same line) —
   // `agents.context.tsx`'s live `aos.client.agent.getById\n  .query(...)`
@@ -235,7 +247,7 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // (`internal/domain/agent/schema.go`) — already wrapped under `agents`,
   // so no `wrapOut` needed; the store reads `response.data?.agents`.
   "agent.list": "agents_list",
-  "agent.update": { key: "agents_update", wrapOut: "agent" },
+  "agent.update": { key: "agents_update", renameIn: { agent: "id" } },
   // `chat.getById`/`chat.create` answer with a bare `*Chat`
   // (`internal/domain/chat/commands.go`). Both are live and confirmed
   // correct as written — task-12's live HTTP pass exercised both directly:
@@ -908,7 +920,12 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "template.list": "templates_list",
   "template.getById": { key: "templates_get", renameIn: { template: "id" } },
   "template.create": "templates_create",
-  "template.update": "templates_update",
+  // Same shape as its four siblings above and below: `templates_update`'s
+  // own `UpdateInput.ID` is `id`, and `templates.context.tsx` sends
+  // `params: { template }`. The rename was on every other template command
+  // and missing only here, so saving a template failed validation while
+  // reading, deleting and rendering one worked.
+  "template.update": { key: "templates_update", renameIn: { template: "id" } },
   "template.delete": { key: "templates_delete", renameIn: { template: "id" } },
   "template.render": { key: "templates_render", renameIn: { template: "id" } },
 

@@ -24,12 +24,53 @@ const APIVersion = "2023-06-01"
 // DefaultMaxTokens is required by this API and has no server-side default.
 const DefaultMaxTokens = 8192
 
-// thinkingBudget maps the reasoning levels onto the token budget this provider
-// takes instead of an effort word.
+// thinkingBudget maps the reasoning levels onto the token budget the *older*
+// models take. It is no longer the default path: on every model released from
+// Claude 4.6 onward `thinking: {type: "enabled", budget_tokens: N}` is
+// rejected outright with a 400, and two of the three Anthropic models this
+// build prices (claude-opus-5, claude-sonnet-5) are in that group — so an
+// agent on either of them, with reasoning anything but "none", could not take
+// a single turn. See takesAdaptiveThinking.
 var thinkingBudget = map[agentloop.ReasoningLevel]int{
 	agentloop.ReasoningLow:    2048,
 	agentloop.ReasoningMedium: 8192,
 	agentloop.ReasoningHigh:   24576,
+}
+
+// effortFor maps the reasoning levels onto the effort word the current models
+// take. The three names line up, which is not a coincidence: the provider's
+// own scale starts at the same three and adds two above them.
+var effortFor = map[agentloop.ReasoningLevel]string{
+	agentloop.ReasoningLow:    "low",
+	agentloop.ReasoningMedium: "medium",
+	agentloop.ReasoningHigh:   "high",
+}
+
+// adaptiveFamilies are the model families that take adaptive thinking and an
+// effort word rather than a token budget.
+//
+// Matched on a substring of the model id rather than an exact list, so a
+// dated snapshot ("claude-opus-4-6@20260101", "anthropic.claude-sonnet-5")
+// resolves the same way as the bare alias, and a model released after this
+// build still works if it carries a family name this recognises. An id
+// nothing here matches falls back to the older budget form, which is the safe
+// direction: an unknown id is more likely to be an older model than a newer
+// one, and a budget on a model that wanted effort fails loudly at the first
+// call rather than silently costing more.
+var adaptiveFamilies = []string{
+	"claude-opus-4-6", "claude-opus-4-7", "claude-opus-4-8", "claude-opus-5",
+	"claude-sonnet-4-6", "claude-sonnet-5",
+	"claude-fable-5", "claude-mythos-5",
+}
+
+func takesAdaptiveThinking(model string) bool {
+	id := strings.ToLower(model)
+	for _, family := range adaptiveFamilies {
+		if strings.Contains(id, family) {
+			return true
+		}
+	}
+	return false
 }
 
 func init() {
@@ -92,12 +133,22 @@ func body(req agentloop.Request, stream bool) map[string]any {
 	if len(req.Tools) > 0 {
 		out["tools"] = toolDefs(req.Tools)
 	}
-	if budget, ok := thinkingBudget[req.Reasoning]; ok {
-		out["thinking"] = map[string]any{"type": "enabled", "budget_tokens": budget}
-		// The budget has to fit inside the answer, and a budget larger than
-		// the ceiling is rejected by the provider rather than clamped.
-		if budget >= DefaultMaxTokens {
-			out["max_tokens"] = budget + 4096
+	if effort, ok := effortFor[req.Reasoning]; ok {
+		if takesAdaptiveThinking(req.Model) {
+			// display: summarized, because this system shows the model's
+			// reasoning — the default on these models is "omitted", which
+			// streams thinking blocks with empty text and leaves the
+			// reasoning pane blank while the turn appears to hang.
+			out["thinking"] = map[string]any{"type": "adaptive", "display": "summarized"}
+			out["output_config"] = map[string]any{"effort": effort}
+		} else if budget, ok := thinkingBudget[req.Reasoning]; ok {
+			out["thinking"] = map[string]any{"type": "enabled", "budget_tokens": budget}
+			// The budget has to fit inside the answer, and a budget larger
+			// than the ceiling is rejected by the provider rather than
+			// clamped.
+			if budget >= DefaultMaxTokens {
+				out["max_tokens"] = budget + 4096
+			}
 		}
 	}
 	if stream {
@@ -149,6 +200,18 @@ func messages(in []agentloop.Message) []map[string]any {
 		case agentloop.RoleAssistant:
 			flush()
 			var content []map[string]any
+			// The signed thinking block goes first, and it goes back exactly
+			// as it arrived. Dropping it is what broke every tool-using turn
+			// with reasoning on: the provider requires the thinking block of
+			// the assistant turn that asked for the tool, and refuses the
+			// request without it. An empty thinking text is normal on the
+			// current models (display defaults to omitted) and is still
+			// valid — what must not change is the signature.
+			if m.Encrypted != "" {
+				content = append(content, map[string]any{
+					"type": "thinking", "thinking": m.Reasoning, "signature": m.Encrypted,
+				})
+			}
 			if m.Text != "" {
 				content = append(content, map[string]any{"type": "text", "text": m.Text})
 			}
@@ -177,12 +240,13 @@ func messages(in []agentloop.Message) []map[string]any {
 
 type message struct {
 	Content []struct {
-		Type     string          `json:"type"`
-		Text     string          `json:"text"`
-		Thinking string          `json:"thinking"`
-		ID       string          `json:"id"`
-		Name     string          `json:"name"`
-		Input    json.RawMessage `json:"input"`
+		Type      string          `json:"type"`
+		Text      string          `json:"text"`
+		Thinking  string          `json:"thinking"`
+		Signature string          `json:"signature"`
+		ID        string          `json:"id"`
+		Name      string          `json:"name"`
+		Input     json.RawMessage `json:"input"`
 	} `json:"content"`
 	StopReason string `json:"stop_reason"`
 	Model      string `json:"model"`
@@ -198,6 +262,13 @@ func translate(m message, model string) agentloop.Response {
 	msg := agentloop.Message{Role: agentloop.RoleAssistant}
 	var calls []agentloop.ToolCall
 	var text, thinking strings.Builder
+	// The signature is what makes a thinking block replayable. A turn that
+	// used a tool has to come back with its thinking block attached,
+	// unchanged and signed, or the provider refuses the next call — which is
+	// every tool-using turn with reasoning on. Kept in Encrypted, the field
+	// that exists for exactly this: opaque, carried between turns, never
+	// read (see agentloop.Message).
+	var signature string
 
 	for _, c := range m.Content {
 		switch c.Type {
@@ -205,12 +276,16 @@ func translate(m message, model string) agentloop.Response {
 			text.WriteString(c.Text)
 		case "thinking":
 			thinking.WriteString(c.Thinking)
+			if c.Signature != "" {
+				signature = c.Signature
+			}
 		case "tool_use":
 			calls = append(calls, agentloop.ToolCall{ID: c.ID, Name: c.Name, Input: c.Input})
 		}
 	}
 	msg.Text = text.String()
 	msg.Reasoning = thinking.String()
+	msg.Encrypted = signature
 	msg.ToolCalls = calls
 
 	stop := agentloop.StopEnd
@@ -251,11 +326,12 @@ type stream struct {
 }
 
 type block struct {
-	kind  string
-	id    string
-	name  string
-	text  strings.Builder
-	input strings.Builder
+	kind      string
+	id        string
+	name      string
+	signature string
+	text      strings.Builder
+	input     strings.Builder
 }
 
 func (s *stream) Recv() (agentloop.Chunk, error) {
@@ -280,6 +356,7 @@ func (s *stream) Recv() (agentloop.Chunk, error) {
 				Type        string `json:"type"`
 				Text        string `json:"text"`
 				Thinking    string `json:"thinking"`
+				Signature   string `json:"signature"`
 				PartialJSON string `json:"partial_json"`
 				StopReason  string `json:"stop_reason"`
 			} `json:"delta"`
@@ -319,6 +396,13 @@ func (s *stream) Recv() (agentloop.Chunk, error) {
 			case "thinking_delta":
 				b.text.WriteString(frame.Delta.Thinking)
 				return agentloop.Chunk{Reasoning: frame.Delta.Thinking}, nil
+			case "signature_delta":
+				// The signature arrives as its own delta at the end of a
+				// thinking block, not on the block that opened it. Without
+				// this the block was assembled unsigned and could not be
+				// replayed — see translate.
+				b.signature += frame.Delta.Signature
+				continue
 			case "input_json_delta":
 				b.input.WriteString(frame.Delta.PartialJSON)
 			}
@@ -341,12 +425,13 @@ func (s *stream) assemble() {
 			continue
 		}
 		var entry struct {
-			Type     string          `json:"type"`
-			Text     string          `json:"text"`
-			Thinking string          `json:"thinking"`
-			ID       string          `json:"id"`
-			Name     string          `json:"name"`
-			Input    json.RawMessage `json:"input"`
+			Type      string          `json:"type"`
+			Text      string          `json:"text"`
+			Thinking  string          `json:"thinking"`
+			Signature string          `json:"signature"`
+			ID        string          `json:"id"`
+			Name      string          `json:"name"`
+			Input     json.RawMessage `json:"input"`
 		}
 		entry.Type = b.kind
 		switch b.kind {
@@ -354,6 +439,7 @@ func (s *stream) assemble() {
 			entry.Text = b.text.String()
 		case "thinking":
 			entry.Thinking = b.text.String()
+			entry.Signature = b.signature
 		case "tool_use":
 			entry.ID, entry.Name = b.id, b.name
 			entry.Input = providers.ToolArguments(b.input.String())

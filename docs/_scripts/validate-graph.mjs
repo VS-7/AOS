@@ -57,6 +57,13 @@ function walk(dir, acc = []) {
     // frontmatter and link to nothing, which is correct for what they are;
     // walking them only produces orphans and missing-field noise.
     if (entry.startsWith(".") || entry === "_scripts" || entry === "superpowers") continue;
+    // `system/` and the folder README are the product documentation people
+    // read on GitHub — requirements, use cases, architecture, channels — with
+    // relative Markdown links and Mermaid diagrams, not vault notes with
+    // wikilinks and frontmatter. They are indexed from docs/README.md, and
+    // this validator's rules (orphans, frontmatter, wikilinks) describe the
+    // specification vault, not them.
+    if (entry === "system" || (dir === DOCS && entry === "README.md")) continue;
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) walk(full, acc);
     else if (extname(entry) === ".md") acc.push(full);

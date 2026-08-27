@@ -1,4 +1,4 @@
-import { DomainError, unwrap } from "./client";
+import { DomainError, bridgeFetch, unwrap } from "./client";
 import { getWorkspace, isDesktop } from "./client";
 import { daemonURL } from "./daemon-origin";
 
@@ -69,7 +69,31 @@ function headers(extra?: Record<string, string>): Record<string, string> {
   return { ...(ws ? { "x-workspace-id": ws } : {}), ...extra };
 }
 
+/**
+ * One call to /api/file, over whichever transport this page actually has.
+ *
+ * The bridge first, and it is not an optimisation: inside the desktop window
+ * a plain fetch to the daemon is cross-origin, carries no cookie and no
+ * bearer, and is refused — so the file tree, the editor and every diff were
+ * empty there. The bridge attaches the credential the window already holds
+ * (internal/transport/wailsvc.DomainService.Fetch). In a browser tab there is
+ * no bridge, `Call.ByName` rejects, and the fetch below is right: the daemon
+ * serves the page, so the request is same-origin and the session cookie goes
+ * with it.
+ */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = init?.method ?? "GET";
+  const headers = (init?.headers ?? {}) as Record<string, string>;
+  const body = typeof init?.body === "string" ? init.body : "";
+
+  try {
+    const answer = await bridgeFetch(method, path, headers["content-type"] ?? "", body);
+    return unwrap(parseBody(answer.body, answer.status));
+  } catch (err) {
+    if (err instanceof DomainError) throw err;
+    // No bridge here — a browser tab. Fall through to fetch.
+  }
+
   const response = await fetch(daemonURL(path), init);
   let payload: unknown;
   try {
@@ -82,6 +106,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     });
   }
   return unwrap(payload);
+}
+
+/** Reads a bridged body, which arrives as the daemon's own JSON text. */
+function parseBody(body: string, status: number): unknown {
+  try {
+    return JSON.parse(body);
+  } catch {
+    throw new DomainError({
+      code: "TRANSPORT_UNREADABLE",
+      message: `the daemon answered ${status} with something that is not JSON`,
+      status,
+    });
+  }
 }
 
 export async function tree(path: string, recursive = false): Promise<FileTree> {

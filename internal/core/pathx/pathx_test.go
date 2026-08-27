@@ -197,3 +197,56 @@ func TestResolveInsideForwardsAResolutionFailureAsItself(t *testing.T) {
 		t.Fatalf("ResolveInside(%q) = %q, which is outside the root", deep, got)
 	}
 }
+
+// A write through a symlinked directory two levels deep used to escape.
+//
+// Resolve fell back to the *immediate* parent, and when that did not exist
+// either it returned the path uncollapsed — lexically inside the root, so
+// Contains said yes, while the MkdirAll the caller does next follows the link
+// and lands outside. Two missing components was all it took.
+func TestResolveInsideRefusesANewPathUnderASymlinkOutOfTheRoot(t *testing.T) {
+	root := resolvedRoot(t)
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
+		t.Skipf("symlinks are not available here: %v", err)
+	}
+
+	for _, p := range []string{
+		"link/newdir/file.txt", // two components missing
+		"link/a/b/c/file.txt",  // four
+		"link/file.txt",        // one — already refused before, still is
+	} {
+		if got, err := pathx.ResolveInside(root, p); !errors.Is(err, pathx.ErrOutside) {
+			t.Errorf("ResolveInside(%q) = %q, %v; want ErrOutside", p, got, err)
+		}
+	}
+
+	// A new path under a real directory is still allowed — that is the case
+	// the fallback exists for.
+	if _, err := pathx.ResolveInside(root, "real/newdir/file.txt"); err != nil {
+		t.Errorf("a new path inside the root was refused: %v", err)
+	}
+}
+
+// Segment is the guard for an identifier about to become one path component.
+func TestSegmentRefusesAnythingThatIsNotOneComponent(t *testing.T) {
+	for _, ok := range []string{"atlas", "a-b_c.9", "550e8400-e29b-41d4-a716-446655440000", ".hidden"} {
+		if got, err := pathx.Segment(ok); err != nil || got != ok {
+			t.Errorf("Segment(%q) = %q, %v; want it accepted", ok, got, err)
+		}
+	}
+	for _, bad := range []string{"", ".", "..", "../..", "a/b", `a\b`, "/abs", "trailing/", "a/../b"} {
+		if _, err := pathx.Segment(bad); !errors.Is(err, pathx.ErrUnsafeSegment) {
+			t.Errorf("Segment(%q) was accepted; it is not a single safe segment", bad)
+		}
+	}
+
+	// JoinSegment is the guard applied where the join happens.
+	got, err := pathx.JoinSegment("/state/workspaces", "mine")
+	if err != nil || got != filepath.Join("/state/workspaces", "mine") {
+		t.Errorf("JoinSegment = %q, %v", got, err)
+	}
+	if _, err := pathx.JoinSegment("/state/workspaces", ".."); err == nil {
+		t.Error(`JoinSegment(root, "..") resolved to the parent of the root`)
+	}
+}

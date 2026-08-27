@@ -102,6 +102,21 @@ export function unwrap<T>(raw: unknown): T {
 }
 
 const WAILSVC_PKG = "github.com/OWNER/aos/internal/transport/wailsvc";
+
+/** One place a coding agent reads skills from — pkg/skill.Target. */
+export interface SkillTarget {
+  id: string;
+  label: string;
+  dir: string;
+  present: boolean;
+  installed: boolean;
+}
+
+/** What an install did — pkg/skill.InstallResult. */
+export interface SkillInstallResult {
+  installed: string[] | null;
+  skipped: Record<string, string>;
+}
 const DOMAIN_SERVICE_INVOKE = `${WAILSVC_PKG}.DomainService.Invoke`;
 
 /**
@@ -203,6 +218,22 @@ export const system = {
   async openExternal(url: string): Promise<void> {
     await Call.ByName(`${WAILSVC_PKG}.SystemService.OpenExternal`, url);
   },
+  /**
+   * The coding agents the skill can be installed into on this machine —
+   * internal/transport/wailsvc.SystemService.SkillTargets. Desktop only:
+   * a browser tab has no view of the user's home directory.
+   */
+  async skillTargets(): Promise<SkillTarget[]> {
+    return (await Call.ByName(`${WAILSVC_PKG}.SystemService.SkillTargets`)) as SkillTarget[];
+  },
+  /**
+   * Writes the skill compiled into the application into one agent's skills
+   * directory ("claude-code", "codex", …) or every detected one ("all") —
+   * the desktop's own `aos self skill install`.
+   */
+  async installSkill(target: string): Promise<SkillInstallResult> {
+    return (await Call.ByName(`${WAILSVC_PKG}.SystemService.InstallSkill`, target)) as SkillInstallResult;
+  },
   async pickFiles(opts: {
     title?: string;
     directory?: string;
@@ -213,6 +244,42 @@ export const system = {
     return (await Call.ByName(`${WAILSVC_PKG}.SystemService.PickFiles`, opts)) as string[];
   },
 };
+
+/** One answer from a non-registry surface, forwarded by the bridge. */
+export interface BridgeResponse {
+  status: number;
+  body: string;
+}
+
+/**
+ * Calls one of the daemon's non-registry HTTP surfaces (`/api/file/*`,
+ * `/api/auth/*`) through the Wails bridge, which attaches the window's own
+ * credential.
+ *
+ * These two surfaces are not commands, so they have no `Invoke` path — and
+ * called with a plain `fetch` from inside the desktop window they were
+ * cross-origin, carried neither cookie nor bearer, and came back 401 (when
+ * they were not blocked by CORS before leaving at all). That is why the file
+ * tree, the editor, the diffs and the account roster were empty in the
+ * application while working perfectly in a browser tab.
+ *
+ * Rejects when there is no bridge — a browser tab — which is the signal for
+ * the caller to use `fetch`, where the session cookie is sent automatically.
+ */
+export async function bridgeFetch(
+  method: string,
+  path: string,
+  contentType = "",
+  body = "",
+): Promise<BridgeResponse> {
+  return (await Call.ByName(
+    `${WAILSVC_PKG}.DomainService.Fetch`,
+    method,
+    path,
+    contentType,
+    body,
+  )) as BridgeResponse;
+}
 
 /**
  * The browser transport.
@@ -249,9 +316,52 @@ const http: Client = {
 
 let activeWorkspace = "";
 
-/** Sets the workspace every subsequent call addresses. */
+/** Where the chosen workspace is remembered between reloads. */
+const WORKSPACE_STORAGE_KEY = "aos.workspace";
+
+/**
+ * The workspace this page addressed last time, if it said.
+ *
+ * Read at boot by the workspace store, which used to have no memory at all:
+ * it asked for the list and took the first entry, so switching workspace
+ * lasted exactly until the next reload and then silently reverted.
+ */
+export function rememberedWorkspace(): string {
+  try {
+    return localStorage.getItem(WORKSPACE_STORAGE_KEY) ?? "";
+  } catch {
+    // Private mode, or a webview with site data off. Not a reason to fail;
+    // the caller falls back to the first workspace as it always did.
+    return "";
+  }
+}
+
+/**
+ * Sets the workspace every subsequent call addresses.
+ *
+ * Three places have to agree, and before this only the first did:
+ *
+ * - this module's own HTTP header, for a browser tab;
+ * - the Go daemon client behind the Wails bridge, which is what actually
+ *   sends the header for every command in the desktop window — it was pinned
+ *   to whatever workspace the window opened with, and its header beats the
+ *   cookie the page sets, so switching workspace in the application changed
+ *   nothing at all;
+ * - localStorage, so the choice survives a reload.
+ */
 export function setWorkspace(id: string): void {
+  if (activeWorkspace === id) return;
   activeWorkspace = id;
+  try {
+    if (id) localStorage.setItem(WORKSPACE_STORAGE_KEY, id);
+  } catch {
+    // The choice still applies to this session.
+  }
+  // Fire and forget: in a browser tab there is no bridge to tell, and the
+  // header above is already the whole answer there.
+  if (id) {
+    void Call.ByName(`${WAILSVC_PKG}.DomainService.SetWorkspace`, id).catch(() => {});
+  }
 }
 
 /** The workspace every subsequent call addresses. */

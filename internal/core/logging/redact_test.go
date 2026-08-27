@@ -13,6 +13,12 @@ import (
 
 const knownToken = "aos_0123456789abcdef0123456789abcdef"
 
+// What auth.Service.mintToken actually produces: "aos_" and base64url, not
+// hex. Every existing assertion in this file used the hex shape above, so the
+// pattern could be — and was — wrong about the only token this product mints
+// and no test noticed.
+const mintedToken = "aos_nEoEqYKgMwSTh8YGuR-ckTMYFmboQFv4kz2T2ClCPls"
+
 func newBuffered(t *testing.T) (*bytes.Buffer, context.Context) {
 	t.Helper()
 	buf := &bytes.Buffer{}
@@ -169,5 +175,23 @@ func TestFromContextWithoutALoggerStillWorks(t *testing.T) {
 func TestNewDefaultsToStderr(t *testing.T) {
 	if logging.New(logging.Config{}) == nil {
 		t.Fatal("New returned nil")
+	}
+}
+
+// The credential most likely to appear in this system's own logs is one it
+// issued. It is base64url — letters, digits, "-" and "_" — and the redactor
+// used to ask for hex, so a real token passed through untouched under any key
+// the secret-key list did not happen to cover.
+func TestATokenThisProductActuallyMintsIsRedacted(t *testing.T) {
+	buf, ctx := newBuffered(t)
+	logging.FromContext(ctx).Info("a call was authenticated", "presented", mintedToken)
+	logging.FromContext(ctx).Info("and in the message: " + mintedToken)
+
+	out := buf.String()
+	if strings.Contains(out, mintedToken) {
+		t.Fatalf("the token survived redaction:\n%s", out)
+	}
+	if !strings.Contains(out, logging.Redacted) {
+		t.Fatalf("nothing was redacted at all:\n%s", out)
 	}
 }

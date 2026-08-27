@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -500,5 +502,68 @@ func TestTheShadowedFlagKeepsTheDomainDescription(t *testing.T) {
 	}
 	if !strings.Contains(out, "Bearer") {
 		t.Errorf("--token lost its transport description:\n%s", out)
+	}
+}
+
+func TestSelfSkillInstallsTheEmbeddedSkillIntoANamedAgent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	reg, _ := registry(t)
+	out, errOut, err := run(t, reg, "self", "skill", "install", "--to", "claude-code", "--format", "json")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, errOut)
+	}
+	if !strings.Contains(out, filepath.Join(home, ".claude", "skills", "aos")) {
+		t.Fatalf("output = %s", out)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "aos", "SKILL.md")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "aos", "references", "memories.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now that ~/.claude exists, the flag-less form finds it on its own.
+	out, _, err = run(t, reg, "self", "skill", "targets", "--format", "json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `"installed": true`) {
+		t.Fatalf("targets did not report the installation:\n%s", out)
+	}
+}
+
+func TestSelfSkillInstallRefusesAnUnknownAgent(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	reg, _ := registry(t)
+	_, errOut, err := run(t, reg, "self", "skill", "install", "--to", "emacs", "--format", "json")
+	if err == nil {
+		t.Fatal("an unknown agent was accepted")
+	}
+	if !strings.Contains(errOut, "SKILL_UNKNOWN_TARGET") {
+		t.Fatalf("stderr = %s", errOut)
+	}
+}
+
+func TestSelfSkillShowPrintsTheSkillAndItsReferences(t *testing.T) {
+	reg, _ := registry(t)
+	out, _, err := run(t, reg, "self", "skill", "show")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(out, "---\nname: aos") {
+		t.Fatalf("SKILL.md = %.60q", out)
+	}
+	out, _, err = run(t, reg, "self", "skill", "show", "tasks")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "# Tasks") {
+		t.Fatalf("references/tasks.md = %.60q", out)
+	}
+	if _, _, err := run(t, reg, "self", "skill", "show", "nope"); err == nil {
+		t.Fatal("a missing reference was printed")
 	}
 }
