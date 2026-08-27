@@ -83,6 +83,41 @@ jobs:
       - name: specification graph
         run: node "docs/_scripts/validate-graph.mjs"
 
+  # The interface had no gate at all until this: the whole of `frontend/` could
+  # stop typechecking, or every test in it could fail, and CI stayed green —
+  # the first anyone would hear of it is a release build failing, or a screen
+  # failing in front of somebody. `gates` above is Go and the specification
+  # graph; `build-desktop` compiles the Go half of the window against a
+  # `dist/.gitkeep`, never the bundle.
+  #
+  # Its own job rather than a step in `gates`, so a Go failure and a frontend
+  # failure are reported separately and neither hides the other.
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # --legacy-peer-deps, and the fallback, mirror release.yml: this tree has
+      # peer ranges npm refuses to resolve strictly, and a lockfile that has
+      # drifted from package.json must not turn into a red gate on a branch
+      # that changed no dependency.
+      - name: install
+        run: npm ci --legacy-peer-deps --silent || npm install --legacy-peer-deps --silent
+
+      - name: typecheck
+        run: npm run typecheck
+
+      - name: tests
+        run: npx vitest run
+
   # The two client binaries are pure Go, so one runner still cross-compiles all
   # six targets with cgo off. aos-desktop can no longer ride along in `./cmd/...`
   # the way it used to: Wails is cgo and a platform GUI toolkit, so with
