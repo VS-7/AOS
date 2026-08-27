@@ -215,6 +215,22 @@ func applyTokens(doc map[string]any, creds Credentials) {
 		}
 		return
 	}
+	// The singular key is Antigravity's: it stores a marshalled oauth2.Token
+	// under "token", with the expiry as an RFC 3339 string beside it rather
+	// than as milliseconds elsewhere in the document. Writing the flat keys
+	// into that file instead would be worse than not writing at all — the
+	// tool that owns it reads token.access_token and would go on presenting
+	// the stale one, while the fresh one sat unread at the top level.
+	if token, ok := doc["token"].(map[string]any); ok {
+		token["access_token"] = creds.AccessToken
+		if creds.RefreshToken != "" {
+			token["refresh_token"] = creds.RefreshToken
+		}
+		if !creds.ExpiresAt.IsZero() {
+			token["expiry"] = creds.ExpiresAt.Format(time.RFC3339Nano)
+		}
+		return
+	}
 	if _, ok := doc["access_token"]; ok {
 		doc["access_token"] = creds.AccessToken
 		if creds.RefreshToken != "" {

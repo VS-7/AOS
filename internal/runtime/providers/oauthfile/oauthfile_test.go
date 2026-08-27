@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -416,5 +417,98 @@ func TestGeminiCLIReadsFromTheStandardPathAndHonoursExpiryDate(t *testing.T) {
 	_, err := s.Token(context.Background())
 	if code := codeOf(t, err); code != "AOS_OAUTH_TOKEN_EXPIRED" {
 		t.Fatalf("code = %q, want AOS_OAUTH_TOKEN_EXPIRED (no Refresh wired by Codex/GeminiCLI yet)", code)
+	}
+}
+
+// TestARenewalWritesBackUnderTheKeyTheFileAlreadyUses.
+//
+// Antigravity stores a marshalled oauth2.Token under a singular "token" key,
+// where Codex uses plural "tokens" and the Gemini CLI writes the fields flat.
+// Getting this wrong is not a cosmetic bug: the flat keys would be written
+// into a document whose owner reads token.access_token, so the tool would go
+// on presenting the stale credential while the fresh one sat unread beside it
+// — and the tokens are somebody else's, in a file this package does not own.
+func TestARenewalWritesBackUnderTheKeyTheFileAlreadyUses(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "antigravity-oauth-token")
+	writeJSON(t, path, map[string]any{
+		"token": map[string]any{
+			"access_token":  "stale",
+			"token_type":    "Bearer",
+			"refresh_token": "rt-1",
+			"expiry":        "2020-01-01T00:00:00Z",
+		},
+		"auth_method": "consumer",
+	})
+
+	now := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
+	store := &oauthfile.Store{
+		Path:  path,
+		Owner: "the Antigravity CLI",
+		Clock: func() time.Time { return now },
+		Parse: func(raw []byte) (oauthfile.Credentials, error) {
+			var doc struct {
+				Token struct {
+					AccessToken  string    `json:"access_token"`
+					RefreshToken string    `json:"refresh_token"`
+					Expiry       time.Time `json:"expiry"`
+				} `json:"token"`
+			}
+			if err := json.Unmarshal(raw, &doc); err != nil {
+				return oauthfile.Credentials{}, err
+			}
+			return oauthfile.Credentials{
+				AccessToken:  doc.Token.AccessToken,
+				RefreshToken: doc.Token.RefreshToken,
+				ExpiresAt:    doc.Token.Expiry,
+			}, nil
+		},
+		Refresh: func(context.Context, string) (oauthfile.Credentials, error) {
+			return oauthfile.Credentials{
+				AccessToken: "fresh",
+				ExpiresAt:   now.Add(time.Hour),
+			}, nil
+		},
+	}
+
+	got, err := store.Token(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "fresh" {
+		t.Fatalf("token = %q", got)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if _, leaked := doc["access_token"]; leaked {
+		t.Error("the token was written flat into a file that nests it under \"token\"")
+	}
+	token, ok := doc["token"].(map[string]any)
+	if !ok {
+		t.Fatalf("the \"token\" object was replaced: %s", raw)
+	}
+	if token["access_token"] != "fresh" {
+		t.Errorf("token.access_token = %v", token["access_token"])
+	}
+	if token["refresh_token"] != "rt-1" {
+		t.Errorf("the refresh token was lost: %v", token["refresh_token"])
+	}
+	if token["token_type"] != "Bearer" {
+		t.Errorf("a key this package does not understand was dropped: %s", raw)
+	}
+	if doc["auth_method"] != "consumer" {
+		t.Errorf("the owner's own field was dropped: %s", raw)
+	}
+	// The expiry has to move with the token, or the owner reads a fresh
+	// credential and believes it expired in 2020.
+	if expiry, _ := token["expiry"].(string); !strings.HasPrefix(expiry, "2030-01-01T01:00:00") {
+		t.Errorf("token.expiry = %v", token["expiry"])
 	}
 }

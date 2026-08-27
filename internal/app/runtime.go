@@ -31,6 +31,7 @@ import (
 	// is the whole of adding a provider to a build, which is the point of the
 	// registry: the core never learns their names.
 	_ "github.com/OWNER/aos/internal/runtime/providers/anthropic"
+	_ "github.com/OWNER/aos/internal/runtime/providers/antigravity"
 	_ "github.com/OWNER/aos/internal/runtime/providers/compat"
 	_ "github.com/OWNER/aos/internal/runtime/providers/google"
 	_ "github.com/OWNER/aos/internal/runtime/providers/openai"

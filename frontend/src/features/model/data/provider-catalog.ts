@@ -3,7 +3,8 @@ import type { ModelProvider } from "@/features/model/interfaces/model.interfaces
 /**
  * Static reference data for the providers `internal/runtime/providers`
  * actually registers — `internal/runtime/providers/{anthropic,openai,
- * google,compat}/*.go`'s own `providers.Register` calls, verified by grep,
+ * google,compat,antigravity}/*.go`'s own `providers.Register` calls,
+ * verified by grep,
  * not assumed.
  *
  * The `models` arrays here are no longer what a connected provider shows.
@@ -109,10 +110,14 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
   {
     id: "codex",
     name: "ChatGPT (Codex login)",
-    description: "The same OpenAI models, billed to a ChatGPT subscription instead of API usage.",
+    description:
+      "The same OpenAI models, billed to a ChatGPT subscription instead of API usage.",
     logo: { light: "", dark: "" },
     default: false,
-    auth: oauthFileAuth("~/.codex/auth.json", "Codex CLI / ChatGPT desktop app"),
+    auth: oauthFileAuth(
+      "~/.codex/auth.json",
+      "Codex CLI / ChatGPT desktop app",
+    ),
     // The Codex surface has its own model line, and it is not the public
     // API's — these are the four the original's own adapter lists
     // (`_extracted/v401/server/.../adapters/codex.adapter.ts`), confirmed
@@ -149,16 +154,56 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
   {
     id: "gemini-cli",
     name: "Gemini (CLI login)",
-    description: "The same Gemini models, billed to a Gemini CLI allowance instead of API usage.",
+    description:
+      "Retired. Google shut the Gemini CLI down for personal accounts on 18 June 2026 — use Antigravity below instead.",
     logo: { light: "", dark: "" },
     default: false,
     auth: oauthFileAuth("~/.gemini/oauth_creds.json", "Gemini CLI"),
-    models: [{ id: "gemini-3-flash-preview", name: "Gemini 3 Flash", enabled: true }],
+    models: [
+      { id: "gemini-3-flash-preview", name: "Gemini 3 Flash", enabled: true },
+    ],
+  },
+  {
+    id: "antigravity",
+    name: "Antigravity",
+    description:
+      "Gemini, Claude and GPT-OSS models on the allowance that comes with the Antigravity CLI login already on this machine.",
+    logo: { light: "", dark: "" },
+    default: false,
+    auth: oauthFileAuth(
+      "~/.gemini/antigravity-cli/antigravity-oauth-token",
+      "Antigravity CLI (agy)",
+    ),
+    // Discovery is the real list here, and it is unusually trustworthy for
+    // this provider: `fetchAvailableModels` returns the catalogue with this
+    // account's own remaining allowance attached, so what the picker shows
+    // once connected is what the service will actually serve. These three
+    // are the fallback for the not-yet-connected case — one from each of the
+    // vendors the endpoint fronts, so the entry reads honestly before there
+    // is a credential to ask with.
+    models: [
+      {
+        id: "gemini-3.6-flash-high",
+        name: "Gemini 3.6 Flash (High)",
+        enabled: true,
+      },
+      {
+        id: "claude-sonnet-4-6",
+        name: "Claude Sonnet 4.6 (Thinking)",
+        enabled: true,
+      },
+      {
+        id: "gpt-oss-120b-medium",
+        name: "GPT-OSS 120B (Medium)",
+        enabled: true,
+      },
+    ],
   },
   {
     id: "openrouter",
     name: "OpenRouter",
-    description: "A gateway to hundreds of models from many vendors, billed through one OpenRouter key.",
+    description:
+      "A gateway to hundreds of models from many vendors, billed through one OpenRouter key.",
     logo: { light: "", dark: "" },
     default: false,
     auth: apiKeyAuth({
@@ -183,7 +228,8 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
   {
     id: "opencode",
     name: "opencode Zen",
-    description: "opencode's own model gateway. Models whose id ends in “-free” need no key.",
+    description:
+      "opencode's own model gateway. Models whose id ends in “-free” need no key.",
     logo: { light: "", dark: "" },
     default: false,
     auth: apiKeyAuth({

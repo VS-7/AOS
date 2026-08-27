@@ -3,12 +3,15 @@ package providers_test
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/OWNER/aos/internal/runtime/agentloop"
 	"github.com/OWNER/aos/internal/runtime/providers"
 	"github.com/OWNER/aos/internal/runtime/providers/anthropic"
+	"github.com/OWNER/aos/internal/runtime/providers/antigravity"
 	"github.com/OWNER/aos/internal/runtime/providers/compat"
 	"github.com/OWNER/aos/internal/runtime/providers/google"
 	"github.com/OWNER/aos/internal/runtime/providers/openai"
@@ -117,6 +120,36 @@ func TestEveryProviderObeysTheContract(t *testing.T) {
 			},
 			WantToolName: "Read", WantToolArgs: `{"path":"README.md"}`,
 		},
+		{
+			// The Cloud Code envelope: a Gemini request nested under
+			// "request", and a Gemini answer nested under "response". The
+			// base URL carries a path here because this API's methods are
+			// suffixes on one — ":generateContent", not "/generateContent".
+			Name: "antigravity",
+			Build: func(base string) agentloop.LLMProvider {
+				return antigravity.New(providers.Config{
+					BaseURL: base + "/v1internal",
+					Home:    antigravityHome(t),
+				})
+			},
+			Answer: providertest.Exchange{
+				Body: `{"response":{"modelVersion":"test-model","candidates":[{"finishReason":"STOP","content":{"role":"model","parts":[
+					{"text":"checking","thought":true},
+					{"text":"the readme says hello"}]}}],
+					"usageMetadata":{"promptTokenCount":120,"candidatesTokenCount":9,"totalTokenCount":129,"thoughtsTokenCount":4}},"traceId":"trace-1"}`,
+				Stream: sse(
+					`{"response":{"modelVersion":"test-model","candidates":[{"content":{"parts":[{"text":"the readme "}]}}]}}`,
+					`{"response":{"modelVersion":"test-model","candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"says hello"}]}}],
+						"usageMetadata":{"promptTokenCount":120,"candidatesTokenCount":9,"totalTokenCount":129}}}`,
+				),
+			},
+			ToolCall: providertest.Exchange{
+				Body: `{"response":{"modelVersion":"test-model","candidates":[{"finishReason":"STOP","content":{"parts":[
+					{"functionCall":{"name":"Read","args":{"path":"README.md"},"id":"call_1"}}]}}],
+					"usageMetadata":{"promptTokenCount":100,"candidatesTokenCount":12,"totalTokenCount":112}}}`,
+			},
+			WantToolName: "Read", WantToolArgs: `{"path":"README.md"}`,
+		},
 	}
 
 	for _, c := range cases {
@@ -124,11 +157,29 @@ func TestEveryProviderObeysTheContract(t *testing.T) {
 	}
 }
 
+// antigravityHome writes the login the Antigravity CLI would have written, so
+// the adapter authenticates against the test server instead of refusing to
+// call at all. The expiry is far out, so nothing is renewed.
+func antigravityHome(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".gemini", "antigravity-cli"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"token":{"access_token":"at","token_type":"Bearer","refresh_token":"rt","expiry":"2099-01-01T00:00:00Z"},"auth_method":"consumer"}`
+	if err := os.WriteFile(
+		filepath.Join(dir, ".gemini", "antigravity-cli", "antigravity-oauth-token"),
+		[]byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 // TestEveryProviderInTheSpecificationIsRegistered. Registration happens from an
 // init function, so this also proves that importing an adapter is all it takes.
 func TestEveryProviderInTheSpecificationIsRegistered(t *testing.T) {
 	want := []string{
-		"anthropic", "codex", "crof", "gemini-cli", "google", "openai", "opencode", "openrouter",
+		"anthropic", "antigravity", "codex", "crof", "gemini-cli", "google", "openai", "opencode", "openrouter",
 	}
 	got := providers.Names()
 	if strings.Join(got, ",") != strings.Join(want, ",") {

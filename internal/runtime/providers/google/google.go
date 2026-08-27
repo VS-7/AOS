@@ -147,6 +147,17 @@ var geminiSchemaKeys = map[string]bool{
 	"anyOf": true,
 }
 
+// Parameters renders a tool's input schema in the shape this API's Schema
+// proto takes.
+//
+// Exported for the antigravity adapter, which posts the same generateContent
+// request body to a different endpoint. It is a re-export rather than a copy
+// because the whitelist below is the kind of table that has to be corrected
+// exactly once: a second copy would keep working while diverging, and the
+// symptom of the divergence is every tool-carrying turn failing with a 400
+// against one provider and not the other.
+func Parameters(in *jsonschema.Schema) map[string]any { return geminiParameters(in) }
+
 // geminiParameters renders a tool's input schema in the shape this API takes.
 //
 // Sending JSON Schema straight through is what the adapter used to do, and it

@@ -24,6 +24,7 @@ Os dois mais interessantes são os de **OAuth local**:
 |---|---|
 | `codex` | `~/.codex/auth.json` — tokens OAuth do ChatGPT/Codex, renovados quando necessário |
 | `gemini-cli` | `~/.gemini/oauth_creds.json` — credenciais do Gemini CLI instalado |
+| `antigravity` | `~/.gemini/antigravity-cli/antigravity-oauth-token` — login do Antigravity CLI (`agy`). Adição nossa, não do original: o Gemini CLI foi desligado para contas pessoais em 18/06/2026 e a linha acima deixou de comprar qualquer coisa |
 
 A implicação, registrada na engenharia reversa:
 
@@ -81,6 +82,7 @@ type RealtimeProvider interface {
 | `opencode` | `openai-go` com `baseURL` | roteamento por sufixo `-free` |
 | `codex` | `openai-go` + OAuth local | lê `~/.codex/auth.json` |
 | `gemini-cli` | `genai` + OAuth local | lê `~/.gemini/oauth_creds.json` |
+| `antigravity` | HTTP direto + OAuth local | envelope Cloud Code `v1internal`, com renovação de token e guarda de cota |
 
 ### Adaptadores OAuth
 
@@ -148,6 +150,17 @@ var pricingRaw []byte
 > [!decision] Tabela de preços versionada
 > Adição, para dar custo por mensagem em [[Chat (Go)]].
 
+> [!decision] O adaptador Antigravity protege a conta antes de proteger a chamada
+> A credencial é a assinatura pessoal de alguém, não uma chave medida, e o endpoint é interno. Três consequências, todas em `internal/runtime/providers/antigravity/`:
+>
+> 1. **Lê o login, nunca cria um.** Não há fluxo de browser nem de device aqui. Sem login na máquina, o adaptador diz isso e para — quem assina é o cliente oficial. Duas coisas emitindo concessões contra o mesmo OAuth client é como se perde a que já existia.
+> 2. **Não repete uma recusa.** Um 429 respondido com retry é um cliente discutindo com um rate limiter, e a discussão é o que transforma um limite em suspensão. `guard.go` recusa, fecha a porta por uma janela que cresce a cada recusa consecutiva, e uma resposta limpa perdoa o histórico. Também há um piso de espaçamento entre chamadas, porque um loop de tools dispara em rajada e uma rajada é a forma que chama atenção.
+> 3. **Recusa antes de gastar.** `fetchAvailableModels` devolve `quotaInfo.remainingFraction` por modelo. Um turno cuja cota já acabou é recusado com o horário do reset, em vez de descoberto por um 429 — e só depois de reler o número, porque recusar em cima de um zero de cinco minutos atrás seria outro tipo de erro.
+>
+> O `onboardUser` do endpoint **não** é chamado: provisionar projeto na conta de alguém é decisão do cliente oficial, e é difícil de desfazer. O campo `project` é opcional (verificado contra a API) — mandamos o que `loadCodeAssist` nomeou, e nada quando não nomeou.
+>
+> 4. **O client OAuth não mora aqui.** O par `client_id`/`client_secret` é do Google, distribuído dentro do CLI oficial. Commitar aqui seria republicar credencial de terceiro a partir de um repositório que não é dele, e o raio de alcance de uma revogação é todo mundo que usa o CLI de verdade — o push protection do GitHub recusa, e está certo. O par vem de `AOS_ANTIGRAVITY_CLIENT_ID` e `AOS_ANTIGRAVITY_CLIENT_SECRET`, sem default. Só a **renovação** precisa dele: uma instalação cujo token ainda não expirou nunca percebe a ausência, e uma que expirou recebe um erro que nomeia as duas variáveis e onde achar os valores (`strings` no binário `agy` instalado).
+
 ## Estado atual
 
 A tabela de preços que a seção "Pendente" mais abaixo chamava de inexistente
@@ -155,7 +168,23 @@ já existe e está wireada — essa nota ficou desatualizada nesse ponto
 específico; o resto dela continua verdadeiro. Dois itens seguem
 genuinamente em aberto:
 
-- **`RefreshFunc` dos adaptadores OAuth não está implementado.**
+- **`RefreshFunc` está implementado para `antigravity`, e segue vazio para `codex` e `gemini-cli`.**
+  O que faltava era exatamente o que a nota abaixo dizia faltar: o endpoint
+  real de token e os parâmetros do cliente. Para Antigravity isso foi obtido
+  do binário `agy` distribuído e confirmado contra
+  `https://oauth2.googleapis.com/token` (o binário carrega dois `client_id`;
+  só um dos quatro pares aceita esses refresh tokens). `oauthfile.applyTokens`
+  ganhou o formato que esse arquivo usa — um `oauth2.Token` sob a chave
+  singular `token` — porque gravar as chaves no nível de cima teria sido pior
+  do que não gravar: o dono do arquivo lê `token.access_token` e continuaria
+  apresentando o credencial velho. Há teste para isso
+  (`TestARenewalWritesBackUnderTheKeyTheFileAlreadyUses`), e a renovação real
+  foi verificada contra o arquivo de verdade, com o CLI oficial voltando a
+  ler o arquivo depois. `codex` e `gemini-cli` continuam sem renovar pela
+  razão original, agora com um precedente de como fechar isso quando houver
+  a especificação de cada um.
+
+- **(histórico) `RefreshFunc` dos adaptadores OAuth não está implementado.**
   `oauthfile.Store.Refresh` é o campo certo — o resto do `Store` (leitura,
   expiração, lock entre processos, regravação preservando chaves
   desconhecidas) tem suíte própria agora (`oauthfile_test.go`, contra um
@@ -211,10 +240,10 @@ ok  	github.com/OWNER/aos/internal/runtime/providers
 | `opencode` roteia `-free` para o endpoint alternativo | `TestOpenCodeRoutesTheFreeModelsElsewhere` |
 | `store: false` presente nas requisições OpenAI | Parte do corpo verificado em `TestEveryProviderObeysTheContract` |
 
-Oito ids sobre quatro formatos de fio: `openai` e `codex` na Responses API; `anthropic` na Messages API; `google` e `gemini-cli` em `generateContent`; `openrouter`, `crof` e `opencode` em Chat Completions.
+Nove ids sobre cinco formatos de fio: `openai` e `codex` na Responses API; `anthropic` na Messages API; `google` e `gemini-cli` em `generateContent`; `openrouter`, `crof` e `opencode` em Chat Completions; e `antigravity` no envelope Cloud Code `v1internal`, que é um `generateContent` aninhado sob `request` e devolvido aninhado sob `response`.
 
 **Divergência: SDKs.** A nota nomeia `openai-go`, `anthropic-sdk-go` e `google.golang.org/genai`. Os adaptadores falam HTTP direto. O contrato de que precisamos — mensagens, tools, reasoning, uso — é um subconjunto pequeno e estável de cada API; os SDKs trazem árvores de dependência grandes para cobrir o resto, e testar contra `httptest` dá suíte verde sem chave. O custo dessa escolha está no limite abaixo.
 
-**Limite honesto da suíte de contrato.** Ela roda contra troca gravada. Prova que o adaptador lê o que o provider documenta — não que o provider ainda mande aquilo. Nenhum adaptador foi exercido contra a API real: não há chave nesta máquina. É a lacuna mais importante desta nota.
+**Limite honesto da suíte de contrato.** Ela roda contra troca gravada. Prova que o adaptador lê o que o provider documenta — não que o provider ainda mande aquilo. Oito dos nove adaptadores seguem sem nunca ter falado com a API real: não há chave nesta máquina para nenhum deles. A exceção é `antigravity`, cuja credencial *é* um arquivo local, e que por isso tem um segundo teste — `live_test.go`, atrás de `AOS_ANTIGRAVITY_LIVE=1` — exercendo catálogo, tool call com `thoughtSignature` de volta e streaming contra o endpoint de verdade. Esse par (gravado + ao vivo) é o formato que os outros adaptadores deveriam ter quando houver credencial para eles: quando o ao vivo falha e o gravado passa, o formato de fio mudou.
 
-**Pendente.** A tabela de preços (`pricing.json`) não existe, então `CostUSD` é sempre zero — os tokens são contados e o dinheiro não. As capabilities opcionais (`Speech`, `Image`, `RealtimeToken`) têm interface e verificação em duas etapas, e nenhum adaptador as implementa; a verificação responde `_NOT_SUPPORTED` corretamente para todos. O `RefreshFunc` dos adaptadores OAuth é um campo que ninguém preenche: o arquivo é lido e o lock entre processos funciona, mas um token expirado vira erro pedindo login em vez de renovar.
+**Pendente.** A tabela de preços (`pricing.json`) não existe, então `CostUSD` é sempre zero — os tokens são contados e o dinheiro não. As capabilities opcionais (`Speech`, `Image`, `RealtimeToken`) têm interface e verificação em duas etapas, e nenhum adaptador as implementa; a verificação responde `_NOT_SUPPORTED` corretamente para todos. O `RefreshFunc` dos adaptadores OAuth deixou de ser um campo que ninguém preenche: `antigravity` renova de verdade (veja "Estado atual"); `codex` e `gemini-cli` ainda não.
