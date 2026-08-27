@@ -158,28 +158,58 @@ aos gateway stop
 aos gateway restart
 ```
 
-## No navegador, e em um servidor
+## Em uma VPS
 
-O mesmo aplicativo compila em **modo servidor**, que troca a janela nativa por
-um servidor HTTP servindo a mesma interface ao navegador:
+Numa VPS o `aosd` carrega a interface dentro dele: você acessa pelo navegador,
+sem instalar nada gráfico no servidor. É Go puro — sem GTK, sem WebKit.
 
 ```sh
-go build -tags server -o aos-web ./cmd/aos-desktop
-WAILS_SERVER_HOST=127.0.0.1 WAILS_SERVER_PORT=8080 ./aos-web
+curl -fsSL https://raw.githubusercontent.com/VS-7/AOS/main/install.sh | AOS_SERVER=1 sh
 ```
 
-Nesse modo o binário é Go puro — não precisa de GTK, WebKit nem de nada
-gráfico — o que o torna adequado a um contêiner ou a uma VPS. Há um
-`build/docker/Dockerfile.server` pronto para isso.
+Isso instala `aosd` e `aos` em `~/.local/bin`, cria o workspace em `~/aos` e
+escreve uma unit de usuário do systemd. Nada disso precisa de root — para
+outro diretório, `AOS_WORKSPACE=/srv/aos`. Depois:
 
-**Antes de expor na internet**, saiba que o daemon escuta em `127.0.0.1` por
-padrão, de propósito. Expor exige `--host 0.0.0.0` **junto com**
-`--require-auth`; sem os dois, ele aborta no boot em vez de servir um workspace
-aberto para a rede. Há também o grupo `aos tunnel`, que publica o daemon local
-via Cloudflare Tunnel sem abrir porta nenhuma.
+```sh
+systemctl --user enable --now aos
+loginctl enable-linger "$USER"     # continua rodando depois que você sair
+```
 
-Não há build pronto do modo servidor nos Releases ainda; hoje ele se compila
-a partir do código.
+O `enable-linger` é o que impede o serviço de morrer quando sua sessão SSH
+fecha.
+
+### Colocando na internet
+
+O daemon escuta em `127.0.0.1:5326` e **fica lá**. Isso é de propósito: expor
+direto exige ligar a segurança antes, e sem isso ele aborta no boot em vez de
+servir um workspace aberto para a rede. O caminho recomendado é um proxy
+reverso terminando TLS na frente. Com Caddy é um arquivo inteiro:
+
+```caddyfile
+aos.example.com {
+    reverse_proxy 127.0.0.1:5326
+}
+```
+
+O Caddy resolve o certificado sozinho. A primeira página pede para criar a
+conta, e enquanto ela não existir nada mais responde.
+
+Se preferir não abrir porta nenhuma nem apontar DNS, o grupo `aos tunnel`
+publica o daemon por Cloudflare Tunnel.
+
+### O que é diferente do desktop
+
+O binário de servidor é o mesmo `aosd`, com a interface compilada dentro — por
+isso ele vem num arquivo separado nos Releases (`AOS-server-…`). O `aosd` que
+acompanha o desktop **não** tem a interface: a janela já carrega a sua própria
+cópia, e uma segunda no mesmo pacote seriam 14 MB repetidos.
+
+O bundle vai comprimido: 53 MB de interface viram 14 MB dentro do binário, e é
+assim que ele chega ao navegador — o pedaço principal são 2 MB na rede em vez
+de 7,6 MB. Numa VPS isso é a diferença que se sente.
+
+Servidor existe para `amd64` e `arm64`.
 
 ## Verificando o que você baixou
 
@@ -208,7 +238,8 @@ consequência a registrar: instalações feitas neste beta carregam essa chave, 
 quando ela for rotacionada elas não conseguirão verificar releases assinados —
 vai ser preciso reinstalar uma vez.
 
-**Plataformas.** macOS só em Apple Silicon. Windows e Linux só em x86-64.
+**Plataformas.** A janela: macOS só em Apple Silicon, Windows e Linux só em
+x86-64. O servidor e os comandos de terminal também em `arm64` no Linux.
 
 ## Licença
 

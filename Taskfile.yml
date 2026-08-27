@@ -226,6 +226,23 @@ tasks:
   # `go build -o <name>` writes exactly <name> and appends nothing, so the
   # extension has to be asked for — build:all already does this, and packaging
   # on Windows needs the two tasks below to agree with it.
+  build:server:
+    desc: Build the daemon with the web interface compiled in, for a server
+    deps: [frontend]
+    cmds:
+      # The bundle is gzipped on the way in: 53 MB of frontend for 14 MB of
+      # binary, and a page fetched over a network rather than off the local
+      # disk wants its assets pre-compressed anyway. The source maps are
+      # dropped — 133 MB of them, exactly as useful where they already are.
+      - go run ./tools/genwebui
+      # `-tags webui` is what turns the embed on. Without it this same command
+      # produces the daemon aos-desktop supervises, which carries no bundle
+      # because that window already has one — see cmd/aosd/webui_embed.go.
+      - CGO_ENABLED=0 go build -tags webui -trimpath -ldflags="{{.LDFLAGS}}" -o dist/aosd{{.EXT}} ./cmd/aosd
+      - CGO_ENABLED=0 go build -trimpath -ldflags="{{.LDFLAGS}}" -o dist/aos{{.EXT}} ./cmd/aos
+    vars:
+      EXT: '{{if eq OS "windows"}}.exe{{end}}'
+
   build:cli:
     desc: Build aos and aosd for this platform
     vars:

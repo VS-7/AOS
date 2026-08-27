@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -34,6 +35,12 @@ type ServeOptions struct {
 	ShutdownTimeout time.Duration
 
 	Log *slog.Logger
+
+	// Interface is the built web interface, served at every path no other
+	// route claims. Nil is a daemon that answers the API and nothing else,
+	// which is what the one aos-desktop supervises does: that window carries
+	// its own copy. See cmd/aosd's webui_embed.go for which build has it.
+	Interface fs.FS
 
 	// Ready is closed once the listener is open. It exists for the test that
 	// starts a daemon and needs to know when to talk to it, rather than
@@ -88,6 +95,7 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 
 	origins := allowedOrigins(resolver)
 	server := httpapi.New(httpapi.Config{
+		Interface:  opts.Interface,
 		Registry:   a.Registry,
 		Auth:       a.Auth,
 		Files:      fileapi.New(fileapi.Config{Service: a.Files, Log: log}),

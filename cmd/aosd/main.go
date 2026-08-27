@@ -83,9 +83,18 @@ func run(ctx context.Context, args []string) error {
 	}
 
 	if isServeMode(args) {
+		// Said once, at startup, because it is the difference between a
+		// daemon somebody can open in a browser and one that only answers an
+		// API — and finding that out from a blank page is worse than reading
+		// it here. See webui_embed.go for which build carries the bundle.
+		ui := webInterface()
+		if ui == nil {
+			logger.Info("serving the API only; this build carries no web interface")
+		}
+
 		// The daemon runs until the context ends, which happens on SIGTERM —
 		// the signal the gateway sends before it resorts to killing.
-		return application.Serve(ctx, app.ServeOptions{Log: logger})
+		return application.Serve(ctx, app.ServeOptions{Log: logger, Interface: ui})
 	}
 
 	root := clix.NewRoot(clix.Config{Registry: application.Registry, IsTTY: isTTY})

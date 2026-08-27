@@ -1,0 +1,14 @@
+Este diretório é o bundle da interface, comprimido e copiado de frontend/dist
+por `task build:server`. O conteúdo é gerado e não entra no histórico — um
+build commitado poria uma interface velha no repositório.
+
+Só este arquivo é versionado, e a razão é o `//go:embed all:dist` em
+webui_embed.go: um padrão de embed que não casa com nada é erro de compilação,
+não aviso. Sem um arquivo aqui, `go build -tags webui ./cmd/aosd` falha num
+clone limpo. O prefixo `all:` é o que faz o embed enxergar um nome começado em
+ponto.
+
+O embed fica atrás da tag `webui` porque o bundle só faz sentido em um dos dois
+lugares onde este daemon roda. Numa VPS ele é a interface inteira; ao lado do
+aos-desktop ele seria uma segunda cópia dos mesmos 14 MB, num tarball que já
+carrega a primeira dentro da janela.

@@ -91,6 +91,73 @@ jobs:
           path: release/
           retention-days: 1
 
+  # The server flavour of the daemon: the same binary with the interface
+  # compiled in, which is what makes a VPS install one file and a browser.
+  #
+  # Cross-compiled from one runner because it is pure Go — the desktop is the
+  # binary that cannot be, and for the opposite reason: Wails links a platform
+  # GUI toolkit, while this only serves the bundle over HTTP.
+  server:
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: the build stamp
+        run: |
+          {
+            echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)"
+            echo "VERSION=$(git describe --tags --always)"
+            echo "COMMIT=$(git rev-parse --short HEAD)"
+          } >> "$GITHUB_ENV"
+
+      - name: the interface
+        # Built once and compressed once, then compiled into both targets.
+        # 53 MB of bundle becomes 14 MB of embedded assets; the source maps
+        # are dropped, which is where the other 133 MB went.
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: |
+          set -euo pipefail
+          cd frontend
+          npm ci --legacy-peer-deps --silent || npm install --legacy-peer-deps --silent
+          npx vite build
+          cd ..
+          go run ./tools/genwebui
+
+      - name: build
+        run: |
+          set -euo pipefail
+          DATE_ISO=$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)
+          LDFLAGS="-s -w -X github.com/OWNER/aos/internal/core/build.Version=${VERSION} -X github.com/OWNER/aos/internal/core/build.Commit=${COMMIT} -X github.com/OWNER/aos/internal/core/build.Date=${DATE_ISO}"
+          mkdir -p release
+          for goarch in amd64 arm64; do
+            stage="stage/${goarch}/AOS"
+            mkdir -p "$stage"
+            # -tags webui is the whole difference from the `cli` job's aosd:
+            # same source, same flags, one embed. See cmd/aosd/webui_embed.go.
+            GOOS=linux GOARCH=$goarch go build -tags webui -trimpath -ldflags="$LDFLAGS" \
+              -o "$stage/aosd" ./cmd/aosd
+            GOOS=linux GOARCH=$goarch go build -trimpath -ldflags="$LDFLAGS" \
+              -o "$stage/aos" ./cmd/aos
+            tar -C "stage/${goarch}" -czf "release/AOS-server-${VERSION}-linux-${goarch}.tar.gz" AOS
+          done
+          ls -la release/
+
+      - uses: actions/upload-artifact@v4
+        with: { name: server, path: release/, retention-days: 1 }
+
   # The desktop cannot be cross-compiled and cannot be built without the
   # frontend bundle, so it gets its own runner and its own npm install. This
   # is also the only job in the repository that builds the real interface —
@@ -277,7 +344,7 @@ jobs:
   # downloaded against this single file, so it has to cover every asset —
   # which means it can only be written once both builds are in.
   publish:
-    needs: [cli, desktop-macos, desktop-windows, desktop-linux]
+    needs: [cli, server, desktop-macos, desktop-windows, desktop-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

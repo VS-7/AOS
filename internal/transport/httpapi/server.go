@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -97,6 +98,17 @@ type Config struct {
 	// own session-cookie-accepting credential check. See artifactapi's
 	// package doc. Nil leaves it unmounted.
 	Artifacts http.Handler
+
+	// Interface is the built web interface — the frontend bundle, served at
+	// every path no other route claims. Nil leaves the daemon answering the
+	// API and nothing else, which is what it did before this existed and what
+	// the daemon the desktop supervises still does: that window carries its
+	// own copy and loads it off its own scheme.
+	//
+	// It is an fs.FS rather than a directory so the server binary can be one
+	// file, which is most of what makes it deployable to a machine nobody
+	// wants to keep a bundle in sync on. See webui.go.
+	Interface fs.FS
 
 	Log   *slog.Logger
 	Now   func() time.Time
@@ -188,7 +200,17 @@ func New(cfg Config) *Server {
 		r.With(authenticate(cfg.Auth, cfg.SecurityEnabled)).Mount("/mcp", cfg.MCP)
 	}
 
-	r.NotFound(s.notFound)
+	// The interface is the fallback, not a route: every API path, the event
+	// channel, the artifacts and the tool surface are matched first and keep
+	// their own answers. Only what nothing claimed reaches the bundle — which
+	// is how a client-side route like /tasks/42 gets the document that knows
+	// how to render it, while /api/nope still gets a refusal in JSON.
+	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
+		if s.serveInterface(w, req) {
+			return
+		}
+		s.notFound(w, req)
+	})
 	r.MethodNotAllowed(s.methodNotAllowed)
 	return s
 }

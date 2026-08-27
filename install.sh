@@ -18,10 +18,21 @@
 # says which packages are missing when GTK4 and WebKitGTK are not installed,
 # rather than leaving a window that never appears.
 #
+# On a server it installs a third thing: the daemon with the interface
+# compiled in, so a VPS is one file and a browser rather than an API you have
+# to write a client for:
+#
+#   curl -fsSL .../install.sh | AOS_SERVER=1 sh
+#
+# The variable goes on `sh`, not on `curl` — prefixing the fetch sets it for
+# the download and not for the script the download produces.
+#
 # Environment:
-#   AOS_VERSION   a tag to install instead of the latest release
-#   AOS_PREFIX    where the binaries go (default ~/.local/bin)
-#   AOS_NO_CLI=1  install only the application, no terminal commands
+#   AOS_VERSION    a tag to install instead of the latest release
+#   AOS_PREFIX     where the binaries go (default ~/.local/bin)
+#   AOS_NO_CLI=1   install only the application, no terminal commands
+#   AOS_SERVER=1   install the headless daemon and a systemd unit (Linux)
+#   AOS_WORKSPACE  the directory the server daemon serves (default ~/aos)
 set -eu
 
 REPO="VS-7/AOS"
@@ -54,14 +65,24 @@ case "$os" in
   *) die "no build for $os; macOS and Linux are what this installs" ;;
 esac
 
-# Whether there is a window to install, as opposed to only the commands.
+# What this run installs. Three shapes, because there are three ways to use
+# the system and they do not want the same files:
 #
-# The desktop is built on one Linux runner and that runner is amd64, so a
-# Linux arm64 machine gets the CLI and nothing else. Saying so here is better
-# than a download that 404s halfway through.
-desktop=1
-if [ "$os" = linux ] && [ "$arch" != amd64 ]; then
-  desktop=0
+#   desktop  the window, plus the daemon it supervises and the commands
+#   server   the daemon with the interface compiled in, headless, plus a
+#            systemd unit — a VPS you reach with a browser
+#   cli      the commands alone, which is all that exists for a platform with
+#            no desktop build
+#
+# The desktop is built on one Linux runner and that runner is amd64, so a Linux
+# arm64 machine has no window to install. The server is pure Go and
+# cross-compiled, so it exists for both.
+mode=desktop
+if [ -n "${AOS_SERVER:-}" ]; then
+  [ "$os" = linux ] || die "AOS_SERVER is a Linux install; this is $os"
+  mode=server
+elif [ "$os" = linux ] && [ "$arch" != amd64 ]; then
+  mode=cli
   # Checked here rather than at the install step: there is nothing to do, and
   # finding that out after downloading is a worse way to be told.
   [ -z "${AOS_NO_CLI:-}" ] || die "AOS_NO_CLI leaves nothing to install on $os/$arch"
@@ -77,11 +98,11 @@ if [ -z "$version" ]; then
   [ -n "$version" ] || die "could not resolve the latest release — the repository may be private, or have no release yet. Set AOS_VERSION to install a known tag."
 fi
 
-if [ "$desktop" = 0 ]; then
-  say "AOS $version — $os/$arch (commands only; the desktop is built for amd64)"
-else
-  say "AOS $version — $os/$arch"
-fi
+case "$mode" in
+  server) say "AOS $version — $os/$arch (server: the daemon and its interface)" ;;
+  cli)    say "AOS $version — $os/$arch (commands only; the desktop is built for amd64)" ;;
+  *)      say "AOS $version — $os/$arch" ;;
+esac
 
 base="https://github.com/$REPO/releases/download/$version"
 
@@ -109,19 +130,26 @@ fetch checksums.txt
 cli=""
 app_zip=""
 tarball=""
-case "$os" in
-  darwin)
-    app_zip="AOS-${version}-${os}-${arch}.zip"
-    fetch "$app_zip"
-    cli="aos_${version}_${os}_${arch} aosd_${version}_${os}_${arch}"
-    ;;
-  linux)
-    if [ "$desktop" = 1 ]; then
+case "$mode" in
+  desktop)
+    if [ "$os" = darwin ]; then
+      app_zip="AOS-${version}-${os}-${arch}.zip"
+      fetch "$app_zip"
+      cli="aos_${version}_${os}_${arch} aosd_${version}_${os}_${arch}"
+    else
       tarball="AOS-${version}-${os}-${arch}.tar.gz"
       fetch "$tarball"
-    else
-      cli="aos_${version}_${os}_${arch} aosd_${version}_${os}_${arch}"
     fi
+    ;;
+  server)
+    # A separate artifact from the desktop tarball above, and not a bigger
+    # one: the daemon in there carries no interface, because the window it is
+    # supervised by already has a copy. This one is the interface.
+    tarball="AOS-server-${version}-${os}-${arch}.tar.gz"
+    fetch "$tarball"
+    ;;
+  cli)
+    cli="aos_${version}_${os}_${arch} aosd_${version}_${os}_${arch}"
     ;;
 esac
 if [ -n "$cli" ] && [ -z "${AOS_NO_CLI:-}" ]; then
@@ -170,7 +198,58 @@ if [ "$os" = darwin ]; then
   cp -R "AOS.app" "$apps/AOS.app"
   say "installed $apps/AOS.app"
 
-elif [ "$desktop" = 1 ]; then
+elif [ "$mode" = server ]; then
+  tar -xzf "$tarball"
+  [ -d "AOS" ] || die "$tarball did not contain AOS/"
+
+  mkdir -p "$PREFIX"
+  for f in aosd aos; do
+    [ -f "AOS/$f" ] || die "$tarball did not contain $f"
+    chmod +x "AOS/$f"
+    mv -f "AOS/$f" "$PREFIX/$f"
+  done
+  say "installed $PREFIX/aosd and $PREFIX/aos"
+
+  workspace="${AOS_WORKSPACE:-$HOME/aos}"
+  mkdir -p "$workspace"
+
+  # A user unit, not a system one. It needs no root, which is what lets this
+  # whole script stay a `curl | sh` on a fresh VPS; `loginctl enable-linger`
+  # is what keeps it running when nobody is logged in, and is printed below
+  # rather than done here — enabling a service that survives logout is a
+  # change to the machine, not a detail of unpacking an archive.
+  units="$HOME/.config/systemd/user"
+  mkdir -p "$units"
+  cat > "$units/aos.service" <<UNIT
+[Unit]
+Description=AOS daemon
+Documentation=https://github.com/$REPO
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=$PREFIX/aosd serve
+WorkingDirectory=$workspace
+Environment=AOS_WORKSPACE_PATH=$workspace
+# Loopback, and left that way: ADR-0009 refuses a wider bind while security is
+# off, and the documented way to reach this from outside is a reverse proxy
+# terminating TLS in front of it. Nothing here should be on a public port.
+Environment=AOS_SERVER_HOSTNAME=127.0.0.1
+Environment=AOS_SERVER_PORT=5326
+Restart=on-failure
+RestartSec=3
+# The daemon owns the workspace and writes to it; everything else on the
+# machine is none of its business.
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
+UNIT
+  say "installed $units/aos.service"
+
+elif [ "$mode" = desktop ]; then
   tar -xzf "$tarball"
   [ -d "AOS" ] || die "$tarball did not contain AOS/"
 
@@ -253,7 +332,7 @@ fi
 # A warning rather than a failure: everything downloaded is installed and
 # correct, and the person is one package manager command from a working
 # application.
-if [ "$os" = linux ] && [ "$desktop" = 1 ] && command -v ldd >/dev/null 2>&1; then
+if [ "$os" = linux ] && [ "$mode" = desktop ] && command -v ldd >/dev/null 2>&1; then
   missing=$(ldd "$PREFIX/aos-desktop" 2>/dev/null | sed -n 's/^[[:space:]]*\(.*\) => not found$/  \1/p' || true)
   if [ -n "$missing" ]; then
     say ""
@@ -270,9 +349,24 @@ fi
 # --- what now --------------------------------------------------------------
 
 say ""
-if [ "$os" = darwin ]; then
+if [ "$mode" = server ]; then
+  say "Start it, and keep it running after you log out:"
+  say ""
+  say "  systemctl --user enable --now aos"
+  say "  loginctl enable-linger \"$USER\""
+  say ""
+  say "It listens on 127.0.0.1:5326 and stays there. To reach it from a"
+  say "browser, put a reverse proxy in front — with Caddy that is one line:"
+  say ""
+  say "  aos.example.com {"
+  say "      reverse_proxy 127.0.0.1:5326"
+  say "  }"
+  say ""
+  say "Caddy gets the certificate itself. The first page asks you to create"
+  say "the account, and until you have, nothing else answers."
+elif [ "$os" = darwin ]; then
   say "Open it:  open -a AOS"
-elif [ "$desktop" = 1 ]; then
+elif [ "$mode" = desktop ]; then
   say "Open it:  aos-desktop        (or find AOS in your applications menu)"
 fi
 if [ -z "${AOS_NO_CLI:-}" ]; then

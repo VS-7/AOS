@@ -12,6 +12,11 @@
 # /dist/ (ignored above); an 18 MB build output was once committed here by
 # hand, and this is what keeps it from happening again.
 /aos-desktop
+# The same mistake with the other two commands: `go build ./cmd/aosd` or
+# `go build ./tools/genwebui` with no -o writes the binary here.
+/aosd
+/aos
+/genwebui
 
 # `go build ./tools/<name>/...` with no -o writes a binary named after the
 # tool's own directory into the repo root — the same mistake /aos-desktop
@@ -33,6 +38,13 @@
 # `dist/`, because Git never looks inside a directory it has already excluded.
 /cmd/aos-desktop/dist/*
 !/cmd/aos-desktop/dist/.gitkeep
+
+# The daemon's copy of the frontend bundle, gzipped by tools/genwebui and
+# embedded only by `-tags webui` (see cmd/aosd/webui_embed.go). Same shape and
+# same reason as the desktop's above: generated, and .gitkeep is the one
+# versioned file because an embed pattern matching nothing is a compile error.
+/cmd/aosd/dist/*
+!/cmd/aosd/dist/.gitkeep
 
 # go-task's local up-to-date cache (source hashes for `sources:`/`generates:`
 # checks) — machine-local, rebuilds itself, nothing to diff.
