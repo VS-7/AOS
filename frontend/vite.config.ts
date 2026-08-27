@@ -54,6 +54,13 @@ export default defineConfig({
   // this project has exactly one test file that needs it.
   test: {
     environment: "jsdom",
+    // The Wails runtime is replaced wholesale in the suite — see
+    // src/test/wails-runtime-stub.ts for the import side effect that makes
+    // the real module unusable in a test process, and how a test that needs
+    // it to behave a particular way still says so for itself.
+    alias: {
+      "@wailsio/runtime": fileURLToPath(new URL("./src/test/wails-runtime-stub.ts", import.meta.url)),
+    },
     // `.tsx`, not just `.ts`: `lib/aos-facade.test.tsx` renders real hooks
     // through a `QueryClientProvider`, which needs JSX — see that file's
     // own comment and `vite.config.ts`'s `test.environment` comment above.
