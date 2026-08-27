@@ -16,6 +16,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { useInstructions } from "../../contexts/instructions.context";
+import { t } from "@/lib/i18n";
 
 const INSTRUCTION_TYPES = ["standards", "patterns", "workflows"] as const;
 
@@ -42,11 +43,11 @@ export function SelectedInstructionDetail() {
 
   return (
     <SplitPageLayout.DetailTabs defaultValue="overview">
-      <SplitPageLayout.DetailTab value="overview" label="Overview">
+      <SplitPageLayout.DetailTab value="overview" label={t("Overview")}>
         <SplitPageLayout.Widget>
           <SplitPageLayout.WidgetHeader>
             <SplitPageLayout.WidgetTitle>
-              Properties
+              {t("Properties")}
             </SplitPageLayout.WidgetTitle>
           </SplitPageLayout.WidgetHeader>
           <SplitPageLayout.WidgetContent>
@@ -58,7 +59,7 @@ export function SelectedInstructionDetail() {
                   <SplitPageLayout.WidgetItem>
                     <Tag className="size-3.5 shrink-0 text-muted-foreground" />
                     <span className="w-14 shrink-0 text-xs text-muted-foreground">
-                      Type
+                      {t("Type")}
                     </span>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -89,7 +90,7 @@ export function SelectedInstructionDetail() {
             <SplitPageLayout.WidgetItem>
               <MapPin className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="w-14 shrink-0 text-xs text-muted-foreground">
-                Scope
+                {t("Scope")}
               </span>
               <span className="text-xs text-foreground">
                 {pathCount
@@ -114,7 +115,7 @@ export function SelectedInstructionDetail() {
 
         <SplitPageLayout.Widget>
           <SplitPageLayout.WidgetHeader>
-            <SplitPageLayout.WidgetTitle>Paths</SplitPageLayout.WidgetTitle>
+            <SplitPageLayout.WidgetTitle>{t("Paths")}</SplitPageLayout.WidgetTitle>
           </SplitPageLayout.WidgetHeader>
           <SplitPageLayout.WidgetContent>
             <FormField
@@ -123,7 +124,7 @@ export function SelectedInstructionDetail() {
               render={({ field }) => (
                 <FormItem className="w-full space-y-2">
                   <FormLabel className="text-xs text-muted-foreground">
-                    One glob per line
+                    {t("One glob per line")}
                   </FormLabel>
                   <FormControl>
                     <Textarea

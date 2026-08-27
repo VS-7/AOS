@@ -15,6 +15,7 @@ import { PlateElement, useEditorMounted, withHOC } from 'platejs/react';
 import { cn } from '@/lib/utils';
 
 import { Caption, CaptionTextarea } from './caption';
+import { t } from "@/lib/i18n";
 import {
   mediaResizeHandleVariants,
   Resizable,
@@ -125,7 +126,7 @@ export const VideoElement = withHOC(
           <Caption style={{ width }} align={align}>
             <CaptionTextarea
               readOnly={readOnly}
-              placeholder="Write a caption..."
+              placeholder={t("Write a caption...")}
             />
           </Caption>
         </figure>

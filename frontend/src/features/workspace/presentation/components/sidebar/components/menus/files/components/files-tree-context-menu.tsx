@@ -32,6 +32,7 @@ import {
 } from "@/features/file/presentation/helpers/files-explorer.helper";
 import type { FilesClipboardState } from "@/features/file/presentation/stores/files.store";
 import { pasteFilesClipboard } from "./files-tree-clipboard.helper";
+import { t } from "@/lib/i18n";
 
 export interface FilesCreateNodeRequest {
   parentPath: string;
@@ -82,8 +83,8 @@ function MenuButton({
 
 function writeClipboard(text: string) {
   void navigator.clipboard.writeText(text).then(
-    () => toast.success("Copied to clipboard."),
-    () => toast.error("Unable to copy to clipboard."),
+    () => toast.success(t("Copied to clipboard.")),
+    () => toast.error(t("Unable to copy to clipboard.")),
   );
 }
 
@@ -185,7 +186,7 @@ export function FilesTreeContextMenu({
       return;
     }
 
-    toast.success("Deleted.");
+    toast.success(t("Deleted."));
     onFilesChanged();
   }
 
@@ -231,7 +232,7 @@ export function FilesTreeContextMenu({
             }}
           >
             <FilePlus className="size-4" />
-            New File
+            {t("New File")}
           </MenuButton>
           <MenuButton
             disabled={readOnly}
@@ -241,12 +242,12 @@ export function FilesTreeContextMenu({
             }}
           >
             <FolderPlus className="size-4" />
-            New Folder
+            {t("New Folder")}
           </MenuButton>
           <DropdownMenuSeparator />
           <MenuButton disabled={!canPaste} onClick={() => void handlePaste()}>
             <ClipboardPaste className="size-4" />
-            Paste
+            {t("Paste")}
           </MenuButton>
         </>
       ) : (
@@ -259,7 +260,7 @@ export function FilesTreeContextMenu({
               }}
             >
               <ExternalLink className="size-4" />
-              Reveal in Finder
+              {t("Reveal in Finder")}
             </MenuButton>
           ) : null}
 
@@ -272,7 +273,7 @@ export function FilesTreeContextMenu({
             }}
           >
             <Copy className="size-4" />
-            Copy Path
+            {t("Copy Path")}
           </MenuButton>
           <MenuButton
             onClick={() => {
@@ -281,7 +282,7 @@ export function FilesTreeContextMenu({
             }}
           >
             <ClipboardCopy className="size-4" />
-            Copy Relative Path
+            {t("Copy Relative Path")}
           </MenuButton>
 
           <DropdownMenuSeparator />
@@ -295,11 +296,11 @@ export function FilesTreeContextMenu({
                 paths: [item.path],
                 context: explorerContext,
               });
-              toast.success("Cut to clipboard.");
+              toast.success(t("Cut to clipboard."));
             }}
           >
             <Scissors className="size-4" />
-            Cut
+            {t("Cut")}
           </MenuButton>
           <MenuButton
             disabled={readOnly}
@@ -310,15 +311,15 @@ export function FilesTreeContextMenu({
                 paths: [item.path],
                 context: explorerContext,
               });
-              toast.success("Copied to clipboard.");
+              toast.success(t("Copied to clipboard."));
             }}
           >
             <ClipboardCopy className="size-4" />
-            Copy
+            {t("Copy")}
           </MenuButton>
           <MenuButton disabled={!canPaste} onClick={() => void handlePaste()}>
             <ClipboardPaste className="size-4" />
-            Paste
+            {t("Paste")}
           </MenuButton>
 
           <DropdownMenuSeparator />
@@ -331,7 +332,7 @@ export function FilesTreeContextMenu({
             }}
           >
             <Pencil className="size-4" />
-            Rename
+            {t("Rename")}
           </MenuButton>
           <MenuButton
             destructive
@@ -339,7 +340,7 @@ export function FilesTreeContextMenu({
             onClick={() => void handleDelete()}
           >
             <Trash2 className="size-4" />
-            Delete
+            {t("Delete")}
           </MenuButton>
         </>
       )}

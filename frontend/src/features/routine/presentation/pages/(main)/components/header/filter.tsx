@@ -14,6 +14,7 @@ import {
 import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
 import { useRoutinesContext } from "@/features/routine/presentation/pages/(main)/context";
 import { aos } from "@/app/aos";
+import { t } from "@/lib/i18n";
 
 const TRIGGER_TYPE_OPTIONS = [
   { id: "webhook", label: "Webhook" },
@@ -119,7 +120,7 @@ export function RoutinesFilter() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
           {agentOptions.length === 0 && (
-            <DropdownMenuItem disabled>No agents available</DropdownMenuItem>
+            <DropdownMenuItem disabled>{t("No agents available")}</DropdownMenuItem>
           )}
           {agentOptions.map((agentId) => (
             <DropdownMenuCheckboxItem
@@ -172,7 +173,7 @@ export function RoutinesFilter() {
           onClick={clearFilters}
           className="h-8 text-xs text-muted-foreground hover:text-foreground px-2 gap-1"
         >
-          Clear
+          {t("Clear")}
           <X className="size-3" />
         </Button>
       )}

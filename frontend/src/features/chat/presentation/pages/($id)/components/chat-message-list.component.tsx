@@ -11,6 +11,7 @@ import type {
 } from "@/features/chat/interfaces/chat.interfaces";
 import type { WorkspaceDirectoryUser } from "@/features/workspace/interfaces/directory.interfaces";
 import { ChatThreadHelper } from "@/features/chat/presentation/helpers/chat-thread.helper";
+import { t } from "@/lib/i18n";
 import {
   ChatMessageItem,
   type ChatMessageReaction,
@@ -258,8 +259,8 @@ export function ChatMessageList({
   if (messages.length === 0) {
     return (
       <ConversationEmptyState
-        description="Start the conversation below. Replies will refresh automatically."
-        title="No messages yet"
+        description={t("Start the conversation below. Replies will refresh automatically.")}
+        title={t("No messages yet")}
       />
     );
   }

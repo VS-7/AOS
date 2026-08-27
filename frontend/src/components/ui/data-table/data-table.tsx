@@ -33,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "../dropdown-menu";
 import { capitalizeLabel } from "./data-table.utils";
+import { t } from "@/lib/i18n";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface DataTableProps<_TData> {
@@ -104,18 +105,18 @@ export function DataTable<TData>({ className }: DataTableProps<TData>) {
                               <>
                                 <DropdownMenuItem onClick={() => header.column.toggleSorting(false)}>
                                   <ArrowUp className="mr-2 size-3.5 text-muted-foreground" />
-                                  Sort Asc
+                                  {t("Sort Asc")}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => header.column.toggleSorting(true)}>
                                   <ArrowDown className="mr-2 size-3.5 text-muted-foreground" />
-                                  Sort Desc
+                                  {t("Sort Desc")}
                                 </DropdownMenuItem>
                               </>
                             )}
                             {header.column.getCanHide() && (
                               <DropdownMenuItem onClick={() => header.column.toggleVisibility(false)}>
                                 <EyeOff className="mr-2 size-3.5 text-muted-foreground" />
-                                Hide Column
+                                {t("Hide Column")}
                               </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>
@@ -161,7 +162,7 @@ export function DataTable<TData>({ className }: DataTableProps<TData>) {
                 colSpan={table.getAllColumns().length}
                 className="h-24 text-center"
               >
-                Nothing Here! :-)
+                {t("Nothing Here! :-)")}
               </TableCell>
             </TableRow>
           )}

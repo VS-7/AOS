@@ -23,6 +23,7 @@ import {
 } from "./components/chat-tabs";
 import { ChatTasksList } from "./components/chat-tasks-list";
 import { ChatTeamList } from "./components/chat-team-list";
+import { t } from "@/lib/i18n";
 
 /**
  * Workspace Chat group — channels, team, tasks, and runs with a Live strip.
@@ -91,7 +92,7 @@ export function WorkspaceSidebarChatGroupMenu() {
   return (
     <SidebarGroup className="relative">
       <div className="flex h-8 items-center gap-1 px-2">
-        <SidebarGroupLabel className="flex-1 px-0">Chat</SidebarGroupLabel>
+        <SidebarGroupLabel className="flex-1 px-0">{t("Chat")}</SidebarGroupLabel>
         <ChatSearchToggle open={searchOpen} onOpenChange={setSearchOpen} />
         {tab === "channels" && !searchOpen ? <CreateChannelDialog /> : null}
       </div>

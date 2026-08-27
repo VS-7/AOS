@@ -9,6 +9,7 @@ import {
 import type { TaskAttachment } from "@/features/task/interfaces/comment.interfaces";
 import { AttachmentItem } from "./components/item.component";
 import { Badge } from "@/components/ui/badge";
+import { t } from "@/lib/i18n";
 
 interface TaskAttachmentsProps {
   attachments: TaskAttachment[];
@@ -25,7 +26,7 @@ export function TaskAttachments({ attachments }: TaskAttachmentsProps) {
             <ChevronDown
               className={`size-4 transition-transform duration-200 ${isOpen ? "rotate-0" : "rotate-180"}`}
             />
-            Attachments{" "}
+            {t("Attachments")}{" "}
             <Badge
               className="rounded-md flex items-center gap-1 px-2"
               variant="outline"
@@ -46,7 +47,7 @@ export function TaskAttachments({ attachments }: TaskAttachmentsProps) {
       <CollapsibleContent>
         {attachments.length === 0 ? (
           <div className="p-3 border rounded-md border-dotted text-sm text-muted-foreground">
-            No attachments yet.
+            {t("No attachments yet.")}
           </div>
         ) : (
           <div className="divide-y rounded-md border bg-card">

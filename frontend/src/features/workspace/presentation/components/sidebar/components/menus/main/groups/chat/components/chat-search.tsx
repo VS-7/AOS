@@ -24,6 +24,7 @@ import {
 } from "../helpers/chat-search.helper";
 import { ChatActivityStamp } from "./chat-activity-stamp";
 import { ChatRowKindIcon } from "./chat-row-kind-icon";
+import { t } from "@/lib/i18n";
 
 interface ChatSearchProps {
   open: boolean;
@@ -144,8 +145,8 @@ export function ChatSearch({
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={onKeyDown}
-                placeholder="Search…"
-                aria-label="Search chats"
+                placeholder={t("Search…")}
+                aria-label={t("Search chats")}
                 className={cn(
                   "h-8 border-0 bg-transparent pl-7 pr-8 text-xs shadow-none",
                   "focus-visible:border focus-visible:border-border/50 focus-visible:bg-sidebar-accent/40 focus-visible:ring-1 focus-visible:ring-ring/30",
@@ -157,7 +158,7 @@ export function ChatSearch({
                 variant="ghost"
                 className="absolute right-1 text-muted-foreground"
                 onClick={() => onOpenChange(false)}
-                aria-label="Close search"
+                aria-label={t("Close search")}
               >
                 <HugeiconsIcon icon={Cancel01Icon} className="size-3.5" />
               </Button>
@@ -177,7 +178,7 @@ export function ChatSearch({
           >
             {hits.length === 0 ? (
               <p className="px-2 py-4 text-center text-xs text-muted-foreground/60">
-                No chats match “{query}”
+                {t("No chats match “")}{query}”
               </p>
             ) : (
               <SidebarMenu>

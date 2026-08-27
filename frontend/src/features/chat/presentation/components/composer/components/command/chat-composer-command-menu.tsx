@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/avatar";
 import { AtIcon, Attachment01Icon, FileLinkIcon, Folder01Icon, PlusSignIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { t } from "@/lib/i18n";
 import type {
   ActiveMention,
   ComposerMentionTarget,
@@ -75,7 +76,7 @@ export function ChatComposerCommandMenu({
         />
         <PromptInputCommandList className="max-h-[360px]">
           <PromptInputCommandEmpty>
-            No matches found for this search.
+            {t("No matches found for this search.")}
           </PromptInputCommandEmpty>
 
           <PromptInputCommandItem
@@ -84,13 +85,13 @@ export function ChatComposerCommandMenu({
           >
             <HugeiconsIcon icon={Attachment01Icon} className="size-4 text-muted-foreground" />
             <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-              Upload photo or file
+              {t("Upload photo or file")}
             </span>
             <HugeiconsIcon icon={PlusSignIcon} className="size-4 text-muted-foreground" />
           </PromptInputCommandItem>
 
           {selectableFiles.length > 0 ? (
-            <PromptInputCommandGroup heading="Files & folders">
+            <PromptInputCommandGroup heading={t("Files & folders")}>
               {selectableFiles.map((reference) => {
                 const isFolder = reference.kind === "folder";
                 const Icon = isFolder ? Folder01Icon : FileLinkIcon;
@@ -116,7 +117,7 @@ export function ChatComposerCommandMenu({
           ) : null}
 
           {!isDirectMessage && agentTargets.length > 0 ? (
-            <PromptInputCommandGroup heading="Agents">
+            <PromptInputCommandGroup heading={t("Agents")}>
               {agentTargets.slice(0, mentionLimit).map((target) => (
                 <PromptInputCommandItem
                   key={target.key}
@@ -139,7 +140,7 @@ export function ChatComposerCommandMenu({
           ) : null}
 
           {!isDirectMessage && userTargets.length > 0 ? (
-            <PromptInputCommandGroup heading="People">
+            <PromptInputCommandGroup heading={t("People")}>
               {userTargets.slice(0, mentionLimit).map((target) => {
                 const initials = target.label
                   .split(/\s+/)

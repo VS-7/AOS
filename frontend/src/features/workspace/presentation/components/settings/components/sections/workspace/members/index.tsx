@@ -44,6 +44,7 @@ import {
 import { SettingsSectionShell } from "../../../section-shell";
 import type { UserPublic } from "@/features/auth/interfaces/user.interfaces";
 import type { WorkspaceMember } from "@/features/workspace/interfaces/workspace.interfaces";
+import { t } from "@/lib/i18n";
 
 export function WorkspaceMembersSection() {
   const workspaceId = aos.stores.workspace.useState((state) => state.current?.id);
@@ -81,7 +82,7 @@ export function WorkspaceMembersSection() {
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!workspaceId || !selectedUserId) {
-      toast.error("Select a user to add");
+      toast.error(t("Select a user to add"));
       return;
     }
 
@@ -99,7 +100,7 @@ export function WorkspaceMembersSection() {
         return;
       }
 
-      toast.success("Member added");
+      toast.success(t("Member added"));
       setCreateOpen(false);
       setSelectedUserId("");
       setSelectedRole("member");
@@ -127,7 +128,7 @@ export function WorkspaceMembersSection() {
         return;
       }
 
-      toast.success("Member updated");
+      toast.success(t("Member updated"));
       await refreshMembers();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to update member");
@@ -149,7 +150,7 @@ export function WorkspaceMembersSection() {
         return;
       }
 
-      toast.success("Member removed");
+      toast.success(t("Member removed"));
       await refreshMembers();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to remove member");
@@ -159,7 +160,7 @@ export function WorkspaceMembersSection() {
   if (!workspaceId) {
     return (
       <SettingsSectionShell>
-        <p className="p-4 text-sm text-muted-foreground">No workspace selected.</p>
+        <p className="p-4 text-sm text-muted-foreground">{t("No workspace selected.")}</p>
       </SettingsSectionShell>
     );
   }
@@ -168,31 +169,31 @@ export function WorkspaceMembersSection() {
     <SettingsSectionShell>
       <FormSection>
         <FormSectionHeader>
-          <FormSectionTitle>Workspace Members</FormSectionTitle>
+          <FormSectionTitle>{t("Workspace Members")}</FormSectionTitle>
           <FormSectionDescription>
-            Control which accounts can access this workspace and their membership role.
+            {t("Control which accounts can access this workspace and their membership role.")}
           </FormSectionDescription>
         </FormSectionHeader>
 
         <FormSectionContent>
           <FormSectionItem>
             <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">Members</p>
+              <p className="text-sm font-medium text-foreground">{t("Members")}</p>
               <p className="text-sm text-muted-foreground">
-                Owners can manage membership. Members can collaborate in the workspace.
+                {t("Owners can manage membership. Members can collaborate in the workspace.")}
               </p>
             </div>
             <Button type="button" size="sm" onClick={() => setCreateOpen(true)}>
               <HugeiconsIcon icon={Add01Icon} className="size-3.5" />
-              Add Member
+              {t("Add Member")}
             </Button>
           </FormSectionItem>
 
           <div className="divide-y divide-border">
             {membersQuery.isLoading ? (
-              <p className="p-4 text-sm text-muted-foreground">Loading members...</p>
+              <p className="p-4 text-sm text-muted-foreground">{t("Loading members...")}</p>
             ) : members.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground">No members yet.</p>
+              <p className="p-4 text-sm text-muted-foreground">{t("No members yet.")}</p>
             ) : (
               members.map((member) => {
                 const user = usersById.get(member.userId);
@@ -221,8 +222,8 @@ export function WorkspaceMembersSection() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="owner">Owner</SelectItem>
-                          <SelectItem value="member">Member</SelectItem>
+                          <SelectItem value="owner">{t("Owner")}</SelectItem>
+                          <SelectItem value="member">{t("Member")}</SelectItem>
                         </SelectContent>
                       </Select>
 
@@ -240,18 +241,18 @@ export function WorkspaceMembersSection() {
                         </AlertDialogTrigger>
                         <AlertDialogContent size="sm">
                           <AlertDialogHeader>
-                            <AlertDialogTitle>Remove member?</AlertDialogTitle>
+                            <AlertDialogTitle>{t("Remove member?")}</AlertDialogTitle>
                             <AlertDialogDescription>
-                              {label} will lose access to this workspace.
+                              {label} {t("will lose access to this workspace.")}
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
                             <AlertDialogAction
                               variant="destructive"
                               onClick={() => void handleRemove(member.userId)}
                             >
-                              Remove
+                              {t("Remove")}
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
@@ -268,18 +269,18 @@ export function WorkspaceMembersSection() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Member</DialogTitle>
+            <DialogTitle>{t("Add Member")}</DialogTitle>
             <DialogDescription>
-              Grant an existing instance account access to this workspace.
+              {t("Grant an existing instance account access to this workspace.")}
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={(event) => void handleCreate(event)} className="space-y-4">
             <div className="space-y-2">
-              <Label>User</Label>
+              <Label>{t("User")}</Label>
               <Select value={selectedUserId} onValueChange={setSelectedUserId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a user" />
+                  <SelectValue placeholder={t("Select a user")} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableUsers.map((user) => (
@@ -292,7 +293,7 @@ export function WorkspaceMembersSection() {
             </div>
 
             <div className="space-y-2">
-              <Label>Role</Label>
+              <Label>{t("Role")}</Label>
               <Select
                 value={selectedRole}
                 onValueChange={(value) => setSelectedRole(value as "owner" | "member")}
@@ -301,15 +302,15 @@ export function WorkspaceMembersSection() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="owner">Owner</SelectItem>
-                  <SelectItem value="member">Member</SelectItem>
+                  <SelectItem value="owner">{t("Owner")}</SelectItem>
+                  <SelectItem value="member">{t("Member")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <DialogFooter>
               <Button type="button" variant="secondary" onClick={() => setCreateOpen(false)}>
-                Cancel
+                {t("Cancel")}
               </Button>
               <Button type="submit" disabled={isCreating || !selectedUserId}>
                 {isCreating ? "Adding..." : "Add Member"}

@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import React from "react"
 import { Maximize, RotateCw, Scan, ZoomIn, ZoomOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -37,23 +38,23 @@ export function FilesImageViewer({ file }: FilesImageViewerProps) {
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <Button size="sm" variant="outline" onClick={() => setScale((value) => clampScale(value - SCALE_STEP))}>
           <ZoomOut data-icon="inline-start" className="size-4" />
-          Zoom out
+          {t("Zoom out")}
         </Button>
         <Button size="sm" variant="outline" onClick={() => setScale((value) => clampScale(value + SCALE_STEP))}>
           <ZoomIn data-icon="inline-start" className="size-4" />
-          Zoom in
+          {t("Zoom in")}
         </Button>
         <Button size="sm" variant="outline" onClick={() => setRotation((value) => (value + 90) % 360)}>
           <RotateCw data-icon="inline-start" className="size-4" />
-          Rotate
+          {t("Rotate")}
         </Button>
         <Button size="sm" variant="outline" onClick={resetView}>
           <Scan data-icon="inline-start" className="size-4" />
-          Reset
+          {t("Reset")}
         </Button>
         <Button size="sm" variant="outline" onClick={() => document.documentElement.requestFullscreen?.()}>
           <Maximize data-icon="inline-start" className="size-4" />
-          Fullscreen
+          {t("Fullscreen")}
         </Button>
         <div className="ml-auto text-xs text-muted-foreground">
           {(scale * 100).toFixed(0)}%

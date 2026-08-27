@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 import { ToolbarButton } from './toolbar';
+import { t } from "@/lib/i18n";
 
 export function MoreToolbarButton(props: DropdownMenuProps) {
   const editor = useEditorRef();
@@ -30,7 +31,7 @@ export function MoreToolbarButton(props: DropdownMenuProps) {
   return (
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false} {...props}>
       <DropdownMenuTrigger asChild>
-        <ToolbarButton pressed={open} tooltip="Insert">
+        <ToolbarButton pressed={open} tooltip={t("Insert")}>
           <MoreHorizontalIcon />
         </ToolbarButton>
       </DropdownMenuTrigger>
@@ -48,7 +49,7 @@ export function MoreToolbarButton(props: DropdownMenuProps) {
             }}
           >
             <KeyboardIcon />
-            Keyboard input
+            {t("Keyboard input")}
           </DropdownMenuItem>
 
           <DropdownMenuItem
@@ -60,7 +61,7 @@ export function MoreToolbarButton(props: DropdownMenuProps) {
             }}
           >
             <SuperscriptIcon />
-            Superscript
+            {t("Superscript")}
             {/* (⌘+,) */}
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -72,7 +73,7 @@ export function MoreToolbarButton(props: DropdownMenuProps) {
             }}
           >
             <SubscriptIcon />
-            Subscript
+            {t("Subscript")}
             {/* (⌘+.) */}
           </DropdownMenuItem>
         </DropdownMenuGroup>

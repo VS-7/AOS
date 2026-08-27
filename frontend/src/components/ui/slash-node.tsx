@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { type TComboboxInputElement, KEYS } from 'platejs';
 import { PlateElement } from 'platejs/react';
+import { t } from "@/lib/i18n";
 
 import {
   insertBlock,
@@ -242,7 +243,7 @@ export function SlashInputElement(
         <InlineComboboxInput />
 
         <InlineComboboxContent>
-          <InlineComboboxEmpty>No results</InlineComboboxEmpty>
+          <InlineComboboxEmpty>{t("No results")}</InlineComboboxEmpty>
 
           {groups.map(({ group, items }) => (
             <InlineComboboxGroup key={group}>

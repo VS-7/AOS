@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import * as React from "react"
 import { z } from "zod"
 
@@ -103,12 +104,12 @@ export function TodoDialogUpsert({ taskId, todo, onCreated, children }: TodoDial
               name="description"
               render={({ field }) => (
                 <Field>
-                  <Label htmlFor="description">Description</Label>
+                  <Label htmlFor="description">{t("Description")}</Label>
                   <FormControl>
                     <Textarea
                       {...field}
                       id="description"
-                      placeholder="What needs to be done?"
+                      placeholder={t("What needs to be done?")}
                       className="min-h-20 resize-none"
                     />
                   </FormControl>
@@ -120,12 +121,12 @@ export function TodoDialogUpsert({ taskId, todo, onCreated, children }: TodoDial
               name="instructions"
               render={({ field }) => (
                 <Field>
-                  <Label htmlFor="instructions">Instructions (optional)</Label>
+                  <Label htmlFor="instructions">{t("Instructions (optional)")}</Label>
                   <FormControl>
                     <Textarea
                       {...field}
                       id="instructions"
-                      placeholder="Instructions for the agent..."
+                      placeholder={t("Instructions for the agent...")}
                       className="min-h-20 resize-none"
                     />
                   </FormControl>
@@ -143,12 +144,12 @@ export function TodoDialogUpsert({ taskId, todo, onCreated, children }: TodoDial
               instead of pretending the field doesn't exist.
             */}
             <Field>
-              <Label htmlFor="agent">Agent</Label>
+              <Label htmlFor="agent">{t("Agent")}</Label>
               <FormControl>
-                <Input id="agent" value={form.watch("agent") ?? ""} disabled placeholder="Not assignable yet" />
+                <Input id="agent" value={form.watch("agent") ?? ""} disabled placeholder={t("Not assignable yet")} />
               </FormControl>
               <p className="text-xs text-muted-foreground">
-                Assigning a todo to a specific agent isn&apos;t saved by the backend yet.
+                {t("Assigning a todo to a specific agent isn't saved by the backend yet.")}
               </p>
             </Field>
           </FieldGroup>
@@ -157,7 +158,7 @@ export function TodoDialogUpsert({ taskId, todo, onCreated, children }: TodoDial
               form.reset()
               ref.current?.click()
             }}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button type="submit" disabled={form.isLoading}>
               {form.isLoading ? "Saving..." : isEdit ? "Update" : "Create"}

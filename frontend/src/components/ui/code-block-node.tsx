@@ -28,6 +28,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { t } from "@/lib/i18n";
 
 type CodeBlockElementProps = PlateElementProps<TCodeBlockElement> & {
   showLanguageLabel?: boolean;
@@ -162,7 +163,7 @@ export function CodeBlockElement({
               variant="ghost"
               className="size-6 text-xs"
               onClick={() => formatCodeBlock(editor, { element })}
-              title="Format code"
+              title={t("Format code")}
             >
               <BracesIcon className="!size-3.5 text-muted-foreground" />
             </Button>
@@ -232,9 +233,9 @@ function CodeBlockCombobox({
             className="h-9"
             value={searchValue}
             onValueChange={(value) => setSearchValue(value)}
-            placeholder="Search language..."
+            placeholder={t("Search language...")}
           />
-          <CommandEmpty>No language found.</CommandEmpty>
+          <CommandEmpty>{t("No language found.")}</CommandEmpty>
 
           <CommandList className="h-[344px] overflow-y-auto">
             <CommandGroup>
@@ -305,7 +306,7 @@ function CopyButton({
       }}
       {...props}
     >
-      <span className="sr-only">Copy</span>
+      <span className="sr-only">{t("Copy")}</span>
       {hasCopied ? (
         <CheckIcon className="!size-3" />
       ) : (

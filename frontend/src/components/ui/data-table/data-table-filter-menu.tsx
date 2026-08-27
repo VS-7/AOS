@@ -25,6 +25,7 @@ import { DataTableTextFilter } from "./data-table-text-filter";
 import { DataTableNumberFilter } from "./data-table-number-filter";
 import { cn } from "@/lib/utils";
 import { ButtonGroup } from "../button-group";
+import { t } from "@/lib/i18n";
 
 type DataTableFilterMenuProps = {
   className?: string;
@@ -172,7 +173,7 @@ export function DataTableFilterMenu({
               className={cn("h-8 rounded-md", className)}
             >
               <Filter className="mr-2 h-4 w-4" />
-              Filters
+              {t("Filters")}
               {totalActiveCount > 0 && (
                 <Badge
                   variant="secondary"
@@ -187,7 +188,7 @@ export function DataTableFilterMenu({
           <DropdownMenuPortal>
             <DropdownMenuContent align="end" className="w-[220px]">
               <DropdownMenuLabel className="flex items-center justify-between">
-                <span>Filter by</span>
+                <span>{t("Filter by")}</span>
                 {totalActiveCount > 0 && (
                   <Button
                     variant="ghost"
@@ -196,7 +197,7 @@ export function DataTableFilterMenu({
                     onClick={handleClearAllFilters}
                   >
                     <X className="mr-1 h-3 w-3" />
-                    Clear all
+                    {t("Clear all")}
                   </Button>
                 )}
               </DropdownMenuLabel>
@@ -346,7 +347,7 @@ export function DataTableFilterMenu({
                         <DropdownMenuPortal>
                           <DropdownMenuSubContent className="w-[240px] p-3">
                             <span className="text-[10px] font-medium text-muted-foreground block border-b pb-1 mb-2 uppercase tracking-wider">
-                              Filter by {filter.label}
+                              {t("Filter by")} {filter.label}
                             </span>
                             <DataTableTextFilter
                               id={filter.id}
@@ -388,7 +389,7 @@ export function DataTableFilterMenu({
                         <DropdownMenuPortal>
                           <DropdownMenuSubContent className="w-[280px] p-3">
                             <span className="text-[10px] font-medium text-muted-foreground block border-b pb-1 mb-2 uppercase tracking-wider">
-                              Filter by {filter.label}
+                              {t("Filter by")} {filter.label}
                             </span>
                             <DataTableNumberFilter
                               id={filter.id}

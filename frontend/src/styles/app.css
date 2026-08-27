@@ -119,6 +119,30 @@
   :root[data-windows="blur"] body {
     background: transparent;
   }
+
+  /*
+   * Linux draws no blur.
+   *
+   * WebKitGTK does implement `backdrop-filter`, and implements it by keeping a
+   * snapshot of what is behind the element. It does not always invalidate that
+   * snapshot when what is behind it changes, so a panel that blurs the page
+   * under it goes on blurring the page that *was* under it — the ghosting
+   * reported on Linux, where a screen leaves a faint copy of the one before.
+   *
+   * Removing the filter costs a visual effect on one platform and is the only
+   * reliable fix from this side: there is no way to ask the snapshot to
+   * refresh. The window is opaque there too (cmd/aos-desktop/platform.go's
+   * translucentHere, and index.html's first-frame branch) — this is the third
+   * layer, for elements that blur against the page rather than the desktop.
+   *
+   * Scoped by `data-platform`, set in index.html from the `platform` the
+   * window states in its own URL, so a browser on Linux — which composites
+   * through the host browser and has none of this — is unaffected.
+   */
+  :root[data-platform="linux"] * {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
 }
 
 @layer components {

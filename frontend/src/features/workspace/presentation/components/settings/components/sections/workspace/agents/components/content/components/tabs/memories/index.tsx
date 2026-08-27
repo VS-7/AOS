@@ -22,6 +22,7 @@ import { aos } from "@/app/aos";
 import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
 import type { MemoryGraph } from "@/features/memory/interfaces/memory.interfaces";
 import { MemoryGraphHelper } from "./helpers/memory-graph.helper";
+import { t } from "@/lib/i18n";
 
 interface AgentMemoriesTabProps {
   agent: Agent;
@@ -147,9 +148,9 @@ export function AgentMemoriesTab({ agent }: AgentMemoriesTabProps) {
             </div>
           </AnimatedEmptyState.Carousel>
           <AnimatedEmptyState.Content>
-            <AnimatedEmptyState.Title>No memory graph yet</AnimatedEmptyState.Title>
+            <AnimatedEmptyState.Title>{t("No memory graph yet")}</AnimatedEmptyState.Title>
             <AnimatedEmptyState.Description>
-              This agent doesn&apos;t have indexed memory nodes yet.
+              {t("This agent doesn't have indexed memory nodes yet.")}
             </AnimatedEmptyState.Description>
           </AnimatedEmptyState.Content>
         </AnimatedEmptyState>

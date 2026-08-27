@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Label } from "../label";
 import { ButtonGroup } from "../button-group";
+import { t } from "@/lib/i18n";
 
 interface DataTableNumberFilterProps {
   id: string;
@@ -142,7 +143,7 @@ function DataTableNumberFilter({
   const FilterContent = () => (
     <div className="flex flex-col gap-2">
       <div>
-        <Label>Select operator</Label>
+        <Label>{t("Select operator")}</Label>
 
         <ToggleGroup
           type="single"
@@ -164,7 +165,7 @@ function DataTableNumberFilter({
       </div>
 
       <div>
-        <Label>Enter value</Label>
+        <Label>{t("Enter value")}</Label>
         <ButtonGroup className="flex items-center mt-1 border">
           <Button
             variant="ghost"
@@ -234,7 +235,7 @@ function DataTableNumberFilter({
                   onClick={handleClear}
                 >
                   <X className="mr-1 h-3 w-3" />
-                  Clear
+                  {t("Clear")}
                 </Button>
               )}
             </div>
@@ -244,7 +245,7 @@ function DataTableNumberFilter({
             {existingConditions.length > 0 && (
               <div className="space-y-1 pt-2 border-t">
                 <span className="text-xs text-muted-foreground">
-                  Active conditions:
+                  {t("Active conditions:")}
                 </span>
                 <div className="flex flex-wrap gap-1">
                   {existingConditions.slice(0, 4).map((cond, index) => {
@@ -280,7 +281,7 @@ function DataTableNumberFilter({
                 className="flex-1"
                 onClick={() => setOpen(false)}
               >
-                Aplicar
+                {t("Aplicar")}
               </Button>
             </div>
           </div>
@@ -299,7 +300,7 @@ function DataTableNumberFilter({
           className="flex-1 h-7 text-xs"
           onClick={handleAdd}
         >
-          Add Condition
+          {t("Add Condition")}
         </Button>
         {isActive && (
           <Button
@@ -308,7 +309,7 @@ function DataTableNumberFilter({
             className="flex-1 h-7 text-xs"
             onClick={handleClear}
           >
-            Clear All
+            {t("Clear All")}
           </Button>
         )}
       </div>
@@ -316,7 +317,7 @@ function DataTableNumberFilter({
       {existingConditions.length > 0 && (
         <div className="space-y-1 pt-2 border-t">
           <span className="text-[10px] text-muted-foreground block font-medium uppercase tracking-wider">
-            Active conditions:
+            {t("Active conditions:")}
           </span>
           <div className="flex flex-wrap gap-1">
             {existingConditions.map((cond, index) => {

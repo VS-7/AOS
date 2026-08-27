@@ -20,6 +20,7 @@ import {
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { aos } from "@/app/aos";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
+import { t } from "@/lib/i18n";
 import type {
   Task,
   TaskWithContext,
@@ -72,7 +73,7 @@ export function DependenciesWidget({ task }: DependenciesWidgetProps) {
       return;
     }
 
-    toast.success("Dependencies updated");
+    toast.success(t("Dependencies updated"));
     setIsMutating(false);
     router.invalidate();
   }
@@ -91,7 +92,7 @@ export function DependenciesWidget({ task }: DependenciesWidgetProps) {
   return (
     <SplitPageLayout.Widget>
       <SplitPageLayout.WidgetHeader>
-        <SplitPageLayout.WidgetTitle>Dependencies</SplitPageLayout.WidgetTitle>
+        <SplitPageLayout.WidgetTitle>{t("Dependencies")}</SplitPageLayout.WidgetTitle>
         <div className="ml-auto flex items-center gap-2">
           {blockedCount > 0 && (
             <span className="flex items-center gap-1 text-xs text-warning">
@@ -106,16 +107,16 @@ export function DependenciesWidget({ task }: DependenciesWidgetProps) {
                 variant="secondary"
                 className="rounded-full"
                 disabled={isMutating}
-                aria-label="Add dependency"
+                aria-label={t("Add dependency")}
               >
                 <Plus />
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-64 p-0" align="end" side="left">
               <Command>
-                <CommandInput placeholder="Search tasks..." />
+                <CommandInput placeholder={t("Search tasks...")} />
                 <CommandList>
-                  <CommandEmpty>No eligible tasks.</CommandEmpty>
+                  <CommandEmpty>{t("No eligible tasks.")}</CommandEmpty>
                   <CommandGroup>
                     {candidates.map((candidate) => {
                       const status = TaskHelper.getStatus(candidate.status);
@@ -150,7 +151,7 @@ export function DependenciesWidget({ task }: DependenciesWidgetProps) {
           <SplitPageLayout.WidgetItem>
             <Link2 className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="text-xs text-muted-foreground">
-              No dependencies yet.
+              {t("No dependencies yet.")}
             </span>
           </SplitPageLayout.WidgetItem>
         )}

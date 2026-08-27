@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import * as React from "react"
 import {
   PromptInputCommand,
@@ -53,14 +54,14 @@ export function ChatComposerSkillsCommandMenu({
         <PromptInputCommandInput
           autoFocus
           onValueChange={onQueryChange}
-          placeholder="Search skills and commands…"
+          placeholder={t("Search skills and commands…")}
           value={query}
         />
         <PromptInputCommandList className="max-h-[360px]">
-          <PromptInputCommandEmpty>No skills or commands match this search.</PromptInputCommandEmpty>
+          <PromptInputCommandEmpty>{t("No skills or commands match this search.")}</PromptInputCommandEmpty>
 
           {slashCommands.length > 0 ? (
-            <PromptInputCommandGroup heading="Commands">
+            <PromptInputCommandGroup heading={t("Commands")}>
               {slashCommands.map((item) => {
                 const Icon = item.id === "stop" ? SquareIcon : EraserIcon
                 const badge = item.id === "stop" ? "Stop" : "Clear"
@@ -85,7 +86,7 @@ export function ChatComposerSkillsCommandMenu({
             </PromptInputCommandGroup>
           ) : null}
 
-          <PromptInputCommandGroup heading="Skills">
+          <PromptInputCommandGroup heading={t("Skills")}>
             {selectableSkills.map((reference) => (
               <PromptInputCommandItem
                 key={reference.id}
@@ -95,7 +96,7 @@ export function ChatComposerSkillsCommandMenu({
                 <HugeiconsIcon icon={SparklesIcon} className="size-4 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate text-sm text-foreground">{reference.label}</span>
                 <span className="rounded-full border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                  Skill
+                  {t("Skill")}
                 </span>
                 <HugeiconsIcon icon={PlusSignIcon} className="size-4 text-muted-foreground" />
               </PromptInputCommandItem>
@@ -104,7 +105,7 @@ export function ChatComposerSkillsCommandMenu({
 
           {trigger ? (
             <div className="border-t px-3 py-2 text-[11px] text-muted-foreground">
-              Type a space to insert a literal slash, or keep filtering skills and commands.
+              {t("Type a space to insert a literal slash, or keep filtering skills and commands.")}
             </div>
           ) : null}
         </PromptInputCommandList>

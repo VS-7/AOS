@@ -2,6 +2,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/aos-facade";
 import { stores } from "@/app/lib/stores";
 import { parseExplorerContext } from "@/features/file/presentation/helpers/files-explorer.helper";
+import { t } from "@/lib/i18n";
 
 type PromptUnsaved = (options?: {
   title?: string;
@@ -42,13 +43,13 @@ export async function requestCloseFileTab(
 
   if (choice === "save") {
     if (!filePath) {
-      toast.error("Unable to save: missing file path.");
+      toast.error(t("Unable to save: missing file path."));
       return false;
     }
 
     const draft = stores.files.state.draftsByPath[filePath];
     if (typeof draft !== "string") {
-      toast.error("Unable to save: draft content is missing.");
+      toast.error(t("Unable to save: draft content is missing."));
       return false;
     }
 

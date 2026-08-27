@@ -37,6 +37,7 @@ import {
   openUserDmTab,
 } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
 import { ChatActivityStamp } from "./chat-activity-stamp";
+import { t } from "@/lib/i18n";
 
 interface ChatTeamListProps {
   agents: Agent[];
@@ -155,7 +156,7 @@ function AgentRow({
           {processing.length > 0 ? (
             <div className="mt-3 space-y-1.5">
               <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
-                Running now
+                {t("Running now")}
               </p>
               <ul className="space-y-1">
                 {processing.map((entry) => (
@@ -185,7 +186,7 @@ function AgentRow({
             </div>
           ) : (
             <p className="mt-3 text-[11px] text-muted-foreground/80">
-              Idle — no active runs.
+              {t("Idle — no active runs.")}
             </p>
           )}
 
@@ -195,7 +196,7 @@ function AgentRow({
             className="mt-3 h-7 px-2.5 text-xs"
             onClick={handleViewInSettings}
           >
-            View Details
+            {t("View Details")}
             <HugeiconsIcon icon={ArrowRightIcon} className="size-3 ml-1" />
           </Button>
         </PopoverContent>
@@ -366,7 +367,7 @@ export function ChatTeamList({ agents, currentChatId }: ChatTeamListProps) {
   if (teamAgents.length === 0 && peerUsers.length === 0) {
     return (
       <p className="px-2 py-3 text-xs text-muted-foreground/70">
-        No teammates yet
+        {t("No teammates yet")}
       </p>
     );
   }
@@ -378,7 +379,7 @@ export function ChatTeamList({ agents, currentChatId }: ChatTeamListProps) {
       {teamAgents.length > 0 ? (
         <div className="space-y-0.5">
           <p className="px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/55">
-            Agents
+            {t("Agents")}
           </p>
           <SidebarMenu>
             {teamAgents.map((agent) => {
@@ -421,7 +422,7 @@ export function ChatTeamList({ agents, currentChatId }: ChatTeamListProps) {
       {peerUsers.length > 0 ? (
         <div className="space-y-0.5">
           <p className="px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/55">
-            People
+            {t("People")}
           </p>
           <SidebarMenu>
             {peerUsers.map((user) => {

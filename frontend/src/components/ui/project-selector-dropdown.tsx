@@ -5,6 +5,7 @@ import { CheckIcon, FolderIcon } from "lucide-react";
 import { aos } from "@/app/aos";
 import { ProjectHelper } from "@/features/project/presentation/helpers/project.helper";
 import { Icon } from "./icon";
+import { t } from "@/lib/i18n";
 import {
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -25,7 +26,7 @@ export function ProjectSelectorDropdown({
   if (projects.length === 0) {
     return (
       <DropdownMenuItem className="text-muted-foreground">
-        No projects available
+        {t("No projects available")}
       </DropdownMenuItem>
     );
   }
@@ -37,7 +38,7 @@ export function ProjectSelectorDropdown({
         className="flex items-center gap-2"
       >
         <FolderIcon className="size-4 text-muted-foreground shrink-0" />
-        <span>No project</span>
+        <span>{t("No project")}</span>
         {!currentProject ? (
           <CheckIcon className="ml-auto size-4 text-muted-foreground shrink-0" />
         ) : null}
@@ -46,7 +47,7 @@ export function ProjectSelectorDropdown({
       <DropdownMenuSeparator />
 
       <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-        Projects
+        {t("Projects")}
       </DropdownMenuLabel>
 
       {projects.map((project) => (

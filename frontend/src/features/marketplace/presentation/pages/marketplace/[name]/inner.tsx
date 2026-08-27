@@ -49,6 +49,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { aos } from "@/app/aos";
+import { t } from "@/lib/i18n";
 
 interface MarketplaceDetailsPageInnerProps {
   plugin: MarketplaceSkill;
@@ -102,7 +103,7 @@ export function MarketplaceDetailsPageInner({
   const { mutate: deletePlugin, loading: isDeleting } =
     aos.client.skill.delete.useMutation({
       onSuccess: async () => {
-        toast.success("Plugin uninstalled");
+        toast.success(t("Plugin uninstalled"));
         await navigate({ to: "/marketplace" });
       },
       onError: (error: unknown) => {
@@ -124,14 +125,14 @@ export function MarketplaceDetailsPageInner({
         <MarketplaceRail>
           <div className="flex flex-col gap-5 text-[13px] leading-5">
             <nav
-              aria-label="Breadcrumb"
+              aria-label={t("Breadcrumb")}
               className="flex flex-wrap items-center gap-2 text-muted-foreground"
             >
               <Link
                 to="/marketplace"
                 className="transition-colors hover:text-foreground"
               >
-                Marketplace
+                {t("Marketplace")}
               </Link>
               <span aria-hidden>/</span>
               <span className="text-foreground">
@@ -141,13 +142,13 @@ export function MarketplaceDetailsPageInner({
 
             <div className="flex flex-col gap-2 text-muted-foreground">
               <p>
-                Created by{" "}
+                {t("Created by")}{" "}
                 <span className="font-medium text-foreground">
                   {plugin.author.name}
                 </span>
               </p>
               <p>
-                Verified by{" "}
+                {t("Verified by")}{" "}
                 <span className="font-medium text-foreground">AOS</span>
               </p>
               {sourceUrl ? (
@@ -157,7 +158,7 @@ export function MarketplaceDetailsPageInner({
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 font-medium text-foreground transition-colors hover:text-foreground/80"
                 >
-                  View Source
+                  {t("View Source")}
                   <HugeiconsIcon icon={ArrowUpRight01Icon} className="size-3.5" />
                 </a>
               ) : null}
@@ -171,7 +172,7 @@ export function MarketplaceDetailsPageInner({
                   }
                   className="inline-flex items-center gap-1 font-medium text-foreground transition-colors hover:text-foreground/80"
                 >
-                  SKILL.md
+                  {t("SKILL.md")}
                   <HugeiconsIcon icon={ArrowUpRight01Icon} className="size-3.5" />
                 </button>
               ) : null}
@@ -185,7 +186,7 @@ export function MarketplaceDetailsPageInner({
                   }
                   className="inline-flex items-center gap-1 font-medium text-foreground transition-colors hover:text-foreground/80"
                 >
-                  Manifest
+                  {t("Manifest")}
                   <HugeiconsIcon icon={ArrowUpRight01Icon} className="size-3.5" />
                 </button>
               ) : null}
@@ -199,7 +200,7 @@ export function MarketplaceDetailsPageInner({
         className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
       >
         <HugeiconsIcon icon={ArrowLeft01Icon} className="size-4" />
-        Back
+        {t("Back")}
       </Link>
 
       <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
@@ -255,27 +256,26 @@ export function MarketplaceDetailsPageInner({
                   disabled={isDeleting}
                 >
                   <HugeiconsIcon icon={Delete02Icon} className="size-3.5" />
-                  Uninstall
+                  {t("Uninstall")}
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent size="sm">
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Uninstall this plugin?</AlertDialogTitle>
+                  <AlertDialogTitle>{t("Uninstall this plugin?")}</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Removes{" "}
-                    <strong>{plugin.interface.displayName}</strong> and its
-                    local files from this workspace.
+                    {t("Removes")}{" "}
+                    <strong>{plugin.interface.displayName}</strong> {t("and its local files from this workspace.")}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
                   <AlertDialogAction
                     variant="destructive"
                     onClick={() =>
                       deletePlugin({ params: { skill: installedSkill.id } })
                     }
                   >
-                    Uninstall
+                    {t("Uninstall")}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -330,7 +330,7 @@ export function MarketplaceDetailsPageInner({
       {related.length > 0 ? (
         <section className="flex flex-col gap-5 pt-4">
           <h2 className="text-xl font-medium tracking-tight text-foreground md:text-2xl">
-            Related plugins
+            {t("Related plugins")}
           </h2>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {related.map((listing) => (

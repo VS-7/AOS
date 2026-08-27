@@ -13,6 +13,7 @@ import {
 } from "../dropdown-menu";
 import { useDataTable } from "./data-table-provider";
 import { capitalizeLabel } from "./data-table.utils";
+import { t } from "@/lib/i18n";
 
 export function DataTableViewOptions() {
   const { table } = useDataTable();
@@ -22,11 +23,11 @@ export function DataTableViewOptions() {
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="h-8 gap-2">
           <ColumnsIcon className="size-4" />
-          Columns
+          {t("Columns")}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[180px]">
-        <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("Toggle columns")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           {table

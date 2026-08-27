@@ -24,6 +24,7 @@ import {
   type ChatComposerSlashCommandItem,
 } from "../components/command/chat-composer-skills-command-menu";
 import { useChatComposerAudio } from "./use-chat-composer-audio";
+import { t } from "@/lib/i18n";
 
 interface UseChatComposerParams extends ChatComposerProps {
   commandRef: React.RefObject<HTMLDivElement | null>;
@@ -123,7 +124,7 @@ export function useChatComposer({
   const { mutate: clearChatContext, loading: isClearingContext } =
     aos.client.chat.clear.useMutation({
       onSuccess: () => {
-        toast.success("Chat context cleared.");
+        toast.success(t("Chat context cleared."));
       },
       onError: (error: any) => {
         toast.error(
@@ -569,7 +570,7 @@ export function useChatComposer({
       // never, if they don't think to check. A toast at the moment of
       // loss, not a silent one.
       if (parts.some((part) => part.type === "file")) {
-        toast.warning("Attachments aren't sent to the agent yet — only your text was delivered.");
+        toast.warning(t("Attachments aren't sent to the agent yet — only your text was delivered."));
       }
 
       sendMessage({

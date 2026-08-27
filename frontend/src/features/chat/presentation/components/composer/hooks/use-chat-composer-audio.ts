@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import * as React from "react"
 import { toast } from "sonner"
 import type { PendingAudioClip } from "../composer.types"
@@ -29,7 +30,7 @@ export function useChatComposerAudio() {
     }
 
     if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      toast.error("Audio recording is not available in this environment.")
+      toast.error(t("Audio recording is not available in this environment."))
       return
     }
 
@@ -64,7 +65,7 @@ export function useChatComposerAudio() {
         setIsRecording(false)
 
         if (blob.size === 0) {
-          toast.error("The recording was empty. Please try again.")
+          toast.error(t("The recording was empty. Please try again."))
           return
         }
 
@@ -92,7 +93,7 @@ export function useChatComposerAudio() {
         recordingChunksRef.current = []
         recordingStartedAtRef.current = null
         setIsRecording(false)
-        toast.error("Unable to record audio right now.")
+        toast.error(t("Unable to record audio right now."))
       }
 
       recorder.start()

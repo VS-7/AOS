@@ -11,6 +11,7 @@ import { PlateElement, withHOC } from 'platejs/react';
 import { cn } from '@/lib/utils';
 
 import { Caption, CaptionTextarea } from './caption';
+import { t } from "@/lib/i18n";
 
 export const AudioElement = withHOC(
   ResizableProvider,
@@ -31,7 +32,7 @@ export const AudioElement = withHOC(
             <CaptionTextarea
               className="h-20"
               readOnly={readOnly}
-              placeholder="Write a caption..."
+              placeholder={t("Write a caption...")}
             />
           </Caption>
         </figure>

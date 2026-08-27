@@ -7,8 +7,10 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthGate } from "@/features/auth/AuthGate";
+import { WorkspaceGate } from "@/features/workspace/WorkspaceGate";
 import { useRealtime } from "@/lib/realtime";
 import { router } from "@/app/router";
+import { I18nProvider, useTranslation } from "@/lib/i18n";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -58,11 +60,28 @@ function RealtimeConnection(): null {
   return null;
 }
 
+/**
+ * Re-renders the whole interface when the language changes.
+ *
+ * Most call sites translate through the module-level `t` rather than a hook —
+ * 958 strings across 224 files, many of them in toasts, helpers and constant
+ * tables that are not components and cannot hold one. That function reads the
+ * active locale at call time, so the strings are already correct; what it
+ * cannot do is tell React that a string it returned earlier is now stale.
+ * Keying the tree on the locale is what does: switching language remounts
+ * once, and every `t(...)` in the tree runs again.
+ */
+function Localized({ children }: { children: JSX.Element }): JSX.Element {
+  const { locale } = useTranslation();
+  return <div key={locale} className="contents">{children}</div>;
+}
+
 export function App(): JSX.Element {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <RealtimeConnection />
+        <I18nProvider>
         <AppStateProvider>
           {/*
             * The shell wrapper, `Toaster` and `TooltipProvider` mirror the
@@ -88,12 +107,17 @@ export function App(): JSX.Element {
           <div className="bg-background text-foreground text-xs min-h-screen">
             <Toaster position="top-center" />
             <TooltipProvider>
-              <AuthGate>
-                <RouterProvider router={router} />
-              </AuthGate>
+              <Localized>
+                <AuthGate>
+                  <WorkspaceGate>
+                    <RouterProvider router={router} />
+                  </WorkspaceGate>
+                </AuthGate>
+              </Localized>
             </TooltipProvider>
           </div>
         </AppStateProvider>
+        </I18nProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );

@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { openExternal } from "@/lib/wails";
+import { t } from "@/lib/i18n";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -185,7 +186,7 @@ function ErrorFallback({ error, section, copied, onReset, onCopy }: ErrorFallbac
         {/* Status pill */}
         <div className="eb-status-row">
           <span className="eb-pulse" aria-hidden="true" />
-          <span className="eb-status-label">Runtime Error</span>
+          <span className="eb-status-label">{t("Runtime Error")}</span>
         </div>
 
         {/* Logo */}
@@ -219,12 +220,12 @@ function ErrorFallback({ error, section, copied, onReset, onCopy }: ErrorFallbac
           {isGlobal ? (
             <button id="eb-reload" className="eb-btn eb-btn--primary" onClick={handleReload}>
               <ReloadIcon />
-              Reload AOS
+              {t("Reload AOS")}
             </button>
           ) : (
             <button id="eb-reset" className="eb-btn eb-btn--primary" onClick={onReset}>
               <ReloadIcon />
-              Try again
+              {t("Try again")}
             </button>
           )}
 
@@ -237,7 +238,7 @@ function ErrorFallback({ error, section, copied, onReset, onCopy }: ErrorFallbac
             {isGlobal && (
               <button id="eb-browser" className="eb-btn eb-btn--ghost" onClick={handleOpenBrowser}>
                 <ExternalIcon />
-                Open in browser
+                {t("Open in browser")}
               </button>
             )}
           </div>

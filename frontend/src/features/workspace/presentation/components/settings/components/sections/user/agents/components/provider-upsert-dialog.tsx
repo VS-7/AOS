@@ -20,6 +20,7 @@ import {
   setModelProviderKey,
 } from "@/features/model/services/model-provider.service";
 import { useProviderLogo } from "../hooks/use-provider-logo";
+import { t } from "@/lib/i18n";
 
 interface ProviderUpsertDialogProps {
   open: boolean;
@@ -74,7 +75,7 @@ export function ProviderUpsertDialog({
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (requiresKey && !value.trim()) {
-      toast.error("API key is required.");
+      toast.error(t("API key is required."));
       return;
     }
 
@@ -138,7 +139,7 @@ export function ProviderUpsertDialog({
             />
             {!provider.auth.required && (
               <p className="text-xs text-muted-foreground">
-                Optional — leave empty to use the default discovery.
+                {t("Optional — leave empty to use the default discovery.")}
               </p>
             )}
           </div>
@@ -150,7 +151,7 @@ export function ProviderUpsertDialog({
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
             >
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? "Submitting…" : "Submit"}

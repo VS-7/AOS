@@ -8,6 +8,7 @@ import { TASK_STATUS_ORDER } from "@/features/task/presentation/consts/task";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
 import { aos } from "@/app/aos";
 import { AgentTaskStatusSection } from "./components/task-status-section";
+import { t } from "@/lib/i18n";
 
 interface AgentTasksTabProps {
   agent: Agent;
@@ -45,7 +46,7 @@ export function AgentTasksTab({ agent }: AgentTasksTabProps) {
   return (
     <div className="container max-w-6xl mx-auto px-6 py-6 pb-10">
       <div className="flex items-center justify-between mb-3 px-2">
-        <span className="text-xs uppercase tracking-wide text-muted-foreground">Assigned tasks</span>
+        <span className="text-xs uppercase tracking-wide text-muted-foreground">{t("Assigned tasks")}</span>
         <span className="text-xs text-muted-foreground">{tasks.length} total</span>
       </div>
 
@@ -63,9 +64,9 @@ export function AgentTasksTab({ agent }: AgentTasksTabProps) {
             </div>
           </AnimatedEmptyState.Carousel>
           <AnimatedEmptyState.Content>
-            <AnimatedEmptyState.Title>No tasks assigned</AnimatedEmptyState.Title>
+            <AnimatedEmptyState.Title>{t("No tasks assigned")}</AnimatedEmptyState.Title>
             <AnimatedEmptyState.Description>
-              No tasks are currently assigned to this agent.
+              {t("No tasks are currently assigned to this agent.")}
             </AnimatedEmptyState.Description>
           </AnimatedEmptyState.Content>
         </AnimatedEmptyState>

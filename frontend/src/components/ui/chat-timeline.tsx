@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query"
 import {
   Accordion,
@@ -172,9 +173,9 @@ function ChatTimelineView({
       </div>
 
       {isLoading ? (
-        <p className="text-xs text-muted-foreground">Loading execution...</p>
+        <p className="text-xs text-muted-foreground">{t("Loading execution...")}</p>
       ) : events.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No execution events yet.</p>
+        <p className="text-xs text-muted-foreground">{t("No execution events yet.")}</p>
       ) : (
         <Accordion type="multiple" className="w-full max-w-none pr-1 pb-2">
           {events.map((event, index) => (

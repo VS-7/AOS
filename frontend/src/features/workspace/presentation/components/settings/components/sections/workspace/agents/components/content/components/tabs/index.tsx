@@ -28,6 +28,7 @@ import { AgentMemoriesTab } from "./memories";
 import { AgentTasksTab } from "./tasks";
 import { AgentChannelsTab } from "./channels";
 import { AgentRoutinesTab } from "./routines";
+import { t } from "@/lib/i18n";
 
 interface AgentContentTabsProps {
   agent?: Agent;
@@ -58,13 +59,13 @@ export function AgentContentTabs({
           idPrefix={idPrefix}
           activeLabel
         >
-          <TabsSubtleItem index={0} icon={Settings2} label="Overview" />
+          <TabsSubtleItem index={0} icon={Settings2} label={t("Overview")} />
           {!isCreateMode && agent ? (
             <>
-              <TabsSubtleItem index={1} icon={BrainCircuit} label="Memories" />
-              <TabsSubtleItem index={2} icon={ListChecks} label="Tasks" />
-              <TabsSubtleItem index={3} icon={CalendarClock} label="Routines" />
-              <TabsSubtleItem index={4} icon={RadioTower} label="Channels" />
+              <TabsSubtleItem index={1} icon={BrainCircuit} label={t("Memories")} />
+              <TabsSubtleItem index={2} icon={ListChecks} label={t("Tasks")} />
+              <TabsSubtleItem index={3} icon={CalendarClock} label={t("Routines")} />
+              <TabsSubtleItem index={4} icon={RadioTower} label={t("Channels")} />
             </>
           ) : null}
         </TabsSubtle>
@@ -84,9 +85,9 @@ export function AgentContentTabs({
               render={({ field }) => (
                 <FormItem className="flex flex-row items-center justify-between gap-4">
                   <div className="space-y-0.5">
-                    <FormLabel className="opacity-60">Avatar</FormLabel>
+                    <FormLabel className="opacity-60">{t("Avatar")}</FormLabel>
                     <FormDescription>
-                      Photo shown wherever this agent appears.
+                      {t("Photo shown wherever this agent appears.")}
                     </FormDescription>
                   </div>
                   <FormControl>
@@ -106,10 +107,10 @@ export function AgentContentTabs({
               name="name"
               render={({ field }) => (
                 <FormItem className="space-y-2">
-                  <FormLabel className="opacity-60">Name</FormLabel>
+                  <FormLabel className="opacity-60">{t("Name")}</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="Atlas"
+                      placeholder={t("Atlas")}
                       className="h-auto rounded-none border-0 bg-transparent px-0 py-0 text-2xl font-semibold shadow-none focus-visible:ring-0"
                       {...field}
                     />
@@ -124,10 +125,10 @@ export function AgentContentTabs({
               name="description"
               render={({ field }) => (
                 <FormItem className="space-y-2">
-                  <FormLabel className="opacity-60">Description</FormLabel>
+                  <FormLabel className="opacity-60">{t("Description")}</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Describe when this agent should be used."
+                      placeholder={t("Describe when this agent should be used.")}
                       className="min-h-10 max-h-48 resize-none rounded-none border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0"
                       {...field}
                       value={field.value ?? ""}
@@ -143,10 +144,10 @@ export function AgentContentTabs({
               name="role"
               render={({ field }) => (
                 <FormItem className="space-y-2">
-                  <FormLabel className="opacity-60">Role</FormLabel>
+                  <FormLabel className="opacity-60">{t("Role")}</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="Frontend Systems Specialist"
+                      placeholder={t("Frontend Systems Specialist")}
                       className="rounded-none border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0"
                       {...field}
                       value={field.value ?? ""}
@@ -162,12 +163,12 @@ export function AgentContentTabs({
               name="content"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="opacity-60">Instructions</FormLabel>
+                  <FormLabel className="opacity-60">{t("Instructions")}</FormLabel>
                   <FormControl>
                     <MarkdownEditor
                       value={field.value ?? ""}
                       onValueChange={field.onChange}
-                      placeholder="Write the system instructions for this agent..."
+                      placeholder={t("Write the system instructions for this agent...")}
                     />
                   </FormControl>
                   <FormMessage />

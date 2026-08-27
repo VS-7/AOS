@@ -38,6 +38,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { aos } from "@/app/aos";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 interface PluginInventoryItemSheetProps {
   item: MarketplaceSkillComponentItem | null;
@@ -117,7 +118,7 @@ function ToolsetInventoryBody({
   const { mutate: deleteToolset, loading: isDeleting } =
     aos.client.toolset.delete.useMutation({
       onSuccess: async () => {
-        toast.success("Toolset deleted");
+        toast.success(t("Toolset deleted"));
         onClose();
         await router.invalidate();
       },
@@ -131,7 +132,7 @@ function ToolsetInventoryBody({
   const { mutate: saveConfig, loading: isSaving } =
     aos.client.toolset.updateConfig.useMutation({
       onSuccess: async () => {
-        toast.success("Environment variables saved");
+        toast.success(t("Environment variables saved"));
         await configQuery.refetch();
       },
       onError: (error: unknown) => {
@@ -173,11 +174,11 @@ function ToolsetInventoryBody({
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="h-8">
           <TabsTrigger value="tools" className="text-[12px]">
-            Tools
+            {t("Tools")}
           </TabsTrigger>
           {hasConfig ? (
             <TabsTrigger value="config" className="text-[12px]">
-              Configuration
+              {t("Configuration")}
             </TabsTrigger>
           ) : null}
         </TabsList>
@@ -189,16 +190,15 @@ function ToolsetInventoryBody({
                 icon={Loading03Icon}
                 className="size-3.5 animate-spin"
               />
-              Loading tools…
+              {t("Loading tools…")}
             </div>
           ) : detailQuery.error ? (
             <p className="text-[13px] text-muted-foreground">
-              Could not connect to list tools. Configure env vars if required,
-              then reopen.
+              {t("Could not connect to list tools. Configure env vars if required, then reopen.")}
             </p>
           ) : tools.length === 0 ? (
             <p className="text-[13px] text-muted-foreground">
-              No tools discovered for this toolset.
+              {t("No tools discovered for this toolset.")}
             </p>
           ) : (
             <div className="overflow-hidden rounded-lg border border-border">
@@ -225,7 +225,7 @@ function ToolsetInventoryBody({
                       variant="ghost"
                       size="icon"
                       className="size-7 shrink-0"
-                      title="Edit tool source"
+                      title={t("Edit tool source")}
                       onClick={() => openWorkspaceFileTab(item.path!)}
                     >
                       <HugeiconsIcon
@@ -300,26 +300,25 @@ function ToolsetInventoryBody({
           <AlertDialogTrigger asChild>
             <Button variant="destructive" size="sm" disabled={isDeleting}>
               <HugeiconsIcon icon={Delete02Icon} className="size-3.5" />
-              Delete
+              {t("Delete")}
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent size="sm">
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete this toolset?</AlertDialogTitle>
+              <AlertDialogTitle>{t("Delete this toolset?")}</AlertDialogTitle>
               <AlertDialogDescription>
-                Removes <strong>{item.label}</strong> from disk. This cannot be
-                undone.
+                {t("Removes")} <strong>{item.label}</strong> {t("from disk. This cannot be undone.")}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
               <AlertDialogAction
                 variant="destructive"
                 onClick={() =>
                   deleteToolset({ params: { toolset: toolsetId } })
                 }
               >
-                Delete toolset
+                {t("Delete toolset")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -333,11 +332,11 @@ function ToolsetInventoryBody({
               onClick={() => openWorkspaceFileTab(item.path!)}
             >
               <HugeiconsIcon icon={PencilEdit01Icon} className="size-3.5" />
-              Edit
+              {t("Edit")}
             </Button>
           ) : null}
           <Button size="sm" onClick={onClose}>
-            Done
+            {t("Done")}
           </Button>
         </div>
       </SheetFooter>

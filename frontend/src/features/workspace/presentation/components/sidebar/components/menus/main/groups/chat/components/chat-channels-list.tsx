@@ -3,6 +3,7 @@ import { SidebarMenu, SidebarMenuMotionItem } from "@/components/ui/sidebar";
 import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
 import { ChatKindHelper } from "@/features/chat/services/chat/chat-kind.helper";
 import { ChannelItem } from "../../channels/components/channel-item";
+import { t } from "@/lib/i18n";
 
 interface ChatChannelsListProps {
   chats: Chat[];
@@ -28,7 +29,7 @@ export function ChatChannelsList({
   if (channelChats.length === 0) {
     return (
       <p className="px-2 py-3 text-xs text-muted-foreground/70">
-        No channels yet
+        {t("No channels yet")}
       </p>
     );
   }

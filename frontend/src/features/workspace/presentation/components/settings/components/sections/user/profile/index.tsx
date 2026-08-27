@@ -25,6 +25,8 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { AppError } from "@/core/errors/aos.error";
 import { api } from "@/lib/aos-facade";
+import { t, LOCALES, LOCALE_NAMES, normalizeLocale, setLocale } from "@/lib/i18n";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const profileFormSchema = z.object({
   name: z.string().min(2),
@@ -143,7 +145,7 @@ export function UserProfileSection() {
         return;
       }
 
-      toast.success("Profile updated successfully!");
+      toast.success(t("Profile updated successfully!"));
       router.invalidate();
     },
   });
@@ -168,10 +170,11 @@ export function UserProfileSection() {
         };
       }
 
+      // `verifyPassword` is the form's own confirmation field, checked by
+      // the schema above; the daemon takes the two it acts on.
       const passwordResult = await aos.stores.auth.actions.updatePassword({
         currentPassword: values.currentPassword!,
         newPassword: values.newPassword!,
-        verifyPassword: values.verifyPassword!,
       });
 
       if (passwordResult.error) {
@@ -199,7 +202,7 @@ export function UserProfileSection() {
         return;
       }
 
-      toast.success("Password updated successfully!");
+      toast.success(t("Password updated successfully!"));
       router.invalidate();
     },
   });
@@ -210,9 +213,9 @@ export function UserProfileSection() {
         <SettingsSectionShell>
           <FormSection>
             <FormSectionHeader>
-              <FormSectionTitle>Basic Info</FormSectionTitle>
+              <FormSectionTitle>{t("Basic Info")}</FormSectionTitle>
               <FormSectionDescription>
-                Your name and how you appear in AOS.
+                {t("Your name and how you appear in AOS.")}
               </FormSectionDescription>
             </FormSectionHeader>
             <FormSectionContent className="divide-y divide-border">
@@ -222,9 +225,9 @@ export function UserProfileSection() {
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                     <div className="flex-1 space-y-0.5">
-                      <FormLabel>Avatar</FormLabel>
+                      <FormLabel>{t("Avatar")}</FormLabel>
                       <FormDescription>
-                        Your profile photo.
+                        {t("Your profile photo.")}
                       </FormDescription>
                     </div>
                     <FormControl>
@@ -244,15 +247,15 @@ export function UserProfileSection() {
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                     <div className="flex-1 space-y-0.5">
-                      <FormLabel>Name</FormLabel>
+                      <FormLabel>{t("Name")}</FormLabel>
                       <FormDescription>
-                        How your name is shown in the app.
+                        {t("How your name is shown in the app.")}
                       </FormDescription>
                     </div>
                     <FormControl>
                       <Input
                         className="max-w-50"
-                        placeholder="Your name"
+                        placeholder={t("Your name")}
                         {...field}
                       />
                     </FormControl>
@@ -265,16 +268,16 @@ export function UserProfileSection() {
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                     <div className="flex-1 space-y-0.5">
-                      <FormLabel>Email</FormLabel>
+                      <FormLabel>{t("Email")}</FormLabel>
                       <FormDescription>
-                        Email used to sign in.
+                        {t("Email used to sign in.")}
                       </FormDescription>
                     </div>
                     <FormControl>
                       <Input
                         className="max-w-50"
                         type="email"
-                        placeholder="you@example.com"
+                        placeholder={t("you@example.com")}
                         {...field}
                       />
                     </FormControl>
@@ -286,9 +289,9 @@ export function UserProfileSection() {
 
           <FormSection>
             <FormSectionHeader>
-              <FormSectionTitle>Region</FormSectionTitle>
+              <FormSectionTitle>{t("Region")}</FormSectionTitle>
               <FormSectionDescription>
-                Timezone and language preferences.
+                {t("Timezone and language preferences.")}
               </FormSectionDescription>
             </FormSectionHeader>
             <FormSectionContent className="divide-y divide-border">
@@ -298,15 +301,15 @@ export function UserProfileSection() {
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                     <div className="flex-1 space-y-0.5">
-                      <FormLabel>Timezone</FormLabel>
+                      <FormLabel>{t("Timezone")}</FormLabel>
                       <FormDescription>
-                        Your local timezone.
+                        {t("Your local timezone.")}
                       </FormDescription>
                     </div>
                     <FormControl>
                       <Input
                         className="max-w-50"
-                        placeholder="America/Sao_Paulo"
+                        placeholder={t("America/Sao_Paulo")}
                         {...field}
                       />
                     </FormControl>
@@ -319,17 +322,40 @@ export function UserProfileSection() {
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                     <div className="flex-1 space-y-0.5">
-                      <FormLabel>Language</FormLabel>
+                      <FormLabel>{t("Language")}</FormLabel>
                       <FormDescription>
-                        Preferred language, e.g. en-US or pt-BR.
+                        {t("The language the interface is shown in.")}
                       </FormDescription>
                     </div>
                     <FormControl>
-                      <Input
-                        className="max-w-50"
-                        placeholder="en-US"
-                        {...field}
-                      />
+                      {/*
+                        * A select, not the free-text box this used to be: the
+                        * field decides which of two catalogues the interface
+                        * renders from, so a typo here used to mean silently
+                        * getting English back with no way to tell why.
+                        *
+                        * It applies on change rather than on save — a language
+                        * you cannot see until you submit is a language you
+                        * cannot check.
+                        */}
+                      <Select
+                        value={normalizeLocale(field.value) ?? "en"}
+                        onValueChange={(next) => {
+                          field.onChange(next);
+                          setLocale(next as (typeof LOCALES)[number]);
+                        }}
+                      >
+                        <SelectTrigger className="max-w-50">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LOCALES.map((locale) => (
+                            <SelectItem key={locale} value={locale}>
+                              {LOCALE_NAMES[locale]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </FormControl>
                   </FormItem>
                 )}
@@ -339,9 +365,9 @@ export function UserProfileSection() {
 
           <FormSection>
             <FormSectionHeader>
-              <FormSectionTitle>Location</FormSectionTitle>
+              <FormSectionTitle>{t("Location")}</FormSectionTitle>
               <FormSectionDescription>
-                Where you are based.
+                {t("Where you are based.")}
               </FormSectionDescription>
             </FormSectionHeader>
             <FormSectionContent className="divide-y divide-border">
@@ -351,15 +377,15 @@ export function UserProfileSection() {
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                     <div className="flex-1 space-y-0.5">
-                      <FormLabel>City</FormLabel>
+                      <FormLabel>{t("City")}</FormLabel>
                       <FormDescription>
-                        Optional.
+                        {t("Optional.")}
                       </FormDescription>
                     </div>
                     <FormControl>
                       <Input
                         className="max-w-50"
-                        placeholder="São Paulo"
+                        placeholder={t("São Paulo")}
                         {...field}
                       />
                     </FormControl>
@@ -372,15 +398,15 @@ export function UserProfileSection() {
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                     <div className="flex-1 space-y-0.5">
-                      <FormLabel>Country</FormLabel>
+                      <FormLabel>{t("Country")}</FormLabel>
                       <FormDescription>
-                        Optional.
+                        {t("Optional.")}
                       </FormDescription>
                     </div>
                     <FormControl>
                       <Input
                         className="max-w-50"
-                        placeholder="Brazil"
+                        placeholder={t("Brazil")}
                         {...field}
                       />
                     </FormControl>
@@ -396,9 +422,9 @@ export function UserProfileSection() {
         <SettingsSectionShell>
           <FormSection>
             <FormSectionHeader>
-              <FormSectionTitle>Password</FormSectionTitle>
+              <FormSectionTitle>{t("Password")}</FormSectionTitle>
               <FormSectionDescription>
-                Update your account password.
+                {t("Update your account password.")}
               </FormSectionDescription>
             </FormSectionHeader>
             <FormSectionContent className="divide-y divide-border">
@@ -408,9 +434,9 @@ export function UserProfileSection() {
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                     <div className="flex-1 space-y-0.5">
-                      <FormLabel>Current password</FormLabel>
+                      <FormLabel>{t("Current password")}</FormLabel>
                       <FormDescription>
-                        Your current password.
+                        {t("Your current password.")}
                       </FormDescription>
                     </div>
                     <FormControl>
@@ -431,9 +457,9 @@ export function UserProfileSection() {
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                     <div className="flex-1 space-y-0.5">
-                      <FormLabel>New password</FormLabel>
+                      <FormLabel>{t("New password")}</FormLabel>
                       <FormDescription>
-                        At least 6 characters.
+                        {t("At least 6 characters.")}
                       </FormDescription>
                     </div>
                     <FormControl>
@@ -454,9 +480,9 @@ export function UserProfileSection() {
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                     <div className="flex-1 space-y-0.5">
-                      <FormLabel>Confirm new password</FormLabel>
+                      <FormLabel>{t("Confirm new password")}</FormLabel>
                       <FormDescription>
-                        Type it again to confirm.
+                        {t("Type it again to confirm.")}
                       </FormDescription>
                     </div>
                     <FormControl>
@@ -473,7 +499,7 @@ export function UserProfileSection() {
               />
             </FormSectionContent>
             <FormSectionFooter className="flex justify-end">
-              <Button type="submit">Update password</Button>
+              <Button type="submit">{t("Update password")}</Button>
             </FormSectionFooter>
           </FormSection>
         </SettingsSectionShell>

@@ -12,6 +12,7 @@ import {
   AvatarImage,
 } from "@/components/ui/avatar";
 import { aos } from "@/app/aos";
+import { t } from "@/lib/i18n";
 import {
   assigneeAgents,
   assigneeInitials,
@@ -46,7 +47,7 @@ export function SetAssigneeDropdown({
             <UserIcon className="size-3 text-muted-foreground" />
           </AvatarFallback>
         </Avatar>
-        <span>No assignee</span>
+        <span>{t("No assignee")}</span>
         {!currentAssignee && <span className="ml-auto text-xs text-muted-foreground">✓</span>}
       </DropdownMenuItem>
 
@@ -55,7 +56,7 @@ export function SetAssigneeDropdown({
         <>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-            People
+            {t("People")}
           </DropdownMenuLabel>
           {people.map((person) => (
             <DropdownMenuItem
@@ -83,7 +84,7 @@ export function SetAssigneeDropdown({
 
       {/* Agents Section */}
       <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-        Agents
+        {t("Agents")}
       </DropdownMenuLabel>
       {agents.map((agent) => (
         <DropdownMenuItem

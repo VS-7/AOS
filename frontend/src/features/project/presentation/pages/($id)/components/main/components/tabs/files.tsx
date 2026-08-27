@@ -16,6 +16,7 @@ import { aos } from "@/app/aos";
 import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces";
 import type { Project } from "@/features/project/interfaces/project.interfaces";
 import type { ViewportTabState } from "@/features/workspace/presentation/stores/viewport.store";
+import { t } from "@/lib/i18n";
 import {
   filterFiles,
   formatFileSize,
@@ -230,11 +231,10 @@ export function ProjectFilesTab({ project }: ProjectFilesTabProps) {
         <AnimatedEmptyState className="border-none shadow-none">
           <AnimatedEmptyState.Content>
             <AnimatedEmptyState.Title>
-              No source directory
+              {t("No source directory")}
             </AnimatedEmptyState.Title>
             <AnimatedEmptyState.Description>
-              Bind an absolute host directory in Overview to browse its files
-              here.
+              {t("Bind an absolute host directory in Overview to browse its files here.")}
             </AnimatedEmptyState.Description>
           </AnimatedEmptyState.Content>
         </AnimatedEmptyState>
@@ -248,11 +248,10 @@ export function ProjectFilesTab({ project }: ProjectFilesTabProps) {
         <AnimatedEmptyState className="border-none shadow-none">
           <AnimatedEmptyState.Content>
             <AnimatedEmptyState.Title>
-              Source outside workspace
+              {t("Source outside workspace")}
             </AnimatedEmptyState.Title>
             <AnimatedEmptyState.Description>
-              This project source is not inside the current workspace, so files
-              cannot be listed here.
+              {t("This project source is not inside the current workspace, so files cannot be listed here.")}
             </AnimatedEmptyState.Description>
           </AnimatedEmptyState.Content>
         </AnimatedEmptyState>
@@ -292,7 +291,7 @@ export function ProjectFilesTab({ project }: ProjectFilesTabProps) {
         <div className="relative w-56">
           <Search className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search files..."
+            placeholder={t("Search files...")}
             className="h-8 pl-8 text-xs"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -317,10 +316,10 @@ export function ProjectFilesTab({ project }: ProjectFilesTabProps) {
             <AnimatedEmptyState className="border-none shadow-none">
               <AnimatedEmptyState.Content>
                 <AnimatedEmptyState.Title>
-                  Unable to load files
+                  {t("Unable to load files")}
                 </AnimatedEmptyState.Title>
                 <AnimatedEmptyState.Description>
-                  Could not load files for this directory.
+                  {t("Could not load files for this directory.")}
                 </AnimatedEmptyState.Description>
               </AnimatedEmptyState.Content>
             </AnimatedEmptyState>
@@ -330,10 +329,10 @@ export function ProjectFilesTab({ project }: ProjectFilesTabProps) {
             <AnimatedEmptyState className="border-none shadow-none">
               <AnimatedEmptyState.Content>
                 <AnimatedEmptyState.Title>
-                  No files found
+                  {t("No files found")}
                 </AnimatedEmptyState.Title>
                 <AnimatedEmptyState.Description>
-                  No files found in this directory.
+                  {t("No files found in this directory.")}
                 </AnimatedEmptyState.Description>
               </AnimatedEmptyState.Content>
             </AnimatedEmptyState>
@@ -345,10 +344,10 @@ export function ProjectFilesTab({ project }: ProjectFilesTabProps) {
             transition={{ duration: 0.24, ease: "easeOut" }}
           >
             <div className="grid grid-cols-[1fr_120px_100px_140px] px-4 py-2 text-xs font-medium text-muted-foreground border-b">
-              <div>Name</div>
-              <div>Type</div>
-              <div>Size</div>
-              <div>Modified</div>
+              <div>{t("Name")}</div>
+              <div>{t("Type")}</div>
+              <div>{t("Size")}</div>
+              <div>{t("Modified")}</div>
             </div>
             {entries.map((entry) => {
               const Icon =
@@ -400,10 +399,10 @@ function FilesTableSkeleton() {
   return (
     <div>
       <div className="grid grid-cols-[1fr_120px_100px_140px] px-4 py-2 text-xs font-medium text-muted-foreground border-b">
-        <div>Name</div>
-        <div>Type</div>
-        <div>Size</div>
-        <div>Modified</div>
+        <div>{t("Name")}</div>
+        <div>{t("Type")}</div>
+        <div>{t("Size")}</div>
+        <div>{t("Modified")}</div>
       </div>
       {Array.from({ length: 8 }).map((_, i) => (
         <div

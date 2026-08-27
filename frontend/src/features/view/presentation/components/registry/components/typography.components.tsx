@@ -1,6 +1,7 @@
 import type { BaseComponentProps } from "@json-render/react";
 import MarkdownContent from "@/components/ui/markdown-content";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 type HeadingProps = {
   text: string;
@@ -149,7 +150,7 @@ export function MarkdownContentComponent({
 
   if (!content) {
     return (
-      <p className="text-sm text-muted-foreground">No content to display.</p>
+      <p className="text-sm text-muted-foreground">{t("No content to display.")}</p>
     );
   }
 

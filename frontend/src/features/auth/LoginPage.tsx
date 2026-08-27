@@ -5,6 +5,7 @@ import { DomainError } from "@/lib/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/ui/logo";
+import { t } from "@/lib/i18n";
 
 interface LoginPageProps {
   /** Called once a session exists — the caller re-checks status and moves on. */
@@ -47,11 +48,11 @@ export function LoginPage({ onSignedIn }: LoginPageProps): JSX.Element {
           <Logo className="h-10 w-10" />
         </div>
 
-        <h1 className="text-3xl font-bold tracking-tight">Log in to AOS</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t("Log in to AOS")}</h1>
 
         <form onSubmit={submit} className="flex w-full flex-col gap-4">
           <Input
-            placeholder="Username or email"
+            placeholder={t("Username or email")}
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
             disabled={pending}
@@ -62,7 +63,7 @@ export function LoginPage({ onSignedIn }: LoginPageProps): JSX.Element {
           />
           <Input
             type="password"
-            placeholder="Password"
+            placeholder={t("Password")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={pending}

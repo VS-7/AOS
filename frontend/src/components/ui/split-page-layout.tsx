@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 import { aos } from "@/app/aos";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { t } from "@/lib/i18n";
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -295,7 +296,7 @@ function SearchInput({ className, placeholder = "Search...", ...props }: SearchI
       </div>
       <button
         type="button"
-        aria-label="Filters"
+        aria-label={t("Filters")}
         className={cn(
           "flex size-9 shrink-0 items-center justify-center rounded-full",
           "bg-muted/35 text-muted-foreground transition-colors",

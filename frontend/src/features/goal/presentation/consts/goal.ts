@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import {
   Target,
   CheckCircle2,
@@ -20,19 +21,19 @@ export const GOAL_STATUS_CONFIG: Record<
   { label: string; icon: any; color: string; badgeClass: string }
 > = {
   active: {
-    label: "Active",
+    get label() { return t("Active"); },
     icon: CircleDashed,
     color: "text-primary",
     badgeClass: "bg-primary/10 text-primary border-primary/20",
   },
   achieved: {
-    label: "Achieved",
+    get label() { return t("Achieved"); },
     icon: CheckCircle2,
     color: "text-success",
     badgeClass: "bg-success/10 text-success border-success/20",
   },
   abandoned: {
-    label: "Abandoned",
+    get label() { return t("Abandoned"); },
     icon: CircleX,
     color: "text-muted-foreground",
     badgeClass: "bg-muted text-muted-foreground border-muted",
@@ -42,7 +43,7 @@ export const GOAL_STATUS_CONFIG: Record<
   // *paused*). Without this entry every lookup of a paused goal returned
   // `undefined` and the row that rendered it threw on `.icon`.
   paused: {
-    label: "Paused",
+    get label() { return t("Paused"); },
     icon: CirclePause,
     color: "text-muted-foreground",
     badgeClass: "bg-muted text-muted-foreground border-muted",
@@ -61,22 +62,22 @@ export const GOAL_PRIORITY_CONFIG: Record<
   { label: string; icon: any; colorClass: string }
 > = {
   no_priority: {
-    label: "No Priority",
+    get label() { return t("No Priority"); },
     icon: SignalZero,
     colorClass: "text-muted-foreground/70",
   },
   low: {
-    label: "Low",
+    get label() { return t("Low"); },
     icon: SignalLow,
     colorClass: "text-muted-foreground/70",
   },
   medium: {
-    label: "Medium",
+    get label() { return t("Medium"); },
     icon: SignalMedium,
     colorClass: "text-muted-foreground/70",
   },
-  high: { label: "High", icon: SignalHigh, colorClass: "text-yellow-500" },
-  urgent: { label: "Urgent", icon: FlagIcon, colorClass: "text-red-500" },
+  high: { get label() { return t("High"); }, icon: SignalHigh, colorClass: "text-yellow-500" },
+  urgent: { get label() { return t("Urgent"); }, icon: FlagIcon, colorClass: "text-red-500" },
 };
 
 export const GOAL_PRIORITY_ORDER: GoalPriority[] = [

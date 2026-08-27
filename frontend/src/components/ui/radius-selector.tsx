@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 "use client"
 
 import { cn } from "@/lib/utils"
@@ -63,7 +64,7 @@ export function ThemeRadiusSelector({
         className,
       )}
       role="radiogroup"
-      aria-label="Corner radius"
+      aria-label={t("Corner radius")}
     >
       {themeRadiusOptions.map((option) => {
         const selected = value === option.value

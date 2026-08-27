@@ -19,6 +19,21 @@ type AuthResult struct {
 	ExpiresAt string     `json:"expiresAt"`
 }
 
+// SessionResult wraps the signed-in account.
+//
+// The wrapper is not decoration: this method and the daemon's own
+// GET /api/auth/session are two transports for one question, and the
+// interface picks between them at runtime (frontend's lib/auth.ts tries the
+// bridge and falls back to HTTP). HTTP answers {"data":{"user":{...}}}, so
+// `const { user } = await session()` is what every caller writes. Returning a
+// bare PublicUser here made that destructuring yield undefined for the whole
+// desktop window — the account had no name in the sidebar, the settings page
+// showed an empty form, and `user.role === "super"` was false, which is what
+// hides the button that creates a workspace. Signed in, and invisible.
+type SessionResult struct {
+	User PublicUser `json:"user"`
+}
+
 // AuthStatus is what the window checks before deciding what to show: nobody
 // onboarded yet, an account exists but this window is not signed in, or it
 // already is.
@@ -107,9 +122,16 @@ func (s *AuthService) Logout(ctx context.Context) error {
 }
 
 // Session reports who, if anyone, this window is currently signed in as.
-func (s *AuthService) Session(ctx context.Context) (PublicUser, error) {
+//
+// Wrapped in SessionResult so the bridge and the daemon's HTTP route answer
+// the same shape — see SessionResult's own doc for what the bare value cost.
+func (s *AuthService) Session(ctx context.Context) (SessionResult, error) {
 	if s.caller == nil {
-		return PublicUser{}, errNoDaemon()
+		return SessionResult{}, errNoDaemon()
 	}
-	return s.caller.Session(ctx)
+	user, err := s.caller.Session(ctx)
+	if err != nil {
+		return SessionResult{}, err
+	}
+	return SessionResult{User: user}, nil
 }

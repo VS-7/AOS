@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import * as React from "react"
 import { motion } from "framer-motion"
 import { Badge } from "@/components/ui/badge"
@@ -80,7 +81,7 @@ export function InboxPanel({ className }: { className?: string }) {
 
             <div className="flex justify-center pb-1 pt-2">
               <Badge variant="outline" className="rounded-full border-dashed text-[11px] font-medium text-muted-foreground">
-                No more notifications
+                {t("No more notifications")}
               </Badge>
             </div>
           </div>

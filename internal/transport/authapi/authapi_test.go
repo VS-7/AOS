@@ -336,3 +336,84 @@ func TestUsersListsTheAccountsOnThisInstallation(t *testing.T) {
 		t.Error("a password hash reached the response body")
 	}
 }
+
+// TestProfileChangesTheNameEveryScreenShows.
+//
+// The account settings page has a name field and a save button; until this
+// route existed, saving it reported "Profile editing isn't wired up in this
+// build yet" — the store action behind it was a disclosed stub, because there
+// was nothing to call. This is what it calls.
+func TestProfileChangesTheNameEveryScreenShows(t *testing.T) {
+	srv := newServer(t)
+	_, env := post(t, srv, "/onboarding", map[string]string{
+		"name": "Vitor", "email": "vitor@example.test", "password": goodPassword,
+	}, "")
+	var onboarded struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(env.Data, &onboarded)
+
+	res, updated := post(t, srv, "/profile", map[string]string{
+		"name": "Vitor Sérgio", "email": "vitor@example.test",
+	}, onboarded.Token)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("profile status = %d", res.StatusCode)
+	}
+
+	// Same shape as /session, so the interface can put the answer straight
+	// back into the store it read /session into.
+	var body struct {
+		User struct {
+			Name string `json:"name"`
+		} `json:"user"`
+	}
+	if err := json.Unmarshal(updated.Data, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.User.Name != "Vitor Sérgio" {
+		t.Errorf("answered name = %q", body.User.Name)
+	}
+
+	_, after := get(t, srv, "/session", onboarded.Token)
+	if err := json.Unmarshal(after.Data, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.User.Name != "Vitor Sérgio" {
+		t.Errorf("the session still reports %q", body.User.Name)
+	}
+}
+
+// TestProfileNeedsASession. It edits an account, so it may not be reachable by
+// anyone who has not proved which account is theirs.
+func TestProfileNeedsASession(t *testing.T) {
+	srv := newServer(t)
+	post(t, srv, "/onboarding", map[string]string{
+		"name": "Vitor", "email": "vitor@example.test", "password": goodPassword,
+	}, "")
+
+	res, _ := post(t, srv, "/profile", map[string]string{"name": "Alguém"}, "")
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", res.StatusCode)
+	}
+}
+
+// TestProfileRefusesABlankName, at the surface as well as in the domain: a
+// 400 with the field named is what lets the form point at the input.
+func TestProfileRefusesABlankName(t *testing.T) {
+	srv := newServer(t)
+	_, env := post(t, srv, "/onboarding", map[string]string{
+		"name": "Vitor", "email": "vitor@example.test", "password": goodPassword,
+	}, "")
+	var onboarded struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(env.Data, &onboarded)
+
+	res, body := post(t, srv, "/profile", map[string]string{"name": " "}, onboarded.Token)
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", res.StatusCode)
+	}
+	if body.Error == nil || body.Error.Code != "AOS_AUTH_NAME_REQUIRED" {
+		t.Errorf("error = %+v, want AOS_AUTH_NAME_REQUIRED", body.Error)
+	}
+}

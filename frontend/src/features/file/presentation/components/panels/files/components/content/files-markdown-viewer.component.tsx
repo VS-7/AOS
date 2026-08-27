@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
+import { t } from "@/lib/i18n";
 
 interface FilesMarkdownViewerProps {
   content: string;
@@ -20,7 +21,7 @@ export function FilesMarkdownViewer({
         onValueChange={onChange}
         disabled={readOnly}
         frontMatterEditor
-        placeholder="Write markdown..."
+        placeholder={t("Write markdown...")}
       />
     </div>
   );

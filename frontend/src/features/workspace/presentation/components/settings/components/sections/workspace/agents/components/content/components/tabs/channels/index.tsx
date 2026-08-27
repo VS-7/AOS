@@ -15,6 +15,7 @@ import { TelegramIcon, WhatsAppIcon } from "@/components/icons/chat-providers";
 import { DiscordIcon } from "@/components/icons/discord-icon";
 import { AppError } from "@/core/errors/aos.error";
 import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
+import { t } from "@/lib/i18n";
 
 const CHANNEL_PROVIDERS = ["telegram", "discord", "slack", "whatsapp"] as const;
 type ChannelProvider = (typeof CHANNEL_PROVIDERS)[number];
@@ -155,7 +156,7 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
     }),
     onResponse: ({ error }) => {
       if (!error) {
-        toast.success("Telegram channel updated successfully.");
+        toast.success(t("Telegram channel updated successfully."));
         void aos.stores.agent.actions.refresh();
         return;
       }
@@ -190,10 +191,9 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
       <SettingsSectionShell className="relative" contentClassName="max-w-4xl">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-1">
-            <h1 className="text-sm font-semibold tracking-tight">Channels</h1>
+            <h1 className="text-sm font-semibold tracking-tight">{t("Channels")}</h1>
             <p className="text-sm text-muted-foreground">
-              Configure how agents can be reached across messaging platforms. Telegram is the only
-              provider enabled for now.
+              {t("Configure how agents can be reached across messaging platforms. Telegram is the only provider enabled for now.")}
             </p>
           </div>
 
@@ -237,18 +237,18 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
                           name="token"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Bot token</FormLabel>
+                              <FormLabel>{t("Bot token")}</FormLabel>
                               <FormControl>
                                 <Input
                                   {...field}
                                   type="password"
                                   autoComplete="off"
-                                  placeholder="123456:ABC-DEF..."
+                                  placeholder={t("123456:ABC-DEF...")}
                                   value={field.value ?? ""}
                                 />
                               </FormControl>
                               <FormDescription>
-                                Paste the Telegram bot token that will authenticate this agent.
+                                {t("Paste the Telegram bot token that will authenticate this agent.")}
                               </FormDescription>
                             </FormItem>
                           )}
@@ -257,9 +257,9 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
                         <div className="space-y-3">
                           <div className="flex items-center justify-between gap-3">
                             <div className="space-y-1">
-                              <h3 className="text-sm font-medium text-foreground">Allowed ids</h3>
+                              <h3 className="text-sm font-medium text-foreground">{t("Allowed ids")}</h3>
                               <p className="text-xs text-muted-foreground">
-                                Add the Telegram user, chat, or group ids that can message this agent.
+                                {t("Add the Telegram user, chat, or group ids that can message this agent.")}
                               </p>
                             </div>
 
@@ -270,14 +270,14 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
                               onClick={() => allowedIdsFieldArray.append({ value: "" })}
                             >
                               <Plus className="size-4" />
-                              Add id
+                              {t("Add id")}
                             </Button>
                           </div>
 
                           <div className="space-y-3">
                             {allowedIdsFieldArray.fields.length === 0 ? (
                               <div className="rounded-lg border border-dashed border-border/70 px-4 py-5 text-sm text-muted-foreground">
-                                No ids added yet. Start with the first allowed Telegram id.
+                                {t("No ids added yet. Start with the first allowed Telegram id.")}
                               </div>
                             ) : (
                               allowedIdsFieldArray.fields.map((field, index) => (
@@ -290,7 +290,7 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
                                     name={`allowedIds.${index}.value` as const}
                                     render={({ field: allowedField }) => (
                                       <FormItem className="flex-1">
-                                        <FormLabel className="sr-only">Allowed id</FormLabel>
+                                        <FormLabel className="sr-only">{t("Allowed id")}</FormLabel>
                                         <FormControl>
                                           <Input
                                             {...allowedField}
@@ -310,7 +310,7 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
                                     onClick={() => allowedIdsFieldArray.remove(index)}
                                   >
                                     <Trash2 className="size-4" />
-                                    <span className="sr-only">Remove allowed id</span>
+                                    <span className="sr-only">{t("Remove allowed id")}</span>
                                   </Button>
                                 </div>
                               ))
@@ -326,7 +326,7 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
                       </div>
                     ) : (
                       <div className="rounded-lg border border-dashed border-border/70 px-4 py-5 text-sm text-muted-foreground">
-                        This channel is coming soon.
+                        {t("This channel is coming soon.")}
                       </div>
                     )}
                   </AccordionContent>

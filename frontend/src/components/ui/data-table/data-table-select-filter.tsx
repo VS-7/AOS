@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "../select";
 import { useDataTable } from "./data-table-provider";
+import { t } from "@/lib/i18n";
 
 interface DataTableSelectFilterProps {
   id: string;
@@ -46,7 +47,7 @@ export function DataTableSelectFilter({
         <SelectValue placeholder={label} />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="ALL">Todas</SelectItem>
+        <SelectItem value="ALL">{t("Todas")}</SelectItem>
         {options.map((option) => (
           <SelectItem key={option.value} value={option.value}>
             {option.label}

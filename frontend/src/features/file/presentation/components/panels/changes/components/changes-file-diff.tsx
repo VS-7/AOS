@@ -6,6 +6,7 @@ import { aos } from "@/app/aos";
 import { serializeExplorerContext } from "@/features/file/presentation/helpers/files-explorer.helper";
 import type { FileExplorerContext } from "@/features/file/interfaces/file.interfaces";
 import type { ChangesPanelPreferences } from "@/features/file/presentation/helpers/changes.helper";
+import { t } from "@/lib/i18n";
 
 interface ChangesFileDiffProps {
   path: string;
@@ -66,7 +67,7 @@ export function ChangesFileDiff({
     return (
       <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
         <LoaderCircle className="size-4 animate-spin" />
-        Loading diff…
+        {t("Loading diff…")}
       </div>
     );
   }
@@ -74,8 +75,7 @@ export function ChangesFileDiff({
   if (diffQuery.isError || !snapshot) {
     return (
       <div className="px-4 py-6 text-sm text-muted-foreground">
-        Diff content not available. This file changed, but a text diff could not
-        be rendered.
+        {t("Diff content not available. This file changed, but a text diff could not be rendered.")}
       </div>
     );
   }
@@ -83,8 +83,7 @@ export function ChangesFileDiff({
   if (isBinary || !oldFile || !newFile) {
     return (
       <div className="px-4 py-6 text-sm text-muted-foreground">
-        Diff content not available. This file changed, but a text diff could not
-        be rendered.
+        {t("Diff content not available. This file changed, but a text diff could not be rendered.")}
       </div>
     );
   }

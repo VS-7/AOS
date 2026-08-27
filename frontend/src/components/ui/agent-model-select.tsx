@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 /**
  * Minimal shape every selectable provider must expose to the picker.
@@ -209,7 +210,7 @@ export const AgentModelSelect = ({
     <Button
       variant="outline"
       size="icon-sm"
-      aria-label="Reasoning level"
+      aria-label={t("Reasoning level")}
       className="rounded-l-none border-l-0"
       disabled={disabled}
     >
@@ -239,14 +240,14 @@ export const AgentModelSelect = ({
               autoFocus
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search models"
+              placeholder={t("Search models")}
               className="h-7 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
             />
           </div>
           <div className="max-h-72 overflow-y-auto p-1">
             {filteredProviders.length === 0 ? (
               <div className="px-2 py-3 text-center text-xs text-muted-foreground">
-                No providers configured.
+                {t("No providers configured.")}
               </div>
             ) : (
               filteredProviders.map((provider) => {
@@ -270,7 +271,7 @@ export const AgentModelSelect = ({
                       />
                       {isLoading && (
                         <span className="text-xs text-muted-foreground">
-                          Loading…
+                          {t("Loading…")}
                         </span>
                       )}
                     </DropdownMenuItem>
@@ -287,7 +288,7 @@ export const AgentModelSelect = ({
                       {provider.renderLogo?.()}
                       <span className="flex-1">{provider.name}</span>
                       <span className="text-xs text-muted-foreground">
-                        No models
+                        {t("No models")}
                       </span>
                     </DropdownMenuItem>
                   );
@@ -344,7 +345,7 @@ export const AgentModelSelect = ({
           <DropdownMenuTrigger asChild>{reasoningButton}</DropdownMenuTrigger>
           <DropdownMenuContent align="end" sideOffset={6} className="w-44">
             <DropdownMenuLabel className="px-2 text-[11px]">
-              Reasoning
+              {t("Reasoning")}
             </DropdownMenuLabel>
             <DropdownMenuRadioGroup
               value={value.reasoning ?? "provider-default"}

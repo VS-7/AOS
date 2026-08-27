@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 'use client'
 
 import { User, Mail } from 'lucide-react'
@@ -14,9 +15,9 @@ export function OnboardingFormUserStep({ form }: OnboardingFormUserStepProps) {
     <div className="flex flex-col items-center justify-center h-full px-8 py-8">
       <div className="w-full max-w-md space-y-6">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">A bit about you</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-foreground">{t("A bit about you")}</h2>
           <p className="text-sm text-muted-foreground leading-relaxed mt-1">
-            This helps your copilot identify you and personalize your local workspace.
+            {t("This helps your copilot identify you and personalize your local workspace.")}
           </p>
         </div>
 
@@ -26,12 +27,12 @@ export function OnboardingFormUserStep({ form }: OnboardingFormUserStepProps) {
             name="user.name"
             render={({ field }) => (
               <FormItem className="space-y-2">
-                <FormLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Full Name</FormLabel>
+                <FormLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("Full Name")}</FormLabel>
                 <FormControl>
                   <div className="relative">
                     <User className="w-4 h-4 text-muted-foreground/60 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <Input
-                      placeholder="e.g. Felipe Barcelos"
+                      placeholder={t("e.g. Felipe Barcelos")}
                       className="pl-10 h-11 bg-muted/20 border-border/60 rounded-xl focus-visible:ring-primary/20 transition-all"
                       autoFocus
                       {...field}
@@ -48,20 +49,20 @@ export function OnboardingFormUserStep({ form }: OnboardingFormUserStepProps) {
             name="user.email"
             render={({ field }) => (
               <FormItem className="space-y-2">
-                <FormLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Email Address</FormLabel>
+                <FormLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("Email Address")}</FormLabel>
                 <FormControl>
                   <div className="relative">
                     <Mail className="w-4 h-4 text-muted-foreground/60 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <Input
                       type="email"
-                      placeholder="you@example.com"
+                      placeholder={t("you@example.com")}
                       className="pl-10 h-11 bg-muted/20 border-border/60 rounded-xl focus-visible:ring-primary/20 transition-all"
                       {...field}
                     />
                   </div>
                 </FormControl>
                 <p className="text-[11px] text-muted-foreground/80 leading-normal pl-1">
-                  Stored locally for workspace session identity and local commits.
+                  {t("Stored locally for workspace session identity and local commits.")}
                 </p>
                 <FormMessage />
               </FormItem>

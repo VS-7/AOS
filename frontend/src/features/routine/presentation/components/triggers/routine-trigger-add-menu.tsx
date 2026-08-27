@@ -22,6 +22,7 @@ import {
   type RoutineTriggerTypeId,
 } from "@/features/routine/presentation/consts/routine-triggers";
 import { RoutineTriggersHelper } from "@/features/routine/presentation/helpers/routine-triggers.helper";
+import { t } from "@/lib/i18n";
 
 interface RoutineTriggerAddMenuProps {
   availableTypes: RoutineTriggerTypeId[];
@@ -111,7 +112,7 @@ export function RoutineTriggerAddMenu({
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search triggers..."
+            placeholder={t("Search triggers...")}
             className="h-6 border-0 bg-transparent px-2 shadow-none focus-visible:ring-0"
           />
         </div>
@@ -119,7 +120,7 @@ export function RoutineTriggerAddMenu({
         <div className="max-h-72 overflow-y-auto p-1.5 shadow-sm">
           {visibleTypes.length === 0 && filteredActivityEvents.length === 0 ? (
             <p className="px-2 py-1.5 text-xs text-muted-foreground">
-              No triggers available
+              {t("No triggers available")}
             </p>
           ) : null}
 
@@ -158,7 +159,7 @@ export function RoutineTriggerAddMenu({
                   <DropdownMenuSubContent className="w-72">
                     {filteredActivityEvents.length === 0 ? (
                       <p className="px-2 py-1.5 text-xs text-muted-foreground">
-                        No activity events available
+                        {t("No activity events available")}
                       </p>
                     ) : (
                       filteredActivityEvents.map((item) => (

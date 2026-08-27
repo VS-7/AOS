@@ -48,6 +48,7 @@ import { MarketplacePage } from "@/features/marketplace/presentation/pages/marke
 import { MarketplaceDetailsPage } from "@/features/marketplace/presentation/pages/marketplace/[name]";
 import { SettingsIndexPage } from "@/features/workspace/presentation/pages/settings";
 import { SettingsSectionPage } from "@/features/workspace/presentation/pages/settings/($group)/($section)";
+import { t } from "@/lib/i18n";
 
 // ─── Route-level error fallback ───────────────────────────────────────────────
 // TanStack Router renders this inside its own error boundary for loader errors.
@@ -94,8 +95,8 @@ function RouteErrorFallback({ error, reset }: ErrorComponentProps) {
 
         {/* Text */}
         <div className="eb-text">
-          <h2 className="eb-title" style={{ fontSize: "1rem" }}>Something went wrong</h2>
-          <p className="eb-desc">This section encountered an unexpected error and has been isolated.</p>
+          <h2 className="eb-title" style={{ fontSize: "1rem" }}>{t("Something went wrong")}</h2>
+          <p className="eb-desc">{t("This section encountered an unexpected error and has been isolated.")}</p>
         </div>
 
         {/* Error pill */}
@@ -111,7 +112,7 @@ function RouteErrorFallback({ error, reset }: ErrorComponentProps) {
             <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <path d="M1 7a6 6 0 1 0 .75-2.91M1 1v3.5h3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            Try again
+            {t("Try again")}
           </button>
         </div>
       </div>

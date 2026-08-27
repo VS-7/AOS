@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { RoutineTriggerFormValue } from "@/features/routine/presentation/consts/routine-triggers";
+import { t } from "@/lib/i18n";
 import {
   ROUTINE_WEEKDAY_OPTIONS,
   RoutineTriggersHelper,
@@ -71,12 +72,12 @@ export function ScheduledTriggerRow({
       <div className="min-w-0 flex-1">
         <div className="flex min-h-7 flex-wrap items-center gap-x-1.5 gap-y-1 text-sm">
           {value.config.preset === "hourly" ? (
-            <span>Every hour</span>
+            <span>{t("Every hour")}</span>
           ) : null}
 
           {value.config.preset === "daily" ? (
             <>
-              <span>Every day at</span>
+              <span>{t("Every day at")}</span>
               <InlineSelect
                 value={value.config.time}
                 options={TIME_OPTIONS.map((time) => ({ value: time, label: time }))}
@@ -87,7 +88,7 @@ export function ScheduledTriggerRow({
 
           {value.config.preset === "weekly" ? (
             <>
-              <span>Every week on</span>
+              <span>{t("Every week on")}</span>
               <InlineSelect
                 value={value.config.day}
                 options={ROUTINE_WEEKDAY_OPTIONS.map((option) => ({
@@ -107,7 +108,7 @@ export function ScheduledTriggerRow({
 
           {value.config.preset === "custom" ? (
             <>
-              <span>Custom schedule</span>
+              <span>{t("Custom schedule")}</span>
               <Input
                 value={value.config.cron}
                 onChange={(event) =>
@@ -133,7 +134,7 @@ export function ScheduledTriggerRow({
         onClick={onRemove}
       >
         <Trash2Icon className="size-3.5" />
-        <span className="sr-only">Remove scheduled trigger</span>
+        <span className="sr-only">{t("Remove scheduled trigger")}</span>
       </Button>
     </div>
   );

@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 
 import { Caption, CaptionTextarea } from './caption';
 import { MediaToolbar } from './media-toolbar';
+import { t } from "@/lib/i18n";
 import {
   mediaResizeHandleVariants,
   Resizable,
@@ -127,7 +128,7 @@ export const MediaEmbedElement = withHOC(
             </Resizable>
 
             <Caption style={{ width }} align={align}>
-              <CaptionTextarea placeholder="Write a caption..." />
+              <CaptionTextarea placeholder={t("Write a caption...")} />
             </Caption>
           </figure>
 

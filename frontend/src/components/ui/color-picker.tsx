@@ -18,6 +18,7 @@ import { springs } from "@/lib/springs";
 import { fontWeights } from "@/lib/font-weight";
 import { Slider } from "./slider";
 import { Dropdown, useDropdown } from "./dropdown";
+import { t } from "@/lib/i18n";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -429,7 +430,7 @@ function SaturationSquare({ h, s, v, onChange }: SaturationSquareProps) {
     <div
       ref={ref}
       role="application"
-      aria-label="Saturation and brightness"
+      aria-label={t("Saturation and brightness")}
       tabIndex={0}
       onFocus={(e) => { if (e.currentTarget.matches(":focus-visible")) setFocused(true); }}
       onBlur={() => setFocused(false)}
@@ -487,7 +488,7 @@ function HueSlider({ h, onChange }: { h: number; onChange: (h: number) => void }
           "linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))",
         borderColor: "transparent",
       }}
-      aria-label="Hue"
+      aria-label={t("Hue")}
     />
   );
 }
@@ -521,7 +522,7 @@ function AlphaSlider({
         backgroundSize: "100% 100%, 8px 8px",
         borderColor: "transparent",
       }}
-      aria-label="Alpha"
+      aria-label={t("Alpha")}
     />
   );
 }
@@ -845,7 +846,7 @@ function EyeDropperButton({ onPick }: { onPick: (hex: string) => void }) {
     <button
       type="button"
       onClick={handleClick}
-      aria-label="Pick color from screen"
+      aria-label={t("Pick color from screen")}
       className={cn(
         "flex items-center justify-center h-9 px-3 text-foreground border border-border bg-transparent hover:bg-accent/40 transition-colors duration-80 outline-none focus-visible:ring-1 focus-visible:ring-[#6B97FF] cursor-pointer rounded-md",
       )}
@@ -1384,7 +1385,7 @@ const ColorPickerPopover = forwardRef<HTMLDivElement, ColorPickerPopoverProps>(
           {triggerShowRemove && (
             <span
               role="button"
-              aria-label="Remove color"
+              aria-label={t("Remove color")}
               tabIndex={0}
               onClick={(e) => {
                 e.stopPropagation();

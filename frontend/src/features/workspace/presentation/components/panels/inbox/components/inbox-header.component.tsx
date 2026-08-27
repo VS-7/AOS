@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import * as React from "react"
 import { CheckCheck, Clock } from "lucide-react"
 import { toast } from "sonner"
@@ -15,7 +16,7 @@ export function InboxHeader() {
         <Clock className="size-4" />
 
         <span className="text-sm">
-          Activity
+          {t("Activity")}
         </span>
         {unreadCount > 0 && (
           <span className="text-xs bg-primary text-primary-foreground rounded-md px-1.5 py-0.5 leading-none">
@@ -31,7 +32,7 @@ export function InboxHeader() {
             size="icon" 
             className="h-7 w-7 text-muted-foreground" 
             onClick={() => markAllAsRead().then(
-              () => toast.success("All activities marked as read"),
+              () => toast.success(t("All activities marked as read")),
               (err) => toast.error(err?.message ?? "Failed to mark activities as read"),
             )}
             disabled={unreadCount === 0}
@@ -40,7 +41,7 @@ export function InboxHeader() {
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">
-          Mark all as read
+          {t("Mark all as read")}
         </TooltipContent>
       </Tooltip>
     </div>

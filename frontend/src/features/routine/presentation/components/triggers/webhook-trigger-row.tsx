@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { t } from "@/lib/i18n";
 import {
   InputGroup,
   InputGroupAddon,
@@ -41,7 +42,7 @@ export function WebhookTriggerRow({
 
       <div className="min-w-0 flex-1">
         <div className="flex min-h-7 flex-wrap items-center gap-2">
-          <span className="text-sm">Webhook triggered</span>
+          <span className="text-sm">{t("Webhook triggered")}</span>
 
           {fireUrl ? (
             <InputGroup className="h-8 max-w-full flex-1 bg-background/70">
@@ -52,14 +53,14 @@ export function WebhookTriggerRow({
                 readOnly
                 value={fireUrl}
                 className="text-xs"
-                aria-label="Webhook fire URL"
+                aria-label={t("Webhook fire URL")}
               />
               <InputGroupAddon align="inline-end">
                 <InputGroupButton
                   type="button"
                   size="icon-xs"
                   onClick={handleCopy}
-                  aria-label="Copy webhook URL"
+                  aria-label={t("Copy webhook URL")}
                 >
                   {copied ? (
                     <CheckIcon className="size-3.5" />
@@ -71,7 +72,7 @@ export function WebhookTriggerRow({
             </InputGroup>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Save this routine to generate the public fire URL.
+              {t("Save this routine to generate the public fire URL.")}
             </p>
           )}
         </div>
@@ -85,7 +86,7 @@ export function WebhookTriggerRow({
         onClick={onRemove}
       >
         <Trash2Icon className="size-3.5" />
-        <span className="sr-only">Remove webhook trigger</span>
+        <span className="sr-only">{t("Remove webhook trigger")}</span>
       </Button>
     </div>
   );

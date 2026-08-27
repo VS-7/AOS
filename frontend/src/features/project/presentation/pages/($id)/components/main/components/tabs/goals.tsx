@@ -15,6 +15,7 @@ import { Plus, ArrowUpRight, CalendarDays } from "lucide-react";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading.hook";
 import type { Goal } from "@/features/goal/interfaces/goal.interfaces";
 import type { Project } from "@/features/project/interfaces/project.interfaces";
+import { t } from "@/lib/i18n";
 
 interface ProjectGoalsTabProps {
   project: Project;
@@ -141,7 +142,7 @@ export function ProjectGoalsTab({ project }: ProjectGoalsTabProps) {
   return (
     <div className="container mx-auto max-w-3xl py-6 pb-12 space-y-6">
       <GoalsSection
-        title="Goals"
+        title={t("Goals")}
         action={
           <Button
             size="sm"
@@ -151,7 +152,7 @@ export function ProjectGoalsTab({ project }: ProjectGoalsTabProps) {
             }
           >
             <Plus className="size-4" />
-            New Goal
+            {t("New Goal")}
           </Button>
         }
       >
@@ -176,7 +177,7 @@ export function ProjectGoalsTab({ project }: ProjectGoalsTabProps) {
           ) : filteredGoals.length === 0 ? (
             <div className="rounded-md border-2 border-dotted h-12 flex items-center justify-center w-full">
               <span className="text-xs text-muted-foreground/60">
-                No goals with this status.
+                {t("No goals with this status.")}
               </span>
             </div>
           ) : (

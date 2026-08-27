@@ -32,6 +32,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { ToolbarButton, ToolbarMenuGroup } from "./toolbar";
+import { t } from "@/lib/i18n";
 
 const MAX_CUSTOM_COLORS = 19;
 const HEX_COLOR_RE = /^#[\da-f]{6}$/i;
@@ -237,7 +238,7 @@ function PureColorPicker({
 }) {
   return (
     <div className={cn("flex flex-col", className)} {...props}>
-      <ToolbarMenuGroup label="Custom Colors">
+      <ToolbarMenuGroup label={t("Custom Colors")}>
         <ColorCustom
           className="px-2"
           color={color}
@@ -250,7 +251,7 @@ function PureColorPicker({
           updatedColor={updatedColor}
         />
       </ToolbarMenuGroup>
-      <ToolbarMenuGroup label="Default Colors">
+      <ToolbarMenuGroup label={t("Default Colors")}>
         <ColorDropdownMenuItems
           className="px-2"
           color={color}
@@ -262,7 +263,7 @@ function PureColorPicker({
         <ToolbarMenuGroup>
           <DropdownMenuItem className="p-2" onClick={clearColor}>
             <EraserIcon />
-            <span>Clear</span>
+            <span>{t("Clear")}</span>
           </DropdownMenuItem>
         </ToolbarMenuGroup>
       )}
@@ -411,7 +412,7 @@ function ColorCustom({
               e.preventDefault();
             }}
           >
-            <span className="sr-only">Custom</span>
+            <span className="sr-only">{t("Custom")}</span>
             <PlusIcon />
           </DropdownMenuItem>
         </ColorInput>

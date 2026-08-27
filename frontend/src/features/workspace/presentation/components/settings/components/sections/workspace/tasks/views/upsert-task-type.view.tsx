@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SettingsStackedView } from "../../../../stacked-view";
 import { aos } from "@/app/aos";
+import { t } from "@/lib/i18n";
 
 interface UpsertTaskTypeViewProps {
   open: boolean;
@@ -92,9 +93,9 @@ export function UpsertTaskTypeView({
               name="label"
               render={({ field }) => (
                 <FormItem className="flex-1">
-                  <FormLabel>Label</FormLabel>
+                  <FormLabel>{t("Label")}</FormLabel>
                   <FormControl>
-                    <Input placeholder="Bug" {...field} />
+                    <Input placeholder={t("Bug")} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -106,7 +107,7 @@ export function UpsertTaskTypeView({
               name="color"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Color</FormLabel>
+                  <FormLabel>{t("Color")}</FormLabel>
                   <FormControl>
                     <div className="flex items-center gap-2">
                       <Input
@@ -127,9 +128,9 @@ export function UpsertTaskTypeView({
             name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Description</FormLabel>
+                <FormLabel>{t("Description")}</FormLabel>
                 <FormControl>
-                  <Input placeholder="Briefly describe what this task type is for..." {...field} value={field.value || ""} />
+                  <Input placeholder={t("Briefly describe what this task type is for...")} {...field} value={field.value || ""} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -141,10 +142,10 @@ export function UpsertTaskTypeView({
             name="instructions"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Specific instructions</FormLabel>
+                <FormLabel>{t("Specific instructions")}</FormLabel>
                 <FormControl>
                   <Textarea
-                    placeholder="Guide agents on how to handle this task type."
+                    placeholder={t("Guide agents on how to handle this task type.")}
                     className="min-h-24"
                     {...field}
                     value={field.value || ""}
@@ -158,7 +159,7 @@ export function UpsertTaskTypeView({
 
         <div className="flex justify-end gap-2 border-t pt-4">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("Cancel")}
           </Button>
           <Button type="submit">
             {taskType ? "Save changes" : "Create task type"}

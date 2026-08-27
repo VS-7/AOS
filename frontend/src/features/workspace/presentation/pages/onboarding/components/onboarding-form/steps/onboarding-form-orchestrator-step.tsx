@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 export interface OnboardingFormOrchestratorStepProps {
   form: UseFormReturn<any>;
@@ -74,8 +75,8 @@ export function OnboardingFormOrchestratorStep({
     <div className="flex flex-col items-center justify-center h-full px-8 py-10">
       <div className="w-full max-w-sm space-y-6">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight">Meet your copilot</h2>
-          <p className="text-sm text-muted-foreground mt-1">Give it a name and a style — it'll adapt from there.</p>
+          <h2 className="text-xl font-semibold tracking-tight">{t("Meet your copilot")}</h2>
+          <p className="text-sm text-muted-foreground mt-1">{t("Give it a name and a style — it'll adapt from there.")}</p>
         </div>
 
         <div className="space-y-5">
@@ -85,10 +86,10 @@ export function OnboardingFormOrchestratorStep({
             name="orchestrator.name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Name</FormLabel>
+                <FormLabel>{t("Name")}</FormLabel>
                 <FormControl>
                   <Input
-                    placeholder="e.g. Atlas, Nova, Sage..."
+                    placeholder={t("e.g. Atlas, Nova, Sage...")}
                     autoFocus
                     {...field}
                   />
@@ -104,7 +105,7 @@ export function OnboardingFormOrchestratorStep({
             name="orchestrator.tone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Tone</FormLabel>
+                <FormLabel>{t("Tone")}</FormLabel>
                 <div className="flex flex-wrap divide-x rounded-md border w-fit bg-background/30 overflow-hidden">
                   {TONES.map((tone) => {
                     const Icon = tone.icon;
@@ -140,7 +141,7 @@ export function OnboardingFormOrchestratorStep({
             name="orchestrator.style"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Response style</FormLabel>
+                <FormLabel>{t("Response style")}</FormLabel>
                 <div className="flex flex-wrap divide-x rounded-md border w-fit bg-background/30 overflow-hidden">
                   {STYLES.map((style) => {
                     const Icon = style.icon;
@@ -176,7 +177,7 @@ export function OnboardingFormOrchestratorStep({
             name="orchestrator.autonomy"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Autonomy level</FormLabel>
+                <FormLabel>{t("Autonomy level")}</FormLabel>
                 <FormControl>
                   <Slider
                     value={field.value ?? 0.5}
@@ -188,8 +189,8 @@ export function OnboardingFormOrchestratorStep({
                   />
                 </FormControl>
                 <div className="flex justify-between text-[11px] text-muted-foreground pt-1">
-                  <span>Asks permission</span>
-                  <span>Fully autonomous</span>
+                  <span>{t("Asks permission")}</span>
+                  <span>{t("Fully autonomous")}</span>
                 </div>
                 <FormMessage />
               </FormItem>

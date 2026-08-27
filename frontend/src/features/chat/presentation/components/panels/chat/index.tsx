@@ -3,6 +3,7 @@ import { aos } from "@/app/aos";
 import { ChatContent } from "@/features/chat/presentation/components/chat-content";
 import { getTabChatId } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
 import type { ViewportTabState } from "@/features/workspace/presentation/stores/viewport.store";
+import { t } from "@/lib/i18n";
 
 /**
  * Viewport panel that keep-alive mounts every open `chat` tab and only
@@ -60,7 +61,7 @@ function ChatTabSurface({
         <ChatContent chatId={chatId} />
       ) : (
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-          Missing chat id for this tab.
+          {t("Missing chat id for this tab.")}
         </div>
       )}
     </div>

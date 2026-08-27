@@ -12,6 +12,7 @@ import { useTasksStatusTransition } from "@/features/task/presentation/hooks/tas
 import { TasksFinishWorkflowDialog } from "@/features/task/presentation/components/dialogs/finish";
 import { useEffect } from "react";
 import { useChat } from "@/features/chat/presentation/hooks/use-chat";
+import { t } from "@/lib/i18n";
 
 export const TaskDetailsPage = aos.page("/tasks/$id")
   .withMetadata({
@@ -67,10 +68,10 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
     async function handlePriorityChange(priority: TaskPriority) {
       try {
         await aos.client.task.update.mutate({ params: { task: task.id }, body: { priority } });
-        toast.success("Priority updated");
+        toast.success(t("Priority updated"));
         router.invalidate();
       } catch {
-        toast.error("Failed to update priority");
+        toast.error(t("Failed to update priority"));
       }
     }
 
@@ -80,17 +81,17 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
         toast.success(assignee ? "Assigned" : "Unassigned");
         router.invalidate();
       } catch {
-        toast.error("Failed to update assignee");
+        toast.error(t("Failed to update assignee"));
       }
     }
 
     async function handleTypeChange(type: string) {
       try {
         await aos.client.task.update.mutate({ params: { task: task.id }, body: { type } });
-        toast.success("Type updated");
+        toast.success(t("Type updated"));
         router.invalidate();
       } catch {
-        toast.error("Failed to update type");
+        toast.error(t("Failed to update type"));
       }
     }
 
@@ -100,7 +101,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
         toast.success(dueAt ? "Due date set" : "Due date removed");
         router.invalidate();
       } catch {
-        toast.error("Failed to update due date");
+        toast.error(t("Failed to update due date"));
       }
     }
 
@@ -110,7 +111,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
         toast.success(project ? "Project updated" : "Project cleared");
         router.invalidate();
       } catch {
-        toast.error("Failed to update project");
+        toast.error(t("Failed to update project"));
       }
     }
 
@@ -120,7 +121,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
         toast.success(goal ? "Goal updated" : "Goal cleared");
         router.invalidate();
       } catch {
-        toast.error("Failed to update goal");
+        toast.error(t("Failed to update goal"));
       }
     }
 

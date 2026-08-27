@@ -15,6 +15,7 @@ import type {
   TaskTransitionInput,
 } from "@/features/task/interfaces/task.interfaces";
 import { CheckCircle2, GitBranch, GitMerge } from "lucide-react";
+import { t } from "@/lib/i18n";
 
 interface TasksFinishWorkflowDialogProps {
   open: boolean;
@@ -80,10 +81,9 @@ export function TasksFinishWorkflowDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Finish task</DialogTitle>
+          <DialogTitle>{t("Finish task")}</DialogTitle>
           <DialogDescription>
-            Choose how <strong>{task?.id}</strong> should be finalized before it
-            moves to finished.
+            {t("Choose how")} <strong>{task?.id}</strong> {t("should be finalized before it moves to finished.")}
           </DialogDescription>
         </DialogHeader>
 
@@ -112,7 +112,7 @@ export function TasksFinishWorkflowDialog({
                     {selected && (
                       <Badge variant="secondary">
                         <CheckCircle2 className="size-3" />
-                        Selected
+                        {t("Selected")}
                       </Badge>
                     )}
                   </div>
@@ -130,13 +130,12 @@ export function TasksFinishWorkflowDialog({
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">
-                  Automatically open PR on GitHub
+                  {t("Automatically open PR on GitHub")}
                 </span>
-                <Badge variant="outline">Coming Soon</Badge>
+                <Badge variant="outline">{t("Coming Soon")}</Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                The switch is visible now to establish the workflow, but it
-                remains disabled until the GitHub automation is wired.
+                {t("The switch is visible now to establish the workflow, but it remains disabled until the GitHub automation is wired.")}
               </p>
             </div>
             <Switch checked={false} disabled />
@@ -145,9 +144,9 @@ export function TasksFinishWorkflowDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("Cancel")}
           </Button>
-          <Button onClick={() => void handleConfirm()}>Continue</Button>
+          <Button onClick={() => void handleConfirm()}>{t("Continue")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { WorkspaceWorktreesSchema } from "@/features/workspace/schemas/workspace.schema";
 import { toast } from "sonner";
 import { AppError } from "@/core/errors/aos.error";
+import { t } from "@/lib/i18n";
 
 export function WorkspaceWorktreesSection() {
   const currentWorkspace = aos.stores.workspace.useState((state) => state.current);
@@ -47,7 +48,7 @@ export function WorkspaceWorktreesSection() {
       }
 
       router.invalidate();
-      toast.success("Worktrees settings updated successfully!");
+      toast.success(t("Worktrees settings updated successfully!"));
     },
   });
 
@@ -56,9 +57,9 @@ export function WorkspaceWorktreesSection() {
       <SettingsSectionShell>
         <FormSection>
           <FormSectionHeader>
-            <FormSectionTitle>Lifecycle Management</FormSectionTitle>
+            <FormSectionTitle>{t("Lifecycle Management")}</FormSectionTitle>
             <FormSectionDescription>
-              Configure how isolated environments are cleaned up.
+              {t("Configure how isolated environments are cleaned up.")}
             </FormSectionDescription>
           </FormSectionHeader>
           <FormSectionContent className="divide-y divide-border">
@@ -68,8 +69,8 @@ export function WorkspaceWorktreesSection() {
               render={({ field }) => (
                 <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                   <div className="space-y-0.5">
-                    <FormLabel>Automatically delete old worktrees</FormLabel>
-                    <FormDescription>Clean up unused environments to save disk space.</FormDescription>
+                    <FormLabel>{t("Automatically delete old worktrees")}</FormLabel>
+                    <FormDescription>{t("Clean up unused environments to save disk space.")}</FormDescription>
                   </div>
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -83,8 +84,8 @@ export function WorkspaceWorktreesSection() {
               render={({ field }) => (
                 <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                   <div className="flex-1 space-y-0.5">
-                    <FormLabel>Worktree Limit</FormLabel>
-                    <FormDescription>Maximum number of active worktrees to keep.</FormDescription>
+                    <FormLabel>{t("Worktree Limit")}</FormLabel>
+                    <FormDescription>{t("Maximum number of active worktrees to keep.")}</FormDescription>
                   </div>
                   <FormControl>
                     <Input
@@ -102,9 +103,9 @@ export function WorkspaceWorktreesSection() {
 
         <FormSection>
           <FormSectionHeader>
-            <FormSectionTitle>Initialization Script</FormSectionTitle>
+            <FormSectionTitle>{t("Initialization Script")}</FormSectionTitle>
             <FormSectionDescription>
-              Optional Bash script to execute after worktree creation.
+              {t("Optional Bash script to execute after worktree creation.")}
             </FormSectionDescription>
           </FormSectionHeader>
           <FormSectionContent className="p-4">
@@ -114,12 +115,11 @@ export function WorkspaceWorktreesSection() {
               render={({ field }) => (
                 <FormItem className="space-y-2">
                   <FormDescription>
-                    This script runs with the worktree path as the current working directory. Useful for
-                    copying `.env` or installing dependencies.
+                    {t("This script runs with the worktree path as the current working directory. Useful for copying `.env` or installing dependencies.")}
                   </FormDescription>
                   <FormControl>
                     <Textarea
-                      placeholder="cp ../../../.env . && bun install"
+                      placeholder={t("cp ../../../.env . && bun install")}
                       className="min-h-32 font-mono text-xs"
                       {...field}
                     />

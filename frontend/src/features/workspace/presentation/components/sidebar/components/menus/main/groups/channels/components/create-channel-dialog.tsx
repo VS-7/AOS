@@ -23,6 +23,7 @@ import { Slug } from "@/core/helpers/slug.helper";
 import { getChannelTitleSuggestions } from "@/features/chat/presentation/consts/title-suggestions";
 import { openChatTab } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
 import { SidebarGroupAction } from "@/components/ui/sidebar";
+import { t } from "@/lib/i18n";
 
 const MAX_CHANNEL_LENGTH = 80;
 
@@ -60,7 +61,7 @@ export function CreateChannelDialog({
         const chat = response?.data?.chat;
 
         if (!chat) {
-          toast.error("Unable to create channel.");
+          toast.error(t("Unable to create channel."));
           return;
         }
 
@@ -71,7 +72,7 @@ export function CreateChannelDialog({
           chatId: chat.id,
           title: chat.title || chat.id,
         });
-        toast.success("Channel created.");
+        toast.success(t("Channel created."));
       },
       onError: (error: any) => {
         toast.error(
@@ -114,8 +115,8 @@ export function CreateChannelDialog({
         {triggerVariant === "group-action" ? (
           <SidebarGroupAction
             className="mr-1.5"
-            aria-label="Create channel"
-            title="Create channel"
+            aria-label={t("Create channel")}
+            title={t("Create channel")}
           >
             <HugeiconsIcon icon={FolderAddIcon} className="size-4" />
           </SidebarGroupAction>
@@ -125,8 +126,8 @@ export function CreateChannelDialog({
             size="icon-xs"
             variant="ghost"
             className="text-sidebar-foreground/60 hover:text-sidebar-foreground"
-            aria-label="Create channel"
-            title="Create channel"
+            aria-label={t("Create channel")}
+            title={t("Create channel")}
           >
             <HugeiconsIcon icon={FolderAddIcon} className="size-3.5" />
           </Button>
@@ -145,7 +146,7 @@ export function CreateChannelDialog({
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.18, delay: 0.04, ease: "easeOut" }}
             >
-              <DialogTitle>Create channel</DialogTitle>
+              <DialogTitle>{t("Create channel")}</DialogTitle>
             </motion.div>
             <motion.div
               initial={{ opacity: 0, y: -4 }}
@@ -153,8 +154,7 @@ export function CreateChannelDialog({
               transition={{ duration: 0.18, delay: 0.08, ease: "easeOut" }}
             >
               <DialogDescription>
-                Choose a short, readable name. We'll slugify it automatically
-                for consistency.
+                {t("Choose a short, readable name. We'll slugify it automatically for consistency.")}
               </DialogDescription>
             </motion.div>
           </DialogHeader>
@@ -170,7 +170,7 @@ export function CreateChannelDialog({
                 className="text-sm font-medium text-foreground"
                 htmlFor="channel-name"
               >
-                Name
+                {t("Name")}
               </label>
 
               <motion.div
@@ -197,7 +197,7 @@ export function CreateChannelDialog({
                   onChange={(event) =>
                     setChannelName(clampSlug(event.target.value))
                   }
-                  placeholder="For example, plano-orcamento"
+                  placeholder={t("For example, plano-orcamento")}
                   maxLength={MAX_CHANNEL_LENGTH}
                   disabled={isCreating}
                   className="h-auto border-0 bg-transparent px-0 py-0 rounded-md text-base shadow-none focus-visible:ring-0"
@@ -272,7 +272,7 @@ export function CreateChannelDialog({
                 transition={{ duration: 0.16, ease: "easeOut" }}
                 className="text-xs text-muted-foreground"
               >
-                Channel URL:{" "}
+                {t("Channel URL:")}{" "}
                 {normalizedName ? `#${normalizedName}` : "waiting for a name"}
               </motion.p>
 
@@ -284,7 +284,7 @@ export function CreateChannelDialog({
                     size="sm"
                     onClick={() => handleOpenChange(false)}
                   >
-                    Cancel
+                    {t("Cancel")}
                   </Button>
                 </motion.div>
                 <motion.div whileHover={{ y: -1 }} whileTap={{ y: 0 }}>
@@ -299,7 +299,7 @@ export function CreateChannelDialog({
                         className="size-4 animate-spin"
                       />
                     ) : null}
-                    Create
+                    {t("Create")}
                   </Button>
                 </motion.div>
               </div>

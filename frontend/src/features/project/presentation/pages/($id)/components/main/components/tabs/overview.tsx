@@ -17,6 +17,7 @@ import { useDelayedLoading } from "@/hooks/use-delayed-loading.hook";
 import { aos } from "@/app/aos";
 import type { Project } from "@/features/project/interfaces/project.interfaces";
 import type { Task } from "@/features/task/interfaces/task.interfaces";
+import { t } from "@/lib/i18n";
 
 interface ProjectOverviewTabProps {
   form: any;
@@ -167,10 +168,10 @@ export function ProjectOverviewTab({ form, project }: ProjectOverviewTabProps) {
         name="name"
         render={({ field }) => (
           <FormItem className="space-y-2">
-            <FormLabel className="opacity-60">Name</FormLabel>
+            <FormLabel className="opacity-60">{t("Name")}</FormLabel>
             <FormControl>
               <Input
-                placeholder="AOS OS"
+                placeholder={t("AOS OS")}
                 className="h-auto rounded-none border-0 bg-transparent px-0 py-0 text-2xl font-semibold shadow-none focus-visible:ring-0"
                 {...field}
               />
@@ -185,10 +186,10 @@ export function ProjectOverviewTab({ form, project }: ProjectOverviewTabProps) {
         name="description"
         render={({ field }) => (
           <FormItem className="space-y-2">
-            <FormLabel className="opacity-60">Description</FormLabel>
+            <FormLabel className="opacity-60">{t("Description")}</FormLabel>
             <FormControl>
               <Textarea
-                placeholder="What is this project about?"
+                placeholder={t("What is this project about?")}
                 className="min-h-10 max-h-48 resize-none rounded-none border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0 overflow-y-auto"
                 {...field}
               />
@@ -204,7 +205,7 @@ export function ProjectOverviewTab({ form, project }: ProjectOverviewTabProps) {
           name="source"
           render={({ field }) => (
             <FormItem className="space-y-2 md:col-span-2">
-              <FormLabel className="opacity-60">Source</FormLabel>
+              <FormLabel className="opacity-60">{t("Source")}</FormLabel>
               <FormControl>
                 <FolderInput
                   placeholder="/absolute/path/to/project"
@@ -223,12 +224,12 @@ export function ProjectOverviewTab({ form, project }: ProjectOverviewTabProps) {
         name="content"
         render={({ field }) => (
           <FormItem>
-            <FormLabel className="opacity-60">Content</FormLabel>
+            <FormLabel className="opacity-60">{t("Content")}</FormLabel>
             <MarkdownEditor
               value={field.value ?? ""}
               onValueChange={field.onChange}
-              title="Content"
-              placeholder="Add context, notes, or documentation for this project..."
+              title={t("Content")}
+              placeholder={t("Add context, notes, or documentation for this project...")}
             />
             <FormMessage />
           </FormItem>

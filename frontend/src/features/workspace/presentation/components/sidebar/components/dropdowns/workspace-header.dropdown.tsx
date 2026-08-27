@@ -20,6 +20,7 @@ import { aos } from "@/app/aos";
 import { SETTINGS_SECTIONS } from "@/features/workspace/presentation/components/settings/constants";
 import { SettingsRouteHelper } from "@/features/workspace/presentation/helpers/settings-route.helper";
 import { WorkspaceAvatar } from "../shared/workspace-avatar";
+import { t } from "@/lib/i18n";
 
 const WORKSPACE_SETTINGS_SECTIONS = SETTINGS_SECTIONS.filter(
   (section) => section.group === "workspace",
@@ -40,9 +41,9 @@ export function AppSidebarWorkspaceHeaderDropdown() {
 
     try {
       await navigator.clipboard.writeText(currentWorkspace.id);
-      toast.success("Workspace ID copied");
+      toast.success(t("Workspace ID copied"));
     } catch {
-      toast.error("Failed to copy workspace ID");
+      toast.error(t("Failed to copy workspace ID"));
     }
   }
 
@@ -54,7 +55,7 @@ export function AppSidebarWorkspaceHeaderDropdown() {
     );
 
     if (!revealed) {
-      toast.error("Failed to open workspace in Finder");
+      toast.error(t("Failed to open workspace in Finder"));
     }
   }
 
@@ -87,7 +88,7 @@ export function AppSidebarWorkspaceHeaderDropdown() {
             sideOffset={6}
           >
             <DropdownMenuGroup>
-              <DropdownMenuLabel>Settings</DropdownMenuLabel>
+              <DropdownMenuLabel>{t("Settings")}</DropdownMenuLabel>
               {WORKSPACE_SETTINGS_SECTIONS.map((section) => {
                 const navigateArgs =
                   SettingsRouteHelper.sectionIdToNavigateArgs(section.id);
@@ -115,7 +116,7 @@ export function AppSidebarWorkspaceHeaderDropdown() {
                     void handleOpenInFinder();
                   }}
                 >
-                  <span className="flex-1">Open in Finder</span>
+                  <span className="flex-1">{t("Open in Finder")}</span>
                   <FolderOpen className="size-3.5" />
                 </DropdownMenuItem>
               </>
@@ -129,7 +130,7 @@ export function AppSidebarWorkspaceHeaderDropdown() {
                 void handleCopyId();
               }}
             >
-              <span className="flex-1">Copy Workspace ID</span>
+              <span className="flex-1">{t("Copy Workspace ID")}</span>
               <Copy className="size-3.5" />
             </DropdownMenuItem>
           </DropdownMenuContent>

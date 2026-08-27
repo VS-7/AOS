@@ -30,6 +30,7 @@ import {
 
 import { buttonVariants } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { t } from "@/lib/i18n";
 
 const popoverVariants = cva(
   'z-50 w-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md outline-hidden'
@@ -107,7 +108,7 @@ export function LinkFloatingToolbar({
 
         <FloatingLinkUrlInput
           className={inputVariants()}
-          placeholder="Paste link"
+          placeholder={t("Paste link")}
           data-plate-focus
         />
       </div>
@@ -118,7 +119,7 @@ export function LinkFloatingToolbar({
         </div>
         <input
           className={inputVariants()}
-          placeholder="Text to display"
+          placeholder={t("Text to display")}
           data-plate-focus
           {...textInputProps}
         />
@@ -135,7 +136,7 @@ export function LinkFloatingToolbar({
         type="button"
         {...editButtonProps}
       >
-        Edit link
+        {t("Edit link")}
       </button>
 
       <Separator orientation="vertical" />
@@ -199,7 +200,7 @@ function LinkOpenButton() {
       onMouseOver={(e) => {
         e.stopPropagation();
       }}
-      aria-label="Open link in a new tab"
+      aria-label={t("Open link in a new tab")}
       target="_blank"
     >
       <ExternalLink width={18} />

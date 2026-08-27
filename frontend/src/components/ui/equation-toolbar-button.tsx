@@ -7,6 +7,7 @@ import { RadicalIcon } from 'lucide-react';
 import { useEditorRef } from 'platejs/react';
 
 import { ToolbarButton } from './toolbar';
+import { t } from "@/lib/i18n";
 
 export function InlineEquationToolbarButton(
   props: React.ComponentProps<typeof ToolbarButton>
@@ -19,7 +20,7 @@ export function InlineEquationToolbarButton(
       onClick={() => {
         insertInlineEquation(editor);
       }}
-      tooltip="Mark as equation"
+      tooltip={t("Mark as equation")}
     >
       <RadicalIcon />
     </ToolbarButton>

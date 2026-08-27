@@ -52,6 +52,7 @@ import {
   type CollectionUpsertFormValues,
 } from "../../../../helpers/form-schema.helper";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { t } from "@/lib/i18n";
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -195,7 +196,7 @@ export const CollectionRecordUpsertPage = aos
     const { mutate: deleteRecord, loading: isDeleting } =
       aos.client.collection.deleteRecord.useMutation({
         onSuccess: async () => {
-          toast.success("Record deleted.");
+          toast.success(t("Record deleted."));
           await router.invalidate();
           await navigate({
             to: "/collections/$id",
@@ -335,23 +336,23 @@ export const CollectionRecordUpsertPage = aos
                                 disabled={isDeleting}
                               >
                                 <Trash2 />
-                                Delete
+                                {t("Delete")}
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent size="sm">
                               <AlertDialogHeader>
                                 <AlertDialogTitle>
-                                  Delete this record?
+                                  {t("Delete this record?")}
                                 </AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  This action removes{" "}
+                                  {t("This action removes")}{" "}
                                   <strong>{recordId}</strong> from{" "}
                                   <strong>{collection.name}</strong>.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel disabled={isDeleting}>
-                                  Cancel
+                                  {t("Cancel")}
                                 </AlertDialogCancel>
                                 <AlertDialogAction
                                   variant="destructive"
@@ -407,11 +408,10 @@ export const CollectionRecordUpsertPage = aos
                               <FormItem className="grid gap-3 sm:grid-cols-[minmax(0,190px)_minmax(0,1fr)] sm:gap-8">
                                 <div className="space-y-1 pt-1">
                                   <FormLabel className="text-[0.95rem] font-medium text-foreground">
-                                    Content
+                                    {t("Content")}
                                   </FormLabel>
                                   <FormDescription className="max-w-xs text-[0.82rem] leading-5 text-muted-foreground">
-                                    Stored separately from the structured
-                                    fields.
+                                    {t("Stored separately from the structured fields.")}
                                   </FormDescription>
                                 </div>
 
@@ -426,7 +426,7 @@ export const CollectionRecordUpsertPage = aos
                                       onChange={(event) =>
                                         field.onChange(event.target.value)
                                       }
-                                      placeholder="Write the record body..."
+                                      placeholder={t("Write the record body...")}
                                       className="min-h-72 rounded-[24px] border-border/70 bg-background/70 px-4 py-3 font-mono shadow-none"
                                     />
                                   </FormControl>
@@ -446,7 +446,7 @@ export const CollectionRecordUpsertPage = aos
                 <SplitPageLayout.DetailTabs defaultValue="overview">
                   <SplitPageLayout.DetailTab
                     value="overview"
-                    label="Overview"
+                    label={t("Overview")}
                     icon={ListChecks}
                   >
                     <SplitPageLayout.Widget>
@@ -454,7 +454,7 @@ export const CollectionRecordUpsertPage = aos
                         <SplitPageLayout.WidgetItem>
                           <Sparkles className="size-3.5 shrink-0 text-muted-foreground" />
                           <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                            State
+                            {t("State")}
                           </span>
                           <span className="text-xs">{editorStateLabel}</span>
                         </SplitPageLayout.WidgetItem>
@@ -465,7 +465,7 @@ export const CollectionRecordUpsertPage = aos
                             <PlusCircle className="size-3.5 shrink-0 text-muted-foreground" />
                           )}
                           <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                            Mode
+                            {t("Mode")}
                           </span>
                           <span className="text-xs">
                             {isEditMode ? "Editing" : "Creating"}
@@ -474,7 +474,7 @@ export const CollectionRecordUpsertPage = aos
                         <SplitPageLayout.WidgetItem>
                           <FileCode2 className="size-3.5 shrink-0 text-muted-foreground" />
                           <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                            Format
+                            {t("Format")}
                           </span>
                           <Badge variant="outline">
                             <FileCode2 />
@@ -484,7 +484,7 @@ export const CollectionRecordUpsertPage = aos
                         <SplitPageLayout.WidgetItem>
                           <Braces className="size-3.5 shrink-0 text-muted-foreground" />
                           <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                            Schema
+                            {t("Schema")}
                           </span>
                           <span className="text-xs">
                             {requiredCount} required
@@ -496,14 +496,14 @@ export const CollectionRecordUpsertPage = aos
                     <SplitPageLayout.Widget>
                       <SplitPageLayout.WidgetHeader>
                         <SplitPageLayout.WidgetTitle>
-                          Collection
+                          {t("Collection")}
                         </SplitPageLayout.WidgetTitle>
                       </SplitPageLayout.WidgetHeader>
                       <SplitPageLayout.WidgetContent>
                         <SplitPageLayout.WidgetItem>
                           <Database className="size-3.5 shrink-0 text-muted-foreground" />
                           <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                            Name
+                            {t("Name")}
                           </span>
                           <span className="truncate text-xs">
                             {collection.name}
@@ -512,7 +512,7 @@ export const CollectionRecordUpsertPage = aos
                         <SplitPageLayout.WidgetItem>
                           <Hash className="size-3.5 shrink-0 text-muted-foreground" />
                           <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                            Record
+                            {t("Record")}
                           </span>
                           <span className="truncate text-xs">{recordId}</span>
                         </SplitPageLayout.WidgetItem>

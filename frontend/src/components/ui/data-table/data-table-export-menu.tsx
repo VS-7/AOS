@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "../dropdown-menu";
 import { useDataTable } from "./data-table-provider";
+import { t } from "@/lib/i18n";
 
 export function DataTableExportMenu() {
   const { handleExport } = useDataTable();
@@ -29,13 +30,13 @@ export function DataTableExportMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="h-8">
           <Download className="mr-2 h-4 w-4" />
-          Export
+          {t("Export")}
           <ChevronDown className="ml-2 h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuPortal>
         <DropdownMenuContent align="end" className="w-[260px]">
-          <DropdownMenuLabel>Export as</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("Export as")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem onClick={() => handleExport({ format: "csv" })}>
@@ -45,9 +46,9 @@ export function DataTableExportMenu() {
 
             <DropdownMenuItem disabled>
               <FileSpreadsheet className="mr-2 h-4 w-4" />
-              Excel
+              {t("Excel")}
               <Badge variant="outline" className="ml-auto">
-                Soon
+                {t("Soon")}
               </Badge>
             </DropdownMenuItem>
 
@@ -55,7 +56,7 @@ export function DataTableExportMenu() {
               <FileIcon className="mr-2 h-4 w-4" />
               PDF
               <Badge variant="outline" className="ml-auto">
-                Soon
+                {t("Soon")}
               </Badge>
             </DropdownMenuItem>
           </DropdownMenuGroup>

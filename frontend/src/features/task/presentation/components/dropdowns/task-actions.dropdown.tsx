@@ -30,6 +30,7 @@ import { SetAssigneeDropdown } from "./set-assignee.dropdown";
 import { SetTypeDropdown } from "./set-type.dropdown";
 import type { Task, TaskPriority } from "@/features/task/interfaces/task.interfaces";
 import { TASK_STATUS_CONFIG, TASK_STATUS_ORDER } from "@/features/task/presentation/consts/task";
+import { t } from "@/lib/i18n";
 
 interface TaskActionsDropdownProps {
   task: Task;
@@ -70,7 +71,7 @@ export function TaskActionsDropdown({
           <DropdownMenuSubTrigger inset>
             <span className="flex items-center gap-2">
               <FlagIcon className="size-4" />
-              <span>Priority</span>
+              <span>{t("Priority")}</span>
             </span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
@@ -86,7 +87,7 @@ export function TaskActionsDropdown({
           <DropdownMenuSubTrigger inset>
             <span className="flex items-center gap-2">
               <TagIcon className="size-4" />
-              <span>Assignee</span>
+              <span>{t("Assignee")}</span>
             </span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
@@ -103,7 +104,7 @@ export function TaskActionsDropdown({
             <DropdownMenuSubTrigger inset>
               <span className="flex items-center gap-2">
                 <TagIcon className="size-4" />
-                <span>Type</span>
+                <span>{t("Type")}</span>
               </span>
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
@@ -121,7 +122,7 @@ export function TaskActionsDropdown({
             <DropdownMenuSubTrigger inset>
               <span className="flex items-center gap-2">
                 <CircleDotIcon className="size-4" />
-                <span>Status</span>
+                <span>{t("Status")}</span>
               </span>
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
@@ -153,7 +154,7 @@ export function TaskActionsDropdown({
             }
           }} inset className="flex items-center gap-2">
             <CalendarIcon className="size-4" />
-            <span>Set due date</span>
+            <span>{t("Set due date")}</span>
           </DropdownMenuItem>
         )}
 
@@ -173,7 +174,7 @@ export function TaskActionsDropdown({
             className="flex items-center gap-2"
           >
             <MessageSquareIcon className="size-4" />
-            <span>Open chat</span>
+            <span>{t("Open chat")}</span>
           </DropdownMenuItem>
         )}
 
@@ -181,7 +182,7 @@ export function TaskActionsDropdown({
         {onOpenWorktree && (
           <DropdownMenuItem onClick={onOpenWorktree} inset className="flex items-center gap-2">
             <GitBranchIcon className="size-4" />
-            <span>Open worktree</span>
+            <span>{t("Open worktree")}</span>
           </DropdownMenuItem>
         )}
 
@@ -189,8 +190,8 @@ export function TaskActionsDropdown({
         {onCopyPrompt && (
           <DropdownMenuItem onClick={onCopyPrompt} inset className="flex items-center gap-2">
             <CopyPlusIcon className="size-4" />
-            <span>Copy as prompt</span>
-            <DropdownMenuShortcut>⌘⇧P</DropdownMenuShortcut>
+            <span>{t("Copy as prompt")}</span>
+            <DropdownMenuShortcut>{t("⌘⇧P")}</DropdownMenuShortcut>
           </DropdownMenuItem>
         )}
 
@@ -198,7 +199,7 @@ export function TaskActionsDropdown({
         {onCopyIdentifier && (
           <DropdownMenuItem onClick={onCopyIdentifier} inset className="flex items-center gap-2">
             <CopyIcon className="size-4" />
-            <span>Copy identifier</span>
+            <span>{t("Copy identifier")}</span>
           </DropdownMenuItem>
         )}
 
@@ -215,7 +216,7 @@ export function TaskActionsDropdown({
             className="flex items-center gap-2"
           >
             <TrashIcon className="size-4" />
-            <span>Delete</span>
+            <span>{t("Delete")}</span>
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

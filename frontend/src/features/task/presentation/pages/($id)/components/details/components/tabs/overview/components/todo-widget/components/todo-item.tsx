@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/popover";
 import type { Todo } from "@/features/task/interfaces/todo.interfaces";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
+import { t } from "@/lib/i18n";
 
 interface TodoItemProps {
   todo: Todo;
@@ -82,13 +83,13 @@ export function TodoItem({ todo }: TodoItemProps) {
         {/* Go's field is `content`, not `instructions` — same schema note. */}
         {todo.content && (
           <div className="space-y-1">
-            <span className="text-sm text-muted-foreground">Notes</span>
+            <span className="text-sm text-muted-foreground">{t("Notes")}</span>
             <p className=" truncate">{todo.content}</p>
           </div>
         )}
         {todo.output && Object.keys(todo.output).length > 0 && (
           <div className="space-y-1">
-            <span className="text-sm text-muted-foreground">Output</span>
+            <span className="text-sm text-muted-foreground">{t("Output")}</span>
             <pre className="text-sm font-mono bg-muted/40 rounded p-2 overflow-auto max-h-24">
               {JSON.stringify(todo.output, null, 2)}
             </pre>

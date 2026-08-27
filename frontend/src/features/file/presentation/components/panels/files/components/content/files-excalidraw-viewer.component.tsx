@@ -5,6 +5,7 @@ import { aos } from "@/app/aos"
 import { Button } from "@/components/ui/button"
 import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces"
 import { Excalidraw } from "@excalidraw/excalidraw";
+import { t } from "@/lib/i18n";
 
 interface FilesExcalidrawViewerProps {
   file: WorkspaceFile
@@ -51,7 +52,7 @@ export function FilesExcalidrawViewer({ file, content }: FilesExcalidrawViewerPr
 
   const { mutate: saveFile, loading: isSaving } = aos.client.file.write.useMutation({
     onSuccess: () => {
-      toast.success("Drawing saved.")
+      toast.success(t("Drawing saved."))
     },
     onError: (error: any) => {
       toast.error(error?.error?.message || error?.message || "Unable to save drawing.")
@@ -111,7 +112,7 @@ export function FilesExcalidrawViewer({ file, content }: FilesExcalidrawViewerPr
           ) : (
             <Save data-icon="inline-start" className="size-4" />
           )}
-          Save drawing
+          {t("Save drawing")}
         </Button>
       </div>
 

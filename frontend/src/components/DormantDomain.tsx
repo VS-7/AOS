@@ -1,5 +1,6 @@
 import type { JSX, ReactNode } from "react";
 import { isCommandDormant, isDormant } from "@/lib/command-map";
+import { t } from "@/lib/i18n";
 
 /**
  * What a screen shows when its domain does not yet exist in Go.
@@ -18,12 +19,10 @@ export function DormantDomain({ feature }: { feature: string }): JSX.Element {
     <div className="flex h-full min-h-64 w-full items-center justify-center p-8">
       <div className="max-w-md rounded-lg border border-dashed border-border bg-muted p-6 text-center">
         <p className="text-sm font-medium text-foreground">
-          Domain not available yet
+          {t("Domain not available yet")}
         </p>
         <p className="mt-2 text-sm text-muted-foreground">
-          The <code className="font-mono">{feature}</code> interface already exists, but the
-          Go backend does not publish this domain yet. The screen lights up on its own once
-          it is implemented.
+          {t("The")} <code className="font-mono">{feature}</code> {t("interface already exists, but the Go backend does not publish this domain yet. The screen lights up on its own once it is implemented.")}
         </p>
       </div>
     </div>

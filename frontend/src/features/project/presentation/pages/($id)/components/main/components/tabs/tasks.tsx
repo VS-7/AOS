@@ -12,6 +12,7 @@ import { aos } from "@/app/aos";
 import { Plus } from "lucide-react";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading.hook";
 import type { Project } from "@/features/project/interfaces/project.interfaces";
+import { t } from "@/lib/i18n";
 
 interface ProjectTasksTabProps {
   project: Project;
@@ -87,7 +88,7 @@ export function ProjectTasksTab({ project }: ProjectTasksTabProps) {
   return (
     <div className="container mx-auto max-w-3xl py-6 pb-12 space-y-6">
       <TasksSection
-        title="Tasks"
+        title={t("Tasks")}
         action={
           <Button
             size="sm"
@@ -95,7 +96,7 @@ export function ProjectTasksTab({ project }: ProjectTasksTabProps) {
             onClick={() => (aos.triggers as { dispatch: (id: string, input?: unknown) => Promise<unknown> }).dispatch("tasks.new")}
           >
             <Plus className="size-4" />
-            New Task
+            {t("New Task")}
           </Button>
         }
       >
@@ -120,7 +121,7 @@ export function ProjectTasksTab({ project }: ProjectTasksTabProps) {
           ) : filteredTasks.length === 0 ? (
             <div className="rounded-md border-2 border-dotted h-12 flex items-center justify-center w-full">
               <span className="text-xs text-muted-foreground/60">
-                No tasks in this status.
+                {t("No tasks in this status.")}
               </span>
             </div>
           ) : (

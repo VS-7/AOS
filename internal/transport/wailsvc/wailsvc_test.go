@@ -662,3 +662,55 @@ func TestUndecodableContentIsRefusedBeforeAnyPanelOpens(t *testing.T) {
 		t.Error("the save panel was opened before the content was checked")
 	}
 }
+
+// TestSessionAnswersTheSameShapeAsHTTP is the bug that made the desktop window
+// look signed out while it was signed in.
+//
+// lib/auth.ts tries the bridge and falls back to the daemon's own
+// GET /api/auth/session, and every caller writes `const { user } = await
+// session()`. HTTP answers {"data":{"user":{...}}}; this method used to answer
+// the bare user, so inside the desktop that destructuring produced undefined —
+// no name in the sidebar, an empty account form, and `user.role === "super"`
+// false, which is the condition that renders the button for creating a
+// workspace. Signed in, and invisible.
+func TestSessionAnswersTheSameShapeAsHTTP(t *testing.T) {
+	who := wailsvc.PublicUser{ID: "u-1", Name: "Vitor", Username: "vitor", Email: "vitor@example.test", Role: "super"}
+	svc := wailsvc.NewAuth(&authCaller{session: who}, nil)
+
+	got, err := svc.Session(ctx())
+	if err != nil {
+		t.Fatalf("Session: %v", err)
+	}
+	if got.User != who {
+		t.Errorf("Session().User = %+v, want %+v", got.User, who)
+	}
+
+	// The wrapper is the contract, not an implementation detail: the JSON the
+	// window receives has to carry a `user` key for the caller to destructure.
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := envelope["user"]; !ok {
+		t.Errorf("Session answered %s — the interface reads .user from this", encoded)
+	}
+}
+
+// TestSessionReportsTheFailureRatherThanAnEmptyUser. Wrapping must not turn a
+// refusal into a successful answer carrying a blank account, which would read
+// to the interface as "signed in as nobody".
+func TestSessionReportsTheFailureRatherThanAnEmptyUser(t *testing.T) {
+	svc := wailsvc.NewAuth(&authCaller{failWith: errors.New("no session")}, nil)
+
+	got, err := svc.Session(ctx())
+	if err == nil {
+		t.Fatal("a failed session check reported success")
+	}
+	if got.User != (wailsvc.PublicUser{}) {
+		t.Errorf("a failed session check carried a user: %+v", got.User)
+	}
+}

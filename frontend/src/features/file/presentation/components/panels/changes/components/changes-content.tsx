@@ -17,6 +17,7 @@ import {
 } from "@/features/file/presentation/helpers/changes.helper";
 import { ChangesHeader } from "./changes-header";
 import { ChangesFileList } from "./changes-file-list";
+import { t } from "@/lib/i18n";
 
 interface ChangesContentProps {
   tabId: string;
@@ -139,13 +140,13 @@ export function ChangesContent({
       {isInitialLoading ? (
         <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
-          Loading changes…
+          {t("Loading changes…")}
         </div>
       ) : changesQuery.isError ? (
         <AnimatedEmptyState className="border-none shadow-none">
           <AnimatedEmptyState.Content>
             <AnimatedEmptyState.Title>
-              Unable to load changes
+              {t("Unable to load changes")}
             </AnimatedEmptyState.Title>
             <AnimatedEmptyState.Description>
               {(changesQuery.error as { message?: string })?.message ||

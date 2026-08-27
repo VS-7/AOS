@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/card";
 
 import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces";
+import { t } from "@/lib/i18n";
 
 interface FilesExternalViewerProps {
   file: WorkspaceFile;
@@ -40,7 +41,7 @@ export function FilesExternalViewer({ file, onOpenExternal }: FilesExternalViewe
             <div className="min-w-0">
               <CardTitle className="truncate">{file.name}</CardTitle>
               <CardDescription>
-                This renderer is intentionally external for now while we shape the Files UX.
+                {t("This renderer is intentionally external for now while we shape the Files UX.")}
               </CardDescription>
             </div>
           </div>
@@ -50,19 +51,17 @@ export function FilesExternalViewer({ file, onOpenExternal }: FilesExternalViewe
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">{file.viewer}</Badge>
             <Badge variant="secondary">{file.extension || "unknown"}</Badge>
-            <Badge variant="secondary">Open in browser tab</Badge>
+            <Badge variant="secondary">{t("Open in browser tab")}</Badge>
           </div>
 
           <p className="text-sm leading-relaxed text-muted-foreground">
-            The center panel supports in-app text, Markdown, JSON, image, PDF, and video
-            viewers. DOCX, Excel, and CSV currently hand off to an external browser tab
-            while we keep the app bundle lean.
+            {t("The center panel supports in-app text, Markdown, JSON, image, PDF, and video viewers. DOCX, Excel, and CSV currently hand off to an external browser tab while we keep the app bundle lean.")}
           </p>
 
           <div className="rounded-xl border bg-muted/20 p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
               <ExternalLink className="size-4 text-muted-foreground" />
-              External handoff
+              {t("External handoff")}
             </div>
             <p className="mt-2 break-all font-mono text-xs leading-5 text-muted-foreground">
               {file.absolutePath}
@@ -72,7 +71,7 @@ export function FilesExternalViewer({ file, onOpenExternal }: FilesExternalViewe
           <div className="flex items-center gap-2">
             <Button onClick={onOpenExternal}>
               <ArrowUpRight data-icon="inline-start" className="size-4" />
-              Open in browser tab
+              {t("Open in browser tab")}
             </Button>
           </div>
         </CardContent>

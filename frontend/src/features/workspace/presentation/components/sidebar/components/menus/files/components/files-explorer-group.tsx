@@ -51,6 +51,7 @@ import {
   FilesTreeContextMenu,
 } from "./files-tree-context-menu";
 import { openChangesTab } from "@/features/file/presentation/helpers/open-changes-tab.helper";
+import { t } from "@/lib/i18n";
 
 function getTabFilePath(tab: ViewportTabState) {
   return typeof tab.metadata?.filePath === "string" ? tab.metadata.filePath : undefined;
@@ -425,14 +426,14 @@ function FilesExplorerGroupInner() {
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              <SelectLabel>Workspace</SelectLabel>
+              <SelectLabel>{t("Workspace")}</SelectLabel>
               <SelectItem value={serializeExplorerContext({ type: "main" })}>
                 main
               </SelectItem>
             </SelectGroup>
             {(snapshot?.tasks?.length ?? 0) > 0 ? (
               <SelectGroup>
-                <SelectLabel>Tasks</SelectLabel>
+                <SelectLabel>{t("Tasks")}</SelectLabel>
                 {snapshot?.tasks?.map((task) => (
                   <SelectItem
                     key={task.id}
@@ -448,7 +449,7 @@ function FilesExplorerGroupInner() {
             ) : null}
             {(snapshot?.branches?.length ?? 0) > 0 ? (
               <SelectGroup>
-                <SelectLabel>Branches</SelectLabel>
+                <SelectLabel>{t("Branches")}</SelectLabel>
                 {snapshot?.branches?.map((branch) => (
                   <SelectItem
                     key={branch}
@@ -464,24 +465,24 @@ function FilesExplorerGroupInner() {
         <div className="ml-auto flex items-center gap-0.5">
           <SidebarActionButton
             icon={FilePlus}
-            label="New file"
+            label={t("New file")}
             disabled={snapshot?.readOnly}
             onClick={() => handleHeaderCreate("file")}
           />
           <SidebarActionButton
             icon={FolderPlus}
-            label="New folder"
+            label={t("New folder")}
             disabled={snapshot?.readOnly}
             onClick={() => handleHeaderCreate("directory")}
           />
           <SidebarActionButton
             icon={GitCompareArrows}
-            label="Open changes"
+            label={t("Open changes")}
             onClick={() => openChangesTab(explorerContext)}
           />
           <SidebarActionButton
             icon={explorerQuery.isFetching ? LoaderCircle : RefreshCw}
-            label="Refresh files"
+            label={t("Refresh files")}
             onClick={() => void handleRefresh()}
           />
         </div>
@@ -491,14 +492,14 @@ function FilesExplorerGroupInner() {
         {isInitialLoading ? (
           <div className="flex items-center gap-2 px-2 py-3 text-sm text-muted-foreground">
             <LoaderCircle className="size-4 animate-spin" />
-            Loading files...
+            {t("Loading files...")}
           </div>
         ) : hasError && !snapshot ? (
           <AnimatedEmptyState className="border-none shadow-none">
             <AnimatedEmptyState.Content>
-              <AnimatedEmptyState.Title>Unable to load files</AnimatedEmptyState.Title>
+              <AnimatedEmptyState.Title>{t("Unable to load files")}</AnimatedEmptyState.Title>
               <AnimatedEmptyState.Description>
-                The sidebar could not resolve the workspace tree from the backend.
+                {t("The sidebar could not resolve the workspace tree from the backend.")}
                 {explorerQuery.error ? (
                   <>
                     {" "}
@@ -512,9 +513,9 @@ function FilesExplorerGroupInner() {
         ) : isEmpty ? (
           <AnimatedEmptyState className="border-none shadow-none">
             <AnimatedEmptyState.Content>
-              <AnimatedEmptyState.Title>No files available</AnimatedEmptyState.Title>
+              <AnimatedEmptyState.Title>{t("No files available")}</AnimatedEmptyState.Title>
               <AnimatedEmptyState.Description>
-                This explorer context is empty right now.
+                {t("This explorer context is empty right now.")}
               </AnimatedEmptyState.Description>
             </AnimatedEmptyState.Content>
           </AnimatedEmptyState>
@@ -655,5 +656,5 @@ async function handleTreeMove(
     return;
   }
 
-  toast.success("Moved.");
+  toast.success(t("Moved."));
 }

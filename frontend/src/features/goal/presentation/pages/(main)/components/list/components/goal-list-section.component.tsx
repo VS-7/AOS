@@ -11,6 +11,7 @@ import type { Goal } from "@/features/goal/interfaces/goal.interfaces";
 import { GoalHelper } from "@/features/goal/presentation/helpers/goal.helper";
 import { GOAL_STATUS_CONFIG } from "@/features/goal/presentation/consts/goal";
 import { GoalListRow } from "./goal-list-row.component";
+import { t } from "@/lib/i18n";
 
 const itemVariants = {
   hidden: { opacity: 0, y: 6 },
@@ -85,7 +86,7 @@ export function GoalsListSection({ status, goals }: GoalsListSectionProps) {
                   transition={{ duration: 0.2 }}
                   className="flex h-11 items-center justify-center px-3 text-xs text-muted-foreground"
                 >
-                  No goals in {config.label.toLowerCase()}
+                  {t("No goals in")} {config.label.toLowerCase()}
                 </motion.div>
               ) : (
                 goals.map((goal) => (

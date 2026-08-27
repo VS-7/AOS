@@ -30,6 +30,7 @@ import type {
 } from "@/features/artifact/interfaces/artifact.interfaces";
 import { ArtifactHelper } from "@/features/artifact/presentation/helpers/artifact.helper";
 import { ArtifactStore } from "@/features/artifact/presentation/stores/artifact.store";
+import { t } from "@/lib/i18n";
 
 const VISIBILITY_OPTIONS: Array<{
   value: ArtifactVisibility;
@@ -76,7 +77,7 @@ export function CreateArtifactDialog({ children }: CreateArtifactDialogProps) {
       onSuccess: async (response) => {
         const created = response?.data as ArtifactListItem | undefined;
         if (!created) {
-          toast.error("Unable to create artifact.");
+          toast.error(t("Unable to create artifact."));
           return;
         }
         await ArtifactStore.actions.refresh();
@@ -127,42 +128,40 @@ export function CreateArtifactDialog({ children }: CreateArtifactDialogProps) {
 
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>New artifact</DialogTitle>
+          <DialogTitle>{t("New artifact")}</DialogTitle>
           <DialogDescription>
-            A static web app registered in this workspace and served by the
-            daemon — a dashboard, a report, a landing page. Starts as a
-            minimal placeholder page you (or an agent) can fill in.
+            {t("A static web app registered in this workspace and served by the daemon — a dashboard, a report, a landing page. Starts as a minimal placeholder page you (or an agent) can fill in.")}
           </DialogDescription>
         </DialogHeader>
 
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="artifact-name">Name</Label>
+            <Label htmlFor="artifact-name">{t("Name")}</Label>
             <Input
               id="artifact-name"
               autoFocus
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Sales dashboard"
+              placeholder={t("Sales dashboard")}
               disabled={isCreating}
               maxLength={120}
             />
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="artifact-description">Description (optional)</Label>
+            <Label htmlFor="artifact-description">{t("Description (optional)")}</Label>
             <Textarea
               id="artifact-description"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              placeholder="What this artifact is, for whoever finds it later."
+              placeholder={t("What this artifact is, for whoever finds it later.")}
               disabled={isCreating}
               rows={2}
             />
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="artifact-visibility">Visibility</Label>
+            <Label htmlFor="artifact-visibility">{t("Visibility")}</Label>
             <Select
               value={visibility}
               onValueChange={(value) => setVisibility(value as ArtifactVisibility)}
@@ -191,7 +190,7 @@ export function CreateArtifactDialog({ children }: CreateArtifactDialogProps) {
               size="sm"
               onClick={() => handleOpenChange(false)}
             >
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button type="submit" size="sm" disabled={isCreating || !name.trim()}>
               {isCreating ? (
@@ -199,7 +198,7 @@ export function CreateArtifactDialog({ children }: CreateArtifactDialogProps) {
               ) : (
                 <HugeiconsIcon icon={WindowsNewIcon} className="size-4" />
               )}
-              Create
+              {t("Create")}
             </Button>
           </DialogFooter>
         </form>

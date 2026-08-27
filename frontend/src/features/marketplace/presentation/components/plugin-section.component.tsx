@@ -6,6 +6,7 @@ import type { MarketplaceSkillListing } from "@/features/marketplace/interfaces/
 import { MARKETPLACE_CATEGORY_PREVIEW_LIMIT } from "@/features/marketplace/presentation/consts/marketplace";
 import { PluginCard } from "@/features/marketplace/presentation/components/plugin-card.component";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 interface PluginSectionProps {
   id: string;
@@ -53,7 +54,7 @@ export function PluginSection({
           onClick={() => setExpanded(true)}
           className="mt-4 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
-          View {hiddenCount} more
+          {t("View")} {hiddenCount} more
         </button>
       ) : null}
     </section>

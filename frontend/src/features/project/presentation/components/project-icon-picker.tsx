@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { ProjectHelper } from "@/features/project/presentation/helpers/project.helper";
+import { t } from "@/lib/i18n";
 
 /** Curated icons shown before the user searches. */
 const FEATURED_ICONS = [
@@ -105,7 +106,7 @@ export function ProjectIconPicker({
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      toast.error("Please choose an image file.");
+      toast.error(t("Please choose an image file."));
       return;
     }
 
@@ -147,8 +148,8 @@ export function ProjectIconPicker({
         <button
           type="button"
           disabled={disabled}
-          aria-label="Change project icon"
-          title="Change icon"
+          aria-label={t("Change project icon")}
+          title={t("Change icon")}
           className={cn(
             "group relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-card/10 outline-none transition-colors",
             "hover:border-foreground/25 hover:bg-accent/40",
@@ -213,14 +214,14 @@ export function ProjectIconPicker({
 
         <Command shouldFilter={false} className="rounded-none border-0">
           <CommandInput
-            placeholder="Search icons…"
+            placeholder={t("Search icons…")}
             value={query}
             onValueChange={setQuery}
             className="!border-b-0"
           />
           <CommandList className="max-h-[220px] p-2 border-t-0">
             <CommandEmpty className="py-6 text-center text-xs">
-              No icons found.
+              {t("No icons found.")}
             </CommandEmpty>
             <div className="grid grid-cols-6 gap-1">
               {visibleIcons.map((iconName) => {

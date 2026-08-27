@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/form-section";
 import { SettingsSectionShell } from "../../../section-shell";
 import type { UserPublic } from "@/features/auth/interfaces/user.interfaces";
+import { t } from "@/lib/i18n";
 
 export function UserUsersSection() {
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -78,7 +79,7 @@ export function UserUsersSection() {
         return;
       }
 
-      toast.success("User created successfully");
+      toast.success(t("User created successfully"));
       setCreateOpen(false);
       setName("");
       setEmail("");
@@ -108,7 +109,7 @@ export function UserUsersSection() {
         return;
       }
 
-      toast.success("User updated");
+      toast.success(t("User updated"));
       await refreshUsers();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to update user");
@@ -128,7 +129,7 @@ export function UserUsersSection() {
         return;
       }
 
-      toast.success("User deleted");
+      toast.success(t("User deleted"));
       await refreshUsers();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to delete user");
@@ -139,31 +140,31 @@ export function UserUsersSection() {
     <SettingsSectionShell>
       <FormSection>
         <FormSectionHeader>
-          <FormSectionTitle>Users</FormSectionTitle>
+          <FormSectionTitle>{t("Users")}</FormSectionTitle>
           <FormSectionDescription>
-            Manage accounts that can sign in to this AOS installation.
+            {t("Manage accounts that can sign in to this AOS installation.")}
           </FormSectionDescription>
         </FormSectionHeader>
 
         <FormSectionContent>
           <FormSectionItem>
             <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">Accounts</p>
+              <p className="text-sm font-medium text-foreground">{t("Accounts")}</p>
               <p className="text-sm text-muted-foreground">
-                Super users can create, update, and remove instance accounts.
+                {t("Super users can create, update, and remove instance accounts.")}
               </p>
             </div>
             <Button type="button" size="sm" onClick={() => setCreateOpen(true)}>
               <HugeiconsIcon icon={Add01Icon} className="size-3.5" />
-              Add User
+              {t("Add User")}
             </Button>
           </FormSectionItem>
 
           <div className="divide-y divide-border">
             {usersQuery.isLoading ? (
-              <p className="p-4 text-sm text-muted-foreground">Loading users...</p>
+              <p className="p-4 text-sm text-muted-foreground">{t("Loading users...")}</p>
             ) : users.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground">No users found.</p>
+              <p className="p-4 text-sm text-muted-foreground">{t("No users found.")}</p>
             ) : (
               users.map((user) => (
                 <div
@@ -186,8 +187,8 @@ export function UserUsersSection() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="member">Member</SelectItem>
-                        <SelectItem value="super">Super</SelectItem>
+                        <SelectItem value="member">{t("Member")}</SelectItem>
+                        <SelectItem value="super">{t("Super")}</SelectItem>
                       </SelectContent>
                     </Select>
 
@@ -205,18 +206,18 @@ export function UserUsersSection() {
                       </AlertDialogTrigger>
                       <AlertDialogContent size="sm">
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Delete user?</AlertDialogTitle>
+                          <AlertDialogTitle>{t("Delete user?")}</AlertDialogTitle>
                           <AlertDialogDescription>
-                            This permanently removes {user.email} from this instance.
+                            {t("This permanently removes")} {user.email} {t("from this instance.")}
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
                           <AlertDialogAction
                             variant="destructive"
                             onClick={() => void handleDelete(user.id)}
                           >
-                            Delete
+                            {t("Delete")}
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
@@ -232,15 +233,15 @@ export function UserUsersSection() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add User</DialogTitle>
+            <DialogTitle>{t("Add User")}</DialogTitle>
             <DialogDescription>
-              Create a new account for this AOS instance.
+              {t("Create a new account for this AOS instance.")}
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={(event) => void handleCreate(event)} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="user-name">Name</Label>
+              <Label htmlFor="user-name">{t("Name")}</Label>
               <Input
                 id="user-name"
                 value={name}
@@ -250,7 +251,7 @@ export function UserUsersSection() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="user-email">Email</Label>
+              <Label htmlFor="user-email">{t("Email")}</Label>
               <Input
                 id="user-email"
                 type="email"
@@ -261,7 +262,7 @@ export function UserUsersSection() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="user-password">Password</Label>
+              <Label htmlFor="user-password">{t("Password")}</Label>
               <Input
                 id="user-password"
                 type="password"
@@ -273,7 +274,7 @@ export function UserUsersSection() {
             </div>
 
             <div className="space-y-2">
-              <Label>Role</Label>
+              <Label>{t("Role")}</Label>
               <Select
                 value={role}
                 onValueChange={(value) => setRole(value as "member" | "super")}
@@ -282,15 +283,15 @@ export function UserUsersSection() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="member">Member</SelectItem>
-                  <SelectItem value="super">Super</SelectItem>
+                  <SelectItem value="member">{t("Member")}</SelectItem>
+                  <SelectItem value="super">{t("Super")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <DialogFooter>
               <Button type="button" variant="secondary" onClick={() => setCreateOpen(false)}>
-                Cancel
+                {t("Cancel")}
               </Button>
               <Button type="submit" disabled={isCreating}>
                 {isCreating ? "Creating..." : "Create User"}

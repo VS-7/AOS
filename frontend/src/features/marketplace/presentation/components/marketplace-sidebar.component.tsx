@@ -2,6 +2,7 @@
 
 import { MarketplaceRail } from "@/features/marketplace/presentation/components/marketplace-shell.component";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 export type MarketplaceSidebarView = "marketplace" | "installed";
 
@@ -27,8 +28,8 @@ export function MarketplaceSidebar({
 }: MarketplaceSidebarProps) {
   return (
     <MarketplaceRail>
-      <nav aria-label="Marketplace sections" className="flex flex-col gap-4">
-        <p className="text-[13px] font-medium text-foreground">Marketplace</p>
+      <nav aria-label={t("Marketplace sections")} className="flex flex-col gap-4">
+        <p className="text-[13px] font-medium text-foreground">{t("Marketplace")}</p>
 
         <ul className="flex flex-col gap-1">
           {links.map((link) => (
@@ -62,7 +63,7 @@ export function MarketplaceSidebar({
               : "text-muted-foreground hover:text-foreground",
           )}
         >
-          Installed ({installedCount})
+          {t("Installed (")}{installedCount})
         </button>
       </nav>
     </MarketplaceRail>

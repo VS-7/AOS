@@ -9,6 +9,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { aos } from "@/app/aos";
 import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
+import { t } from "@/lib/i18n";
 
 const NEW_AGENT_ID = "__new_agent__";
 
@@ -109,7 +110,7 @@ export function AgentsProvider({ children, agents }: AgentsProviderProps) {
           return;
         }
 
-        toast.success("Agent created.");
+        toast.success(t("Agent created."));
         await aos.stores.agent.actions.refresh();
         setSelectedAgentFull(createdAgent as Agent);
         setSelectedAgentId(createdAgent.id);
@@ -131,7 +132,7 @@ export function AgentsProvider({ children, agents }: AgentsProviderProps) {
         return;
       }
 
-      toast.success("Agent updated.");
+      toast.success(t("Agent updated."));
       await aos.stores.agent.actions.refresh();
       setSelectedAgentFull(updatedAgent as Agent);
       form.reset(buildAgentFormValues(updatedAgent as Agent));
@@ -141,7 +142,7 @@ export function AgentsProvider({ children, agents }: AgentsProviderProps) {
   const { mutate: deleteAgent, loading: isDeleting } =
     aos.client.agent.delete.useMutation({
       onSuccess: async () => {
-        toast.success("Agent deleted.");
+        toast.success(t("Agent deleted."));
         await aos.stores.agent.actions.refresh();
         setSelectedAgentId(null);
         setSelectedAgentFull(undefined);

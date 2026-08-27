@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
+import { t } from "@/lib/i18n";
 
 interface RoutineActionsDropdownProps {
   routine: Routine;
@@ -62,7 +63,7 @@ export function RoutineActionsDropdown({
             className="flex items-center gap-2"
           >
             <CopyIcon className="size-4" />
-            <span>Copy identifier</span>
+            <span>{t("Copy identifier")}</span>
           </DropdownMenuItem>
         )}
 
@@ -75,7 +76,7 @@ export function RoutineActionsDropdown({
             className="flex items-center gap-2"
           >
             <TrashIcon className="size-4" />
-            <span>Delete</span>
+            <span>{t("Delete")}</span>
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

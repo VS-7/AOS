@@ -17,6 +17,7 @@ import { switchWorkspace } from "../shared/switch-workspace";
 import { WorkspaceAvatar } from "../shared/workspace-avatar";
 import { ArrowLeftRightIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { t } from "@/lib/i18n";
 
 export function AppSidebarWorkspaceSelectDropdown() {
   const { current: currentWorkspace, options: workspaces } =
@@ -75,7 +76,7 @@ export function AppSidebarWorkspaceSelectDropdown() {
                     <div className="flex size-6 items-center justify-center rounded-sm border bg-background">
                       <Plus className="size-4 shrink-0" />
                     </div>
-                    New Workspace
+                    {t("New Workspace")}
                   </DropdownMenuItem>
                 }
               />

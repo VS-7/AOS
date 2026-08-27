@@ -17,6 +17,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { aos } from "@/app/aos";
+import { t } from "@/lib/i18n";
 
 function getCurrentCollectionName(pathname: string): string | undefined {
   if (!pathname.startsWith("/collections/")) {
@@ -52,9 +53,9 @@ export function WorkspaceSidebarCollectionsGroupMenu() {
     >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton tooltip="Collections">
+          <SidebarMenuButton tooltip={t("Collections")}>
             <HugeiconsIcon icon={DatabaseIcon} className="size-3.5" />
-            <span>Collections</span>
+            <span>{t("Collections")}</span>
             <HugeiconsIcon
               icon={ArrowRight01Icon}
               className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90"
@@ -84,7 +85,7 @@ export function WorkspaceSidebarCollectionsGroupMenu() {
               })
             ) : (
               <span className="px-2 text-xs text-muted-foreground/60">
-                No collections yet
+                {t("No collections yet")}
               </span>
             )}
           </SidebarMenuSub>

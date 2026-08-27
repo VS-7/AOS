@@ -339,6 +339,55 @@ func (s *Service) ChangePassword(ctx context.Context, in ChangePasswordInput) er
 	return nil
 }
 
+// UpdateProfileInput changes what an account is called and how it is reached.
+//
+// Password is not here on purpose: ChangePassword verifies the current one
+// first, and folding the two together would let a form that only meant to fix
+// a typo in an email silently reset a credential.
+type UpdateProfileInput struct {
+	UserID string
+	Name   string
+	Email  string
+}
+
+// UpdateProfile changes an account's name and email.
+//
+// The name is what every screen in the interface shows for a person; until
+// this existed there was no way to change it after onboarding, and the
+// settings page that offers to had nothing behind it.
+func (s *Service) UpdateProfile(ctx context.Context, in UpdateProfileInput) (Public, error) {
+	users, err := s.store.Load(ctx)
+	if err != nil {
+		return Public{}, errStoreFailed("UpdateProfile", err)
+	}
+	idx := indexOf(users, in.UserID)
+	if idx < 0 {
+		return Public{}, errUserNotFound(in.UserID)
+	}
+
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return Public{}, errNameRequired()
+	}
+
+	email := normalizeEmail(in.Email)
+	if email != "" && email != users[idx].Email {
+		for i := range users {
+			if i != idx && users[i].Email == email {
+				return Public{}, errEmailTaken(email)
+			}
+		}
+		users[idx].Email = email
+	}
+
+	users[idx].Name = name
+	users[idx].UpdatedAt = s.clock.Now()
+	if err := s.store.Save(ctx, users); err != nil {
+		return Public{}, errStoreFailed("UpdateProfile", err)
+	}
+	return users[idx].ToPublic(), nil
+}
+
 // Get reads one account's public projection.
 func (s *Service) Get(ctx context.Context, userID string) (Public, error) {
 	users, err := s.store.Load(ctx)

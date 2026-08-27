@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import * as React from "react"
 import { LoaderCircle, RotateCcw, Save } from "lucide-react"
 import { toast } from "sonner"
@@ -48,7 +49,7 @@ function FilesViewerFallback() {
   return (
     <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
       <LoaderCircle className="size-4 animate-spin" />
-      Loading editor...
+      {t("Loading editor...")}
     </div>
   )
 }
@@ -100,7 +101,7 @@ export function FilesContent({
         aos.stores.files.actions.clearDraft(activeFilePath)
       }
       syncDirty(false)
-      toast.success("File saved.")
+      toast.success(t("File saved."))
     },
     onError: (error: any) => {
       toast.error(error?.error?.message || error?.message || "Unable to save file.")
@@ -160,7 +161,7 @@ export function FilesContent({
       if (!touched) return
 
       if (hasDraftChanges) {
-        toast.message("File changed on disk", {
+        toast.message(t("File changed on disk"), {
           description: "Your local edits were kept. Revert or save to reconcile.",
         })
         return
@@ -233,9 +234,9 @@ export function FilesContent({
       <div className="flex h-full items-center justify-center p-8">
         <AnimatedEmptyState className="border-none shadow-none">
           <AnimatedEmptyState.Content>
-            <AnimatedEmptyState.Title>No file selected</AnimatedEmptyState.Title>
+            <AnimatedEmptyState.Title>{t("No file selected")}</AnimatedEmptyState.Title>
             <AnimatedEmptyState.Description>
-              Choose a file in the sidebar explorer to inspect its content.
+              {t("Choose a file in the sidebar explorer to inspect its content.")}
             </AnimatedEmptyState.Description>
           </AnimatedEmptyState.Content>
         </AnimatedEmptyState>
@@ -247,7 +248,7 @@ export function FilesContent({
     return (
       <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
         <LoaderCircle className="size-4 animate-spin" />
-        Loading file content...
+        {t("Loading file content...")}
       </div>
     )
   }
@@ -290,8 +291,8 @@ export function FilesContent({
         </SplitPageLayout.ContentHeaderMain>
 
         <SplitPageLayout.ContentHeaderActions>
-          {isReadOnly ? <Badge variant="secondary">Read-only</Badge> : null}
-          {readQuery.isError ? <Badge variant="destructive">Load failed</Badge> : null}
+          {isReadOnly ? <Badge variant="secondary">{t("Read-only")}</Badge> : null}
+          {readQuery.isError ? <Badge variant="destructive">{t("Load failed")}</Badge> : null}
 
           <Button
             size="icon"

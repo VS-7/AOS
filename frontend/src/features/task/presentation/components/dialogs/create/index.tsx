@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import * as React from "react"
 import { z } from "zod"
 import { useRouter } from "@tanstack/react-router"
@@ -155,7 +156,7 @@ export function TaskDialog() {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl p-0 gap-0 overflow-hidden">
         <DialogHeader className="sr-only">
-          <DialogTitle>Create Task</DialogTitle>
+          <DialogTitle>{t("Create Task")}</DialogTitle>
         </DialogHeader>
         <Form form={form} className="flex flex-col">
           <div className="p-6 pb-2">
@@ -169,7 +170,7 @@ export function TaskDialog() {
 
                   return (
                     <Field>
-                      <FieldLabel>Status</FieldLabel>
+                      <FieldLabel>{t("Status")}</FieldLabel>
                       <FormControl>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -204,7 +205,7 @@ export function TaskDialog() {
                     <FormControl>
                       <Input
                         {...field}
-                        placeholder="Task title"
+                        placeholder={t("Task title")}
                         className="text-xl font-medium border-none shadow-none focus-visible:ring-0 px-0 h-auto"
                         autoFocus
                       />
@@ -220,7 +221,7 @@ export function TaskDialog() {
                     <FormControl>
                       <Textarea
                         {...field}
-                        placeholder="Add description..."
+                        placeholder={t("Add description...")}
                         className="border-none shadow-none focus-visible:ring-0 px-0 min-h-25 resize-none text-muted-foreground"
                       />
                     </FormControl>
@@ -321,14 +322,14 @@ export function TaskDialog() {
                     )}
                   >
                     <GitBranch data-icon="inline-start" className="size-4" />
-                    <span>Worktree</span>
+                    <span>{t("Worktree")}</span>
                     <ChevronDown data-icon="inline-end" className="size-3" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-80 p-4" align="start">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium">Enable Worktree</div>
+                      <div className="text-sm font-medium">{t("Enable Worktree")}</div>
                       <FormField
                         control={form.control}
                         name="worktree.enabled"
@@ -363,11 +364,11 @@ export function TaskDialog() {
                           name="worktree.base"
                           render={({ field }) => (
                             <Field>
-                              <label className="text-xs text-muted-foreground mb-1 block">Base Branch</label>
+                              <label className="text-xs text-muted-foreground mb-1 block">{t("Base Branch")}</label>
                               <FormControl>
                                 <Input
                                   {...field}
-                                  placeholder="e.g., develop, main"
+                                  placeholder={t("e.g., develop, main")}
                                   className="h-8"
                                 />
                               </FormControl>
@@ -379,11 +380,11 @@ export function TaskDialog() {
                           name="worktree.branch"
                           render={({ field }) => (
                             <Field>
-                              <label className="text-xs text-muted-foreground mb-1 block">Branch Name</label>
+                              <label className="text-xs text-muted-foreground mb-1 block">{t("Branch Name")}</label>
                               <FormControl>
                                 <Input
                                   {...field}
-                                  placeholder="e.g., feature/my-task"
+                                  placeholder={t("e.g., feature/my-task")}
                                   className="h-8"
                                 />
                               </FormControl>
@@ -392,7 +393,7 @@ export function TaskDialog() {
                         />
                         <div className="text-xs text-muted-foreground">
                           <Check className="inline-block size-3 mr-1" />
-                          Worktree will be created when task starts
+                          {t("Worktree will be created when task starts")}
                         </div>
                       </>
                     )}
@@ -402,7 +403,7 @@ export function TaskDialog() {
             </div>
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" type="button" onClick={() => onOpenChange(false)}>
-                Cancel
+                {t("Cancel")}
               </Button>
               <Button size="sm" type="submit" disabled={form.isLoading}>
                 {form.isLoading ? "Creating..." : "Create"}

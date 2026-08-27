@@ -88,6 +88,7 @@ import {
 import { cn } from '@/lib/utils';
 
 import { blockSelectionVariants } from './block-selection';
+import { t } from "@/lib/i18n";
 import {
   ColorDropdownMenuItems,
   DEFAULT_COLORS,
@@ -903,14 +904,14 @@ function TableFloatingToolbarContent({
         contentEditable={false}
       >
         <ToolbarGroup>
-          <ColorDropdownMenu tooltip="Background color">
+          <ColorDropdownMenu tooltip={t("Background color")}>
             <PaintBucketIcon />
           </ColorDropdownMenu>
           {canMerge && onMerge && (
             <ToolbarButton
               onClick={onMerge}
               onMouseDown={(e) => e.preventDefault()}
-              tooltip="Merge cells"
+              tooltip={t("Merge cells")}
             >
               <CombineIcon />
             </ToolbarButton>
@@ -919,7 +920,7 @@ function TableFloatingToolbarContent({
             <ToolbarButton
               onClick={onSplit}
               onMouseDown={(e) => e.preventDefault()}
-              tooltip="Split cell"
+              tooltip={t("Split cell")}
             >
               <SquareSplitHorizontalIcon />
             </ToolbarButton>
@@ -927,7 +928,7 @@ function TableFloatingToolbarContent({
 
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
-              <ToolbarButton tooltip="Cell borders">
+              <ToolbarButton tooltip={t("Cell borders")}>
                 <Grid2X2Icon />
               </ToolbarButton>
             </DropdownMenuTrigger>
@@ -939,7 +940,7 @@ function TableFloatingToolbarContent({
 
           {collapsedInside && (
             <ToolbarGroup>
-              <ToolbarButton tooltip="Delete table" {...buttonProps}>
+              <ToolbarButton tooltip={t("Delete table")} {...buttonProps}>
                 <Trash2Icon />
               </ToolbarButton>
             </ToolbarGroup>
@@ -951,21 +952,21 @@ function TableFloatingToolbarContent({
             <ToolbarButton
               onClick={onInsertRowBefore}
               onMouseDown={(e) => e.preventDefault()}
-              tooltip="Insert row before"
+              tooltip={t("Insert row before")}
             >
               <ArrowUp />
             </ToolbarButton>
             <ToolbarButton
               onClick={onInsertRowAfter}
               onMouseDown={(e) => e.preventDefault()}
-              tooltip="Insert row after"
+              tooltip={t("Insert row after")}
             >
               <ArrowDown />
             </ToolbarButton>
             <ToolbarButton
               onClick={onDeleteRow}
               onMouseDown={(e) => e.preventDefault()}
-              tooltip="Delete row"
+              tooltip={t("Delete row")}
             >
               <XIcon />
             </ToolbarButton>
@@ -977,21 +978,21 @@ function TableFloatingToolbarContent({
             <ToolbarButton
               onClick={onInsertColumnBefore}
               onMouseDown={(e) => e.preventDefault()}
-              tooltip="Insert column before"
+              tooltip={t("Insert column before")}
             >
               <ArrowLeft />
             </ToolbarButton>
             <ToolbarButton
               onClick={onInsertColumnAfter}
               onMouseDown={(e) => e.preventDefault()}
-              tooltip="Insert column after"
+              tooltip={t("Insert column after")}
             >
               <ArrowRight />
             </ToolbarButton>
             <ToolbarButton
               onClick={onDeleteColumn}
               onMouseDown={(e) => e.preventDefault()}
-              tooltip="Delete column"
+              tooltip={t("Delete column")}
             >
               <XIcon />
             </ToolbarButton>
@@ -1034,28 +1035,28 @@ function TableBordersDropdownMenuContent(
           onCheckedChange={getOnSelectTableBorder('top')}
         >
           <BorderTopIcon />
-          <div>Top Border</div>
+          <div>{t("Top Border")}</div>
         </DropdownMenuCheckboxItem>
         <DropdownMenuCheckboxItem
           checked={hasRightBorder}
           onCheckedChange={getOnSelectTableBorder('right')}
         >
           <BorderRightIcon />
-          <div>Right Border</div>
+          <div>{t("Right Border")}</div>
         </DropdownMenuCheckboxItem>
         <DropdownMenuCheckboxItem
           checked={hasBottomBorder}
           onCheckedChange={getOnSelectTableBorder('bottom')}
         >
           <BorderBottomIcon />
-          <div>Bottom Border</div>
+          <div>{t("Bottom Border")}</div>
         </DropdownMenuCheckboxItem>
         <DropdownMenuCheckboxItem
           checked={hasLeftBorder}
           onCheckedChange={getOnSelectTableBorder('left')}
         >
           <BorderLeftIcon />
-          <div>Left Border</div>
+          <div>{t("Left Border")}</div>
         </DropdownMenuCheckboxItem>
       </DropdownMenuGroup>
 
@@ -1065,14 +1066,14 @@ function TableBordersDropdownMenuContent(
           onCheckedChange={getOnSelectTableBorder('none')}
         >
           <BorderNoneIcon />
-          <div>No Border</div>
+          <div>{t("No Border")}</div>
         </DropdownMenuCheckboxItem>
         <DropdownMenuCheckboxItem
           checked={hasOuterBorders}
           onCheckedChange={getOnSelectTableBorder('outer')}
         >
           <BorderAllIcon />
-          <div>Outside Borders</div>
+          <div>{t("Outside Borders")}</div>
         </DropdownMenuCheckboxItem>
       </DropdownMenuGroup>
     </DropdownMenuContent>
@@ -1117,7 +1118,7 @@ function ColorDropdownMenu({
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="start">
-        <ToolbarMenuGroup label="Colors">
+        <ToolbarMenuGroup label={t("Colors")}>
           <ColorDropdownMenuItems
             className="px-2"
             colors={DEFAULT_COLORS}
@@ -1127,7 +1128,7 @@ function ColorDropdownMenu({
         <DropdownMenuGroup>
           <DropdownMenuItem className="p-2" onClick={onClearColor}>
             <EraserIcon />
-            <span>Clear</span>
+            <span>{t("Clear")}</span>
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>

@@ -41,6 +41,7 @@ import { DormantGate } from "@/components/DormantDomain";
 import { useAlert } from "@/components/ui/alert-provider";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { t } from "@/lib/i18n";
 import {
   DataTable,
   DataTableProvider,
@@ -198,7 +199,7 @@ export const CollectionPage = aos
     const { mutate: deleteRecord } =
       client.collection.deleteRecord.useMutation({
         onSuccess: async () => {
-          toast.success("Record deleted.");
+          toast.success(t("Record deleted."));
           await router.invalidate();
         },
         onError: (error) => {
@@ -434,7 +435,7 @@ function CollectionPageContent({
         </div>
         <PageActions>
           <DataTableSearch
-            placeholder="Search records..."
+            placeholder={t("Search records...")}
             className="h-8 w-full max-w-[160px] lg:max-w-[240px] bg-background border rounded-lg"
           />
           <DataTableFilterMenu size="sm" variant="ghost" />
@@ -450,7 +451,7 @@ function CollectionPageContent({
               onClick={handleDeleteSelected}
             >
               <Trash2 className="size-4 mr-2" />
-              Delete Selected ({selectedRows.length})
+              {t("Delete Selected (")}{selectedRows.length})
             </Button>
           )}
           <Button
@@ -462,7 +463,7 @@ function CollectionPageContent({
             }
           >
             <PlusSquareIcon />
-            Create
+            {t("Create")}
           </Button>
         </PageActions>
       </PageHeader>

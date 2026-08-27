@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/tooltip";
 import { aos } from "@/app/aos";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 export const PLUGIN_INVENTORY_SECTION_META: Record<
   MarketplaceSkillComponentKind,
@@ -96,7 +97,7 @@ export function PluginDetailSection({
   const showEmpty = interactive;
 
   const onDeleted = React.useCallback(async () => {
-    toast.success("Item deleted");
+    toast.success(t("Item deleted"));
     await router.invalidate();
   }, [router]);
 
@@ -213,7 +214,7 @@ export function PluginDetailSection({
         // which was never the actual wire shape.
         const artifact = result.data?.artifact;
         if (!artifact || !artifact.urls?.local) {
-          toast.error("Artifact URL not available");
+          toast.error(t("Artifact URL not available"));
           return;
         }
         ArtifactHelper.openInBrowserTab(artifact);
@@ -267,7 +268,7 @@ export function PluginDetailSection({
       {items.length === 0 ? (
         <div className="flex h-12 w-full items-center justify-center rounded-md border-2 border-dotted">
           <span className="text-muted-foreground/60">
-            No {meta.label.toLowerCase()} in this plugin yet!
+            {t("No")} {meta.label.toLowerCase()} {t("in this plugin yet!")}
           </span>
         </div>
       ) : (
@@ -322,10 +323,10 @@ export function PluginDetailSection({
                                 icon={SquareArrowUpRightIcon}
                                 className="size-3.5"
                               />
-                              <span className="sr-only">Open</span>
+                              <span className="sr-only">{t("Open")}</span>
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent side="top">Open</TooltipContent>
+                          <TooltipContent side="top">{t("Open")}</TooltipContent>
                         </Tooltip>
                       ) : null}
 
@@ -346,10 +347,10 @@ export function PluginDetailSection({
                                 icon={PencilEdit01Icon}
                                 className="size-3.5"
                               />
-                              <span className="sr-only">Edit</span>
+                              <span className="sr-only">{t("Edit")}</span>
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent side="top">Edit</TooltipContent>
+                          <TooltipContent side="top">{t("Edit")}</TooltipContent>
                         </Tooltip>
                       ) : null}
 
@@ -370,29 +371,29 @@ export function PluginDetailSection({
                                     icon={Delete02Icon}
                                     className="size-3.5"
                                   />
-                                  <span className="sr-only">Delete</span>
+                                  <span className="sr-only">{t("Delete")}</span>
                                 </Button>
                               </AlertDialogTrigger>
                             </TooltipTrigger>
-                            <TooltipContent side="top">Delete</TooltipContent>
+                            <TooltipContent side="top">{t("Delete")}</TooltipContent>
                           </Tooltip>
                           <AlertDialogContent size="sm">
                             <AlertDialogHeader>
                               <AlertDialogTitle>
-                                Delete this item?
+                                {t("Delete this item?")}
                               </AlertDialogTitle>
                               <AlertDialogDescription>
-                                Removes <strong>{item.label}</strong>{" "}
+                                {t("Removes")} <strong>{item.label}</strong>{" "}
                                 permanently.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
                               <AlertDialogAction
                                 variant="destructive"
                                 onClick={() => handleDelete(item)}
                               >
-                                Delete
+                                {t("Delete")}
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>

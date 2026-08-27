@@ -22,6 +22,7 @@ import {
   type OnboardingFormOrchestratorStepProps,
 } from "./steps/onboarding-form-orchestrator-step";
 import { OnboardingFormInitStep } from "./steps/onboarding-form-init-step";
+import { t } from "@/lib/i18n";
 
 // ---------------------------------------------------------------------------
 // Step definitions — fields to validate before advancing
@@ -329,7 +330,7 @@ export function OnboardingForm() {
                       className="rounded-full"
                       onClick={goBack}
                     >
-                      Previous
+                      {t("Previous")}
                     </Button>
                   )}
                   <Button

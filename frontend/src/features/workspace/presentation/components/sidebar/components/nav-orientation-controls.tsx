@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { stores } from "@/app/lib/stores";
 import { useSidebarActiveRoute } from "../hooks/use-sidebar-active-route";
+import { t } from "@/lib/i18n";
 
 /**
  * Desktop chrome cluster for Home / Search.
@@ -39,7 +40,7 @@ export function WorkspaceNavOrientationControls() {
               "h-8 w-8 text-muted-foreground hover:text-foreground",
             )}
           >
-            <Link to="/" aria-label="Home">
+            <Link to="/" aria-label={t("Home")}>
               <HugeiconsIcon icon={HomeIcon} className="size-3.5" />
             </Link>
           </Button>
@@ -49,7 +50,7 @@ export function WorkspaceNavOrientationControls() {
           align="start"
           className="flex items-center gap-2"
         >
-          Home
+          {t("Home")}
         </TooltipContent>
       </Tooltip>
 
@@ -60,7 +61,7 @@ export function WorkspaceNavOrientationControls() {
             size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
             onClick={openSearch}
-            aria-label="Search"
+            aria-label={t("Search")}
           >
             <HugeiconsIcon icon={SearchIcon} className="size-3.5" />
           </Button>
@@ -70,7 +71,7 @@ export function WorkspaceNavOrientationControls() {
           align="start"
           className="flex items-center gap-2"
         >
-          Search
+          {t("Search")}
           <KbdGroup>
             <Kbd>⌘</Kbd>
             <Kbd>K</Kbd>

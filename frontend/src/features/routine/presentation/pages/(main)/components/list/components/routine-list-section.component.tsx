@@ -10,6 +10,7 @@ import {
 import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
 import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
 import { RoutineListRow } from "./routine-list-row.component";
+import { t } from "@/lib/i18n";
 
 const itemVariants = {
   hidden: { opacity: 0, y: 6 },
@@ -82,7 +83,7 @@ export function RoutineListSection({ status, routines }: RoutineListSectionProps
                   transition={{ duration: 0.2 }}
                   className="flex h-11 items-center justify-center px-3 text-xs text-muted-foreground"
                 >
-                  No routines in {config.label.toLowerCase()}
+                  {t("No routines in")} {config.label.toLowerCase()}
                 </motion.div>
               ) : (
                 routines.map((routine) => <RoutineListRow key={routine.id} routine={routine} />)

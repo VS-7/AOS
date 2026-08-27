@@ -13,6 +13,7 @@ import { SearchIcon, HomeIcon } from "@hugeicons/core-free-icons";
 import { stores } from "@/app/lib/stores";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useSidebarActiveRoute } from "../../../../../hooks/use-sidebar-active-route";
+import { t } from "@/lib/i18n";
 
 /**
  * Mobile-only Home / Search rows.
@@ -32,20 +33,20 @@ export function WorkspaceSidebarNavigationGroup() {
     <SidebarGroup>
       <SidebarGroupContent>
         <SidebarMenu>
-          <SidebarMenuItem aria-label="Home" title="Home">
+          <SidebarMenuItem aria-label={t("Home")} title={t("Home")}>
             <SidebarMenuButton asChild isActive={isRouteActive("/")}>
               <Link to="/">
                 <HugeiconsIcon icon={HomeIcon} />
-                Home
+                {t("Home")}
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem aria-label="Search" title="Search">
+          <SidebarMenuItem aria-label={t("Search")} title={t("Search")}>
             <SidebarMenuButton
               onClick={() => stores.viewport.actions.toggleCommander(true)}
             >
               <HugeiconsIcon icon={SearchIcon} />
-              Search
+              {t("Search")}
               <KbdGroup className="ml-auto">
                 <Kbd>⌘</Kbd>
                 <Kbd>K</Kbd>

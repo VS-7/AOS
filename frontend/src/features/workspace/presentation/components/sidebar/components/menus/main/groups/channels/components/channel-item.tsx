@@ -43,6 +43,7 @@ import {
   openChatTab,
 } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
 import { ChatActivityStamp } from "../../chat/components/chat-activity-stamp";
+import { t } from "@/lib/i18n";
 
 interface ChannelItemProps {
   chat: Chat;
@@ -72,7 +73,7 @@ export function ChannelItem({
       onSuccess: () => {
         setIsEditing(false);
         onChanged?.();
-        toast.success("Channel renamed.");
+        toast.success(t("Channel renamed."));
       },
       onError: (error: any) => {
         toast.error(
@@ -87,7 +88,7 @@ export function ChannelItem({
     aos.client.chat.delete.useMutation({
       onSuccess: () => {
         onChanged?.();
-        toast.success("Channel deleted.");
+        toast.success(t("Channel deleted."));
         if (isActive) {
           closeChatTab(chat.id);
         }
@@ -245,7 +246,7 @@ export function ChannelItem({
                           </Button>
                         </motion.div>
                       </TooltipTrigger>
-                      <TooltipContent side="top">Confirm rename</TooltipContent>
+                      <TooltipContent side="top">{t("Confirm rename")}</TooltipContent>
                     </Tooltip>
 
                     <Tooltip>
@@ -271,7 +272,7 @@ export function ChannelItem({
                           </Button>
                         </motion.div>
                       </TooltipTrigger>
-                      <TooltipContent side="top">Cancel rename</TooltipContent>
+                      <TooltipContent side="top">{t("Cancel rename")}</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 </motion.div>
@@ -320,7 +321,7 @@ export function ChannelItem({
           </DropdownMenuTrigger>
 
           <DropdownMenuContent align="start" side="right" className="w-44">
-            <DropdownMenuLabel>Channel Actions</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("Channel Actions")}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={(event) => {
@@ -329,7 +330,7 @@ export function ChannelItem({
               }}
             >
               <HugeiconsIcon icon={PencilIcon} />
-              Rename
+              {t("Rename")}
             </DropdownMenuItem>
             <DropdownMenuItem
               variant="destructive"
@@ -339,7 +340,7 @@ export function ChannelItem({
               }}
             >
               <HugeiconsIcon icon={Delete01Icon} />
-              Delete
+              {t("Delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

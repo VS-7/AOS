@@ -8,6 +8,7 @@ import { aos } from "@/app/aos";
 import { toast } from "sonner";
 import { reloadAt } from "@/lib/wails";
 import type { AuthOnboarding } from "@/features/auth/interfaces/auth.interfaces";
+import { t } from "@/lib/i18n";
 
 interface InitStage {
   id: string;
@@ -152,7 +153,7 @@ export function OnboardingFormInitStep({
 
       if (result.error || !result.data?.workspaceId) {
         dispatch({ type: "ERROR" });
-        toast.error("An error occurred while creating your workspace", {
+        toast.error(t("An error occurred while creating your workspace"), {
           description: "Please check the data and try again.",
         });
         onError?.();
@@ -165,11 +166,11 @@ export function OnboardingFormInitStep({
         password: data.security.password,
       });
 
-      toast.success("Your workspace has been created successfully!");
+      toast.success(t("Your workspace has been created successfully!"));
       await aos.stores.workspace.actions.switch(result.data.workspaceId);
     } catch {
       dispatch({ type: "ERROR" });
-      toast.error("An error occurred while creating your workspace", {
+      toast.error(t("An error occurred while creating your workspace"), {
         description: "Please check the data and try again.",
       });
       onError?.();

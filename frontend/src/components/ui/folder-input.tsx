@@ -3,6 +3,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { isDesktop, system } from "@/lib/client";
+import { isDesktopWindow } from "@/lib/wails";
+import { t } from "@/lib/i18n";
 
 interface FolderInputProps {
   value: string;
@@ -19,7 +21,12 @@ export function FolderInput({
   disabled,
   inputClassName,
 }: FolderInputProps) {
-  const native = isDesktop();
+  // `isDesktopWindow` first: `isDesktop()` only turns true once a domain
+  // call has succeeded over the bridge, and the first screen that needs to
+  // pick a folder — choosing the very first workspace — runs before any
+  // has. The window's own query string says which it is, synchronously,
+  // from the first paint.
+  const native = isDesktopWindow || isDesktop();
 
   const handleSelectFolder = async () => {
     const picked = await system.pickFiles({ directories: true });
@@ -46,7 +53,7 @@ export function FolderInput({
           size="icon"
           onClick={handleSelectFolder}
           disabled={disabled}
-          title="Select Folder"
+          title={t("Select Folder")}
         >
           <FolderOpen className="size-4" />
         </Button>

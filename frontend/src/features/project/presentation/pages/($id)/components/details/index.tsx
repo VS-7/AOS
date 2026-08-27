@@ -1,6 +1,7 @@
 import type { Project } from "@/features/project/interfaces/project.interfaces";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { Folder, CalendarDays } from "lucide-react";
+import { t } from "@/lib/i18n";
 
 interface ProjectDetailsSidebarProps {
   project: Project;
@@ -9,11 +10,11 @@ interface ProjectDetailsSidebarProps {
 export function ProjectDetailsSidebar({ project }: ProjectDetailsSidebarProps) {
   return (
     <SplitPageLayout.DetailTabs defaultValue="overview">
-      <SplitPageLayout.DetailTab value="overview" label="Overview">
+      <SplitPageLayout.DetailTab value="overview" label={t("Overview")}>
         <SplitPageLayout.Widget>
           <SplitPageLayout.WidgetHeader>
             <SplitPageLayout.WidgetTitle>
-              Properties
+              {t("Properties")}
             </SplitPageLayout.WidgetTitle>
           </SplitPageLayout.WidgetHeader>
           <SplitPageLayout.WidgetContent>
@@ -33,7 +34,7 @@ export function ProjectDetailsSidebar({ project }: ProjectDetailsSidebarProps) {
               <SplitPageLayout.WidgetItem>
                 <Folder className="size-3.5 shrink-0 text-muted-foreground" />
                 <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                  Source
+                  {t("Source")}
                 </span>
                 <span
                   className="truncate text-xs text-muted-foreground"
@@ -48,7 +49,7 @@ export function ProjectDetailsSidebar({ project }: ProjectDetailsSidebarProps) {
             <SplitPageLayout.WidgetItem>
               <CalendarDays className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                Created
+                {t("Created")}
               </span>
               <span className="text-xs text-muted-foreground">
                 {new Date(project.createdAt).toLocaleDateString()}
@@ -62,7 +63,7 @@ export function ProjectDetailsSidebar({ project }: ProjectDetailsSidebarProps) {
           <SplitPageLayout.Widget>
             <SplitPageLayout.WidgetHeader>
               <SplitPageLayout.WidgetTitle>
-                Description
+                {t("Description")}
               </SplitPageLayout.WidgetTitle>
             </SplitPageLayout.WidgetHeader>
             <SplitPageLayout.WidgetContent>

@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 'use client'
 
 import { Clock, MapPin } from 'lucide-react'
@@ -30,9 +31,9 @@ export function OnboardingFormRegionStep({ form }: OnboardingFormRegionStepProps
     <div className="flex flex-col items-center justify-center h-full px-6 py-10">
       <div className="w-full max-w-md space-y-8">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">Language & Region</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-foreground">{t("Language & Region")}</h2>
           <p className="text-sm text-muted-foreground leading-relaxed mt-1">
-            Pick your language and local timezone so your copilot speaks to you naturally.
+            {t("Pick your language and local timezone so your copilot speaks to you naturally.")}
           </p>
         </div>
 
@@ -42,11 +43,11 @@ export function OnboardingFormRegionStep({ form }: OnboardingFormRegionStepProps
             name="region.language"
             render={({ field }) => (
               <FormItem className="space-y-2">
-                <FormLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Primary Language</FormLabel>
+                <FormLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("Primary Language")}</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger className="h-11 bg-background/60 border-border/60 rounded-xl focus:ring-primary/20 transition-all">
-                      <SelectValue placeholder="Select primary language" />
+                      <SelectValue placeholder={t("Select primary language")} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent className="rounded-xl border-border/60 max-h-56">
@@ -67,12 +68,12 @@ export function OnboardingFormRegionStep({ form }: OnboardingFormRegionStepProps
             name="region.timezone"
             render={({ field }) => (
               <FormItem className="space-y-2">
-                <FormLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Timezone</FormLabel>
+                <FormLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("Timezone")}</FormLabel>
                 <FormControl>
                   <div className="relative">
                     <Clock className="w-4 h-4 text-muted-foreground/60 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <Input
-                      placeholder="e.g. America/Sao_Paulo"
+                      placeholder={t("e.g. America/Sao_Paulo")}
                       className="pl-10 h-11 bg-background/60 border-border/60 rounded-xl focus-visible:ring-primary/20 transition-all"
                       {...field}
                     />
@@ -90,13 +91,13 @@ export function OnboardingFormRegionStep({ form }: OnboardingFormRegionStepProps
               render={({ field }) => (
                 <FormItem className="space-y-2">
                   <FormLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    City <span className="normal-case text-muted-foreground/60 font-normal">(optional)</span>
+                    {t("City")} <span className="normal-case text-muted-foreground/60 font-normal">{t("(optional)")}</span>
                   </FormLabel>
                   <FormControl>
                     <div className="relative">
                       <MapPin className="w-3.5 h-3.5 text-muted-foreground/60 absolute left-3 top-1/2 -translate-y-1/2" />
                       <Input
-                        placeholder="São Paulo"
+                        placeholder={t("São Paulo")}
                         className="pl-8 h-10 bg-background/60 border-border/60 rounded-xl text-sm focus-visible:ring-primary/20 transition-all"
                         {...field}
                       />
@@ -113,11 +114,11 @@ export function OnboardingFormRegionStep({ form }: OnboardingFormRegionStepProps
               render={({ field }) => (
                 <FormItem className="space-y-2">
                   <FormLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Country <span className="normal-case text-muted-foreground/60 font-normal">(optional)</span>
+                    {t("Country")} <span className="normal-case text-muted-foreground/60 font-normal">{t("(optional)")}</span>
                   </FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="Brazil"
+                      placeholder={t("Brazil")}
                       className="h-10 bg-background/60 border-border/60 rounded-xl text-sm focus-visible:ring-primary/20 transition-all"
                       {...field}
                     />

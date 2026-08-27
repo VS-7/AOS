@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import { Events } from "@wailsio/runtime";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 import {
   closeWindow,
   isWindowMaximised,
@@ -136,7 +137,7 @@ export function WindowControls({ className }: { className?: string }): JSX.Eleme
       data-slot="window-controls"
       className={cn("flex items-center", className)}
     >
-      <Control label="Minimise" region="minimise" onClick={() => void minimiseWindow()}>
+      <Control label={t("Minimise")} region="minimise" onClick={() => void minimiseWindow()}>
         <Glyph d="M1 5h8" />
       </Control>
       <Control
@@ -150,7 +151,7 @@ export function WindowControls({ className }: { className?: string }): JSX.Eleme
           <Glyph d="M1.5 1.5h7v7h-7z" />
         )}
       </Control>
-      <Control label="Close" region="close" danger onClick={() => void closeWindow()}>
+      <Control label={t("Close")} region="close" danger onClick={() => void closeWindow()}>
         <Glyph d="M1.5 1.5l7 7M8.5 1.5l-7 7" />
       </Control>
     </div>

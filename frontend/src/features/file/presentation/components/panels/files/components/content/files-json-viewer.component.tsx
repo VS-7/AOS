@@ -10,6 +10,7 @@ import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FilesTextViewer } from "./files-text-viewer.component";
 import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces";
+import { t } from "@/lib/i18n";
 
 interface FilesJsonViewerProps {
   content: string;
@@ -147,7 +148,7 @@ export function FilesJsonViewer({
         <div className="flex items-start gap-2 border-b border-border/60 bg-destructive/5 px-4 py-3 text-xs text-destructive">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="font-medium">Invalid JSON — editing as text</p>
+            <p className="font-medium">{t("Invalid JSON — editing as text")}</p>
             <p className="mt-0.5 text-destructive/80">
               {parseError ?? "Could not parse this file as JSON."}
             </p>

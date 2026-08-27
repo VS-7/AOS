@@ -25,6 +25,7 @@ import { useSidebarActiveRoute } from "../sidebar/hooks/use-sidebar-active-route
 import { WorkspaceTabStrip } from "./workspace-tab-strip";
 import { WORKSPACE_NAV_CONTROLS_INSET_CLASS } from "../sidebar/components/workspace-nav-controls-shell";
 import { WindowControls } from "@/components/ui/window-controls";
+import { t } from "@/lib/i18n";
 
 export function WorkspaceNavigation() {
   const clickTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(
@@ -126,7 +127,7 @@ export function WorkspaceNavigation() {
               align="start"
               className="flex items-center gap-2"
             >
-              New Browser Tab
+              {t("New Browser Tab")}
               <KbdGroup>
                 <Kbd>⌘</Kbd>
                 <Kbd>T</Kbd>
@@ -148,7 +149,7 @@ export function WorkspaceNavigation() {
                 isRouteActive("/activities") && "text-foreground bg-accent/60",
               )}
             >
-              <Link to="/activities" aria-label="Activity">
+              <Link to="/activities" aria-label={t("Activity")}>
                 <HugeiconsIcon icon={Clock02Icon} className="size-3.5" />
                 {unreadCount > 0 ? (
                   <span className="absolute right-1 top-1 size-1.5 rounded-full bg-primary" />
@@ -161,7 +162,7 @@ export function WorkspaceNavigation() {
             align="end"
             className="flex items-center gap-2"
           >
-            Activity
+            {t("Activity")}
             {unreadCount > 0 ? (
               <span className="text-xs text-muted-foreground">
                 {unreadCount} unread
@@ -186,7 +187,7 @@ export function WorkspaceNavigation() {
             align="end"
             className="flex items-center gap-2"
           >
-            Open Changes
+            {t("Open Changes")}
             <KbdGroup>
               <Kbd>⌘</Kbd>
               <Kbd>⇧</Kbd>
@@ -214,7 +215,7 @@ export function WorkspaceNavigation() {
             align="end"
             className="flex items-center gap-2"
           >
-            Refresh
+            {t("Refresh")}
             <KbdGroup>
               <Kbd>⌘</Kbd>
               <Kbd>R</Kbd>
@@ -244,7 +245,7 @@ export function WorkspaceNavigation() {
             align="end"
             className="flex items-center gap-2"
           >
-            Toggle Fullscreen
+            {t("Toggle Fullscreen")}
             <KbdGroup>
               <Kbd>⌘</Kbd>
               <Kbd>⇧</Kbd>
@@ -274,7 +275,7 @@ export function WorkspaceNavigation() {
             align="end"
             className="flex items-center gap-2"
           >
-            Toggle Page Sidebar
+            {t("Toggle Page Sidebar")}
             <KbdGroup>
               <Kbd>⌘</Kbd>
               <Kbd>⇧</Kbd>

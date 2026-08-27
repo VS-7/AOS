@@ -10,6 +10,7 @@ import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
 import { ROUTINE_STATUS_ORDER } from "@/features/routine/presentation/consts/routine";
 import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
 import { RoutineListSection } from "@/features/routine/presentation/pages/(main)/components/list/components/routine-list-section.component";
+import { t } from "@/lib/i18n";
 
 interface AgentRoutinesTabProps {
   agent: Agent;
@@ -46,13 +47,13 @@ export function AgentRoutinesTab({ agent }: AgentRoutinesTabProps) {
     <div className="container max-w-6xl mx-auto px-6 py-6 pb-10 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div className="space-y-0.5">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Agent routines</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("Agent routines")}</p>
           <p className="text-xs text-muted-foreground">{routines.length} total</p>
         </div>
 
         <Button type="button" size="sm" onClick={() => navigate({ to: "/routines/$id", params: { id: "new" } })}>
           <Plus className="size-4" />
-          New Routine
+          {t("New Routine")}
         </Button>
       </div>
 
@@ -78,9 +79,9 @@ export function AgentRoutinesTab({ agent }: AgentRoutinesTabProps) {
             </div>
           </AnimatedEmptyState.Carousel>
           <AnimatedEmptyState.Content>
-            <AnimatedEmptyState.Title>No routines configured</AnimatedEmptyState.Title>
+            <AnimatedEmptyState.Title>{t("No routines configured")}</AnimatedEmptyState.Title>
             <AnimatedEmptyState.Description>
-              This agent does not have routines yet.
+              {t("This agent does not have routines yet.")}
             </AnimatedEmptyState.Description>
           </AnimatedEmptyState.Content>
         </AnimatedEmptyState>

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { aos } from "@/app/aos";
+import { t } from "@/lib/i18n";
 
 interface MarketplaceInstallButtonProps {
   pluginName: string;
@@ -53,7 +54,7 @@ export function MarketplaceInstallButton({
       {isInstalling ? (
         <>
           <Spinner />
-          Installing...
+          {t("Installing...")}
         </>
       ) : isInstalled ? (
         "Installed"

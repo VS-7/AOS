@@ -11,6 +11,7 @@ import { PlateElement, useReadOnly, withHOC } from 'platejs/react';
 
 import { cn } from '@/lib/utils';
 import { Caption, CaptionTextarea } from './caption';
+import { t } from "@/lib/i18n";
 
 export const FileElement = withHOC(
   ResizableProvider,
@@ -40,7 +41,7 @@ export const FileElement = withHOC(
             <CaptionTextarea
               className="text-left"
               readOnly={readOnly}
-              placeholder="Write a caption..."
+              placeholder={t("Write a caption...")}
             />
           </Caption>
         </a>

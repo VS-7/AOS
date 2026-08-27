@@ -31,6 +31,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 
 import { CaptionButton } from './caption';
+import { t } from "@/lib/i18n";
 
 const inputVariants = cva(
   'flex h-[28px] w-full rounded-md border-none bg-transparent px-1.5 py-1 text-base placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-transparent md:text-sm'
@@ -87,7 +88,7 @@ export function MediaToolbar({
 
               <FloatingMediaPrimitive.UrlInput
                 className={inputVariants()}
-                placeholder="Paste the embed link..."
+                placeholder={t("Paste the embed link...")}
                 options={{ plugin }}
               />
             </div>
@@ -97,11 +98,11 @@ export function MediaToolbar({
             <FloatingMediaPrimitive.EditButton
               className={buttonVariants({ size: 'sm', variant: 'ghost' })}
             >
-              Edit link
+              {t("Edit link")}
             </FloatingMediaPrimitive.EditButton>
 
             <CaptionButton size="sm" variant="ghost">
-              Caption
+              {t("Caption")}
             </CaptionButton>
 
             <Separator orientation="vertical" className="mx-1 h-6" />

@@ -49,6 +49,7 @@ import {
 import { Accordion, AccordionItem } from "@/components/ui/accordion";
 import { SlidingNumber } from "@/components/ui/sliding-number";
 import { motion, useReducedMotion } from "motion/react";
+import { t } from "@/lib/i18n";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂"] as const;
 
@@ -386,7 +387,7 @@ export function ChatMessageItem({
     try {
       await navigator.clipboard.writeText(fullText);
       setCopied(true);
-      toast.success("Message copied");
+      toast.success(t("Message copied"));
 
       if (copyTimeoutRef.current) {
         window.clearTimeout(copyTimeoutRef.current);
@@ -396,7 +397,7 @@ export function ChatMessageItem({
         setCopied(false);
       }, 1600);
     } catch {
-      toast.error("Could not copy this message");
+      toast.error(t("Could not copy this message"));
     }
   }
 
@@ -720,8 +721,8 @@ function ChatMessageCompactActions({
           <MessageAction
             className="size-5 rounded-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground"
             disabled={disabled}
-            label="Open emoji picker"
-            tooltip="More reactions"
+            label={t("Open emoji picker")}
+            tooltip={t("More reactions")}
             variant="ghost"
           >
             <SmilePlusIcon className="size-3" />
@@ -767,13 +768,13 @@ function ChatMessageEmojiPicker({
       <div className="border-b border-border/70 p-3">
         <EmojiPicker.Search
           className="h-9 w-full rounded-lg border border-border/70 bg-background px-3 text-sm outline-hidden transition-colors placeholder:text-muted-foreground focus:border-ring"
-          placeholder="Search emoji"
+          placeholder={t("Search emoji")}
         />
       </div>
 
       <EmojiPicker.Viewport className="relative flex-1 outline-hidden">
         <EmojiPicker.Loading className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-          Loading emojis...
+          {t("Loading emojis...")}
         </EmojiPicker.Loading>
         <EmojiPicker.Empty className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
           {({ search }: { search: string }) => `No emoji found for "${search}"`}

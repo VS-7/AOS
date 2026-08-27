@@ -40,6 +40,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 // ---------------------------------------------------------------------------
 // Front matter — types & parsing
@@ -339,7 +340,7 @@ function FrontMatterPropertyValue({
 
         {!disabled ? (
           <Input
-            placeholder="Add..."
+            placeholder={t("Add...")}
             className="h-7 min-w-24 flex-1 border-0 focus:bg-muted/60 bg-transparent px-2 text-xs shadow-none focus-visible:ring-1 focus-visible:ring-ring/10"
             onKeyDown={(event) => {
               if (event.key !== "Enter") return;
@@ -426,7 +427,7 @@ function FrontMatterPropertyRow({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-48">
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Change type</DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger>{t("Change type")}</DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               {FIELD_TYPE_OPTIONS.map((option) => {
                 const Icon = option.icon;
@@ -449,7 +450,7 @@ function FrontMatterPropertyRow({
             variant="destructive"
             onClick={onRemove}
           >
-            Remove
+            {t("Remove")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -509,7 +510,7 @@ function FrontMatterPropertiesEditor({
   return (
     <div className="border-b border-border/40 pb-4">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">Properties</p>
+        <p className="text-xs text-muted-foreground">{t("Properties")}</p>
       </div>
 
       <div className="flex flex-col">
@@ -531,7 +532,7 @@ function FrontMatterPropertiesEditor({
           className="mt-2 inline-flex items-center ml-2 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
         >
           <Plus className="size-3.5" />
-          Add property
+          {t("Add property")}
         </button>
       ) : null}
     </div>
@@ -724,7 +725,7 @@ export function MarkdownEditor({
     <div className="flex flex-col gap-4">
       {canShowPropertiesPanel && !propertiesPanelEnabled ? (
         <div className="flex items-center justify-end gap-2 border-b border-border/40 pb-3">
-          <span className="text-xs text-muted-foreground">Properties panel</span>
+          <span className="text-xs text-muted-foreground">{t("Properties panel")}</span>
           <Switch
             checked={propertiesPanelEnabled}
             disabled={disabled}

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/tooltip";
 import { SettingsContentContainer } from "../../../../../content-container";
 import { useInstructions } from "../../contexts/instructions.context";
+import { t } from "@/lib/i18n";
 
 export function InstructionsSidebar() {
   const {
@@ -41,7 +42,7 @@ export function InstructionsSidebar() {
     <>
       <SplitPageLayout.SidebarHeader>
         <SplitPageLayout.SearchInput
-          placeholder="Search instructions..."
+          placeholder={t("Search instructions...")}
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
         />
@@ -63,7 +64,7 @@ export function InstructionsSidebar() {
             <AnimatedEmptyState className="border-none shadow-none py-12">
               <AnimatedEmptyState.Content>
                 <AnimatedEmptyState.Title>
-                  No instructions found
+                  {t("No instructions found")}
                 </AnimatedEmptyState.Title>
                 <AnimatedEmptyState.Description>
                   {searchQuery

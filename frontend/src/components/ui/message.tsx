@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import type { UIMessage } from "ai";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
+import { t } from "@/lib/i18n";
 import {
   createContext,
   useCallback,
@@ -256,7 +257,7 @@ export const MessageBranchPrevious = ({
 
   return (
     <Button
-      aria-label="Previous branch"
+      aria-label={t("Previous branch")}
       disabled={totalBranches <= 1}
       onClick={goToPrevious}
       size="icon-sm"
@@ -279,7 +280,7 @@ export const MessageBranchNext = ({
 
   return (
     <Button
-      aria-label="Next branch"
+      aria-label={t("Next branch")}
       disabled={totalBranches <= 1}
       onClick={goToNext}
       size="icon-sm"

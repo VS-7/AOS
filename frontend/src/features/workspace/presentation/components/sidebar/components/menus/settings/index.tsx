@@ -20,6 +20,7 @@ import { useSidebarActiveRoute } from "../../../hooks/use-sidebar-active-route";
 import { aos } from "@/app/aos";
 import { api } from "@/lib/aos-facade";
 import type { WorkspaceMember } from "@/features/workspace/interfaces/workspace.interfaces";
+import { t } from "@/lib/i18n";
 
 function useSettingsSectionVisibility() {
   const authUser = aos.stores.auth.useState((state) => state.user);
@@ -72,7 +73,7 @@ export function AppSidebarSettingsMenu() {
   return (
     <SidebarContent className="scroll-fade scroll-fade-10 gap-0">
       <SidebarGroup>
-        <SidebarGroupLabel>User</SidebarGroupLabel>
+        <SidebarGroupLabel>{t("User")}</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
             {SETTINGS_SECTIONS.filter((candidate) => candidate.group === "user")
@@ -102,7 +103,7 @@ export function AppSidebarSettingsMenu() {
       </SidebarGroup>
 
       <SidebarGroup>
-        <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+        <SidebarGroupLabel>{t("Workspace")}</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
             {SETTINGS_SECTIONS.filter(

@@ -7,6 +7,7 @@ import { cn, timeAgo } from "@/lib/utils";
 import { MarkdownRenderer } from "@/components/ui/markdown-content";
 import { ChevronDown, CornerDownRight, Paperclip } from "lucide-react";
 import { AttachmentItem } from "../../attachments/components/item.component";
+import { t } from "@/lib/i18n";
 
 const COLLAPSED_MAX_HEIGHT_CLASS = "max-h-64";
 
@@ -94,12 +95,12 @@ export function CommentItem({ node, onReply, replyTargetId }: CommentItemProps) 
               <span className="text-sm font-medium">{comment.author}</span>
               {isAgent && (
                 <Badge variant="secondary">
-                  Agent
+                  {t("Agent")}
                 </Badge>
               )}
               {depth > 0 && (
                 <Badge variant="outline">
-                  Reply
+                  {t("Reply")}
                 </Badge>
               )}
               <span className="text-xs text-muted-foreground">{timestamp}</span>
@@ -134,7 +135,7 @@ export function CommentItem({ node, onReply, replyTargetId }: CommentItemProps) 
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                   <Paperclip className="size-3.5" />
-                  Attachments
+                  {t("Attachments")}
                 </div>
                 <div className="divide-y rounded-xl border bg-card">
                   {comment.attachments.map((attachment, index) => (
@@ -153,7 +154,7 @@ export function CommentItem({ node, onReply, replyTargetId }: CommentItemProps) 
                 onClick={() => onReply(node)}
               >
                 <CornerDownRight className="mr-1 size-3.5" />
-                Reply
+                {t("Reply")}
               </Button>
             </div>
           </div>

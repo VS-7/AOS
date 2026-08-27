@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { PromptInputFooter, PromptInputSubmit, PromptInputTools } from "@/components/ui/prompt-input"
@@ -47,7 +48,7 @@ export function ChatComposerFooter({
     <PromptInputFooter className="items-center gap-3 px-3 py-2">
       <PromptInputTools className="flex flex-1 items-center gap-2">
         <Button
-          aria-label="Add files, folders, skills, instructions, or mentions"
+          aria-label={t("Add files, folders, skills, instructions, or mentions")}
           className={toolButtonClass}
           onClick={onOpenCommand}
           size="icon-sm"

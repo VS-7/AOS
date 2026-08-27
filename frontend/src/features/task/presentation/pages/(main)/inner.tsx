@@ -16,6 +16,7 @@ import { TasksFilter } from "./components/header/filter";
 import { TasksViewToggle } from "./components/header/view-toggle";
 import { useRouter } from "@tanstack/react-router";
 import { Input } from "@/components/ui/input";
+import { t } from "@/lib/i18n";
 import {
   DndContext,
   DragOverlay,
@@ -33,7 +34,7 @@ const TasksHeader = React.memo(function TasksHeader() {
     <PageSecondaryHeader className="justify-between px-4 py-2">
       <div className="flex items-center gap-3">
         <h1 className="text-sm font-semibold tracking-tight text-foreground select-none pl-2">
-          Tasks
+          {t("Tasks")}
         </h1>
         <div className="relative flex items-center h-8 w-44 sm:w-56 rounded-md bg-transparent transition-colors">
           <Search className="absolute left-2.5 size-3.5 text-muted-foreground pointer-events-none" />
@@ -41,7 +42,7 @@ const TasksHeader = React.memo(function TasksHeader() {
             type="text"
             value={searchDraft}
             onChange={(event) => handleSearchChange(event.target.value)}
-            placeholder="Search tasks..."
+            placeholder={t("Search tasks...")}
             className="h-8 pl-8 pr-2.5 py-0 border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:bg-transparent placeholder:text-muted-foreground/50 text-xs md:text-sm"
           />
         </div>
@@ -61,7 +62,7 @@ const TasksHeader = React.memo(function TasksHeader() {
           onClick={() => (aos.triggers as { dispatch: (id: string) => void }).dispatch("tasks.new")}
         >
           <Plus data-icon="inline-start" />
-          Add task
+          {t("Add task")}
         </Button>
 
         <TasksViewToggle />

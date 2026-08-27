@@ -64,6 +64,37 @@ func errUserNotFound(id string) error {
 		})
 }
 
+// errNameRequired refuses an account with nothing to call it.
+//
+// The name is not decoration: it is what the sidebar, the chat roster and
+// every "assigned to" line show. Blanking it leaves an account nobody can
+// point at.
+func errNameRequired() error {
+	return apperr.New("AUTH_NAME_REQUIRED").
+		Causer("auth.Service.UpdateProfile").
+		Msgf("an account needs a name").
+		Issue("name", "is required").
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{
+			Label: "send a name — it is what identifies you everywhere in the interface",
+		})
+}
+
+// errEmailTaken refuses a second account on one address.
+//
+// Login accepts either the username or the email, so two accounts sharing one
+// would make which of them a password opens a matter of ordering.
+func errEmailTaken(email string) error {
+	return apperr.New("AUTH_EMAIL_TAKEN").
+		Causer("auth.Service.UpdateProfile").
+		Msgf("another account already uses %q", email).
+		Issue("email", email).
+		Status(apperr.StatusConflict).
+		CTA(apperr.CallToAction{
+			Label: "use an address no other account on this installation has",
+		})
+}
+
 // errAlreadyOnboarded closes the hole that would otherwise exist on a daemon
 // bound to something other than loopback: an unauthenticated endpoint that
 // creates the first administrator is only safe while there is no first

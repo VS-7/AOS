@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ButtonGroup } from "./button-group";
+import { t } from "@/lib/i18n";
 
 const DEFAULT_MAX_EDGE_PX = 512;
 const DEFAULT_MAX_BYTES = 400_000;
@@ -56,7 +57,7 @@ export function ImageUpload({
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      toast.error("Please choose an image file.");
+      toast.error(t("Please choose an image file."));
       return;
     }
 
@@ -81,7 +82,7 @@ export function ImageUpload({
         disabled={disabled || busy}
         onClick={handlePick}
         className="rounded-md outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
-        aria-label="Change image"
+        aria-label={t("Change image")}
       >
         <Avatar className="size-7">
           {value ? <AvatarImage src={value} alt="" /> : null}
@@ -109,7 +110,7 @@ export function ImageUpload({
             size="icon-sm"
             disabled={disabled || busy}
             onClick={onRemove}
-            aria-label="Remove image"
+            aria-label={t("Remove image")}
           >
             <Trash2 />
           </Button>

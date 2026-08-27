@@ -10,6 +10,7 @@ import {
 import { MarketplaceSearch } from "@/features/marketplace/presentation/components/marketplace-search.component";
 import { MarketplaceShell } from "@/features/marketplace/presentation/components/marketplace-shell.component";
 import { PluginSection } from "@/features/marketplace/presentation/components/plugin-section.component";
+import { t } from "@/lib/i18n";
 import {
   MARKETPLACE_ALLOWED_CATEGORIES,
   MARKETPLACE_FEATURED_SECTION_ID,
@@ -145,7 +146,7 @@ export function MarketplacePageInner({
     >
       <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
         <h1 className="text-2xl font-medium tracking-tight text-foreground md:text-[2rem] md:leading-none">
-          Extend your Workspace
+          {t("Extend your Workspace")}
         </h1>
         <MarketplaceSearch
           defaultQuery={searchQuery}
@@ -166,7 +167,7 @@ export function MarketplacePageInner({
             search={{}}
             className="text-[13px] font-medium text-foreground underline underline-offset-4"
           >
-            Clear filters
+            {t("Clear filters")}
           </Link>
         </div>
       ) : null}
@@ -175,7 +176,7 @@ export function MarketplacePageInner({
         filteredInstalledListings.length > 0 ? (
           <PluginSection
             id={MARKETPLACE_INSTALLED_SECTION_ID}
-            title="Installed Plugins"
+            title={t("Installed Plugins")}
             listings={filteredInstalledListings}
             installedNames={installedNames}
             previewLimit={filteredInstalledListings.length}
@@ -189,15 +190,14 @@ export function MarketplacePageInner({
         )
       ) : listings.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No plugins matched your search. Try another query or browse all
-          categories.
+          {t("No plugins matched your search. Try another query or browse all categories.")}
         </p>
       ) : (
         <>
           {featured.length > 0 ? (
             <PluginSection
               id={MARKETPLACE_FEATURED_SECTION_ID}
-              title="Featured Plugins"
+              title={t("Featured Plugins")}
               listings={featured}
               installedNames={installedNames}
               previewLimit={featured.length}

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/tooltip";
 import { SettingsContentContainer } from "../../../../../content-container";
 import { useTemplates } from "../../contexts/templates.context";
+import { t } from "@/lib/i18n";
 
 export function TemplatesSidebar() {
   const {
@@ -45,7 +46,7 @@ export function TemplatesSidebar() {
     <>
       <SplitPageLayout.SidebarHeader>
         <SplitPageLayout.SearchInput
-          placeholder="Search templates..."
+          placeholder={t("Search templates...")}
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
         />
@@ -67,7 +68,7 @@ export function TemplatesSidebar() {
             <AnimatedEmptyState className="border-none shadow-none py-12">
               <AnimatedEmptyState.Content>
                 <AnimatedEmptyState.Title>
-                  No templates found
+                  {t("No templates found")}
                 </AnimatedEmptyState.Title>
                 <AnimatedEmptyState.Description>
                   {searchQuery

@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { SYSTEM_FONT_VALUE } from "@/features/theme/presentation/helpers/font-settings.helper";
+import { t } from "@/lib/i18n";
 
 export { SYSTEM_FONT_VALUE };
 export const SYSTEM_FONT_COMMAND_VALUE = "system-font-option";
@@ -149,7 +150,7 @@ export function FontFamilySelector({
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList className="max-h-72">
-            <CommandEmpty>No fonts found.</CommandEmpty>
+            <CommandEmpty>{t("No fonts found.")}</CommandEmpty>
             <CommandGroup>
               <CommandItem
                 value={SYSTEM_FONT_COMMAND_VALUE}
@@ -178,7 +179,7 @@ export function FontFamilySelector({
               </CommandItem>
             </CommandGroup>
             <CommandSeparator />
-            <CommandGroup heading="All fonts">
+            <CommandGroup heading={t("All fonts")}>
               {fonts.map((font) => {
                 const isSelected = font === selectedValue;
 

@@ -41,6 +41,7 @@ import { ProjectOverviewTab } from "./components/main/components/tabs/overview";
 import { ProjectTasksTab } from "./components/main/components/tabs/tasks";
 import { ProjectGoalsTab } from "./components/main/components/tabs/goals";
 import { ProjectFilesTab } from "./components/main/components/tabs/files";
+import { t } from "@/lib/i18n";
 import {
   Copy,
   FileText,
@@ -152,16 +153,16 @@ function ProjectCreateSidebar({ values }: ProjectCreateSidebarProps) {
 
   return (
     <SplitPageLayout.DetailTabs defaultValue="overview">
-      <SplitPageLayout.DetailTab value="overview" label="Overview">
+      <SplitPageLayout.DetailTab value="overview" label={t("Overview")}>
         <SplitPageLayout.Widget>
           <SplitPageLayout.WidgetHeader>
-            <SplitPageLayout.WidgetTitle>Preview</SplitPageLayout.WidgetTitle>
+            <SplitPageLayout.WidgetTitle>{t("Preview")}</SplitPageLayout.WidgetTitle>
           </SplitPageLayout.WidgetHeader>
           <SplitPageLayout.WidgetContent>
             <SplitPageLayout.WidgetItem>
               <Folder className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                Route
+                {t("Route")}
               </span>
               <span className="font-mono text-xs text-muted-foreground">
                 /projects/{previewId}
@@ -172,7 +173,7 @@ function ProjectCreateSidebar({ values }: ProjectCreateSidebarProps) {
               <SplitPageLayout.WidgetItem>
                 <Folder className="size-3.5 shrink-0 text-muted-foreground" />
                 <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                  Source
+                  {t("Source")}
                 </span>
                 <span
                   className="truncate text-xs text-muted-foreground"
@@ -189,7 +190,7 @@ function ProjectCreateSidebar({ values }: ProjectCreateSidebarProps) {
           <SplitPageLayout.Widget>
             <SplitPageLayout.WidgetHeader>
               <SplitPageLayout.WidgetTitle>
-                Description
+                {t("Description")}
               </SplitPageLayout.WidgetTitle>
             </SplitPageLayout.WidgetHeader>
             <SplitPageLayout.WidgetContent>
@@ -268,7 +269,7 @@ export const ProjectDetailsPage = aos
             return;
           }
 
-          toast.success("Project updated.");
+          toast.success(t("Project updated."));
           void aos.stores.projects.actions.refresh();
           router.invalidate();
           return;
@@ -281,7 +282,7 @@ export const ProjectDetailsPage = aos
           return;
         }
 
-        toast.success("Project created.");
+        toast.success(t("Project created."));
         void aos.stores.projects.actions.refresh();
         await router.invalidate();
         await navigate({
@@ -302,7 +303,7 @@ export const ProjectDetailsPage = aos
     const { mutate: deleteProject, loading: isDeleting } =
       aos.client.project.delete.useMutation({
         onSuccess: async () => {
-          toast.success("Project deleted.");
+          toast.success(t("Project deleted."));
           void aos.stores.projects.actions.refresh();
           await router.invalidate();
           await navigate({ to: "/projects" });
@@ -374,7 +375,7 @@ export const ProjectDetailsPage = aos
                           {isEditMode && projectLink && project ? (
                             <>
                               <HeaderIconButton
-                                label="Copy project link"
+                                label={t("Copy project link")}
                                 shortcut="L"
                                 onClick={() =>
                                   copyToClipboard(projectLink, "Project link")
@@ -383,7 +384,7 @@ export const ProjectDetailsPage = aos
                                 <Link2 />
                               </HeaderIconButton>
                               <HeaderIconButton
-                                label="Copy project ID"
+                                label={t("Copy project ID")}
                                 shortcut="I"
                                 onClick={() =>
                                   copyToClipboard(project.id, "Project ID")
@@ -408,28 +409,28 @@ export const ProjectDetailsPage = aos
                                     >
                                       <Trash2 />
                                       <span className="sr-only">
-                                        Delete project
+                                        {t("Delete project")}
                                       </span>
                                     </Button>
                                   </TooltipTrigger>
                                 </AlertDialogTrigger>
                                 <TooltipContent sideOffset={8}>
-                                  Delete project
+                                  {t("Delete project")}
                                 </TooltipContent>
                               </Tooltip>
                               <AlertDialogContent size="sm">
                                 <AlertDialogHeader>
                                   <AlertDialogTitle>
-                                    Delete this project?
+                                    {t("Delete this project?")}
                                   </AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    This action removes{" "}
+                                    {t("This action removes")}{" "}
                                     <strong>{project.name}</strong> permanently.
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel disabled={isDeleting}>
-                                    Cancel
+                                    {t("Cancel")}
                                   </AlertDialogCancel>
                                   <AlertDialogAction
                                     variant="destructive"
@@ -481,22 +482,22 @@ export const ProjectDetailsPage = aos
                             <TabsSubtleItem
                               index={0}
                               icon={FileText}
-                              label="Overview"
+                              label={t("Overview")}
                             />
                             <TabsSubtleItem
                               index={1}
                               icon={ListChecks}
-                              label="Tasks"
+                              label={t("Tasks")}
                             />
                             <TabsSubtleItem
                               index={2}
                               icon={Goal}
-                              label="Goals"
+                              label={t("Goals")}
                             />
                             <TabsSubtleItem
                               index={3}
                               icon={FolderOpen}
-                              label="Files"
+                              label={t("Files")}
                             />
                           </TabsSubtle>
                         </div>

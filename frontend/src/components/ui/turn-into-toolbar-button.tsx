@@ -39,6 +39,7 @@ import {
 } from '@/components/editor/transforms';
 
 import { ToolbarButton, ToolbarMenuGroup } from './toolbar';
+import { t } from "@/lib/i18n";
 
 export const turnIntoItems = [
   {
@@ -160,7 +161,7 @@ export function TurnIntoToolbarButton(props: DropdownMenuProps) {
         <ToolbarButton
           className="min-w-[125px]"
           pressed={open}
-          tooltip="Turn into"
+          tooltip={t("Turn into")}
           isDropdown
         >
           {selectedItem?.label}
@@ -180,7 +181,7 @@ export function TurnIntoToolbarButton(props: DropdownMenuProps) {
           onValueChange={(type) => {
             setBlockType(editor, type);
           }}
-          label="Turn into"
+          label={t("Turn into")}
         >
           {turnIntoItems.map(({ icon, label, value: itemValue }) => (
             <DropdownMenuRadioItem

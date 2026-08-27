@@ -21,6 +21,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { AppError } from "@/core/errors/aos.error";
 import { toast } from "sonner";
+import { t } from "@/lib/i18n";
 
 const generalFormSchema = z.object({
   preventSleep: z.boolean(),
@@ -69,7 +70,7 @@ export function UserGeneralSection() {
         return;
       }
 
-      toast.success("Settings updated succesfully!");
+      toast.success(t("Settings updated succesfully!"));
       router.invalidate();
     },
   });
@@ -79,9 +80,9 @@ export function UserGeneralSection() {
       <SettingsSectionShell>
         <FormSection>
           <FormSectionHeader>
-            <FormSectionTitle>Behavior</FormSectionTitle>
+            <FormSectionTitle>{t("Behavior")}</FormSectionTitle>
             <FormSectionDescription>
-              Configure execution behaviors.
+              {t("Configure execution behaviors.")}
             </FormSectionDescription>
           </FormSectionHeader>
           <FormSectionContent className="divide-y divide-border">
@@ -91,9 +92,9 @@ export function UserGeneralSection() {
               render={({ field }) => (
                 <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                   <div className="space-y-0.5">
-                    <FormLabel>Prevent sleep during execution</FormLabel>
+                    <FormLabel>{t("Prevent sleep during execution")}</FormLabel>
                     <FormDescription>
-                      Keeps your computer awake while running long tasks.
+                      {t("Keeps your computer awake while running long tasks.")}
                     </FormDescription>
                   </div>
                   <FormControl>
@@ -108,9 +109,9 @@ export function UserGeneralSection() {
               render={({ field }) => (
                 <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                   <div className="space-y-0.5">
-                    <FormLabel>Enable permission notifications</FormLabel>
+                    <FormLabel>{t("Enable permission notifications")}</FormLabel>
                     <FormDescription>
-                      Show OS notifications when a permission is required.
+                      {t("Show OS notifications when a permission is required.")}
                     </FormDescription>
                   </div>
                   <FormControl>

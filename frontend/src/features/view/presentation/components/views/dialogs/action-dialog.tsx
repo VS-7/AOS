@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FormSchemaHelper } from "../../../helpers/form-schema.helper";
 import type { ViewActionParams, ViewActionParamProperty } from "../../../helpers";
+import { t } from "@/lib/i18n";
 
 export type ActionDialogProps = {
   open: boolean;
@@ -126,7 +127,7 @@ export function ActionDialog({
                 disabled={isSubmitting}
                 className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 border border-input bg-background"
               >
-                Cancel
+                {t("Cancel")}
               </button>
               <button
                 type="submit"
@@ -161,7 +162,7 @@ function FieldInput({ name, prop, value, onChange }: FieldInputProps) {
         onChange={(e) => onChange(e.target.value)}
         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        <option value="">Select an option</option>
+        <option value="">{t("Select an option")}</option>
         {prop.enum.map((option: unknown) => (
           <option key={String(option)} value={String(option)}>
             {String(option)}
@@ -213,7 +214,7 @@ function FieldInput({ name, prop, value, onChange }: FieldInputProps) {
                 : [],
             )
           }
-          placeholder="Comma-separated values"
+          placeholder={t("Comma-separated values")}
           className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         />
       );

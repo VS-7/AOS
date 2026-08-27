@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 
 import type { MarketplaceSkillListing } from "@/features/marketplace/interfaces/marketplace.interfaces";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 interface PluginCardProps {
   listing: MarketplaceSkillListing;
@@ -33,10 +34,10 @@ export function PluginCard({
           {isInstalled ? (
             <span
               className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-foreground/5 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
-              title="Installed"
+              title={t("Installed")}
             >
               <Check className="size-2.5" aria-hidden />
-              Installed
+              {t("Installed")}
             </span>
           ) : null}
         </div>

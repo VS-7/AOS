@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { PLACEHOLDER_IMAGE } from "@/assets/placeholder";
+import { t } from "@/lib/i18n";
 
 interface CarouselImageAnimation {
   focalPoint: {
@@ -189,11 +190,10 @@ export function WelcomeSection() {
               className="flex max-w-[36rem] mx-auto flex-col items-center gap-2 text-center"
             >
               <h2 className="text-base font-semibold tracking-tight">
-                Welcome to AOS
+                {t("Welcome to AOS")}
               </h2>
               <p className="text-base text-muted-foreground">
-                A quick look at how AOS keeps your context alive, adapts to
-                your work, and turns what you mean into what gets done.
+                {t("A quick look at how AOS keeps your context alive, adapts to your work, and turns what you mean into what gets done.")}
               </p>
             </motion.div>
           ) : (

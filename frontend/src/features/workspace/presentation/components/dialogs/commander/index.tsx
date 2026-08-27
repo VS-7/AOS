@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import * as React from "react"
 import { AppWindow, Globe, Check, FileText } from "lucide-react"
 import { iconByName, loadIcons } from "@/lib/icon-registry"
@@ -107,12 +108,12 @@ export function WorkspaceCommander() {
   return (
     <CommandDialog open={open} onOpenChange={aos.stores.viewport.actions.setCommanderOpen}>
       <CommandInput
-        placeholder="Type a command or search..."
+        placeholder={t("Type a command or search...")}
         value={query}
         onValueChange={setQuery}
       />
       <CommandList>
-        <CommandEmpty>No results found.</CommandEmpty>
+        <CommandEmpty>{t("No results found.")}</CommandEmpty>
 
         {Object.entries(groupedCommands).map(([group, groupCommands]) => (
           <CommandGroup key={group} heading={group}>

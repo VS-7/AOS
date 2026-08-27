@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { SettingsContentContainer } from "../../../../../content-container";
 import { useInstructions } from "../../contexts/instructions.context";
+import { t } from "@/lib/i18n";
 
 export function SelectedInstructionContent() {
   const {
@@ -54,10 +55,10 @@ export function SelectedInstructionContent() {
           </AnimatedEmptyState.Carousel>
           <AnimatedEmptyState.Content>
             <AnimatedEmptyState.Title>
-              No Instruction Selected
+              {t("No Instruction Selected")}
             </AnimatedEmptyState.Title>
             <AnimatedEmptyState.Description>
-              Select an instruction from the list or create a new one.
+              {t("Select an instruction from the list or create a new one.")}
             </AnimatedEmptyState.Description>
           </AnimatedEmptyState.Content>
         </AnimatedEmptyState>
@@ -94,7 +95,7 @@ export function SelectedInstructionContent() {
                   onClick={() => void handleCopyId()}
                 >
                   <Copy />
-                  <span className="sr-only">Copy instruction ID</span>
+                  <span className="sr-only">{t("Copy instruction ID")}</span>
                 </Button>
 
                 <AlertDialog>
@@ -107,22 +108,22 @@ export function SelectedInstructionContent() {
                       disabled={isDeleting}
                     >
                       <Trash2 />
-                      <span className="sr-only">Delete instruction</span>
+                      <span className="sr-only">{t("Delete instruction")}</span>
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent size="sm">
                     <AlertDialogHeader>
                       <AlertDialogTitle>
-                        Delete this instruction?
+                        {t("Delete this instruction?")}
                       </AlertDialogTitle>
                       <AlertDialogDescription>
-                        This action removes{" "}
+                        {t("This action removes")}{" "}
                         <strong>{selectedInstruction.name}</strong> permanently.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel disabled={isDeleting}>
-                        Cancel
+                        {t("Cancel")}
                       </AlertDialogCancel>
                       <AlertDialogAction
                         variant="destructive"
@@ -170,10 +171,10 @@ export function SelectedInstructionContent() {
                 name="name"
                 render={({ field }) => (
                   <FormItem className="space-y-2">
-                    <FormLabel className="opacity-60">Name</FormLabel>
+                    <FormLabel className="opacity-60">{t("Name")}</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Frontend Instructions"
+                        placeholder={t("Frontend Instructions")}
                         className="h-auto rounded-none border-0 bg-transparent px-0 py-0 text-2xl font-semibold shadow-none focus-visible:ring-0"
                         {...field}
                       />
@@ -188,10 +189,10 @@ export function SelectedInstructionContent() {
                 name="description"
                 render={({ field }) => (
                   <FormItem className="space-y-2">
-                    <FormLabel className="opacity-60">Description</FormLabel>
+                    <FormLabel className="opacity-60">{t("Description")}</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Summarize what this instruction enforces and when it applies."
+                        placeholder={t("Summarize what this instruction enforces and when it applies.")}
                         className="min-h-10 max-h-48 resize-none rounded-none border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0"
                         {...field}
                         value={field.value ?? ""}
@@ -207,12 +208,12 @@ export function SelectedInstructionContent() {
                 name="content"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="opacity-60">Content</FormLabel>
+                    <FormLabel className="opacity-60">{t("Content")}</FormLabel>
                     <FormControl>
                       <MarkdownEditor
                         value={field.value ?? ""}
                         onValueChange={field.onChange}
-                        placeholder="Write the full markdown instruction body..."
+                        placeholder={t("Write the full markdown instruction body...")}
                       />
                     </FormControl>
                     <FormMessage />

@@ -13,6 +13,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { aos } from "@/app/aos";
 import { useNavigationState } from "@/features/workspace/presentation/hooks/use-navigation-state";
 import { WorkspaceNavOrientationControls } from "./nav-orientation-controls";
+import { t } from "@/lib/i18n";
 
 export function WorkspaceNavControls() {
   const isMobile = useIsMobile();
@@ -56,7 +57,7 @@ export function WorkspaceNavControls() {
           align="start"
           className="flex items-center gap-2"
         >
-          Toggle Sidebar
+          {t("Toggle Sidebar")}
           <KbdGroup>
             <Kbd>⌘</Kbd>
             <Kbd>B</Kbd>
@@ -81,7 +82,7 @@ export function WorkspaceNavControls() {
           align="start"
           className="flex items-center gap-2"
         >
-          Go Back
+          {t("Go Back")}
           <KbdGroup>
             <Kbd>⌘</Kbd>
             <Kbd>←</Kbd>
@@ -106,7 +107,7 @@ export function WorkspaceNavControls() {
           align="start"
           className="flex items-center gap-2"
         >
-          Go Forward
+          {t("Go Forward")}
           <KbdGroup>
             <Kbd>⌘</Kbd>
             <Kbd>→</Kbd>

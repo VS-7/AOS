@@ -8,6 +8,7 @@ import { Badge } from "../badge";
 import { Popover, PopoverContent, PopoverTrigger } from "../popover";
 import { useDataTable } from "./data-table-provider";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 interface DataTableTextFilterProps {
   id: string;
@@ -129,10 +130,10 @@ export function DataTableTextFilter({
                 className="flex-1"
                 onClick={handleClear}
               >
-                Clear
+                {t("Clear")}
               </Button>
               <Button size="sm" className="flex-1" onClick={handleApply}>
-                Filter
+                {t("Filter")}
               </Button>
             </div>
           </div>
@@ -151,10 +152,10 @@ export function DataTableTextFilter({
           className="flex-1 h-7 text-xs"
           onClick={handleClear}
         >
-          Clear
+          {t("Clear")}
         </Button>
         <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleApply}>
-          Apply
+          {t("Apply")}
         </Button>
       </div>
     </div>

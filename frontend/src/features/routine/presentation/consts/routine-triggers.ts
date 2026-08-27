@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { ActivityIcon, ClockIcon, WebhookIcon } from "lucide-react";
 import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
 import type { RoutineActivityFilter } from "@/features/routine/interfaces/routine.interfaces";
+import { t } from "@/lib/i18n";
 
 export type RoutineTriggerTypeId = Routine["triggers"][number]["type"];
 
@@ -64,9 +65,9 @@ export const ROUTINE_TRIGGER_TYPE_REGISTRY: Record<
 > = {
   scheduled: {
     id: "scheduled",
-    label: "Scheduled",
+    get label() { return t("Scheduled"); },
     addLabel: "Scheduled",
-    description: "Run this routine on a recurring schedule.",
+    get description() { return t("Run this routine on a recurring schedule."); },
     icon: ClockIcon,
     searchableTerms: ["cron", "schedule", "hourly", "daily", "weekly"],
     createDefault: (preset = "hourly") => ({
@@ -88,9 +89,9 @@ export const ROUTINE_TRIGGER_TYPE_REGISTRY: Record<
   },
   webhook: {
     id: "webhook",
-    label: "Webhook triggered",
+    get label() { return t("Webhook triggered"); },
     addLabel: "Webhook triggered",
-    description: "Fire this routine from an external HTTP request.",
+    get description() { return t("Fire this routine from an external HTTP request."); },
     icon: WebhookIcon,
     searchableTerms: ["webhook", "http", "url", "api"],
     createDefault: () => ({
@@ -102,9 +103,9 @@ export const ROUTINE_TRIGGER_TYPE_REGISTRY: Record<
   },
   activity: {
     id: "activity",
-    label: "On activity",
+    get label() { return t("On activity"); },
     addLabel: "On activity",
-    description: "Fire when a workspace activity event matches.",
+    get description() { return t("Fire when a workspace activity event matches."); },
     icon: ActivityIcon,
     searchableTerms: ["activity", "event", "task", "chat", "notification"],
     createDefault: () => ({

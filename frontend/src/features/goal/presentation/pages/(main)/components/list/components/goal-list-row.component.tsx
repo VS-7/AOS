@@ -21,6 +21,7 @@ import { CalendarDays, MoreHorizontal, Trash2, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SetPriorityDropdown } from "@/features/task/presentation/components/dropdowns/set-priority.dropdown";
+import { t } from "@/lib/i18n";
 
 interface GoalListRowProps {
   goal: Goal;
@@ -46,7 +47,7 @@ export function GoalListRow({ goal }: GoalListRowProps) {
       );
       router.invalidate();
     } catch {
-      toast.error("Failed to update priority");
+      toast.error(t("Failed to update priority"));
     }
   };
 
@@ -59,7 +60,7 @@ export function GoalListRow({ goal }: GoalListRowProps) {
       toast.success(`Moved to ${GoalHelper.getStatus(status).label}`);
       router.invalidate();
     } catch {
-      toast.error("Failed to update status");
+      toast.error(t("Failed to update status"));
     }
   };
 
@@ -69,7 +70,7 @@ export function GoalListRow({ goal }: GoalListRowProps) {
       toast.success(`Goal ${goal.id} deleted`);
       router.invalidate();
     } catch {
-      toast.error("Failed to delete goal");
+      toast.error(t("Failed to delete goal"));
     }
   };
 
@@ -168,14 +169,14 @@ export function GoalListRow({ goal }: GoalListRowProps) {
             className="flex items-center gap-2"
           >
             <Copy className="size-3.5" />
-            Copy ID
+            {t("Copy ID")}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={handleDelete}
             className="flex items-center gap-2 text-red-500 focus:text-red-500"
           >
             <Trash2 className="size-3.5" />
-            Delete
+            {t("Delete")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

@@ -18,6 +18,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import { WorkspaceSidebarMainMenu } from "./components/menus/main";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { AppSidebarUserAccountDropdown } from "./components/dropdowns/user-account.dropdown";
+import { t } from "@/lib/i18n";
 
 function getMenuRank(menu: WorkspaceSidebarMenu) {
   if (menu === "files") return 1;
@@ -121,7 +122,7 @@ export function WorkspaceSidebar() {
                   <SidebarMenuItem>
                     <SidebarMenuButton onClick={handleBackToWorkspace}>
                       <ArrowLeftIcon />
-                      Back to workspace
+                      {t("Back to workspace")}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>

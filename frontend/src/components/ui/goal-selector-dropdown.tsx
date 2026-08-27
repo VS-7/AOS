@@ -3,6 +3,7 @@
 import { CheckIcon, Target } from "lucide-react";
 
 import { aos } from "@/app/aos";
+import { t } from "@/lib/i18n";
 import {
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -23,7 +24,7 @@ export function GoalSelectorDropdown({
   if (goals.length === 0) {
     return (
       <DropdownMenuItem className="text-muted-foreground">
-        No goals available
+        {t("No goals available")}
       </DropdownMenuItem>
     );
   }
@@ -35,7 +36,7 @@ export function GoalSelectorDropdown({
         className="flex items-center gap-2"
       >
         <Target className="size-4 text-muted-foreground shrink-0" />
-        <span>No goal</span>
+        <span>{t("No goal")}</span>
         {!currentGoal ? (
           <CheckIcon className="ml-auto size-4 text-muted-foreground shrink-0" />
         ) : null}
@@ -44,7 +45,7 @@ export function GoalSelectorDropdown({
       <DropdownMenuSeparator />
 
       <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-        Goals
+        {t("Goals")}
       </DropdownMenuLabel>
 
       {goals.map((goal) => (

@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { useAgents } from "../../contexts/agents.context";
+import { t } from "@/lib/i18n";
 
 export function SelectedAgentDetail() {
   const { selectedAgent, selectedAgentId, isCreateMode, form } = useAgents();
@@ -19,11 +20,11 @@ export function SelectedAgentDetail() {
 
   return (
     <SplitPageLayout.DetailTabs defaultValue="overview">
-      <SplitPageLayout.DetailTab value="overview" label="Overview">
+      <SplitPageLayout.DetailTab value="overview" label={t("Overview")}>
         <SplitPageLayout.Widget>
           <SplitPageLayout.WidgetHeader>
             <SplitPageLayout.WidgetTitle>
-              Configuration
+              {t("Configuration")}
             </SplitPageLayout.WidgetTitle>
           </SplitPageLayout.WidgetHeader>
           <SplitPageLayout.WidgetContent>
@@ -35,7 +36,7 @@ export function SelectedAgentDetail() {
                   <SplitPageLayout.WidgetItem>
                     <Cpu className="size-3.5 shrink-0 text-muted-foreground" />
                     <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                      Provider
+                      {t("Provider")}
                     </span>
                     <FormControl>
                       <Input
@@ -59,7 +60,7 @@ export function SelectedAgentDetail() {
                   <SplitPageLayout.WidgetItem>
                     <Layers className="size-3.5 shrink-0 text-muted-foreground" />
                     <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                      Model
+                      {t("Model")}
                     </span>
                     <FormControl>
                       <Input
@@ -83,7 +84,7 @@ export function SelectedAgentDetail() {
                   <SplitPageLayout.WidgetItem>
                     <BrainCircuit className="size-3.5 shrink-0 text-muted-foreground" />
                     <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                      Skill
+                      {t("Skill")}
                     </span>
                     <FormControl>
                       <Input
@@ -108,7 +109,7 @@ export function SelectedAgentDetail() {
                     <div className="flex items-center gap-2">
                       <Shield className="size-3.5 shrink-0 text-muted-foreground" />
                       <span className="text-xs text-muted-foreground">
-                        Orchestrator
+                        {t("Orchestrator")}
                       </span>
                     </div>
                     <FormControl>

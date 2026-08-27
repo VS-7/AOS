@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 import { AddSkillDropdown } from "./add-skill-dropdown";
+import { t } from "@/lib/i18n";
 
 const MCP_HTTP_URL = "http://localhost:5326/mcp";
 const TOKEN_PLACEHOLDER = "aos_<your-api-token>";
@@ -118,7 +119,7 @@ export function DevelopersSkillMcpSection({
       );
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.error("Failed to copy");
+      toast.error(t("Failed to copy"));
     }
   };
 
@@ -126,16 +127,16 @@ export function DevelopersSkillMcpSection({
     // See lib/save-file.ts: `<a download>` is inert in the desktop window, so
     // this used to report success for a file that was never written.
     const saved = await saveText(exportJson, "mcp.json", "application/json");
-    if (saved.status === "saved") toast.success("mcp.json downloaded");
+    if (saved.status === "saved") toast.success(t("mcp.json downloaded"));
     if (saved.status === "failed") toast.error(saved.reason);
   };
 
   return (
     <FormSection>
       <FormSectionHeader>
-        <FormSectionTitle>Skill and MCP</FormSectionTitle>
+        <FormSectionTitle>{t("Skill and MCP")}</FormSectionTitle>
         <FormSectionDescription>
-          Connect agents through AOS skills and the MCP server.
+          {t("Connect agents through AOS skills and the MCP server.")}
         </FormSectionDescription>
       </FormSectionHeader>
 
@@ -150,10 +151,10 @@ export function DevelopersSkillMcpSection({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">
-                AOS Skills
+                {t("AOS Skills")}
               </p>
               <p className="text-sm text-muted-foreground">
-                Allow agents to interact with AOS through CLI and skills.
+                {t("Allow agents to interact with AOS through CLI and skills.")}
               </p>
             </div>
           </div>
@@ -170,10 +171,10 @@ export function DevelopersSkillMcpSection({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">
-                AOS MCP server
+                {t("AOS MCP server")}
               </p>
               <p className="text-sm text-muted-foreground">
-                Add this to agents that support{" "}
+                {t("Add this to agents that support")}{" "}
                 <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
                   mcp.json
                 </code>
@@ -184,7 +185,7 @@ export function DevelopersSkillMcpSection({
           <Switch
             checked={mcpEnabled}
             onCheckedChange={setMcpEnabled}
-            aria-label="Toggle AOS MCP server config"
+            aria-label={t("Toggle AOS MCP server config")}
           />
         </FormSectionItem>
 
@@ -216,7 +217,7 @@ export function DevelopersSkillMcpSection({
                     size="icon"
                     className="size-7"
                     onClick={handleDownload}
-                    aria-label="Download mcp.json"
+                    aria-label={t("Download mcp.json")}
                   >
                     <HugeiconsIcon icon={Download01Icon} className="size-3.5" />
                   </Button>
@@ -226,7 +227,7 @@ export function DevelopersSkillMcpSection({
                     size="icon"
                     className="size-7"
                     onClick={() => void handleCopy()}
-                    aria-label="Copy mcp.json with full token"
+                    aria-label={t("Copy mcp.json with full token")}
                   >
                     {copied ? (
                       <HugeiconsIcon icon={Tick01Icon} className="size-3.5" />
@@ -246,8 +247,7 @@ export function DevelopersSkillMcpSection({
             </Tabs>
             {!apiToken ? (
               <p className="mt-2 text-xs text-muted-foreground">
-                Preview shows a masked token. Generate or load an API token in
-                REST API to copy mcp.json with the full value.
+                {t("Preview shows a masked token. Generate or load an API token in REST API to copy mcp.json with the full value.")}
               </p>
             ) : null}
           </div>

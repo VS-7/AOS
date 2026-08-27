@@ -15,6 +15,7 @@ import {
 } from "@/components/editor/plugins/discussion-kit";
 
 import { Comment, CommentCreateForm, formatCommentDate } from "./comment";
+import { t } from "@/lib/i18n";
 import {
   BLOCK_SUGGESTION_TOKEN,
   type ResolvedSuggestion,
@@ -99,7 +100,7 @@ export function BlockSuggestionCard({
             {suggestion.type === "remove" &&
               getRemoveSummaryItems(suggestion.text!).map((text, index) => (
                 <div key={index} className="flex items-center gap-2">
-                  <span className="text-muted-foreground text-sm">Delete:</span>
+                  <span className="text-muted-foreground text-sm">{t("Delete:")}</span>
 
                   <span key={index} className="text-sm">
                     {text}
@@ -110,7 +111,7 @@ export function BlockSuggestionCard({
             {suggestion.type === "insert" &&
               suggestionText2Array(suggestion.newText!).map((text, index) => (
                 <div key={index} className="flex items-center gap-2">
-                  <span className="text-muted-foreground text-sm">Add:</span>
+                  <span className="text-muted-foreground text-sm">{t("Add:")}</span>
 
                   <span key={index} className="text-sm">
                     {text || "line breaks"}
@@ -151,7 +152,7 @@ export function BlockSuggestionCard({
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground text-sm">
                   {Object.keys(suggestion.properties).map((key) => (
-                    <span key={key}>Un{key}</span>
+                    <span key={key}>{t("Un")}{key}</span>
                   ))}
 
                   {Object.keys(suggestion.newProperties).map((key) => (

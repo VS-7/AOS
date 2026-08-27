@@ -17,6 +17,7 @@ import {
 } from "@tanstack/react-table";
 import { Checkbox } from "../checkbox";
 import { saveBlob } from "@/lib/save-file";
+import { t } from "@/lib/i18n";
 import {
   DataTableContextValue,
   DataTableProviderProps,
@@ -175,7 +176,7 @@ export function DataTableProvider<TData>({
             (table.getIsSomePageRowsSelected() && "indeterminate")
           }
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label="Select all"
+          aria-label={t("Select all")}
           className="translate-y-[2px]"
         />
       ),
@@ -183,7 +184,7 @@ export function DataTableProvider<TData>({
         <Checkbox
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="Select row"
+          aria-label={t("Select row")}
           className="translate-y-[2px]"
         />
       ),

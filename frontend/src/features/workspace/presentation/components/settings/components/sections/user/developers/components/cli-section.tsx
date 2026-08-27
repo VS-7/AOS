@@ -17,6 +17,7 @@ import {
   FormSectionTitle,
 } from "@/components/ui/form-section";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 // No npm distribution (see docs/08 - Entrega/Build e Cross-Compile.md's "Sem
 // distribuição via npm" decision) — the original's Node shim existed only to
@@ -64,7 +65,7 @@ async function copyText(text: string, successMessage: string): Promise<void> {
     await navigator.clipboard.writeText(text);
     toast.success(successMessage);
   } catch {
-    toast.error("Failed to copy");
+    toast.error(t("Failed to copy"));
   }
 }
 
@@ -93,7 +94,7 @@ function CliCommandInput({
           type="button"
           className="inline-flex size-3.5 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
           onClick={onCopy}
-          aria-label="Copy command"
+          aria-label={t("Copy command")}
         >
           <HugeiconsIcon icon={Copy01Icon} className="size-3.5" />
         </button>
@@ -159,8 +160,7 @@ export function DevelopersCliSection() {
 
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             <p className="text-sm text-muted-foreground">
-              Browse and run AOS from the command line. Works directly with
-              Codex, Claude Code, and more.
+              {t("Browse and run AOS from the command line. Works directly with Codex, Claude Code, and more.")}
             </p>
             <p className="text-sm font-semibold text-foreground">
               {CLI_VERSION_LABEL}
@@ -181,7 +181,7 @@ export function DevelopersCliSection() {
                   void copyText(CLI_INSTALL_COMMAND, "Install command copied")
                 }
               >
-                Install
+                {t("Install")}
               </Button>
             </div>
           </div>

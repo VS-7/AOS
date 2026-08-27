@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { aos } from '@/app/aos';
 import { hexToOklch } from '@/lib/utils';
+import { platform } from '@/lib/wails';
 import type { ThemeSettings } from '@/features/theme/interfaces/theme.interfaces';
 import type { ThemeRadius } from '@/components/ui/radius-selector';
 
@@ -15,8 +16,21 @@ function isNative(): boolean {
   return typeof window !== 'undefined' && !!window.aos;
 }
 
+/**
+ * Whether this window may be see-through.
+ *
+ * Never in a browser tab, which has nothing behind it — and never on Linux,
+ * where a translucent window leaves the previous screen visible through the
+ * current one as a faint residue. WebKitGTK composites the window with an
+ * alpha channel and does not clear a re-tiled region, so nothing repaints over
+ * what was there. `cmd/aos-desktop/platform.go`'s `translucentHere` refuses it
+ * on the native side for the same reason, and `index.html` does it again for
+ * the first frame: all three are needed, because an opaque window with a
+ * transparent body still shows the defect.
+ */
 function resolveWindowsMode(windows: ThemeSettings['windows'] | undefined): 'solid' | 'blur' {
   if (!isNative()) return 'solid';
+  if (platform() === 'linux') return 'solid';
   return windows ?? 'blur';
 }
 

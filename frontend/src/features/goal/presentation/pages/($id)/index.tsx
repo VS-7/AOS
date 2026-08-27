@@ -83,6 +83,7 @@ import {
   TASK_STATUS_ORDER,
 } from "@/features/task/presentation/consts/task";
 import type { Task } from "@/features/task/interfaces/task.interfaces";
+import { t } from "@/lib/i18n";
 
 const goalFormSchema = z.object({
   title: z.string().trim().min(1, "Title is required"),
@@ -278,7 +279,7 @@ export const GoalDetailsPage = aos
             return;
           }
 
-          toast.success("Goal updated.");
+          toast.success(t("Goal updated."));
           void aos.stores.goals.actions.refresh();
           await router.invalidate();
           return;
@@ -293,7 +294,7 @@ export const GoalDetailsPage = aos
           return;
         }
 
-        toast.success("Goal created.");
+        toast.success(t("Goal created."));
         void aos.stores.goals.actions.refresh();
         await router.invalidate();
         await navigate({ to: "/goals/$id", params: { id: createdGoalId } });
@@ -303,7 +304,7 @@ export const GoalDetailsPage = aos
     const { mutate: deleteGoal, loading: isDeleting } =
       aos.client.goal.delete.useMutation({
         onSuccess: async () => {
-          toast.success("Goal deleted.");
+          toast.success(t("Goal deleted."));
           void aos.stores.goals.actions.refresh();
           await router.invalidate();
           await navigate({ to: "/goals" });
@@ -358,7 +359,7 @@ export const GoalDetailsPage = aos
                       <div className="flex items-center gap-2">
                         {isEditMode && goalLink ? (
                           <HeaderIconButton
-                            label="Copy link"
+                            label={t("Copy link")}
                             onClick={() =>
                               void copyToClipboard(goalLink, "Goal link")
                             }
@@ -369,7 +370,7 @@ export const GoalDetailsPage = aos
 
                         {isEditMode && goal ? (
                           <HeaderIconButton
-                            label="Copy ID"
+                            label={t("Copy ID")}
                             onClick={() =>
                               void copyToClipboard(goal.id, "Goal ID")
                             }
@@ -390,27 +391,27 @@ export const GoalDetailsPage = aos
                                     className="rounded-md"
                                   >
                                     <Trash2 />
-                                    <span className="sr-only">Delete goal</span>
+                                    <span className="sr-only">{t("Delete goal")}</span>
                                   </Button>
                                 </TooltipTrigger>
                               </AlertDialogTrigger>
                               <TooltipContent sideOffset={8}>
-                                Delete goal
+                                {t("Delete goal")}
                               </TooltipContent>
                             </Tooltip>
                             <AlertDialogContent size="sm">
                               <AlertDialogHeader>
                                 <AlertDialogTitle>
-                                  Delete this goal?
+                                  {t("Delete this goal?")}
                                 </AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  This action removes{" "}
+                                  {t("This action removes")}{" "}
                                   <strong>{goal.title}</strong> permanently.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel disabled={isDeleting}>
-                                  Cancel
+                                  {t("Cancel")}
                                 </AlertDialogCancel>
                                 <AlertDialogAction
                                   variant="destructive"
@@ -454,10 +455,10 @@ export const GoalDetailsPage = aos
                       name="title"
                       render={({ field }) => (
                         <FormItem className="space-y-2">
-                          <FormLabel className="opacity-60">Title</FormLabel>
+                          <FormLabel className="opacity-60">{t("Title")}</FormLabel>
                           <FormControl>
                             <Input
-                              placeholder="Launch V1"
+                              placeholder={t("Launch V1")}
                               className="h-auto border-0 bg-transparent px-0 py-0 rounded-none text-2xl font-semibold shadow-none focus-visible:ring-0"
                               {...field}
                             />
@@ -473,11 +474,11 @@ export const GoalDetailsPage = aos
                       render={({ field }) => (
                         <FormItem className="space-y-2">
                           <FormLabel className="opacity-60">
-                            Description
+                            {t("Description")}
                           </FormLabel>
                           <FormControl>
                             <Textarea
-                              placeholder="Briefly describe the outcome this goal is driving."
+                              placeholder={t("Briefly describe the outcome this goal is driving.")}
                               className="min-h-10 max-h-48 resize-none border-0 rounded-none bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0 overflow-y-auto"
                               {...field}
                               value={field.value ?? ""}
@@ -493,12 +494,12 @@ export const GoalDetailsPage = aos
                       name="content"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="opacity-60">Content</FormLabel>
+                          <FormLabel className="opacity-60">{t("Content")}</FormLabel>
                           <FormControl>
                             <MarkdownEditor
                               value={field.value ?? ""}
                               onValueChange={field.onChange}
-                              placeholder="Add the detailed context, milestones, or notes for this goal..."
+                              placeholder={t("Add the detailed context, milestones, or notes for this goal...")}
                             />
                           </FormControl>
                           <FormMessage />
@@ -509,7 +510,7 @@ export const GoalDetailsPage = aos
                     {isEditMode && goalTasks.length > 0 ? (
                       <section className="border-t pt-6">
                         <header className="flex items-center gap-1 pb-4">
-                          <h3 className="text-sm font-medium">Tasks</h3>
+                          <h3 className="text-sm font-medium">{t("Tasks")}</h3>
                           <span className="text-sm text-muted-foreground">
                             {goalTasks.length} total
                           </span>
@@ -549,14 +550,14 @@ export const GoalDetailsPage = aos
                 <SplitPageLayout.DetailTabs defaultValue="overview">
                   <SplitPageLayout.DetailTab
                     value="overview"
-                    label="Overview"
+                    label={t("Overview")}
                     icon={Target}
                   >
                     <div className="space-y-3">
                       <SplitPageLayout.Widget>
                         <SplitPageLayout.WidgetHeader>
                           <SplitPageLayout.WidgetTitle>
-                            Properties
+                            {t("Properties")}
                           </SplitPageLayout.WidgetTitle>
                         </SplitPageLayout.WidgetHeader>
                         <SplitPageLayout.WidgetContent>
@@ -576,7 +577,7 @@ export const GoalDetailsPage = aos
                                       className={`size-3.5 shrink-0 ${currentStatus.color}`}
                                     />
                                     <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                                      Status
+                                      {t("Status")}
                                     </span>
 
                                     <DropdownMenu>
@@ -636,7 +637,7 @@ export const GoalDetailsPage = aos
                                       className={`size-3.5 shrink-0 ${currentPriority.colorClass}`}
                                     />
                                     <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                                      Priority
+                                      {t("Priority")}
                                     </span>
 
                                     <DropdownMenu>
@@ -688,7 +689,7 @@ export const GoalDetailsPage = aos
                                 <SplitPageLayout.WidgetItem className="items-start">
                                   <CalendarDays className="mt-1 size-3.5 shrink-0 text-muted-foreground" />
                                   <span className="w-16 shrink-0 pt-0.5 text-xs text-muted-foreground">
-                                    Deadline
+                                    {t("Deadline")}
                                   </span>
                                   <div className="flex min-w-0 flex-1 flex-col gap-2">
                                     <FormControl>
@@ -717,7 +718,7 @@ export const GoalDetailsPage = aos
                                 <SplitPageLayout.WidgetItem className="items-start">
                                   <Folder className="mt-1 size-3.5 shrink-0 text-muted-foreground" />
                                   <span className="w-16 shrink-0 pt-0.5 text-xs text-muted-foreground">
-                                    Project
+                                    {t("Project")}
                                   </span>
                                   <div className="min-w-0 flex-1">
                                     <DropdownMenu>

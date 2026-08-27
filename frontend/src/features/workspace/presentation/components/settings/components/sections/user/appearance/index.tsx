@@ -47,6 +47,7 @@ import { cn } from "@/lib/utils";
 import { SettingsFieldLabel } from "./components/settings-field-label";
 import { getThemePreviewColors } from "@/components/ui/theme-preview-swatch";
 import type { Theme } from "@/features/theme/interfaces/theme.interfaces";
+import { t } from "@/lib/i18n";
 
 const SETTINGS_CONTROL_WIDTH = "h-8 w-48 px-2 shadow-none";
 const SETTINGS_SELECT_TRIGGER = cn(
@@ -138,7 +139,7 @@ export function UserAppearanceSection() {
         return;
       }
 
-      toast.success("Appearance updated successfully!");
+      toast.success(t("Appearance updated successfully!"));
     },
   });
 
@@ -177,16 +178,16 @@ export function UserAppearanceSection() {
       <SettingsSectionShell>
         <FormSection>
           <FormSectionHeader>
-            <FormSectionTitle>Theme</FormSectionTitle>
+            <FormSectionTitle>{t("Theme")}</FormSectionTitle>
             <FormSectionDescription>
-              Use light, dark, or device theme
+              {t("Use light, dark, or device theme")}
             </FormSectionDescription>
           </FormSectionHeader>
           <FormSectionContent>
             <FormSectionItem className="border-y-0!">
               <SettingsFieldLabel
-                label="Theme mode"
-                description="Choose how AOS adapts to your environment"
+                label={t("Theme mode")}
+                description={t("Choose how AOS adapts to your environment")}
               />
               <FormField
                 control={form.control}
@@ -208,7 +209,7 @@ export function UserAppearanceSection() {
                             icon={Sun01Icon}
                             className="size-3.5"
                           />
-                          Light
+                          {t("Light")}
                         </ToggleGroupItem>
                         <ToggleGroupItem
                           value="dark"
@@ -218,7 +219,7 @@ export function UserAppearanceSection() {
                             icon={Moon02Icon}
                             className="size-3.5"
                           />
-                          Dark
+                          {t("Dark")}
                         </ToggleGroupItem>
                         <ToggleGroupItem
                           value="system"
@@ -228,7 +229,7 @@ export function UserAppearanceSection() {
                             icon={ComputerIcon}
                             className="size-3.5"
                           />
-                          Device
+                          {t("Device")}
                         </ToggleGroupItem>
                       </ToggleGroup>
                     </FormControl>
@@ -258,7 +259,7 @@ export function UserAppearanceSection() {
                     <span className="select-none opacity-50">1</span>
                     <span>
                       <span style={{ color: currentValues.accent }}>const</span>{" "}
-                      themePreview: ThemeConfig = {"{"}
+                      {t("themePreview: ThemeConfig =")} {"{"}
                     </span>
                   </div>
                   <div
@@ -314,7 +315,7 @@ export function UserAppearanceSection() {
 
             <FormSectionItem className="border-t-0!">
               <h4 className="text-sm font-medium capitalize">
-                {mode} theme settings
+                {mode} {t("theme settings")}
               </h4>
             </FormSectionItem>
 
@@ -325,8 +326,8 @@ export function UserAppearanceSection() {
                 <FormItem className="gap-0">
                   <FormSectionItem className="bg-background/50">
                     <SettingsFieldLabel
-                      label="Theme"
-                      description="Pick a color preset for the active mode"
+                      label={t("Theme")}
+                      description={t("Pick a color preset for the active mode")}
                     />
                     <FormControl>
                       <ThemeSelector
@@ -399,8 +400,8 @@ export function UserAppearanceSection() {
                 <FormItem className="gap-0">
                   <FormSectionItem className="bg-background/50">
                     <SettingsFieldLabel
-                      label="Contrast"
-                      description="Adjust the contrast level of the interface"
+                      label={t("Contrast")}
+                      description={t("Adjust the contrast level of the interface")}
                     />
                     <FormControl>
                       <div
@@ -436,8 +437,8 @@ export function UserAppearanceSection() {
                 <FormItem className="gap-0">
                   <FormSectionItem className="bg-background/50">
                     <SettingsFieldLabel
-                      label="UI font"
-                      description="Typeface used across the interface"
+                      label={t("UI font")}
+                      description={t("Typeface used across the interface")}
                     />
                     <FormControl>
                       <FontFamilySelector
@@ -458,8 +459,8 @@ export function UserAppearanceSection() {
                 <FormItem className="gap-0">
                   <FormSectionItem className="bg-background/50">
                     <SettingsFieldLabel
-                      label="Code font"
-                      description="Typeface used in editors and code blocks"
+                      label={t("Code font")}
+                      description={t("Typeface used in editors and code blocks")}
                     />
                     <FormControl>
                       <FontFamilySelector
@@ -482,8 +483,8 @@ export function UserAppearanceSection() {
                   <FormItem className="gap-0">
                     <FormSectionItem className="bg-background/50">
                       <SettingsFieldLabel
-                        label="Translucent sidebar"
-                        description="Apply a frosted glass effect to the sidebar"
+                        label={t("Translucent sidebar")}
+                        description={t("Apply a frosted glass effect to the sidebar")}
                       />
                       <FormControl>
                         <Switch
@@ -505,8 +506,8 @@ export function UserAppearanceSection() {
                 <FormItem className="gap-0">
                   <FormSectionItem className="bg-background/50">
                     <SettingsFieldLabel
-                      label="Radius"
-                      description="Choose how rounded the interface should feel"
+                      label={t("Radius")}
+                      description={t("Choose how rounded the interface should feel")}
                     />
                     <FormControl>
                       <ThemeRadiusSelector
@@ -523,9 +524,9 @@ export function UserAppearanceSection() {
 
         <FormSection>
           <FormSectionHeader>
-            <FormSectionTitle>File icons</FormSectionTitle>
+            <FormSectionTitle>{t("File icons")}</FormSectionTitle>
             <FormSectionDescription>
-              Control the icon set used by the Files explorer and file tabs
+              {t("Control the icon set used by the Files explorer and file tabs")}
             </FormSectionDescription>
           </FormSectionHeader>
           <FormSectionContent>
@@ -536,8 +537,8 @@ export function UserAppearanceSection() {
                 <FormItem className="gap-0">
                   <FormSectionItem>
                     <SettingsFieldLabel
-                      label="Icon set"
-                      description="Choose how detailed file icons should be"
+                      label={t("Icon set")}
+                      description={t("Choose how detailed file icons should be")}
                     />
                     <FormControl>
                       <Select value={field.value} onValueChange={field.onChange}>
@@ -548,10 +549,10 @@ export function UserAppearanceSection() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="complete">Complete</SelectItem>
-                          <SelectItem value="standard">Standard</SelectItem>
-                          <SelectItem value="minimal">Minimal</SelectItem>
-                          <SelectItem value="none">None</SelectItem>
+                          <SelectItem value="complete">{t("Complete")}</SelectItem>
+                          <SelectItem value="standard">{t("Standard")}</SelectItem>
+                          <SelectItem value="minimal">{t("Minimal")}</SelectItem>
+                          <SelectItem value="none">{t("None")}</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormControl>
@@ -566,8 +567,8 @@ export function UserAppearanceSection() {
                 <FormItem className="gap-0">
                   <FormSectionItem>
                     <SettingsFieldLabel
-                      label="Colored icons"
-                      description="Use semantic colors for file type icons"
+                      label={t("Colored icons")}
+                      description={t("Use semantic colors for file type icons")}
                     />
                     <FormControl>
                       <Switch
@@ -584,9 +585,9 @@ export function UserAppearanceSection() {
 
         <FormSection>
           <FormSectionHeader>
-            <FormSectionTitle>Typography</FormSectionTitle>
+            <FormSectionTitle>{t("Typography")}</FormSectionTitle>
             <FormSectionDescription>
-              Adjust the font sizes used throughout the application
+              {t("Adjust the font sizes used throughout the application")}
             </FormSectionDescription>
           </FormSectionHeader>
           <FormSectionContent>

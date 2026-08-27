@@ -24,6 +24,7 @@ import { ArtifactHelper } from "@/features/artifact/presentation/helpers/artifac
 import { useArtifacts } from "@/features/artifact/presentation/hooks/use-artifacts";
 import { CreateArtifactDialog } from "@/features/artifact/presentation/components/create-artifact-dialog";
 import { useViews } from "@/features/view/presentation/hooks/use-views";
+import { t } from "@/lib/i18n";
 
 type SurfaceRow = {
   kind: "view" | "artifact";
@@ -92,9 +93,9 @@ export function WorkspaceSidebarSurfacesGroupMenu() {
     >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton tooltip="Surfaces">
+          <SidebarMenuButton tooltip={t("Surfaces")}>
             <HugeiconsIcon icon={Layers01Icon} />
-            <span>Surfaces</span>
+            <span>{t("Surfaces")}</span>
             <HugeiconsIcon
               icon={ArrowRight01Icon}
               className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90"
@@ -107,7 +108,7 @@ export function WorkspaceSidebarSurfacesGroupMenu() {
               <CreateArtifactDialog>
                 <SidebarMenuButton className="text-muted-foreground hover:text-foreground">
                   <HugeiconsIcon icon={PlusSignIcon} className="size-3.5" />
-                  <span>New artifact</span>
+                  <span>{t("New artifact")}</span>
                 </SidebarMenuButton>
               </CreateArtifactDialog>
             </SidebarMenuItem>
@@ -138,7 +139,7 @@ export function WorkspaceSidebarSurfacesGroupMenu() {
             ))}
             {rows.length === 0 ? (
               <span className="px-2 text-xs text-muted-foreground/60">
-                No surfaces yet
+                {t("No surfaces yet")}
               </span>
             ) : null}
           </SidebarMenuSub>

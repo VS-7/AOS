@@ -156,6 +156,21 @@ export function session(): Promise<{ user: PublicUser }> {
 }
 
 /**
+ * Changes the signed-in account's name and email.
+ *
+ * HTTP only, same as `changePassword` below and for the same reason:
+ * AuthService binds five methods over the bridge and this is not one of them.
+ */
+export function updateProfile(name: string, email: string): Promise<{ user: PublicUser }> {
+  return call<{ user: PublicUser }>(
+    null,
+    [],
+    "/api/auth/profile",
+    { method: "POST", headers: jsonHeaders, body: JSON.stringify({ name, email }) },
+  );
+}
+
+/**
  * Changes the current session's password.
  *
  * Desktop method is `null` on purpose: AuthService binds only Status,
@@ -169,6 +184,15 @@ export async function changePassword(current: string, next: string): Promise<voi
     null,
     [],
     "/api/auth/password",
-    { method: "POST", headers: jsonHeaders, body: JSON.stringify({ current, next }) },
+    // `currentPassword`/`newPassword`, not `current`/`next`: those are the
+    // names the handler decodes (internal/transport/authapi's
+    // changePassword). Sending the short ones meant Go decoded two empty
+    // strings, so every attempt failed the current-password check and the
+    // screen reported a wrong password the person had typed correctly.
+    {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ currentPassword: current, newPassword: next }),
+    },
   );
 }

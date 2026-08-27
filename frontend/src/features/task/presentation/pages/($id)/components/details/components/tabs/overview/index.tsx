@@ -42,6 +42,7 @@ import { GoalSelectorDropdown } from "@/components/ui/goal-selector-dropdown";
 import { DateTimeInput } from "@/components/ui/date-time-input";
 import { Icon } from "@/components/ui/icon";
 import { ProjectHelper } from "@/features/project/presentation/helpers/project.helper";
+import { t } from "@/lib/i18n";
 
 interface TaskDetailsSidebarProps {
   task: TaskWithContext;
@@ -92,7 +93,7 @@ export function TaskOverviewTab({
           <SplitPageLayout.WidgetItem>
             <StatusIcon className={`size-3.5 shrink-0 ${statusCfg.color}`} />
             <span className="w-16 shrink-0 text-xs text-muted-foreground">
-              Status
+              {t("Status")}
             </span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -118,7 +119,7 @@ export function TaskOverviewTab({
               className={`size-3.5 shrink-0 ${priorityCfg.colorClass}`}
             />
             <span className="w-16 shrink-0 text-xs text-muted-foreground">
-              Priority
+              {t("Priority")}
             </span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -140,7 +141,7 @@ export function TaskOverviewTab({
           <SplitPageLayout.WidgetItem>
             <TagIcon className="size-3" />
             <span className="w-16 shrink-0 text-xs text-muted-foreground">
-              Type
+              {t("Type")}
             </span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -162,7 +163,7 @@ export function TaskOverviewTab({
           <SplitPageLayout.WidgetItem>
             <User className="size-3" />
             <span className="w-16 shrink-0 text-xs text-muted-foreground">
-              Assignee
+              {t("Assignee")}
             </span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -205,7 +206,7 @@ export function TaskOverviewTab({
           <SplitPageLayout.WidgetItem>
             <CalendarDays className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="w-16 shrink-0 text-xs text-muted-foreground">
-              Due Date
+              {t("Due Date")}
             </span>
             <DateTimeInput
               value={task.dueAt}
@@ -220,7 +221,7 @@ export function TaskOverviewTab({
           <SplitPageLayout.WidgetItem>
             <Folder className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="w-16 shrink-0 text-xs text-muted-foreground">
-              Project
+              {t("Project")}
             </span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -248,7 +249,7 @@ export function TaskOverviewTab({
           <SplitPageLayout.WidgetItem>
             <Target className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="w-16 shrink-0 text-xs text-muted-foreground">
-              Goal
+              {t("Goal")}
             </span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -272,7 +273,7 @@ export function TaskOverviewTab({
             <SplitPageLayout.WidgetItem>
               <FileOutput className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                Template
+                {t("Template")}
               </span>
               <span className="truncate text-xs">{task.template}</span>
             </SplitPageLayout.WidgetItem>
@@ -281,7 +282,7 @@ export function TaskOverviewTab({
             <SplitPageLayout.WidgetItem>
               <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                Worktree
+                {t("Worktree")}
               </span>
               <span className="text-xs">
                 {task.worktree.branch
@@ -299,7 +300,7 @@ export function TaskOverviewTab({
             <SplitPageLayout.WidgetItem>
               <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                Base
+                {t("Base")}
               </span>
               <code className="text-xs text-muted-foreground">
                 {task.worktree.base}
@@ -312,7 +313,7 @@ export function TaskOverviewTab({
       {task.summary && (
         <SplitPageLayout.Widget>
           <SplitPageLayout.WidgetHeader>
-            <SplitPageLayout.WidgetTitle>Summary</SplitPageLayout.WidgetTitle>
+            <SplitPageLayout.WidgetTitle>{t("Summary")}</SplitPageLayout.WidgetTitle>
           </SplitPageLayout.WidgetHeader>
           <SplitPageLayout.WidgetContent>
             <SplitPageLayout.WidgetItem className="items-start">

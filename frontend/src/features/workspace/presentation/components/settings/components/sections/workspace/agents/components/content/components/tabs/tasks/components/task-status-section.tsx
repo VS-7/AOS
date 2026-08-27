@@ -10,6 +10,7 @@ import type { Task } from "@/features/task/interfaces/task.interfaces";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
 import { TaskListRow } from "@/features/task/presentation/pages/(main)/components/list/components/task-list-row.component";
 import { useEffect, useState } from "react";
+import { t } from "@/lib/i18n";
 
 interface AgentTaskStatusSectionProps {
   status: Task["status"];
@@ -61,7 +62,7 @@ export function AgentTaskStatusSection({ status, tasks }: AgentTaskStatusSection
                   transition={{ duration: 0.2 }}
                   className="flex h-11 items-center px-3 text-xs text-muted-foreground"
                 >
-                  No tasks in {config.label.toLowerCase()}
+                  {t("No tasks in")} {config.label.toLowerCase()}
                 </motion.div>
               ) : (
                 tasks.map((task) => <TaskListRow key={task.id} task={task} />)

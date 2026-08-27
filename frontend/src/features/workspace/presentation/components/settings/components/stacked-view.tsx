@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 interface SettingsStackedViewProps {
   open: boolean;
@@ -41,7 +42,7 @@ export function SettingsStackedView({
           onClick={onBack}
         >
           <ArrowLeft className="size-4" />
-          Back
+          {t("Back")}
         </Button>
       </div>
 

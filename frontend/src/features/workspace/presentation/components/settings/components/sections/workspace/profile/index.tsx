@@ -35,6 +35,7 @@ import { WorkspaceUpdateInputSchema } from "@/features/workspace/schemas/workspa
 import { AppError } from "@/core/errors/aos.error";
 import { toast } from "sonner";
 import { ColorPickerPopover } from "@/components/ui/color-picker";
+import { t } from "@/lib/i18n";
 
 /**
  * Workspace branding (name, logo, color) and danger-zone delete.
@@ -85,7 +86,7 @@ export function WorkspaceProfileSection() {
         return;
       }
 
-      toast.success("Workspace profile updated successfully!");
+      toast.success(t("Workspace profile updated successfully!"));
       void aos.stores.workspace.actions.refresh();
     },
   });
@@ -98,7 +99,7 @@ export function WorkspaceProfileSection() {
       await aos.stores.workspace.actions.deleteWorkspace(
         currentWorkspace.id,
       );
-      toast.success("Workspace deleted successfully");
+      toast.success(t("Workspace deleted successfully"));
       navigate({ to: "/" });
     } catch (error) {
       const message =
@@ -119,9 +120,9 @@ export function WorkspaceProfileSection() {
       <SettingsSectionShell>
         <FormSection>
             <FormSectionHeader>
-            <FormSectionTitle>Branding</FormSectionTitle>
+            <FormSectionTitle>{t("Branding")}</FormSectionTitle>
             <FormSectionDescription>
-              Name, logo, and color for this workspace.
+              {t("Name, logo, and color for this workspace.")}
             </FormSectionDescription>
           </FormSectionHeader>
           <FormSectionContent className="divide-y divide-border">
@@ -131,9 +132,9 @@ export function WorkspaceProfileSection() {
               render={({ field }) => (
                 <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                   <div className="flex-1 space-y-0.5">
-                    <FormLabel>Logo</FormLabel>
+                    <FormLabel>{t("Logo")}</FormLabel>
                     <FormDescription>
-                      Workspace logo.
+                      {t("Workspace logo.")}
                     </FormDescription>
                   </div>
                   <FormControl>
@@ -153,15 +154,15 @@ export function WorkspaceProfileSection() {
               render={({ field }) => (
                 <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                   <div className="flex-1 space-y-0.5">
-                    <FormLabel>Name</FormLabel>
+                    <FormLabel>{t("Name")}</FormLabel>
                     <FormDescription>
-                      How this workspace is named.
+                      {t("How this workspace is named.")}
                     </FormDescription>
                   </div>
                   <FormControl>
                     <Input
                       className="max-w-50"
-                      placeholder="Workspace name"
+                      placeholder={t("Workspace name")}
                       {...field}
                     />
                   </FormControl>
@@ -174,9 +175,9 @@ export function WorkspaceProfileSection() {
               render={({ field }) => (
                 <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                   <div className="flex-1 space-y-0.5">
-                    <FormLabel>Accent color</FormLabel>
+                    <FormLabel>{t("Accent color")}</FormLabel>
                     <FormDescription>
-                      Optional color accent.
+                      {t("Optional color accent.")}
                     </FormDescription>
                   </div>
                   <FormControl>
@@ -194,41 +195,39 @@ export function WorkspaceProfileSection() {
 
         <FormSection>
           <FormSectionHeader>
-            <FormSectionTitle>Danger Zone</FormSectionTitle>
+            <FormSectionTitle>{t("Danger Zone")}</FormSectionTitle>
             <FormSectionDescription>
-              Irreversible actions. Proceed with caution.
+              {t("Irreversible actions. Proceed with caution.")}
             </FormSectionDescription>
           </FormSectionHeader>
           <FormSectionContent>
             <div className="flex flex-row items-center justify-between gap-4 p-4">
               <div className="flex-1 space-y-0.5">
-                <p className="text-sm font-medium">Delete this workspace</p>
+                <p className="text-sm font-medium">{t("Delete this workspace")}</p>
                 <p className="text-sm text-muted-foreground">
-                  Permanently remove the workspace and all its configuration.
-                  This action cannot be undone.
+                  {t("Permanently remove the workspace and all its configuration. This action cannot be undone.")}
                 </p>
               </div>
               <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
                 <AlertDialogTrigger asChild>
                   <Button variant="destructive" size="sm">
-                    Delete Workspace
+                    {t("Delete Workspace")}
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Workspace</AlertDialogTitle>
+                    <AlertDialogTitle>{t("Delete Workspace")}</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Are you sure you want to delete{" "}
+                      {t("Are you sure you want to delete")}{" "}
                       <span className="font-semibold">
                         {currentWorkspace?.name}
                       </span>
-                      ? This will permanently remove the workspace and all its
-                      configuration. This action cannot be undone.
+                      {t("? This will permanently remove the workspace and all its configuration. This action cannot be undone.")}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel disabled={deleting}>
-                      Cancel
+                      {t("Cancel")}
                     </AlertDialogCancel>
                     <AlertDialogAction
                       disabled={deleting}

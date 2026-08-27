@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import React from "react"
 import { ExternalLink, Search, ZoomIn, ZoomOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -37,11 +38,11 @@ export function FilesPdfViewer({ file, onOpenExternal }: FilesPdfViewerProps) {
       <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
         <Button size="sm" variant="outline" onClick={() => setZoom((value) => Math.max(MIN_ZOOM, value - ZOOM_STEP))}>
           <ZoomOut data-icon="inline-start" className="size-4" />
-          Zoom out
+          {t("Zoom out")}
         </Button>
         <Button size="sm" variant="outline" onClick={() => setZoom((value) => Math.min(MAX_ZOOM, value + ZOOM_STEP))}>
           <ZoomIn data-icon="inline-start" className="size-4" />
-          Zoom in
+          {t("Zoom in")}
         </Button>
         <div className="min-w-24 text-xs text-muted-foreground">{Math.round(zoom * 100)}%</div>
 
@@ -50,14 +51,14 @@ export function FilesPdfViewer({ file, onOpenExternal }: FilesPdfViewerProps) {
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search in PDF"
+            placeholder={t("Search in PDF")}
             className="h-8"
           />
         </div>
 
         <Button size="sm" variant="outline" onClick={onOpenExternal}>
           <ExternalLink data-icon="inline-start" className="size-4" />
-          Open in browser tab
+          {t("Open in browser tab")}
         </Button>
       </div>
 

@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -21,9 +22,9 @@ export function ChatComposerAudioConfirmationDialog({
     <Dialog onOpenChange={onOpenChange} open={Boolean(clip)}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Attach voice note</DialogTitle>
+          <DialogTitle>{t("Attach voice note")}</DialogTitle>
           <DialogDescription>
-            Review the recording before attaching it to the next message.
+            {t("Review the recording before attaching it to the next message.")}
           </DialogDescription>
         </DialogHeader>
 
@@ -36,7 +37,7 @@ export function ChatComposerAudioConfirmationDialog({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-foreground">{clip.filename}</p>
                 <p className="text-xs text-muted-foreground">
-                  {ComposerHelper.formatDuration(clip.durationMs)} voice note
+                  {ComposerHelper.formatDuration(clip.durationMs)} {t("voice note")}
                 </p>
               </div>
             </div>
@@ -47,10 +48,10 @@ export function ChatComposerAudioConfirmationDialog({
 
         <DialogFooter>
           <Button onClick={() => onOpenChange(false)} type="button" variant="ghost">
-            Discard
+            {t("Discard")}
           </Button>
           <Button onClick={onConfirm} type="button">
-            Attach audio
+            {t("Attach audio")}
           </Button>
         </DialogFooter>
       </DialogContent>

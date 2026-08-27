@@ -17,6 +17,7 @@ import { AgentContentTabs } from "./components/tabs";
 import { AvatarAgentFallback } from "@/components/ui/avatar";
 import { SettingsContentContainer } from "../../../../../content-container";
 import { useAgents } from "../../contexts/agents.context";
+import { t } from "@/lib/i18n";
 
 export function SelectedAgentContent() {
   const {
@@ -45,10 +46,10 @@ export function SelectedAgentContent() {
           </AnimatedEmptyState.Carousel>
           <AnimatedEmptyState.Content>
             <AnimatedEmptyState.Title>
-              No Agent Selected
+              {t("No Agent Selected")}
             </AnimatedEmptyState.Title>
             <AnimatedEmptyState.Description>
-              Select an agent from the list or create a new one.
+              {t("Select an agent from the list or create a new one.")}
             </AnimatedEmptyState.Description>
           </AnimatedEmptyState.Content>
         </AnimatedEmptyState>
@@ -90,7 +91,7 @@ export function SelectedAgentContent() {
                   onClick={() => void handleCopyId()}
                 >
                   <Copy />
-                  <span className="sr-only">Copy agent ID</span>
+                  <span className="sr-only">{t("Copy agent ID")}</span>
                 </Button>
 
                 <AlertDialog>
@@ -103,20 +104,20 @@ export function SelectedAgentContent() {
                       disabled={isDeleting}
                     >
                       <Trash2 />
-                      <span className="sr-only">Delete agent</span>
+                      <span className="sr-only">{t("Delete agent")}</span>
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent size="sm">
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Delete this agent?</AlertDialogTitle>
+                      <AlertDialogTitle>{t("Delete this agent?")}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This action removes{" "}
+                        {t("This action removes")}{" "}
                         <strong>{selectedAgent.name}</strong> permanently.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel disabled={isDeleting}>
-                        Cancel
+                        {t("Cancel")}
                       </AlertDialogCancel>
                       <AlertDialogAction
                         variant="destructive"

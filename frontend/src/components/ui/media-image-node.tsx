@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 
 import { Caption, CaptionTextarea } from './caption';
 import { MediaToolbar } from './media-toolbar';
+import { t } from "@/lib/i18n";
 import {
   mediaResizeHandleVariants,
   Resizable,
@@ -70,7 +71,7 @@ export const ImageElement = withHOC(
                 onFocus={(e) => {
                   e.preventDefault();
                 }}
-                placeholder="Write a caption..."
+                placeholder={t("Write a caption...")}
               />
             </Caption>
           </figure>

@@ -18,6 +18,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 import {
   THEME_PREVIEW_SWATCH_SIZE,
   ThemePreviewSwatch,
@@ -103,7 +104,7 @@ export function ThemeSelector({
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList className="max-h-72">
-            <CommandEmpty>No themes found.</CommandEmpty>
+            <CommandEmpty>{t("No themes found.")}</CommandEmpty>
             {defaultTheme ? (
               <CommandGroup>
                 <CommandItem
@@ -140,7 +141,7 @@ export function ThemeSelector({
             {otherThemes.length > 0 ? (
               <>
                 <CommandSeparator />
-                <CommandGroup heading="All themes">
+                <CommandGroup heading={t("All themes")}>
                   {otherThemes.map((theme) => {
                     const isSelected = theme.id === value;
 

@@ -9,6 +9,7 @@ import { RoutineTriggerAddMenu } from "./routine-trigger-add-menu";
 import { ScheduledTriggerRow } from "./scheduled-trigger-row";
 import { WebhookTriggerRow } from "./webhook-trigger-row";
 import { ActivityTriggerRow } from "./activity-trigger-row";
+import { t } from "@/lib/i18n";
 
 interface RoutineTriggersPanelProps {
   value: RoutineTriggerFormValue[];
@@ -44,7 +45,7 @@ export function RoutineTriggersPanel({
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-sm text-muted-foreground">Triggers</p>
+      <p className="text-sm text-muted-foreground">{t("Triggers")}</p>
 
       <div className="overflow-hidden rounded-md border bg-card/30">
         {value.map((trigger, index) => (
@@ -87,7 +88,7 @@ export function RoutineTriggersPanel({
                   className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
                 >
                   <PlusIcon className="size-4" />
-                  <span>Add Trigger</span>
+                  <span>{t("Add Trigger")}</span>
                 </button>
               }
             />
@@ -98,7 +99,7 @@ export function RoutineTriggersPanel({
       {scheduledCount > 1 ? (
         <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500">
           <span aria-hidden>⚠</span>
-          Only the first cron trigger will be used
+          {t("Only the first cron trigger will be used")}
         </p>
       ) : null}
     </div>

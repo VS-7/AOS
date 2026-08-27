@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 'use client'
 
 import { Eye, EyeOff, Lock, CheckCircle2 } from 'lucide-react'
@@ -51,9 +52,9 @@ export function OnboardingFormSecurityStep({ form }: OnboardingFormSecurityStepP
     <div className="flex flex-col items-center justify-center h-full px-8 py-8">
       <div className="w-full max-w-md space-y-6">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">Your space, your security</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-foreground">{t("Your space, your security")}</h2>
           <p className="text-sm text-muted-foreground leading-relaxed mt-1">
-            Set a master password to encrypt your local workspace, API credentials, and sessions.
+            {t("Set a master password to encrypt your local workspace, API credentials, and sessions.")}
           </p>
         </div>
 
@@ -63,13 +64,13 @@ export function OnboardingFormSecurityStep({ form }: OnboardingFormSecurityStepP
             name="security.password"
             render={({ field }) => (
               <FormItem className="space-y-2">
-                <FormLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Master Password</FormLabel>
+                <FormLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("Master Password")}</FormLabel>
                 <FormControl>
                   <div className="relative">
                     <Lock className="w-4 h-4 text-muted-foreground/60 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <Input
                       type={showPassword ? 'text' : 'password'}
-                      placeholder="Enter a strong master password"
+                      placeholder={t("Enter a strong master password")}
                       className="pl-10 pr-10 h-11 bg-muted/20 border-border/60 rounded-xl focus-visible:ring-primary/20 transition-all"
                       autoFocus
                       {...field}
@@ -97,7 +98,7 @@ export function OnboardingFormSecurityStep({ form }: OnboardingFormSecurityStepP
 
           <div className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground font-medium">Password Strength</span>
+              <span className="text-muted-foreground font-medium">{t("Password Strength")}</span>
               <span className={cn('font-medium transition-colors', password ? 'text-foreground' : 'text-muted-foreground')}>
                 {strength.label}
               </span>
@@ -137,7 +138,7 @@ export function OnboardingFormSecurityStep({ form }: OnboardingFormSecurityStepP
 
           <div className="pt-2 border-t border-border/30 flex items-center gap-2 text-[11px] text-muted-foreground/80">
             <span className="shrink-0">🔒</span>
-            <span>Zero-Knowledge — Credentials remain exclusively on your local device.</span>
+            <span>{t("Zero-Knowledge — Credentials remain exclusively on your local device.")}</span>
           </div>
         </div>
       </div>

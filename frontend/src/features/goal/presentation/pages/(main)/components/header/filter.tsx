@@ -20,6 +20,7 @@ import { useGoalsContext } from "@/features/goal/presentation/pages/(main)/conte
 import { aos } from "@/app/aos";
 import { Icon } from "@/components/ui/icon";
 import { ProjectHelper } from "@/features/project/presentation/helpers/project.helper";
+import { t } from "@/lib/i18n";
 
 export function GoalsFilter() {
   const {
@@ -162,7 +163,7 @@ export function GoalsFilter() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
           {projects.length === 0 && (
-            <DropdownMenuItem disabled>No projects available</DropdownMenuItem>
+            <DropdownMenuItem disabled>{t("No projects available")}</DropdownMenuItem>
           )}
           {projects.map((project) => (
             <DropdownMenuCheckboxItem
@@ -188,7 +189,7 @@ export function GoalsFilter() {
           onClick={clearFilters}
           className="h-8 text-xs text-muted-foreground hover:text-foreground px-2 gap-1"
         >
-          Clear
+          {t("Clear")}
           <X className="size-3" />
         </Button>
       )}

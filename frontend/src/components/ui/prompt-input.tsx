@@ -74,6 +74,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { nanoid } from "nanoid";
+import { t } from "@/lib/i18n";
 import type {
   ChangeEvent,
   ChangeEventHandler,
@@ -929,12 +930,12 @@ export const PromptInput = ({
     <>
       <input
         accept={accept}
-        aria-label="Upload files"
+        aria-label={t("Upload files")}
         className="hidden"
         multiple={multiple}
         onChange={handleChange}
         ref={inputRef}
-        title="Upload files"
+        title={t("Upload files")}
         type="file"
       />
       <form

@@ -30,6 +30,7 @@ import {
   FormSchemaHelper,
 } from "../helpers/form-schema.helper";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
+import { t } from "@/lib/i18n";
 
 type SchemaFormProps = {
   form: AosFormReturn<any>;
@@ -99,7 +100,7 @@ export function SchemaForm({
           <section key={name} className="space-y-6">
             <div className="space-y-2">
               <p className="text-[0.68rem] font-medium uppercase tracking-[0.18em] text-muted-foreground/80">
-                Section
+                {t("Section")}
               </p>
               <div className="space-y-1">
                 <h3 className="text-lg font-semibold tracking-tight text-foreground">{label}</h3>
@@ -311,7 +312,7 @@ export function SchemaForm({
   if (Object.keys(rootProperties).length === 0) {
     return (
       <div className="rounded-[28px] border border-dashed border-border/70 px-6 py-8 text-sm leading-6 text-muted-foreground">
-        This collection schema has no declared properties yet.
+        {t("This collection schema has no declared properties yet.")}
       </div>
     );
   }
@@ -384,7 +385,7 @@ function SchemaArrayField({
               {label}
             </h3>
             {required && !isNested ? (
-              <span className="text-xs text-muted-foreground">Required list</span>
+              <span className="text-xs text-muted-foreground">{t("Required list")}</span>
             ) : null}
           </div>
           {fieldSchema.description && !isNested ? (
@@ -402,7 +403,7 @@ function SchemaArrayField({
           onClick={() => append(FormSchemaHelper.createEmptyValue(itemSchema) as never)}
         >
           <Plus />
-          Add item
+          {t("Add item")}
         </Button>
       </div>
 
@@ -411,7 +412,7 @@ function SchemaArrayField({
           "rounded-[24px] border border-dashed border-border/70 px-5 py-6 text-sm leading-6 text-muted-foreground",
           isNested && "py-4 text-xs"
         )}>
-          No entries yet. Add the first {itemLabel.toLowerCase()} when you&apos;re ready.
+          {t("No entries yet. Add the first")} {itemLabel.toLowerCase()} {t("when you're ready.")}
         </div>
       ) : (
         <div className="space-y-3">
@@ -430,7 +431,7 @@ function SchemaArrayField({
                   onClick={() => remove(index)}
                 >
                   <Trash2 className="size-3.5" />
-                  <span className="sr-only">Remove {itemLabel} #{index + 1}</span>
+                  <span className="sr-only">{t("Remove")} {itemLabel} #{index + 1}</span>
                 </Button>
 
                 <div className="flex items-center gap-2 pr-8">

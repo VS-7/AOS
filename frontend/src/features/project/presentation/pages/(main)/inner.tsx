@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 import { ProjectListRow } from "./components/list/components/project-list-row.component";
 import { cn } from "@/lib/utils";
 import { useProjectsContext } from "./context";
+import { t } from "@/lib/i18n";
 
 export function ProjectsPageInner() {
   const navigate = useNavigate();
@@ -16,7 +17,7 @@ export function ProjectsPageInner() {
       <Page className="h-full overflow-hidden">
         <PageSecondaryHeader className="justify-between border-b px-4 py-2">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Projects</span>
+            <span className="text-sm font-medium">{t("Projects")}</span>
             <span className="text-xs text-muted-foreground">
               {filteredProjects.length}
             </span>
@@ -30,7 +31,7 @@ export function ProjectsPageInner() {
               }
             >
               <Plus data-icon="inline-start" />
-              Add project
+              {t("Add project")}
             </Button>
           </div>
         </PageSecondaryHeader>
@@ -41,7 +42,7 @@ export function ProjectsPageInner() {
               <AnimatePresence mode="popLayout">
                 {filteredProjects.length === 0 ? (
                   <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-                    No projects yet
+                    {t("No projects yet")}
                   </div>
                 ) : (
                   <div className="flex flex-col rounded-md border shadow-inner bg-muted divide-y overflow-hidden">

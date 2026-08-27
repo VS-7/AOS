@@ -17,6 +17,7 @@ import { aos } from "@/app/aos";
 import { Form, FormField, FormItem, FormControl, FormMessage } from "@/components/ui/form";
 import { toast } from "sonner";
 import { ColorPickerPopover } from "@/components/ui/color-picker";
+import { t } from "@/lib/i18n";
 
 interface CreateWorkspaceDialogProps {
   trigger?: React.ReactNode;
@@ -53,18 +54,30 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
         return;
       }
 
-      if (data && data.data) {
-        const result = await aos.stores.workspace.actions.switch(data.data.id);
-
-        if (result.error) {
-          toast.error(result.error.message || "Failed to switch to the new workspace");
-          return;
-        }
-
-        if (onSuccess) {
-          onSuccess(data.data.id);
-        }
+      // `data.workspace.id`, not `data.data.id`. `useForm` already unwraps
+      // the envelope before it gets here (`app/builders/app.tsx`), so the
+      // second `.data` was reaching into the workspace object for a key it
+      // does not have: the condition was never true, and creating a
+      // workspace ended in a dialog that stayed open having said nothing.
+      const created = data?.workspace?.id ?? data?.id;
+      if (!created) {
+        toast.error(t("The workspace was created but the daemon did not say which one."));
+        return;
       }
+
+      // Refresh before switching: `switch` only accepts an id it can see in
+      // `options`, and the list it reads was fetched before this workspace
+      // existed.
+      await aos.stores.workspace.actions.refresh();
+
+      const result = await aos.stores.workspace.actions.switch(created);
+      if (result.error) {
+        toast.error(result.error.message || "Failed to switch to the new workspace");
+        return;
+      }
+
+      toast.success(t("Workspace created."));
+      onSuccess?.(created);
     }
   });
 
@@ -76,9 +89,9 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className="sm:max-w-106.25">
         <DialogHeader>
-          <DialogTitle>New Workspace</DialogTitle>
+          <DialogTitle>{t("New Workspace")}</DialogTitle>
           <DialogDescription>
-            Create a new workspace to organize your projects, skills, and agents.
+            {t("Create a new workspace to organize your projects, skills, and agents.")}
           </DialogDescription>
         </DialogHeader>
         <Form form={form} className="grid gap-4 py-4">
@@ -90,7 +103,7 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
             >
               {currentName ? currentName.charAt(0).toUpperCase() : "?"}
             </div>
-            <span className="text-xs text-muted-foreground">Preview</span>
+            <span className="text-xs text-muted-foreground">{t("Preview")}</span>
           </div>
 
           <FormField
@@ -98,9 +111,9 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
             name="name"
             render={({ field }) => (
               <FormItem className="grid gap-2">
-                <Label htmlFor="name">Workspace Name</Label>
+                <Label htmlFor="name">{t("Workspace Name")}</Label>
                 <FormControl>
-                  <Input id="name" placeholder="e.g. Acme Corp" {...field} />
+                  <Input id="name" placeholder={t("e.g. Acme Corp")} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -112,9 +125,9 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
             name="path"
             render={({ field }) => (
               <FormItem className="grid gap-2">
-                <Label htmlFor="path">Directory Path</Label>
+                <Label htmlFor="path">{t("Directory Path")}</Label>
                 <FormControl>
-                  <FolderInput placeholder="Absolute path on your machine" value={field.value} onChange={field.onChange} />
+                  <FolderInput placeholder={t("Absolute path on your machine")} value={field.value} onChange={field.onChange} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -126,7 +139,7 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
             name="color"
             render={({ field }) => (
               <FormItem className="grid gap-2">
-                <Label htmlFor="color">Brand Color</Label>
+                <Label htmlFor="color">{t("Brand Color")}</Label>
                 <div className="flex gap-2">
                   <ColorPickerPopover
                     triggerShowRemove

@@ -4,6 +4,7 @@ import {
   Renderer,
 } from "@json-render/react";
 import type { Spec } from "@json-render/core";
+import { t } from "@/lib/i18n";
 import {
   viewCatalog,
   viewRegistry,
@@ -56,13 +57,11 @@ export function ViewRenderer({
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
         <p className="text-sm font-medium text-foreground">
-          This view has no renderable json-render spec.
+          {t("This view has no renderable json-render spec.")}
         </p>
         <p className="text-muted-foreground text-sm max-w-md">
-          Expected a flat <code className="text-xs">elements</code> map with a
-          valid <code className="text-xs">root</code>. If the API returned
-          <code className="text-xs"> &quot;[Circular]&quot;</code>, restart the
-          gateway after the view service serialization fix.
+          {t("Expected a flat")} <code className="text-xs">elements</code> {t("map with a valid")} <code className="text-xs">root</code>. If the API returned
+          <code className="text-xs"> &quot;[Circular]&quot;</code>{t(", restart the gateway after the view service serialization fix.")}
         </p>
       </div>
     );

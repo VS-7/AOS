@@ -91,12 +91,37 @@ func (p *wailsPlatform) SetAppearance(_ context.Context, appearance, windows str
 	// A translucent window needs a transparent background behind the page for
 	// the operating system's blur to show through; a solid one needs the page
 	// to paint its own.
-	if windows == "blur" {
+	//
+	// Never transparent on Linux, whatever the theme asks for — see
+	// translucentHere for what a transparent window does there.
+	if windows == "blur" && translucentHere() {
 		p.window.SetBackgroundColour(application.NewRGBA(0, 0, 0, 0))
 	} else {
 		p.window.SetBackgroundColour(opaqueFor(appearance))
 	}
 	return nil
+}
+
+// backgroundTypeHere is the window's compositing mode for this platform.
+func backgroundTypeHere() application.BackgroundType {
+	if translucentHere() {
+		return application.BackgroundTypeTranslucent
+	}
+	return application.BackgroundTypeSolid
+}
+
+// backgroundHere is the colour the window starts with.
+//
+// Transparent where the platform draws its own backdrop; a real, fully opaque
+// colour where it does not. Dark is the right guess for the first frame: the
+// interface's own default appearance is dark, and the alternative — a flash of
+// white before the page paints — is the more noticeable of the two mistakes.
+// The page corrects it through SetAppearance as soon as the theme is known.
+func backgroundHere() application.RGBA {
+	if translucentHere() {
+		return application.NewRGBA(0, 0, 0, 0)
+	}
+	return opaqueFor("dark")
 }
 
 // opaqueFor is the colour behind the page while it has not painted yet. It is
@@ -140,6 +165,25 @@ func directoryOf(path string) string {
 // window is frameless there and the interface draws the three controls itself
 // (see the frontend's window-controls component).
 func framelessHere() bool { return runtime.GOOS != "darwin" }
+
+// translucentHere decides whether this window may be see-through.
+//
+// Not on Linux, and this is the fix for the ghosting people reported there:
+// screens leaving a faint residue of whatever was on them before.
+//
+// A translucent window on Linux makes Wails call setTransparent()
+// (webview_window_linux.go), which composites the whole window with an alpha
+// channel. WebKitGTK's accelerated compositor latches its clear colour at the
+// first composite and does not refresh it — Wails' own comment in that file
+// says so — and with an alpha channel there is no opaque clear at all, so a
+// region the compositor re-tiles keeps whatever was drawn there. The result is
+// the previous screen showing through the new one at low opacity, which is
+// exactly what was seen.
+//
+// macOS is the platform this was for: NSVisualEffectView draws a real backdrop
+// behind the page. Windows composites correctly through WebView2. Linux has
+// neither, and pays for the option with a rendering defect.
+func translucentHere() bool { return runtime.GOOS != "linux" }
 
 // windowOptions is the window this application opens.
 //
@@ -193,9 +237,17 @@ func windowOptions(address string) application.WebviewWindowOptions {
 		// HandlePlatformFileDrop returns early too, and the drop is simply
 		// swallowed. With it on, the paths arrive as a window event, which
 		// main.go forwards to the interface.
-		EnableFileDrop:   true,
-		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
-		BackgroundType:   application.BackgroundTypeTranslucent,
+		EnableFileDrop: true,
+
+		// Opaque on Linux, translucent elsewhere — see translucentHere.
+		//
+		// The colour matters even in the solid case, and it has to be right
+		// here rather than set later: Wails pins it as WebKitGTK's
+		// accelerated-compositing clear colour before the first paint, and a
+		// colour left at zero would be treated as "not explicitly opaque" and
+		// leave the WebKitGTK default (white) latched behind a dark page.
+		BackgroundColour: backgroundHere(),
+		BackgroundType:   backgroundTypeHere(),
 		Mac: application.MacWindow{
 			// Hidden-inset: no title bar, full-size content, and the traffic
 			// lights still drawn by macOS in the top left, slightly inset —

@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import React from "react"
 import { Maximize, Pause, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -33,11 +34,11 @@ export function FilesVideoViewer({ file }: FilesVideoViewerProps) {
         >
           <Play data-icon="inline-start" className="size-4" />
           <Pause data-icon="inline-start" className="size-4" />
-          Play/Pause
+          {t("Play/Pause")}
         </Button>
 
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          Speed
+          {t("Speed")}
           <select
             value={playbackRate}
             onChange={(event) => {
@@ -60,7 +61,7 @@ export function FilesVideoViewer({ file }: FilesVideoViewerProps) {
 
         <Button size="sm" variant="outline" onClick={() => videoRef.current?.requestFullscreen()}>
           <Maximize data-icon="inline-start" className="size-4" />
-          Fullscreen
+          {t("Fullscreen")}
         </Button>
       </div>
 

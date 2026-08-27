@@ -9,6 +9,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { aos } from "@/app/aos";
 import type { Instruction } from "@/features/instruction/interfaces/instruction.interfaces";
+import { t } from "@/lib/i18n";
 
 const NEW_INSTRUCTION_ID = "__new_instruction__";
 
@@ -110,7 +111,7 @@ export function InstructionsProvider({
           return;
         }
 
-        toast.success("Instruction created.");
+        toast.success(t("Instruction created."));
         await refreshInstructions();
         setSelectedInstructionFull(createdInstruction);
         setSelectedInstructionId(createdInstruction.id);
@@ -132,7 +133,7 @@ export function InstructionsProvider({
         return;
       }
 
-      toast.success("Instruction updated.");
+      toast.success(t("Instruction updated."));
       await refreshInstructions();
       setSelectedInstructionFull(updatedInstruction);
       form.reset(buildInstructionFormValues(updatedInstruction));
@@ -142,7 +143,7 @@ export function InstructionsProvider({
   const { mutate: deleteInstruction, loading: isDeleting } =
     aos.client.instruction.delete.useMutation({
       onSuccess: async () => {
-        toast.success("Instruction deleted.");
+        toast.success(t("Instruction deleted."));
         await refreshInstructions();
         setSelectedInstructionId(null);
         setSelectedInstructionFull(undefined);

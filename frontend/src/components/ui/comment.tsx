@@ -54,6 +54,7 @@ import {
 } from '@/components/editor/plugins/discussion-kit';
 
 import { Editor, EditorContainer } from './editor';
+import { t } from "@/lib/i18n";
 
 export type TComment = {
   id: string;
@@ -200,7 +201,7 @@ export function Comment(props: {
           <span className="mr-1">
             {formatCommentDate(new Date(comment.createdAt))}
           </span>
-          {comment.isEdited && <span>(edited)</span>}
+          {comment.isEdited && <span>{t("(edited)")}</span>}
         </div>
 
         {isMyComment && (hovering || dropdownOpen) && (
@@ -322,7 +323,7 @@ function CommentMoreDropdown(props: {
     // Wails does not implement, so it drew nothing at all and this guard
     // failed silently inside the desktop window. See lib/wails.ts.
     if (!comment.id)
-      return toast.error('You are operating too quickly, please try again later.');
+      return toast.error(t("You are operating too quickly, please try again later."));
 
     // Find and update the discussion
     const updatedDiscussions = editor
@@ -357,7 +358,7 @@ function CommentMoreDropdown(props: {
     selectedEditCommentRef.current = true;
 
     if (!comment.id)
-      return toast.error('You are operating too quickly, please try again later.');
+      return toast.error(t("You are operating too quickly, please try again later."));
 
     setEditingId(comment.id);
   }, [comment.id, setEditingId]);
@@ -387,11 +388,11 @@ function CommentMoreDropdown(props: {
         <DropdownMenuGroup>
           <DropdownMenuItem onClick={onEditComment}>
             <PencilIcon className="size-4" />
-            Edit comment
+            {t("Edit comment")}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onDeleteComment}>
             <TrashIcon className="size-4" />
-            Delete comment
+            {t("Delete comment")}
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>
@@ -585,7 +586,7 @@ export function CommentCreateForm({
                   onAddComment();
                 }
               }}
-              placeholder="Reply..."
+              placeholder={t("Reply...")}
               autoComplete="off"
               autoFocus={autoFocus}
             />

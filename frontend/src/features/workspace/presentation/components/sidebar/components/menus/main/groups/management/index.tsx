@@ -21,6 +21,7 @@ import { WorkspaceSidebarProjectsGroupMenu } from "../projects";
 import { WorkspaceSidebarSurfacesGroupMenu } from "../surfaces";
 import { useSidebarActiveRoute } from "../../../../../hooks/use-sidebar-active-route";
 import { aos } from "@/app/aos";
+import { t } from "@/lib/i18n";
 
 export function WorkspaceSidebarManagementGroup() {
   const { isRouteActive } = useSidebarActiveRoute();
@@ -32,44 +33,44 @@ export function WorkspaceSidebarManagementGroup() {
     <SidebarGroup>
       <SidebarGroupContent>
         <SidebarMenu>
-          <SidebarMenuItem aria-label="Tasks" title="Tasks">
+          <SidebarMenuItem aria-label={t("Tasks")} title={t("Tasks")}>
             <SidebarMenuButton asChild isActive={isRouteActive("/tasks")}>
               <Link to="/tasks">
                 <HugeiconsIcon icon={CheckListIcon} />
-                Tasks
+                {t("Tasks")}
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem aria-label="Routines" title="Routines">
+          <SidebarMenuItem aria-label={t("Routines")} title={t("Routines")}>
             <SidebarMenuButton asChild isActive={isRouteActive("/routines")}>
               <Link to="/routines">
                 <HugeiconsIcon icon={RepeatIcon} />
-                Routines
+                {t("Routines")}
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem aria-label="Goals" title="Goals">
+          <SidebarMenuItem aria-label={t("Goals")} title={t("Goals")}>
             <SidebarMenuButton asChild isActive={isRouteActive("/goals")}>
               <Link to="/goals">
                 <HugeiconsIcon icon={TargetIcon} />
-                Goals
+                {t("Goals")}
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem aria-label="Files" title="Files">
+          <SidebarMenuItem aria-label={t("Files")} title={t("Files")}>
             <SidebarMenuButton
               isActive={isFilesMenuActive}
               onClick={() => stores.viewport.actions.setSidebarMenu("files")}
             >
               <HugeiconsIcon icon={FolderIcon} />
-              Files
+              {t("Files")}
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem aria-label="Marketplace" title="Marketplace">
+          <SidebarMenuItem aria-label={t("Marketplace")} title={t("Marketplace")}>
             <SidebarMenuButton asChild isActive={isRouteActive("/marketplace")}>
               <Link to="/marketplace">
                 <HugeiconsIcon icon={Store01Icon} />
-                Marketplace
+                {t("Marketplace")}
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

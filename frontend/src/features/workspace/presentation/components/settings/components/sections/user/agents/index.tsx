@@ -23,6 +23,7 @@ import {
 } from "./components/models-section";
 import { ProvidersSection } from "./components/providers-section";
 import type { AgentModelSelectValue } from "@/components/ui/agent-model-select";
+import { t } from "@/lib/i18n";
 
 const DEFAULT_AGENT_MODELS: ConfigAgentModels = {
   default: { provider: "", model: "", reasoning: "medium" },
@@ -107,7 +108,7 @@ export function UserAgentsSection() {
           },
         });
         if (!result) {
-          toast.error("Failed to save model preference.");
+          toast.error(t("Failed to save model preference."));
           return;
         }
         router.invalidate();
@@ -127,9 +128,9 @@ export function UserAgentsSection() {
     <SettingsSectionShell>
       <FormSection>
         <FormSectionHeader>
-          <FormSectionTitle>Providers</FormSectionTitle>
+          <FormSectionTitle>{t("Providers")}</FormSectionTitle>
           <FormSectionDescription>
-            Connect the AI providers you want to use in AOS.
+            {t("Connect the AI providers you want to use in AOS.")}
           </FormSectionDescription>
         </FormSectionHeader>
         <FormSectionContent>
@@ -139,9 +140,9 @@ export function UserAgentsSection() {
 
       <FormSection>
         <FormSectionHeader>
-          <FormSectionTitle>Models</FormSectionTitle>
+          <FormSectionTitle>{t("Models")}</FormSectionTitle>
           <FormSectionDescription>
-            Pick the model AOS uses for each kind of work.
+            {t("Pick the model AOS uses for each kind of work.")}
           </FormSectionDescription>
         </FormSectionHeader>
         <FormSectionContent>

@@ -5,6 +5,7 @@ import { TodoItem } from "./components/todo-item";
 import { Button } from "@/components/ui/button";
 import { TodoDialogUpsert } from "./components/todo-dialog-upsert";
 import type { Todo } from "@/features/task/interfaces/todo.interfaces";
+import { t } from "@/lib/i18n";
 
 interface TodoWidgetProps {
   taskId: string;
@@ -26,7 +27,7 @@ export function TodoWidget({ taskId }: TodoWidgetProps) {
   return (
     <SplitPageLayout.Widget>
       <SplitPageLayout.WidgetHeader>
-        <SplitPageLayout.WidgetTitle>Todos</SplitPageLayout.WidgetTitle>
+        <SplitPageLayout.WidgetTitle>{t("Todos")}</SplitPageLayout.WidgetTitle>
         <div className="ml-auto gap-2 flex items-center">
           {todos.length > 0 && (
             <span className="text-xs text-muted-foreground">{progressPct}%</span>
@@ -42,12 +43,12 @@ export function TodoWidget({ taskId }: TodoWidgetProps) {
         <SplitPageLayout.WidgetItem>
           <Flag className="size-3.5 shrink-0 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">
-            {finishedCount} / {todos.length} todos finished
+            {finishedCount} / {todos.length} {t("todos finished")}
           </span>
         </SplitPageLayout.WidgetItem>
         {todos.length === 0 && (
           <SplitPageLayout.WidgetItem>
-            <span className="text-xs text-muted-foreground">No todos yet.</span>
+            <span className="text-xs text-muted-foreground">{t("No todos yet.")}</span>
           </SplitPageLayout.WidgetItem>
         )}
         {todos.map((todo) => (

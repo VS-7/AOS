@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { useTemplates } from "../../contexts/templates.context";
+import { t } from "@/lib/i18n";
 
 export function SelectedTemplateDetail() {
   const { selectedTemplate, selectedTemplateId, isCreateMode, form } =
@@ -20,11 +21,11 @@ export function SelectedTemplateDetail() {
 
   return (
     <SplitPageLayout.DetailTabs defaultValue="overview">
-      <SplitPageLayout.DetailTab value="overview" label="Overview">
+      <SplitPageLayout.DetailTab value="overview" label={t("Overview")}>
         <SplitPageLayout.Widget>
           <SplitPageLayout.WidgetHeader>
             <SplitPageLayout.WidgetTitle>
-              Properties
+              {t("Properties")}
             </SplitPageLayout.WidgetTitle>
           </SplitPageLayout.WidgetHeader>
           <SplitPageLayout.WidgetContent>
@@ -36,7 +37,7 @@ export function SelectedTemplateDetail() {
                   <SplitPageLayout.WidgetItem>
                     <Puzzle className="size-3.5 shrink-0 text-muted-foreground" />
                     <span className="w-14 shrink-0 text-xs text-muted-foreground">
-                      Skill
+                      {t("Skill")}
                     </span>
                     <FormControl>
                       <Input
@@ -60,7 +61,7 @@ export function SelectedTemplateDetail() {
                   <SplitPageLayout.WidgetItem>
                     <FolderOutput className="size-3.5 shrink-0 text-muted-foreground" />
                     <span className="w-14 shrink-0 text-xs text-muted-foreground">
-                      Output
+                      {t("Output")}
                     </span>
                     <FormControl>
                       <Input
@@ -92,7 +93,7 @@ export function SelectedTemplateDetail() {
 
         <SplitPageLayout.Widget>
           <SplitPageLayout.WidgetHeader>
-            <SplitPageLayout.WidgetTitle>Schema</SplitPageLayout.WidgetTitle>
+            <SplitPageLayout.WidgetTitle>{t("Schema")}</SplitPageLayout.WidgetTitle>
           </SplitPageLayout.WidgetHeader>
           <SplitPageLayout.WidgetContent>
             <FormField
@@ -101,7 +102,7 @@ export function SelectedTemplateDetail() {
               render={({ field }) => (
                 <FormItem className="w-full space-y-2">
                   <FormLabel className="text-xs text-muted-foreground">
-                    JSON schema for template variables
+                    {t("JSON schema for template variables")}
                   </FormLabel>
                   <FormControl>
                     <Textarea

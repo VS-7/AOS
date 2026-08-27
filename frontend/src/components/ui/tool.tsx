@@ -17,6 +17,7 @@ import { CodeBlock } from "./code-block";
 import { DotmSquare4 } from "./dotm-square-4";
 import { Shimmer } from "./shimmer";
 import { AgentToolThinkingHelper } from "@/features/agent/presentation/helpers/agent-tool-thinking.helper";
+import { t } from "@/lib/i18n";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -192,7 +193,7 @@ export type ToolInputProps = ComponentProps<"div"> & { input: unknown };
 export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
   <div className={cn("space-y-1.5 overflow-hidden", className)} {...props}>
     <h4 className="font-bold text-[9px] text-muted-foreground/30 uppercase tracking-widest pl-1">
-      Parameters
+      {t("Parameters")}
     </h4>
     <div className="rounded-md bg-muted/20 border border-border/10 overflow-hidden">
       <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />

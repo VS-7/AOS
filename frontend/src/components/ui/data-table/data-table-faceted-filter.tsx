@@ -17,6 +17,7 @@ import {
 } from "../command";
 import { useDataTable } from "./data-table-provider";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 interface DataTableFacetedFilterProps {
   id: string;
@@ -116,7 +117,7 @@ export function DataTableFacetedFilter({
         <Command>
           <CommandInput placeholder={label} />
           <CommandList>
-            <CommandEmpty>No results found.</CommandEmpty>
+            <CommandEmpty>{t("No results found.")}</CommandEmpty>
             <CommandGroup>
               {options.map((option) => {
                 const isSelected = selectedValues.includes(option.value);
@@ -148,7 +149,7 @@ export function DataTableFacetedFilter({
                     onSelect={handleClear}
                     className="justify-center text-center"
                   >
-                    Clear filters
+                    {t("Clear filters")}
                   </CommandItem>
                 </CommandGroup>
               </>

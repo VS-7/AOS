@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useActiveThemeMode } from "@/features/theme/presentation/hooks/use-active-theme-mode";
+import { t } from "@/lib/i18n";
 
 /**
  * Skill install targets with SVGL logos (light/dark variants from svgl.app).
@@ -71,7 +72,7 @@ export function AddSkillDropdown() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="outline" size="sm" className="gap-1.5">
-          Add skill to...
+          {t("Add skill to...")}
           <HugeiconsIcon
             icon={ArrowDown01Icon}
             className="size-3.5 opacity-60"
@@ -92,7 +93,7 @@ export function AddSkillDropdown() {
               <DropdownMenuItem
                 className="gap-3 py-2"
                 onSelect={() => {
-                  toast.message("Coming soon", {
+                  toast.message(t("Coming soon"), {
                     description: `Skill install for ${target.label} will be available in a future update.`,
                   });
                 }}

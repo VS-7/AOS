@@ -31,6 +31,7 @@ import {
 } from "@/features/model/services/model-provider.service";
 import { ProviderUpsertDialog } from "./provider-upsert-dialog";
 import { useProviderLogo } from "../hooks/use-provider-logo";
+import { t } from "@/lib/i18n";
 
 function isSubscriptionAuth(provider: ModelProvider) {
   return provider.auth.mode !== "api-key";
@@ -105,7 +106,7 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
     <div className="rounded-xl border border-border bg-secondary/50 overflow-hidden divide-y divide-border">
       {connected.length === 0 && (
         <div className="flex items-center justify-between p-4 text-sm text-muted-foreground">
-          <span>No providers connected yet.</span>
+          <span>{t("No providers connected yet.")}</span>
         </div>
       )}
 
@@ -147,7 +148,7 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
               <DropdownMenuContent align="end" sideOffset={6} className="w-44">
                 <DropdownMenuItem onSelect={() => setEditing(provider)}>
                   <HugeiconsIcon icon={PencilEdit01Icon} className="size-4" />
-                  <span>Edit</span>
+                  <span>{t("Edit")}</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -155,7 +156,7 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
                   onSelect={() => handleDisconnect(provider)}
                 >
                   <HugeiconsIcon icon={Cancel01Icon} className="size-4" />
-                  <span>Disconnect</span>
+                  <span>{t("Disconnect")}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -172,14 +173,14 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
               className="w-full justify-start gap-2 text-muted-foreground"
             >
               <HugeiconsIcon icon={PlusSignIcon} className="size-4" />
-              Connect
+              {t("Connect")}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" sideOffset={6} className="w-72 p-1">
             {subscriptionAvailable.length > 0 && (
               <>
                 <DropdownMenuLabel className="px-2 py-1 text-[11px]">
-                  Subscription
+                  {t("Subscription")}
                 </DropdownMenuLabel>
                 {subscriptionAvailable.map((provider) => (
                   <DropdownMenuItem
@@ -229,7 +230,7 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
 
             {available.length === 0 && (
               <div className="px-2 py-3 text-center text-xs text-muted-foreground">
-                All providers are connected.
+                {t("All providers are connected.")}
               </div>
             )}
           </DropdownMenuContent>

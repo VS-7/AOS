@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { Form, FormControl, FormField } from "@/components/ui/form";
 import { cn } from "@/lib/utils";
 import type { TaskComment } from "@/features/task/interfaces/comment.interfaces";
+import { t } from "@/lib/i18n";
 import {
   CommentItem,
   type CommentThreadNode,
@@ -178,7 +179,7 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
             <ChevronDown
               className={`size-4 transition-transform duration-200 ${isOpen ? "rotate-0" : "rotate-180"}`}
             />
-            Comments{" "}
+            {t("Comments")}{" "}
             <Badge
               className="rounded-md flex items-center gap-1 px-2"
               variant="outline"
@@ -201,8 +202,7 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
 
           {!isLoadingComments && thread.length === 0 && (
             <div className="px-4 py-6 text-sm text-muted-foreground">
-              No comments yet. Start the thread with context, decisions, or next
-              steps.
+              {t("No comments yet. Start the thread with context, decisions, or next steps.")}
             </div>
           )}
 
@@ -227,7 +227,7 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
                     <div className="flex items-center justify-between text-sm border-b bg-background px-4 py-3">
                       <div className="flex items-center gap-2 font-medium text-foreground">
                         <CornerDownRight className="size-4 text-muted-foreground" />
-                        Replying to {replyTarget.comment.author}
+                        {t("Replying to")} {replyTarget.comment.author}
                       </div>
                       <Button
                         variant="ghost"
@@ -237,7 +237,7 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
                         onClick={() => setReplyTarget(null)}
                       >
                         <X className="size-4" />
-                        <span className="sr-only">Cancel reply</span>
+                        <span className="sr-only">{t("Cancel reply")}</span>
                       </Button>
                     </div>
                   )}
@@ -248,7 +248,7 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
                         variant="secondary"
                         className="rounded-md px-2 py-0.5 text-[11px]"
                       >
-                        Auto-mention enabled
+                        {t("Auto-mention enabled")}
                       </Badge>
                     </div>
                   )}
@@ -284,7 +284,7 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
                           disabled
                         >
                           <Paperclip className="size-4" />
-                          <span className="sr-only">Attach file</span>
+                          <span className="sr-only">{t("Attach file")}</span>
                         </Button>
                         <Button
                           size="icon"

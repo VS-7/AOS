@@ -4,6 +4,7 @@ import type { TaskAttachment } from "@/features/task/interfaces/comment.interfac
 import { Badge } from "@/components/ui/badge";
 import { aos } from "@/app/aos";
 import { cn, getDisplayName, getIconForExtension } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 const TEXT_FILE_EXTENSIONS = new Set([
   "txt",
@@ -116,7 +117,7 @@ export function AttachmentItem({ attachment }: { attachment: TaskAttachment }) {
       <div className="flex items-center max-w-xs">
         <Button variant="ghost" size="icon" className={cn("size-8 rounded-md")} type="button" disabled>
           <MoreHorizontal className="size-4" />
-          <span className="sr-only">More attachment actions</span>
+          <span className="sr-only">{t("More attachment actions")}</span>
         </Button>
       </div>
     </div>

@@ -77,6 +77,7 @@ func New(cfg Config) http.Handler {
 	r.Post("/logout", s.logout)
 	r.Get("/session", s.session)
 	r.Post("/password", s.changePassword)
+	r.Post("/profile", s.updateProfile)
 	r.Get("/users", s.users)
 	return r
 }
@@ -237,6 +238,34 @@ func (s *server) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, map[string]any{})
+}
+
+// updateProfile changes the signed-in account's name and email.
+//
+// Same shape as session on the way out — {"user": {...}} — so the interface
+// can drop the answer straight into the store it read session into, rather
+// than reconciling two projections of one account.
+func (s *server) updateProfile(w http.ResponseWriter, r *http.Request) {
+	user, err := s.authenticate(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	var in struct {
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	}
+	if !s.decode(w, r, &in) {
+		return
+	}
+	updated, err := s.svc.UpdateProfile(r.Context(), auth.UpdateProfileInput{
+		UserID: user.ID, Name: in.Name, Email: in.Email,
+	})
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, map[string]any{"user": updated})
 }
 
 func (s *server) authenticate(r *http.Request) (*auth.User, error) {

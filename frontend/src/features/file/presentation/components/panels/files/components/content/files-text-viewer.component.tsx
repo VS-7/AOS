@@ -5,6 +5,7 @@ import { aos } from "@/app/aos";
 
 import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces";
 import { buildMonacoTheme, resolveMonacoLanguage } from "../../helpers/files-editor.helper";
+import { t } from "@/lib/i18n";
 
 /**
  * The one divergence from the original in this file, and a deliberate one.
@@ -120,7 +121,7 @@ export function FilesTextViewer({
     return (
       <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
         <LoaderCircle className="size-4 animate-spin" />
-        Loading file content...
+        {t("Loading file content...")}
       </div>
     );
   }
@@ -139,7 +140,7 @@ export function FilesTextViewer({
         loading={
           <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
             <LoaderCircle className="size-4 animate-spin" />
-            Loading editor...
+            {t("Loading editor...")}
           </div>
         }
         onChange={(value) => {
@@ -193,7 +194,7 @@ export function FilesTextViewer({
         // for the moment before it while the Monaco chunk arrives.
         <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
-          Loading editor...
+          {t("Loading editor...")}
         </div>
       )}
 

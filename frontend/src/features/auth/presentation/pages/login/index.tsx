@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { LogInIcon } from "lucide-react";
 import { useRouter } from "@tanstack/react-router";
+import { t } from "@/lib/i18n";
 
 export const LoginPage = aos.page("/login")
   .withMetadata({
@@ -26,12 +27,12 @@ export const LoginPage = aos.page("/login")
       e.preventDefault();
 
       if (!email.trim()) {
-        toast.error("Please enter your email.");
+        toast.error(t("Please enter your email."));
         return;
       }
 
       if (!password.trim()) {
-        toast.error("Please enter your password.");
+        toast.error(t("Please enter your password."));
         return;
       }
 
@@ -50,7 +51,7 @@ export const LoginPage = aos.page("/login")
           return;
         }
 
-        toast.success("Authenticated successfully!");
+        toast.success(t("Authenticated successfully!"));
         router.navigate({ to: "/" });
       } catch (error: unknown) {
         const message =
@@ -73,7 +74,7 @@ export const LoginPage = aos.page("/login")
               </div>
 
               <h1 className="text-3xl font-bold tracking-tight">
-                Log in to AOS
+                {t("Log in to AOS")}
               </h1>
 
               <form
@@ -82,7 +83,7 @@ export const LoginPage = aos.page("/login")
               >
                 <Input
                   type="email"
-                  placeholder="Email"
+                  placeholder={t("Email")}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isLoading}
@@ -92,7 +93,7 @@ export const LoginPage = aos.page("/login")
                 />
                 <Input
                   type="password"
-                  placeholder="Password"
+                  placeholder={t("Password")}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
@@ -111,7 +112,7 @@ export const LoginPage = aos.page("/login")
               </form>
 
               <p className="text-xs text-muted-foreground">
-                © Nubler Digital LTDA
+                {t("© Nubler Digital LTDA")}
               </p>
             </div>
           </div>

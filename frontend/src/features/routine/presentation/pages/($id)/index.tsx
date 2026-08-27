@@ -64,6 +64,7 @@ import {
 import { RoutineTriggersField } from "@/features/routine/presentation/components/triggers";
 import { ROUTINE_STATUS_CONFIG } from "@/features/routine/presentation/consts/routine";
 import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
+import { t } from "@/lib/i18n";
 import {
   RoutineTriggerFormSchema,
   RoutineTriggersHelper,
@@ -195,7 +196,7 @@ export const RoutineUpsertPage = aos
             return;
           }
 
-          toast.success("Routine updated.");
+          toast.success(t("Routine updated."));
           router.invalidate();
           return;
         }
@@ -207,7 +208,7 @@ export const RoutineUpsertPage = aos
           return;
         }
 
-        toast.success("Routine created.");
+        toast.success(t("Routine created."));
         router.invalidate();
         router.navigate({
           to: "/routines/$id",
@@ -222,7 +223,7 @@ export const RoutineUpsertPage = aos
     const { mutate: deleteRoutine, loading: isDeleting } =
       aos.client.routine.delete.useMutation({
         onSuccess: async () => {
-          toast.success("Routine deleted.");
+          toast.success(t("Routine deleted."));
           await router.invalidate();
           await router.navigate({ to: "/" });
         },
@@ -333,29 +334,28 @@ export const RoutineUpsertPage = aos
                                   >
                                     <Trash2 />
                                     <span className="sr-only">
-                                      Delete routine
+                                      {t("Delete routine")}
                                     </span>
                                   </Button>
                                 </TooltipTrigger>
                               </AlertDialogTrigger>
                               <TooltipContent sideOffset={8}>
-                                Delete routine
+                                {t("Delete routine")}
                               </TooltipContent>
                             </Tooltip>
                             <AlertDialogContent size="sm">
                               <AlertDialogHeader>
                                 <AlertDialogTitle>
-                                  Delete this routine?
+                                  {t("Delete this routine?")}
                                 </AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  This action removes{" "}
-                                  <strong>{routine?.name}</strong> and all its
-                                  runs.
+                                  {t("This action removes")}{" "}
+                                  <strong>{routine?.name}</strong> {t("and all its runs.")}
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel disabled={isDeleting}>
-                                  Cancel
+                                  {t("Cancel")}
                                 </AlertDialogCancel>
                                 <AlertDialogAction
                                   variant="destructive"
@@ -418,10 +418,10 @@ export const RoutineUpsertPage = aos
                       name="name"
                       render={({ field }) => (
                         <FormItem className="space-y-2">
-                          <FormLabel className="opacity-60">Name</FormLabel>
+                          <FormLabel className="opacity-60">{t("Name")}</FormLabel>
                           <FormControl>
                             <Input
-                              placeholder="Daily Report"
+                              placeholder={t("Daily Report")}
                               className="h-auto rounded-none border-0 bg-transparent px-0 py-0 text-2xl font-semibold shadow-none focus-visible:ring-0"
                               {...field}
                             />
@@ -441,13 +441,13 @@ export const RoutineUpsertPage = aos
                         <TabsSubtleItem
                           index={0}
                           icon={Settings2}
-                          label="Settings"
+                          label={t("Settings")}
                         />
                         {isEditMode ? (
                           <TabsSubtleItem
                             index={1}
                             icon={History}
-                            label="Run History"
+                            label={t("Run History")}
                           />
                         ) : null}
                       </TabsSubtle>
@@ -477,8 +477,8 @@ export const RoutineUpsertPage = aos
                             <MarkdownEditor
                               value={field.value ?? ""}
                               onValueChange={field.onChange}
-                              title="Prompt"
-                              placeholder="Enter the system prompt for this routine..."
+                              title={t("Prompt")}
+                              placeholder={t("Enter the system prompt for this routine...")}
                             />
                             <FormMessage />
                           </FormItem>
@@ -515,14 +515,14 @@ export const RoutineUpsertPage = aos
                 <SplitPageLayout.DetailTabs defaultValue="overview">
                   <SplitPageLayout.DetailTab
                     value="overview"
-                    label="Overview"
+                    label={t("Overview")}
                     icon={PlayIcon}
                   >
                     <div className="space-y-3">
                       <SplitPageLayout.Widget>
                         <SplitPageLayout.WidgetHeader>
                           <SplitPageLayout.WidgetTitle>
-                            Configuration
+                            {t("Configuration")}
                           </SplitPageLayout.WidgetTitle>
                         </SplitPageLayout.WidgetHeader>
                         <SplitPageLayout.WidgetContent>
@@ -538,7 +538,7 @@ export const RoutineUpsertPage = aos
                                   <SplitPageLayout.WidgetItem>
                                     <TagIcon className="size-3.5 shrink-0 text-muted-foreground" />
                                     <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                                      Status
+                                      {t("Status")}
                                     </span>
 
                                     <DropdownMenu>
@@ -574,7 +574,7 @@ export const RoutineUpsertPage = aos
                                     className={`size-3.5 shrink-0 text-muted-foreground`}
                                   />
                                   <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                                    Agent
+                                    {t("Agent")}
                                   </span>
 
                                   <DropdownMenu>

@@ -29,8 +29,10 @@ import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/ui/logo";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { FolderInput } from "@/components/ui/folder-input";
 import { cn } from "@/lib/utils";
 import { PLACEHOLDER_IMAGE } from "@/assets/placeholder";
+import { t } from "@/lib/i18n";
 
 interface OnboardingFormProps {
   /** Called once the account (and, best-effort, the workspace region) exist. */
@@ -49,18 +51,20 @@ interface WizardData {
   timezone: string;
   city: string;
   country: string;
+  workspaceName: string;
+  workspacePath: string;
   orchestratorName: string;
   tone: Tone;
   style: Style;
   autonomy: number;
 }
 
-const STEPS = ["welcome", "user", "security", "region", "orchestrator", "init"] as const;
+const STEPS = ["welcome", "user", "security", "region", "workspace", "orchestrator", "init"] as const;
 type Step = (typeof STEPS)[number];
 
-// Only "welcome" through "orchestrator" count toward "n of 5" — init is the
-// submission itself, not a fifth thing to fill in.
-const FORM_STEPS: Step[] = ["welcome", "user", "security", "region", "orchestrator"];
+// Only "welcome" through "orchestrator" count toward the progress bar — init
+// is the submission itself, not another thing to fill in.
+const FORM_STEPS: Step[] = ["welcome", "user", "security", "region", "workspace", "orchestrator"];
 
 function defaultData(): WizardData {
   let timezone = "UTC";
@@ -79,6 +83,8 @@ function defaultData(): WizardData {
     timezone,
     city: "",
     country: "",
+    workspaceName: "",
+    workspacePath: "",
     orchestratorName: "",
     tone: "friendly",
     style: "balanced",
@@ -154,6 +160,9 @@ export function OnboardingForm({ onDone }: OnboardingFormProps): JSX.Element {
     if (step === "security") {
       if (data.password.length < 12) return "Use at least 12 characters — this account can run shell commands on this machine.";
       if (data.password !== data.confirmPassword) return "Passwords don't match.";
+    }
+    if (step === "workspace") {
+      if (!data.workspaceName.trim()) return "Name your workspace.";
     }
     return null;
   }
@@ -285,6 +294,7 @@ export function OnboardingForm({ onDone }: OnboardingFormProps): JSX.Element {
                 {step === "user" && <UserStep data={data} update={update} />}
                 {step === "security" && <SecurityStep data={data} update={update} />}
                 {step === "region" && <RegionStep data={data} update={update} />}
+                {step === "workspace" && <WorkspaceStep data={data} update={update} />}
                 {step === "orchestrator" && <OrchestratorStep data={data} update={update} />}
                 {isInitStep && <InitStep data={data} onError={handleInitError} onDone={onDone} />}
               </motion.div>
@@ -326,7 +336,7 @@ export function OnboardingForm({ onDone }: OnboardingFormProps): JSX.Element {
               <div className="flex items-center gap-2">
                 {!isFirstStep && (
                   <Button type="button" variant="secondary" className="rounded-full" onClick={goBack}>
-                    Previous
+                    {t("Previous")}
                   </Button>
                 )}
                 <Button type="button" className="rounded-full" onClick={goNext}>
@@ -381,10 +391,9 @@ function WelcomeStep(): JSX.Element {
       </main>
       <footer className="p-4">
         <div className="flex max-w-[36rem] mx-auto flex-col items-center gap-2 text-center">
-          <h2 className="text-base font-semibold tracking-tight">Welcome to AOS</h2>
+          <h2 className="text-base font-semibold tracking-tight">{t("Welcome to AOS")}</h2>
           <p className="text-base text-muted-foreground">
-            AOS runs agents against your own workspace, with your own credentials, on your own
-            machine. Let's set up your account.
+            {t("AOS runs agents against your own workspace, with your own credentials, on your own machine. Let's set up your account.")}
           </p>
         </div>
       </footer>
@@ -407,22 +416,22 @@ function UserStep({ data, update }: { data: WizardData; update: Update }): JSX.E
     <div className="flex flex-col items-center justify-center h-full px-8 py-8">
       <div className="w-full max-w-md space-y-6">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">A bit about you</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-foreground">{t("A bit about you")}</h2>
           <p className="text-sm text-muted-foreground leading-relaxed mt-1">
-            This helps your copilot identify you and personalize your local workspace.
+            {t("This helps your copilot identify you and personalize your local workspace.")}
           </p>
         </div>
 
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="ob-name" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Full Name
+              {t("Full Name")}
             </Label>
             <div className="relative">
               <User className="w-4 h-4 text-muted-foreground/60 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <Input
                 id="ob-name"
-                placeholder="e.g. Ada Lovelace"
+                placeholder={t("e.g. Ada Lovelace")}
                 className="pl-10 h-11 bg-muted/20 border-border/60 rounded-xl focus-visible:ring-primary/20 transition-all"
                 autoFocus
                 value={data.name}
@@ -434,7 +443,7 @@ function UserStep({ data, update }: { data: WizardData; update: Update }): JSX.E
 
           <div className="space-y-2">
             <Label htmlFor="ob-email" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Email Address
+              {t("Email Address")}
             </Label>
             <div className="relative">
               <Mail className="w-4 h-4 text-muted-foreground/60 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -442,7 +451,7 @@ function UserStep({ data, update }: { data: WizardData; update: Update }): JSX.E
                 id="ob-email"
                 type="email"
                 autoComplete="email"
-                placeholder="you@example.com"
+                placeholder={t("you@example.com")}
                 className="pl-10 h-11 bg-muted/20 border-border/60 rounded-xl focus-visible:ring-primary/20 transition-all"
                 value={data.email}
                 onChange={(e) => update("email", e.target.value)}
@@ -450,7 +459,7 @@ function UserStep({ data, update }: { data: WizardData; update: Update }): JSX.E
               />
             </div>
             <p className="text-[11px] text-muted-foreground/80 leading-normal pl-1">
-              Stored locally for workspace session identity and local commits.
+              {t("Stored locally for workspace session identity and local commits.")}
             </p>
           </div>
         </div>
@@ -495,17 +504,16 @@ function SecurityStep({ data, update }: { data: WizardData; update: Update }): J
     <div className="flex flex-col items-center justify-center h-full px-8 py-8">
       <div className="w-full max-w-md space-y-6">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">Your space, your security</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-foreground">{t("Your space, your security")}</h2>
           <p className="text-sm text-muted-foreground leading-relaxed mt-1">
-            Set a password for this account — it can run shell commands on this machine, so make
-            it a strong one.
+            {t("Set a password for this account — it can run shell commands on this machine, so make it a strong one.")}
           </p>
         </div>
 
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="ob-password" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Password
+              {t("Password")}
             </Label>
             <div className="relative">
               <Lock className="w-4 h-4 text-muted-foreground/60 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -513,7 +521,7 @@ function SecurityStep({ data, update }: { data: WizardData; update: Update }): J
                 id="ob-password"
                 type={showPassword ? "text" : "password"}
                 autoComplete="new-password"
-                placeholder="Enter a strong password"
+                placeholder={t("Enter a strong password")}
                 className="pl-10 pr-10 h-11 bg-muted/20 border-border/60 rounded-xl focus-visible:ring-primary/20 transition-all"
                 autoFocus
                 value={data.password}
@@ -535,7 +543,7 @@ function SecurityStep({ data, update }: { data: WizardData; update: Update }): J
 
           <div className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground font-medium">Password Strength</span>
+              <span className="text-muted-foreground font-medium">{t("Password Strength")}</span>
               <span className={cn("font-medium transition-colors", data.password ? "text-foreground" : "text-muted-foreground")}>
                 {strength.label}
               </span>
@@ -575,7 +583,7 @@ function SecurityStep({ data, update }: { data: WizardData; update: Update }): J
 
           <div className="space-y-2">
             <Label htmlFor="ob-confirm" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Confirm Password
+              {t("Confirm Password")}
             </Label>
             <div className="relative">
               <Lock className="w-4 h-4 text-muted-foreground/60 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -583,7 +591,7 @@ function SecurityStep({ data, update }: { data: WizardData; update: Update }): J
                 id="ob-confirm"
                 type={showConfirm ? "text" : "password"}
                 autoComplete="new-password"
-                placeholder="Re-enter your password"
+                placeholder={t("Re-enter your password")}
                 className="pl-10 pr-10 h-11 bg-muted/20 border-border/60 rounded-xl focus-visible:ring-primary/20 transition-all"
                 value={data.confirmPassword}
                 onChange={(e) => update("confirmPassword", e.target.value)}
@@ -604,7 +612,7 @@ function SecurityStep({ data, update }: { data: WizardData; update: Update }): J
 
           <div className="pt-2 border-t border-border/30 flex items-center gap-2 text-[11px] text-muted-foreground/80">
             <span className="shrink-0">🔒</span>
-            <span>Zero-knowledge — this password is hashed on this machine and never leaves it.</span>
+            <span>{t("Zero-knowledge — this password is hashed on this machine and never leaves it.")}</span>
           </div>
         </div>
       </div>
@@ -636,20 +644,20 @@ function RegionStep({ data, update }: { data: WizardData; update: Update }): JSX
     <div className="flex flex-col items-center justify-center h-full px-6 py-10">
       <div className="w-full max-w-md space-y-8">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">Language &amp; Region</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-foreground">{t("Language & Region")}</h2>
           <p className="text-sm text-muted-foreground leading-relaxed mt-1">
-            Pick your language and local timezone so your copilot speaks to you naturally.
+            {t("Pick your language and local timezone so your copilot speaks to you naturally.")}
           </p>
         </div>
 
         <div className="space-y-5 bg-muted/20 border border-border/40 p-6 rounded-2xl backdrop-blur-sm">
           <div className="space-y-2">
             <Label htmlFor="ob-language" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Primary Language
+              {t("Primary Language")}
             </Label>
             <Select value={data.language} onValueChange={(v) => update("language", v)}>
               <SelectTrigger id="ob-language" className="h-11 bg-background/60 border-border/60 rounded-xl focus:ring-primary/20 transition-all w-full">
-                <SelectValue placeholder="Select primary language" />
+                <SelectValue placeholder={t("Select primary language")} />
               </SelectTrigger>
               <SelectContent className="rounded-xl border-border/60 max-h-56">
                 {LANGUAGES.map((lang) => (
@@ -663,13 +671,13 @@ function RegionStep({ data, update }: { data: WizardData; update: Update }): JSX
 
           <div className="space-y-2">
             <Label htmlFor="ob-timezone" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Timezone
+              {t("Timezone")}
             </Label>
             <div className="relative">
               <Clock className="w-4 h-4 text-muted-foreground/60 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <Input
                 id="ob-timezone"
-                placeholder="e.g. America/Sao_Paulo"
+                placeholder={t("e.g. America/Sao_Paulo")}
                 className="pl-10 h-11 bg-background/60 border-border/60 rounded-xl focus-visible:ring-primary/20 transition-all"
                 value={data.timezone}
                 onChange={(e) => update("timezone", e.target.value)}
@@ -680,13 +688,13 @@ function RegionStep({ data, update }: { data: WizardData; update: Update }): JSX
           <div className="grid grid-cols-2 gap-3 pt-1">
             <div className="space-y-2">
               <Label htmlFor="ob-city" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                City <span className="normal-case text-muted-foreground/60 font-normal">(optional)</span>
+                {t("City")} <span className="normal-case text-muted-foreground/60 font-normal">{t("(optional)")}</span>
               </Label>
               <div className="relative">
                 <MapPin className="w-3.5 h-3.5 text-muted-foreground/60 absolute left-3 top-1/2 -translate-y-1/2" />
                 <Input
                   id="ob-city"
-                  placeholder="São Paulo"
+                  placeholder={t("São Paulo")}
                   className="pl-8 h-10 bg-background/60 border-border/60 rounded-xl text-sm focus-visible:ring-primary/20 transition-all"
                   value={data.city}
                   onChange={(e) => update("city", e.target.value)}
@@ -696,16 +704,77 @@ function RegionStep({ data, update }: { data: WizardData; update: Update }): JSX
 
             <div className="space-y-2">
               <Label htmlFor="ob-country" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Country <span className="normal-case text-muted-foreground/60 font-normal">(optional)</span>
+                {t("Country")} <span className="normal-case text-muted-foreground/60 font-normal">{t("(optional)")}</span>
               </Label>
               <Input
                 id="ob-country"
-                placeholder="Brazil"
+                placeholder={t("Brazil")}
                 className="h-10 bg-background/60 border-border/60 rounded-xl text-sm focus-visible:ring-primary/20 transition-all"
                 value={data.country}
                 onChange={(e) => update("country", e.target.value)}
               />
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Workspace
+// ---------------------------------------------------------------------------
+
+/**
+ * Where the work will live.
+ *
+ * This step did not exist, and its absence was the single most expensive
+ * defect in the application: onboarding created the account, said "your
+ * workspace is live", and registered no workspace at all. The daemon then had
+ * nothing to serve — the sidebar showed "No Workspace", the switcher was
+ * empty, and there was no way to make one from the interface, because the only
+ * button that creates a workspace lives inside that switcher.
+ *
+ * The directory is optional on purpose. Leaving it empty is the right default
+ * for somebody who opened an application and does not have a repository in
+ * mind: the daemon creates one under its own state directory
+ * (`workspace_create` with no `path`). Pointing it at an existing repository
+ * is the other real case, and the picker is there for it.
+ */
+function WorkspaceStep({ data, update }: { data: WizardData; update: Update }): JSX.Element {
+  return (
+    <div className="flex flex-col items-center justify-center h-full px-8 py-10">
+      <div className="w-full max-w-sm space-y-6">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">{t("Your first workspace")}</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            {t("A workspace is a folder your agents work in. Everything they write — agents, tasks, notes — is a file inside it.")}
+          </p>
+        </div>
+
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="ob-ws-name">{t("Workspace name")}</Label>
+            <Input
+              id="ob-ws-name"
+              placeholder={t("e.g. Acme Corp")}
+              className="h-10 bg-background/60 border-border/60 rounded-xl text-sm focus-visible:ring-primary/20 transition-all"
+              value={data.workspaceName}
+              onChange={(e) => update("workspaceName", e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="ob-ws-path">{t("Folder (optional)")}</Label>
+            <FolderInput
+              value={data.workspacePath}
+              onChange={(value) => update("workspacePath", value)}
+              placeholder={t("Leave empty and AOS picks a folder for you")}
+              inputClassName="h-10 bg-background/60 border-border/60 rounded-xl text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("Point this at a Git repository to have your agents work directly on it.")}
+            </p>
           </div>
         </div>
       </div>
@@ -735,23 +804,23 @@ function OrchestratorStep({ data, update }: { data: WizardData; update: Update }
     <div className="flex flex-col items-center justify-center h-full px-8 py-10">
       <div className="w-full max-w-sm space-y-6">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight">Meet your copilot</h2>
-          <p className="text-sm text-muted-foreground mt-1">Give it a name and a style — it'll adapt from there.</p>
+          <h2 className="text-xl font-semibold tracking-tight">{t("Meet your copilot")}</h2>
+          <p className="text-sm text-muted-foreground mt-1">{t("Give it a name and a style — it'll adapt from there.")}</p>
         </div>
 
         <div className="space-y-5">
           <div className="space-y-2">
-            <Label htmlFor="ob-orch-name">Name</Label>
+            <Label htmlFor="ob-orch-name">{t("Name")}</Label>
             <Input
               id="ob-orch-name"
-              placeholder="e.g. Atlas, Nova, Sage..."
+              placeholder={t("e.g. Atlas, Nova, Sage...")}
               value={data.orchestratorName}
               onChange={(e) => update("orchestratorName", e.target.value)}
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Tone</Label>
+            <Label>{t("Tone")}</Label>
             <div className="flex flex-wrap divide-x rounded-md border w-fit bg-background/30 overflow-hidden">
               {TONES.map((tone) => {
                 const Icon = tone.icon;
@@ -775,7 +844,7 @@ function OrchestratorStep({ data, update }: { data: WizardData; update: Update }
           </div>
 
           <div className="space-y-2">
-            <Label>Response style</Label>
+            <Label>{t("Response style")}</Label>
             <div className="flex flex-wrap divide-x rounded-md border w-fit bg-background/30 overflow-hidden">
               {STYLES.map((style) => {
                 const Icon = style.icon;
@@ -799,7 +868,7 @@ function OrchestratorStep({ data, update }: { data: WizardData; update: Update }
           </div>
 
           <div className="space-y-2">
-            <Label>Autonomy level</Label>
+            <Label>{t("Autonomy level")}</Label>
             <Slider
               value={data.autonomy}
               onChange={(v) => update("autonomy", v as number)}
@@ -809,14 +878,13 @@ function OrchestratorStep({ data, update }: { data: WizardData; update: Update }
               showValue={false}
             />
             <div className="flex justify-between text-[11px] text-muted-foreground pt-1">
-              <span>Asks permission</span>
-              <span>Fully autonomous</span>
+              <span>{t("Asks permission")}</span>
+              <span>{t("Fully autonomous")}</span>
             </div>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            These preferences aren't wired to a running orchestrator yet — the one this workspace
-            gets is seeded automatically when it's created.
+            {t("These preferences aren't wired to a running orchestrator yet — the one this workspace gets is seeded automatically when it's created.")}
           </p>
         </div>
       </div>
@@ -862,6 +930,34 @@ function stepReducer(state: InitState, action: InitAction): InitState {
   }
 }
 
+/**
+ * Registers the first workspace, unless the installation already has one.
+ *
+ * The check matters on a second run of onboarding against a daemon that was
+ * already set up (a reinstalled application over a live state directory):
+ * creating a second workspace there would split the person's work in two
+ * without saying so.
+ */
+async function ensureWorkspace(data: WizardData): Promise<void> {
+  const listed = (await client.invoke("workspace_list", {
+    _reasoning: "onboarding is finishing and needs to know whether a workspace already exists",
+  })) as { workspaces?: unknown[] } | undefined;
+  if ((listed?.workspaces?.length ?? 0) > 0) return;
+
+  const path = data.workspacePath.trim();
+  await client.invoke("workspace_create", {
+    name: data.workspaceName.trim() || `${data.name.trim() || "My"} workspace`,
+    ...(path ? { path } : {}),
+    orchestrator: {
+      ...(data.orchestratorName.trim() ? { name: data.orchestratorName.trim() } : {}),
+      tone: data.tone,
+      style: data.style,
+      autonomy: data.autonomy,
+    },
+    _reasoning: "onboarding is creating the installation's first workspace",
+  });
+}
+
 function InitStep({
   data,
   onError,
@@ -899,6 +995,18 @@ function InitStep({
         // The account exists and the person is signed in either way; a
         // region preference that didn't save is not worth failing over.
       }
+
+      // The workspace. This is the step that was missing, and it is not
+      // optional: without a registered workspace the daemon has nothing to
+      // serve, so the sidebar reads "No Workspace", the switcher is empty and
+      // every workspace-scoped screen shows an empty state that looks like a
+      // bug — which is exactly what a fresh installation did.
+      //
+      // The orchestrator's name, tone, style and autonomy travel with it.
+      // `workspace_create` has taken them since it was written; the wizard
+      // collected all four and sent none, so the copilot somebody named on
+      // the previous screen was always called Atlas.
+      await ensureWorkspace(data);
 
       dispatch({ type: "COMPLETE" });
       // A short beat so the "Ready" stage is actually seen before AuthGate

@@ -17,6 +17,7 @@ import { aos } from "@/app/aos";
 import { ProjectHelper } from "@/features/project/presentation/helpers/project.helper";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AddSquareIcon } from "@hugeicons/core-free-icons";
+import { t } from "@/lib/i18n";
 
 function getCurrentProjectId(pathname: string): string | undefined {
   if (!pathname.startsWith("/projects/")) return undefined;
@@ -51,9 +52,9 @@ export function WorkspaceSidebarProjectsGroupMenu() {
     >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton tooltip="Projects">
+          <SidebarMenuButton tooltip={t("Projects")}>
             <Folder />
-            <span>Projects</span>
+            <span>{t("Projects")}</span>
             <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
           </SidebarMenuButton>
         </CollapsibleTrigger>
@@ -66,7 +67,7 @@ export function WorkspaceSidebarProjectsGroupMenu() {
                     icon={AddSquareIcon}
                     className="size-3.5 text-muted-foreground"
                   />
-                  <span className="truncate">New project</span>
+                  <span className="truncate">{t("New project")}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenuMotionItem>
@@ -94,7 +95,7 @@ export function WorkspaceSidebarProjectsGroupMenu() {
             })}
             {projects.length === 0 ? (
               <span className="px-2 text-xs text-muted-foreground/60">
-                No projects yet
+                {t("No projects yet")}
               </span>
             ) : null}
           </SidebarMenuSub>

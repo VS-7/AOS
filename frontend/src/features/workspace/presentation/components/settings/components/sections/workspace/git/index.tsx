@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { WorkspaceGitSchema } from "@/features/workspace/schemas/workspace.schema";
 import { toast } from "sonner";
 import { AppError } from "@/core/errors/aos.error";
+import { t } from "@/lib/i18n";
 
 export function WorkspaceGitSection() {
   const router = useRouter();
@@ -52,7 +53,7 @@ export function WorkspaceGitSection() {
         return;
       }
 
-      toast.success("Git settings updated successfully!");
+      toast.success(t("Git settings updated successfully!"));
       router.invalidate();
     },
   });
@@ -62,8 +63,8 @@ export function WorkspaceGitSection() {
       <SettingsSectionShell>
         <FormSection>
           <FormSectionHeader>
-            <FormSectionTitle>Workflow</FormSectionTitle>
-            <FormSectionDescription>Basic git automation behavior.</FormSectionDescription>
+            <FormSectionTitle>{t("Workflow")}</FormSectionTitle>
+            <FormSectionDescription>{t("Basic git automation behavior.")}</FormSectionDescription>
           </FormSectionHeader>
           <FormSectionContent className="divide-y divide-border">
             <FormField
@@ -72,11 +73,11 @@ export function WorkspaceGitSection() {
               render={({ field }) => (
                 <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                   <div className="flex-1 space-y-0.5">
-                    <FormLabel>Branch prefix</FormLabel>
-                    <FormDescription>Prefix used when creating new branches.</FormDescription>
+                    <FormLabel>{t("Branch prefix")}</FormLabel>
+                    <FormDescription>{t("Prefix used when creating new branches.")}</FormDescription>
                   </div>
                   <FormControl>
-                    <Input className="max-w-50" placeholder="e.g. agent/" {...field} />
+                    <Input className="max-w-50" placeholder={t("e.g. agent/")} {...field} />
                   </FormControl>
                 </FormItem>
               )}
@@ -87,8 +88,8 @@ export function WorkspaceGitSection() {
               render={({ field }) => (
                 <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                   <div className="space-y-0.5">
-                    <FormLabel>Always force push</FormLabel>
-                    <FormDescription>Enable force pushing by default on agent branches.</FormDescription>
+                    <FormLabel>{t("Always force push")}</FormLabel>
+                    <FormDescription>{t("Enable force pushing by default on agent branches.")}</FormDescription>
                   </div>
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -101,8 +102,8 @@ export function WorkspaceGitSection() {
 
         <FormSection>
           <FormSectionHeader>
-            <FormSectionTitle>Instructions</FormSectionTitle>
-            <FormSectionDescription>Tell agents how to format git messages.</FormSectionDescription>
+            <FormSectionTitle>{t("Instructions")}</FormSectionTitle>
+            <FormSectionDescription>{t("Tell agents how to format git messages.")}</FormSectionDescription>
           </FormSectionHeader>
           <FormSectionContent className="divide-y divide-border">
             <FormField
@@ -111,11 +112,11 @@ export function WorkspaceGitSection() {
               render={({ field }) => (
                 <FormItem className="gap-4 p-4">
                   <div className="mb-4 space-y-0.5">
-                    <FormLabel>Commit instructions</FormLabel>
-                    <FormDescription>Custom rules for writing commit messages.</FormDescription>
+                    <FormLabel>{t("Commit instructions")}</FormLabel>
+                    <FormDescription>{t("Custom rules for writing commit messages.")}</FormDescription>
                   </div>
                   <FormControl>
-                    <Textarea placeholder="Instructions here..." className="min-h-25" {...field} />
+                    <Textarea placeholder={t("Instructions here...")} className="min-h-25" {...field} />
                   </FormControl>
                 </FormItem>
               )}
@@ -126,11 +127,11 @@ export function WorkspaceGitSection() {
               render={({ field }) => (
                 <FormItem className="gap-4 p-4">
                   <div className="mb-4 space-y-0.5">
-                    <FormLabel>Pull request instructions</FormLabel>
-                    <FormDescription>Custom rules for writing PR descriptions.</FormDescription>
+                    <FormLabel>{t("Pull request instructions")}</FormLabel>
+                    <FormDescription>{t("Custom rules for writing PR descriptions.")}</FormDescription>
                   </div>
                   <FormControl>
-                    <Textarea placeholder="Instructions here..." className="min-h-25" {...field} />
+                    <Textarea placeholder={t("Instructions here...")} className="min-h-25" {...field} />
                   </FormControl>
                 </FormItem>
               )}

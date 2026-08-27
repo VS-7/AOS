@@ -9,6 +9,7 @@ import { GoalsListSection } from "./components/list/components/goal-list-section
 import { GOAL_STATUS_ORDER } from "../../consts/goal";
 import { useGoalsContext } from "./context";
 import { GoalsFilter } from "./components/header/filter";
+import { t } from "@/lib/i18n";
 
 const GoalsHeader = React.memo(function GoalsHeader() {
   const { searchDraft, handleSearchChange } = useGoalsContext();
@@ -18,7 +19,7 @@ const GoalsHeader = React.memo(function GoalsHeader() {
     <PageSecondaryHeader className="justify-between px-4 py-2">
       <div className="flex items-center gap-3">
         <h1 className="text-sm font-semibold tracking-tight text-foreground select-none pl-2">
-          Goals
+          {t("Goals")}
         </h1>
         <div className="relative flex items-center h-8 w-44 sm:w-56 rounded-md bg-transparent transition-colors">
           <Search className="absolute left-2.5 size-3.5 text-muted-foreground pointer-events-none" />
@@ -26,7 +27,7 @@ const GoalsHeader = React.memo(function GoalsHeader() {
             type="text"
             value={searchDraft}
             onChange={(event) => handleSearchChange(event.target.value)}
-            placeholder="Search goals..."
+            placeholder={t("Search goals...")}
             className="h-8 pl-8 pr-2.5 py-0 border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:bg-transparent placeholder:text-muted-foreground/50 text-xs md:text-sm"
           />
         </div>
@@ -42,7 +43,7 @@ const GoalsHeader = React.memo(function GoalsHeader() {
           }
         >
           <Plus data-icon="inline-start" />
-          Add goal
+          {t("Add goal")}
         </Button>
       </div>
     </PageSecondaryHeader>

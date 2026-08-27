@@ -25,6 +25,7 @@ import { useTasksContext } from "@/features/task/presentation/pages/(main)/conte
 import { aos } from "@/app/aos";
 import { Icon } from "@/components/ui/icon";
 import { ProjectHelper } from "@/features/project/presentation/helpers/project.helper";
+import { t } from "@/lib/i18n";
 
 export function TasksFilter() {
   const {
@@ -225,7 +226,7 @@ export function TasksFilter() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-48">
           {taskTypes.length === 0 && (
-            <DropdownMenuItem disabled>No types available</DropdownMenuItem>
+            <DropdownMenuItem disabled>{t("No types available")}</DropdownMenuItem>
           )}
           {taskTypes.map((type) => {
             const workspaceType = currentWorkspace?.tasks?.find(
@@ -272,7 +273,7 @@ export function TasksFilter() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
           {projects.length === 0 && (
-            <DropdownMenuItem disabled>No projects available</DropdownMenuItem>
+            <DropdownMenuItem disabled>{t("No projects available")}</DropdownMenuItem>
           )}
           {projects.map((project) => (
             <DropdownMenuCheckboxItem
@@ -311,7 +312,7 @@ export function TasksFilter() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
           {goals.length === 0 && (
-            <DropdownMenuItem disabled>No goals available</DropdownMenuItem>
+            <DropdownMenuItem disabled>{t("No goals available")}</DropdownMenuItem>
           )}
           {goals.map((goal) => (
             <DropdownMenuCheckboxItem
@@ -334,7 +335,7 @@ export function TasksFilter() {
           onClick={clearFilters}
           className="h-8 text-xs text-muted-foreground hover:text-foreground px-2 gap-1"
         >
-          Clear
+          {t("Clear")}
           <X className="size-3" />
         </Button>
       )}

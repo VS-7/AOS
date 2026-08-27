@@ -168,3 +168,56 @@ func TestFilesDraggedOntoTheWindowReachTheInterface(t *testing.T) {
 		t.Fatal("file drops are disabled, so a dropped file is swallowed by the window")
 	}
 }
+
+// TestTheLinuxWindowIsOpaque is the ghosting fix.
+//
+// A translucent window makes Wails call setTransparent() on Linux
+// (webview_window_linux.go), which composites the whole window with an alpha
+// channel. WebKitGTK's accelerated compositor latches its clear colour at the
+// first composite and never refreshes it — Wails' own comment in that file
+// says so — and with an alpha channel there is no opaque clear at all, so a
+// re-tiled region keeps whatever was drawn there. What people saw was the
+// previous screen showing through the new one at low opacity.
+//
+// Solid alone is not enough: Wails only pins the clear colour when the colour
+// is *explicitly* opaque (`BackgroundColour.Alpha == 255`), leaving the
+// WebKitGTK default — white — behind a dark page otherwise. Both halves are
+// asserted here because either one alone leaves a visible defect.
+func TestTheLinuxWindowIsOpaque(t *testing.T) {
+	opts := windowOptions("http://127.0.0.1:5326")
+
+	if runtime.GOOS == "linux" {
+		if opts.BackgroundType != application.BackgroundTypeSolid {
+			t.Error("the Linux window is translucent — WebKitGTK will not clear what was on it before")
+		}
+		if opts.BackgroundColour.Alpha != 255 {
+			t.Errorf("background alpha = %d, want 255 so Wails pins the compositor's clear colour",
+				opts.BackgroundColour.Alpha)
+		}
+		return
+	}
+
+	// Everywhere else the translucency is the point: macOS draws a real
+	// NSVisualEffectView behind the page, and WebView2 composites correctly.
+	if opts.BackgroundType != application.BackgroundTypeTranslucent {
+		t.Errorf("background type = %v, want translucent on %s", opts.BackgroundType, runtime.GOOS)
+	}
+}
+
+// TestTranslucencyIsDecidedPerPlatform pins the predicate itself, so the
+// decision survives on the two platforms this test binary never runs on.
+func TestTranslucencyIsDecidedPerPlatform(t *testing.T) {
+	if got, want := translucentHere(), runtime.GOOS != "linux"; got != want {
+		t.Errorf("translucentHere() = %v on %s, want %v", got, runtime.GOOS, want)
+	}
+
+	// The solid answer must be a colour, not a zero value: Wails treats a
+	// non-opaque colour on a solid window as "no explicit background" and
+	// leaves WebKitGTK's white default latched.
+	if !translucentHere() && backgroundHere().Alpha != 255 {
+		t.Error("a solid window was given a background Wails will ignore")
+	}
+	if translucentHere() && backgroundHere().Alpha != 0 {
+		t.Error("a translucent window was given an opaque background, which defeats the backdrop")
+	}
+}

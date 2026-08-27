@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { aos } from "@/app/aos";
 import type { FileExplorerContext } from "@/features/file/interfaces/file.interfaces";
+import { t } from "@/lib/i18n";
 import {
   formatCreateDestinationPath,
   joinWorkspacePath,
@@ -146,7 +147,7 @@ export function FilesCreateNodeDialog({
             <FieldGroup>
               <div className="rounded-md border bg-muted/40 px-3 py-2">
                 <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                  Path
+                  {t("Path")}
                 </p>
                 <p className="mt-1 break-all font-mono text-xs text-foreground">
                   {previewPath}
@@ -158,7 +159,7 @@ export function FilesCreateNodeDialog({
                 name="name"
                 render={({ field }) => (
                   <Field>
-                    <Label htmlFor="files-create-name">Name</Label>
+                    <Label htmlFor="files-create-name">{t("Name")}</Label>
                     <FormControl>
                       <Input
                         {...field}
@@ -178,16 +179,16 @@ export function FilesCreateNodeDialog({
                 name="type"
                 render={({ field }) => (
                   <Field>
-                    <Label htmlFor="files-create-type">Type</Label>
+                    <Label htmlFor="files-create-type">{t("Type")}</Label>
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
                         <SelectTrigger id="files-create-type">
-                          <SelectValue placeholder="Select type" />
+                          <SelectValue placeholder={t("Select type")} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="file">File</SelectItem>
-                        <SelectItem value="directory">Folder</SelectItem>
+                        <SelectItem value="file">{t("File")}</SelectItem>
+                        <SelectItem value="directory">{t("Folder")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </Field>
@@ -201,10 +202,10 @@ export function FilesCreateNodeDialog({
                 variant="outline"
                 onClick={() => onOpenChange(false)}
               >
-                Cancel
+                {t("Cancel")}
               </Button>
               <Button type="submit" disabled={isCreating}>
-                Create
+                {t("Create")}
               </Button>
             </DialogFooter>
           </form>

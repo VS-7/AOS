@@ -6,6 +6,7 @@ import { ChevronDown } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { type ButtonProps } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { t } from "@/lib/i18n";
 import {
   Popover,
   PopoverContent,
@@ -166,7 +167,7 @@ export function DateTimeInput({
         {showTime ? (
           <div className="border-t p-3">
             <label className="mb-1 block text-xs text-muted-foreground">
-              Time
+              {t("Time")}
             </label>
             <Input
               type="time"

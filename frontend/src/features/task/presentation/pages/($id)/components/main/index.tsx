@@ -41,6 +41,7 @@ import { TaskAttachments } from "../attachments";
 import { TaskComments } from "../comments";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import type { UseChatResult } from "@/features/chat/presentation/hooks/use-chat";
+import { t } from "@/lib/i18n";
 
 interface TaskDetailsMainProps {
   task: TaskWithContext;
@@ -103,7 +104,7 @@ export function TaskDetailsMain({
         toast.error(result.error.message || "Failed to stop chat");
         return;
       }
-      toast.success("Chat stopped.");
+      toast.success(t("Chat stopped."));
       router.invalidate();
     },
     onError: (error: any) => {
@@ -257,10 +258,10 @@ export function TaskDetailsMain({
         params: { task: task.id },
         body: { priority },
       });
-      toast.success("Priority updated");
+      toast.success(t("Priority updated"));
       router.invalidate();
     } catch (error) {
-      toast.error("Failed to update priority");
+      toast.error(t("Failed to update priority"));
     }
   }
 
@@ -273,7 +274,7 @@ export function TaskDetailsMain({
       toast.success(assignee ? "Assigned" : "Unassigned");
       router.invalidate();
     } catch (error) {
-      toast.error("Failed to update assignee");
+      toast.error(t("Failed to update assignee"));
     }
   }
 
@@ -283,10 +284,10 @@ export function TaskDetailsMain({
         params: { task: task.id },
         body: { type },
       });
-      toast.success("Type updated");
+      toast.success(t("Type updated"));
       router.invalidate();
     } catch (error) {
-      toast.error("Failed to update type");
+      toast.error(t("Failed to update type"));
     }
   }
 
@@ -299,7 +300,7 @@ export function TaskDetailsMain({
       toast.success(dueAt ? "Due date set" : "Due date removed");
       router.invalidate();
     } catch (error) {
-      toast.error("Failed to update due date");
+      toast.error(t("Failed to update due date"));
     }
   }
 
@@ -309,7 +310,7 @@ export function TaskDetailsMain({
       toast.success(`Task ${task.id} deleted`);
       navigate({ to: "/tasks" });
     } catch (error) {
-      toast.error("Failed to delete task");
+      toast.error(t("Failed to delete task"));
     }
   }
 
@@ -348,21 +349,21 @@ export function TaskDetailsMain({
           <SplitPageLayout.ContentHeaderActions>
             <TooltipProvider>
               <HeaderIconButton
-                label="Copy issue link"
+                label={t("Copy issue link")}
                 shortcut="L"
                 onClick={handleCopyLink}
               >
                 <Link2 />
               </HeaderIconButton>
               <HeaderIconButton
-                label="Copy task ID"
+                label={t("Copy task ID")}
                 shortcut="I"
                 onClick={handleCopyId}
               >
                 <Copy />
               </HeaderIconButton>
               <HeaderIconButton
-                label="Copy branch name"
+                label={t("Copy branch name")}
                 shortcut="B"
                 onClick={handleCopyBranch}
               >
@@ -381,7 +382,7 @@ export function TaskDetailsMain({
                 }}
               >
                 <MessageSquare className="size-3.5" data-icon="inline-start" />
-                Open chat
+                {t("Open chat")}
               </Button>
             )}
             {showStopButton && (
@@ -400,7 +401,7 @@ export function TaskDetailsMain({
                 variant="outline"
               >
                 <Square data-icon="inline-start" />
-                Stop
+                {t("Stop")}
               </Button>
             )}
             {showStartButton && (
@@ -409,7 +410,7 @@ export function TaskDetailsMain({
                 onClick={handleStartTask}
               >
                 <Play data-icon="inline-start" />
-                Start
+                {t("Start")}
               </Button>
             )}
             {showContinueButton && (
@@ -418,7 +419,7 @@ export function TaskDetailsMain({
                 onClick={handleStartTask}
               >
                 <Play data-icon="inline-start" />
-                Continue
+                {t("Continue")}
               </Button>
             )}
             {showApproveButton && (
@@ -428,7 +429,7 @@ export function TaskDetailsMain({
                 onClick={() => void handleStatusSelect("finished")}
               >
                 <CheckIcon data-icon="inline-start" />
-                Aprove and mark as finished
+                {t("Aprove and mark as finished")}
               </Button>
             )}
           </SplitPageLayout.ContentHeaderActions>
@@ -452,9 +453,9 @@ export function TaskDetailsMain({
                 {task.checkpoint.reason || "Run interrupted"}
               </p>
               <p className="text-[11px] text-muted-foreground">
-                Stopped {new Date(task.checkpoint.stoppedAt).toLocaleString()}
+                {t("Stopped")} {new Date(task.checkpoint.stoppedAt).toLocaleString()}
                 {task.checkpoint.pendingTodoIds?.length ? (
-                  <> &middot; {task.checkpoint.pendingTodoIds.length} pending todos</>
+                  <> {t("&middot;")} {task.checkpoint.pendingTodoIds.length} {t("pending todos")}</>
                 ) : null}
               </p>
             </div>
@@ -479,10 +480,10 @@ export function TaskDetailsMain({
                 </AnimatedEmptyState.Carousel>
                 <AnimatedEmptyState.Content>
                   <AnimatedEmptyState.Title>
-                    No content defined
+                    {t("No content defined")}
                   </AnimatedEmptyState.Title>
                   <AnimatedEmptyState.Description>
-                    This task does not have a detailed description yet.
+                    {t("This task does not have a detailed description yet.")}
                   </AnimatedEmptyState.Description>
                 </AnimatedEmptyState.Content>
               </AnimatedEmptyState>
@@ -527,7 +528,7 @@ export function TaskDetailsMain({
             finishTransition.close();
             refresh();
           } catch (error) {
-            toast.error("Failed to finish task", {
+            toast.error(t("Failed to finish task"), {
               // @ts-expect-error - Expected
               description: error?.error?.message || error?.message || undefined,
             });

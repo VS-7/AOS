@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { SettingsContentContainer } from "../../../../../content-container";
 import { useTemplates } from "../../contexts/templates.context";
+import { t } from "@/lib/i18n";
 
 export function SelectedTemplateContent() {
   const {
@@ -54,10 +55,10 @@ export function SelectedTemplateContent() {
           </AnimatedEmptyState.Carousel>
           <AnimatedEmptyState.Content>
             <AnimatedEmptyState.Title>
-              No Template Selected
+              {t("No Template Selected")}
             </AnimatedEmptyState.Title>
             <AnimatedEmptyState.Description>
-              Select a template from the list or create a new one.
+              {t("Select a template from the list or create a new one.")}
             </AnimatedEmptyState.Description>
           </AnimatedEmptyState.Content>
         </AnimatedEmptyState>
@@ -94,7 +95,7 @@ export function SelectedTemplateContent() {
                   onClick={() => void handleCopyId()}
                 >
                   <Copy />
-                  <span className="sr-only">Copy template ID</span>
+                  <span className="sr-only">{t("Copy template ID")}</span>
                 </Button>
 
                 <AlertDialog>
@@ -107,20 +108,20 @@ export function SelectedTemplateContent() {
                       disabled={isDeleting}
                     >
                       <Trash2 />
-                      <span className="sr-only">Delete template</span>
+                      <span className="sr-only">{t("Delete template")}</span>
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent size="sm">
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Delete this template?</AlertDialogTitle>
+                      <AlertDialogTitle>{t("Delete this template?")}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This action removes{" "}
+                        {t("This action removes")}{" "}
                         <strong>{selectedTemplate.name}</strong> permanently.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel disabled={isDeleting}>
-                        Cancel
+                        {t("Cancel")}
                       </AlertDialogCancel>
                       <AlertDialogAction
                         variant="destructive"
@@ -168,10 +169,10 @@ export function SelectedTemplateContent() {
                 name="name"
                 render={({ field }) => (
                   <FormItem className="space-y-2">
-                    <FormLabel className="opacity-60">Name</FormLabel>
+                    <FormLabel className="opacity-60">{t("Name")}</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Plan"
+                        placeholder={t("Plan")}
                         className="h-auto rounded-none border-0 bg-transparent px-0 py-0 text-2xl font-semibold shadow-none focus-visible:ring-0"
                         {...field}
                         disabled={!isCreateMode}
@@ -179,8 +180,7 @@ export function SelectedTemplateContent() {
                     </FormControl>
                     {!isCreateMode ? (
                       <p className="text-xs text-muted-foreground">
-                        Template names stay stable after creation because they
-                        define the template ID.
+                        {t("Template names stay stable after creation because they define the template ID.")}
                       </p>
                     ) : null}
                     <FormMessage />
@@ -193,10 +193,10 @@ export function SelectedTemplateContent() {
                 name="description"
                 render={({ field }) => (
                   <FormItem className="space-y-2">
-                    <FormLabel className="opacity-60">Description</FormLabel>
+                    <FormLabel className="opacity-60">{t("Description")}</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Describe what this template generates and when it should be used."
+                        placeholder={t("Describe what this template generates and when it should be used.")}
                         className="min-h-10 max-h-48 resize-none rounded-none border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0"
                         {...field}
                         value={field.value ?? ""}
@@ -212,12 +212,12 @@ export function SelectedTemplateContent() {
                 name="content"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="opacity-60">Content</FormLabel>
+                    <FormLabel className="opacity-60">{t("Content")}</FormLabel>
                     <FormControl>
                       <MarkdownEditor
                         value={field.value ?? ""}
                         onValueChange={field.onChange}
-                        placeholder="Write the Liquid template body..."
+                        placeholder={t("Write the Liquid template body...")}
                       />
                     </FormControl>
                     <FormMessage />

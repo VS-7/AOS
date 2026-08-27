@@ -75,8 +75,19 @@
            it here, as this used to, was always false, so the desktop window
            painted its first frame opaque and then switched to translucent a
            moment later. */
-        var isDesktop = new URLSearchParams(window.location.search).has("daemon");
-        root.dataset.windows = isDesktop ? settings.windows || "blur" : "solid";
+        /* Linux is forced solid, whatever the theme says.
+
+           A translucent window there composites through WebKitGTK with an
+           alpha channel, and its compositor does not clear a re-tiled region —
+           so the screen you just left stays visible through the one you are
+           on, faintly. cmd/aos-desktop/platform.go's translucentHere is the
+           other half of this; both are needed, because a transparent body over
+           an opaque window still leaves the page's own layers uncleared. */
+        var params = new URLSearchParams(window.location.search);
+        var isDesktop = params.has("daemon");
+        var isLinux = params.get("platform") === "linux";
+        root.dataset.windows = isDesktop && !isLinux ? settings.windows || "blur" : "solid";
+        if (isLinux) root.dataset.platform = "linux";
       })();
     </script>
   </head>

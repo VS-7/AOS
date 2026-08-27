@@ -7,6 +7,7 @@ import { Avatar, AvatarAgentFallback } from "@/components/ui/avatar";
 import { aos } from "@/app/aos";
 import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
 import { ROUTINE_RESERVED_AGENT_CONFIG } from "@/features/routine/presentation/consts/routine";
+import { t } from "@/lib/i18n";
 
 interface SetRoutineAgentDropdownProps {
   currentAgent: string;
@@ -22,7 +23,7 @@ export function SetRoutineAgentDropdown({
   return (
     <div className="flex flex-col gap-1">
       <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-        Workspace targets
+        {t("Workspace targets")}
       </DropdownMenuLabel>
 
       {RoutineHelper.RESERVED_AGENTS.map((agentId) => (
@@ -51,12 +52,12 @@ export function SetRoutineAgentDropdown({
       <DropdownMenuSeparator />
 
       <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-        Agents
+        {t("Agents")}
       </DropdownMenuLabel>
 
       {agents.length === 0 ? (
         <div className="px-2 py-1 text-xs text-muted-foreground">
-          No agents available.
+          {t("No agents available.")}
         </div>
       ) : (
         agents.map((agent) => (

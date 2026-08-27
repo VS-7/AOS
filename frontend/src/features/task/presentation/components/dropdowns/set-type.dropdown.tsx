@@ -4,6 +4,7 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { aos } from "@/app/aos";
+import { t } from "@/lib/i18n";
 
 interface SetTypeDropdownProps {
   currentType?: string;
@@ -24,7 +25,7 @@ export function SetTypeDropdown({ currentType, onTypeChange }: SetTypeDropdownPr
   if (taskTypes.length === 0) {
     return (
       <DropdownMenuItem className="text-muted-foreground">
-        No task types available
+        {t("No task types available")}
       </DropdownMenuItem>
     );
   }
@@ -32,7 +33,7 @@ export function SetTypeDropdown({ currentType, onTypeChange }: SetTypeDropdownPr
   return (
     <div className="flex flex-col gap-1">
       <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-        Task Type
+        {t("Task Type")}
       </DropdownMenuLabel>
       {taskTypes.map((taskType) => (
         <DropdownMenuItem

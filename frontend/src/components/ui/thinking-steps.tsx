@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import type { BadgeColor } from "@/components/ui/badge";
+import { t } from "@/lib/i18n";
 
 // ─── ThinkingSteps (root) ───────────────────────────────────────────────────
 
@@ -327,7 +328,7 @@ function ThinkingStep({
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
                 className="flex shrink-0 items-center gap-1 text-destructive/90"
-                title="Error"
+                title={t("Error")}
               >
                 <XCircleIcon className="size-3.5" />
               </motion.span>

@@ -11,6 +11,7 @@ import { ButtonGroup } from "@/components/ui/button-group";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Trash2Icon } from "lucide-react";
+import { t } from "@/lib/i18n";
 
 interface ActivityTriggerRowProps {
   value: Extract<RoutineTriggerFormValue, { type: "activity" }>;
@@ -82,7 +83,7 @@ export function ActivityTriggerRow({
         </div>
 
         <div className="min-w-0 flex-1 flex items-center gap-2">
-          <span>When</span>
+          <span>{t("When")}</span>
           <p className="text-xs text-muted-foreground">
             {eventDefinition
               ? ActivityEventHelper.getDisplayLabel(eventDefinition)
@@ -99,7 +100,7 @@ export function ActivityTriggerRow({
             onClick={handleAddFilter}
           >
             <PlusIcon className="size-3.5" />
-            Add filter
+            {t("Add filter")}
           </Button>
 
           <Button
@@ -109,7 +110,7 @@ export function ActivityTriggerRow({
             className="self-center text-muted-foreground hover:text-destructive"
             onClick={onRemove}
           >
-            Remove
+            {t("Remove")}
           </Button>
         </div>
       </div>
@@ -123,7 +124,7 @@ export function ActivityTriggerRow({
                 onValueChange={(path) => handleUpdateFilter(index, { path })}
               >
                 <SelectTrigger className="!h-7 w-[128px] rounded-md border-border/70 bg-background/70 px-2 text-xs">
-                  <SelectValue placeholder="Field" />
+                  <SelectValue placeholder={t("Field")} />
                 </SelectTrigger>
                 <SelectContent>
                   {filterableFields.map((field) => (
@@ -147,7 +148,7 @@ export function ActivityTriggerRow({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="eq">equals</SelectItem>
-                  <SelectItem value="neq">not equals</SelectItem>
+                  <SelectItem value="neq">{t("not equals")}</SelectItem>
                   <SelectItem value="contains">contains</SelectItem>
                 </SelectContent>
               </Select>
@@ -157,7 +158,7 @@ export function ActivityTriggerRow({
                 onChange={(event) =>
                   handleUpdateFilter(index, { value: event.target.value })
                 }
-                placeholder="Value"
+                placeholder={t("Value")}
                 className="h-7 min-w-[120px] flex-1 rounded-md border-border/70 bg-background/70 px-2 !text-xs"
               />
 

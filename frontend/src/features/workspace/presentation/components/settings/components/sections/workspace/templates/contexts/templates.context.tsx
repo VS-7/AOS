@@ -9,6 +9,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { aos } from "@/app/aos";
 import type { Template } from "@/features/template/interfaces/template.interfaces";
+import { t } from "@/lib/i18n";
 
 const NEW_TEMPLATE_ID = "__new_template__";
 
@@ -111,7 +112,7 @@ export function TemplatesProvider({
       try {
         body = getTemplatePayload(values);
       } catch {
-        toast.error("Template schema must be valid JSON.");
+        toast.error(t("Template schema must be valid JSON."));
         return;
       }
 
@@ -125,7 +126,7 @@ export function TemplatesProvider({
           return;
         }
 
-        toast.success("Template created.");
+        toast.success(t("Template created."));
         await refreshTemplates();
         setSelectedTemplateFull(createdTemplate as Template);
         setSelectedTemplateId(createdTemplate.id);
@@ -153,7 +154,7 @@ export function TemplatesProvider({
         return;
       }
 
-      toast.success("Template updated.");
+      toast.success(t("Template updated."));
       await refreshTemplates();
       setSelectedTemplateFull(updatedTemplate as Template);
       form.reset(buildTemplateFormValues(updatedTemplate as Template));
@@ -163,7 +164,7 @@ export function TemplatesProvider({
   const { mutate: deleteTemplate, loading: isDeleting } =
     aos.client.template.delete.useMutation({
       onSuccess: async () => {
-        toast.success("Template deleted.");
+        toast.success(t("Template deleted."));
         await refreshTemplates();
         setSelectedTemplateId(null);
         setSelectedTemplateFull(undefined);

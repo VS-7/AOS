@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { AvatarAgentFallback } from "@/components/ui/avatar";
 import { SettingsContentContainer } from "../../../../../content-container";
 import { useAgents } from "../../contexts/agents.context";
+import { t } from "@/lib/i18n";
 
 export function AgentsSidebar() {
   const {
@@ -40,7 +41,7 @@ export function AgentsSidebar() {
     <>
       <SplitPageLayout.SidebarHeader>
         <SplitPageLayout.SearchInput
-          placeholder="Search agents..."
+          placeholder={t("Search agents...")}
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
         />
@@ -62,7 +63,7 @@ export function AgentsSidebar() {
             <AnimatedEmptyState className="border-none shadow-none py-12">
               <AnimatedEmptyState.Content>
                 <AnimatedEmptyState.Title>
-                  No agents found
+                  {t("No agents found")}
                 </AnimatedEmptyState.Title>
                 <AnimatedEmptyState.Description>
                   {searchQuery

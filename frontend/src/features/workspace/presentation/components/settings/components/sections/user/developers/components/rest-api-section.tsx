@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { aos } from "@/app/aos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { t } from "@/lib/i18n";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -64,7 +65,7 @@ export function DevelopersRestApiSection({
   const handleCopyToken = async () => {
     const value = apiToken ?? maskedToken;
     if (!value) {
-      toast.error("No token to copy");
+      toast.error(t("No token to copy"));
       return;
     }
     try {
@@ -73,7 +74,7 @@ export function DevelopersRestApiSection({
         apiToken ? "Full token copied to clipboard" : "Token preview copied",
       );
     } catch {
-      toast.error("Failed to copy");
+      toast.error(t("Failed to copy"));
     }
   };
 
@@ -88,7 +89,7 @@ export function DevelopersRestApiSection({
 
       const masked = `aos_...${result.token.slice(-4)}`;
       onTokenRevealed(result.token, masked);
-      toast.success("API token regenerated successfully!");
+      toast.success(t("API token regenerated successfully!"));
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to regenerate API token";
@@ -103,9 +104,9 @@ export function DevelopersRestApiSection({
   return (
     <FormSection>
       <FormSectionHeader>
-        <FormSectionTitle>REST API</FormSectionTitle>
+        <FormSectionTitle>{t("REST API")}</FormSectionTitle>
         <FormSectionDescription>
-          Manage tokens for programmatic access to the AOS API.
+          {t("Manage tokens for programmatic access to the AOS API.")}
         </FormSectionDescription>
       </FormSectionHeader>
 
@@ -119,7 +120,7 @@ export function DevelopersRestApiSection({
               />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">API Token</p>
+              <p className="text-sm font-medium text-foreground">{t("API Token")}</p>
               <p className="text-sm text-muted-foreground">
                 {hasToken
                   ? "Use this token for REST and MCP authentication."
@@ -173,7 +174,7 @@ export function DevelopersRestApiSection({
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
                   <AlertDialogAction
                     variant="destructive"
                     disabled={isRegenerating}
@@ -198,12 +199,12 @@ export function DevelopersRestApiSection({
                   className="size-8 shrink-0"
                   disabled={!hasToken && !apiToken}
                   onClick={() => void handleCopyToken()}
-                  aria-label="Copy API token"
+                  aria-label={t("Copy API token")}
                 >
                   <HugeiconsIcon icon={Copy01Icon} className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Copy full token</TooltipContent>
+              <TooltipContent>{t("Copy full token")}</TooltipContent>
             </Tooltip>
           </div>
         </FormSectionItem>
@@ -218,16 +219,16 @@ export function DevelopersRestApiSection({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">
-                API Documentation
+                {t("API Documentation")}
               </p>
               <p className="text-sm text-muted-foreground">
-                Open the interactive OpenAPI docs for this AOS instance.
+                {t("Open the interactive OpenAPI docs for this AOS instance.")}
               </p>
             </div>
           </div>
           <Button type="button" variant="ghost" size="sm" asChild>
             <a href={API_DOCS_URL} target="_blank" rel="noopener noreferrer">
-              Open docs
+              {t("Open docs")}
               <HugeiconsIcon icon={LinkSquare02Icon} className="size-3.5" />
             </a>
           </Button>

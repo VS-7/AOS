@@ -1,6 +1,6 @@
 import { AosStore } from "./builders/store";
 import { client, setWorkspace } from "@/lib/client";
-import { session, status, login, logout } from "@/lib/auth";
+import { session, status, login, logout, updateProfile, changePassword } from "@/lib/auth";
 import type {
   WorkspaceDirectoryAgent,
   WorkspaceDirectoryUser,
@@ -269,23 +269,83 @@ const workspaceStore = AosStore.create("workspace")
   )
   .addAction(
     "switch",
-    () =>
+    (ctx) =>
       /**
-       * Task 9 addition, disclosed stub: AOS is single-workspace (see
-       * `options` above) — there is nothing to switch to yet. Returns an
-       * explicit error rather than silently pretending success.
+       * Points every subsequent call at another workspace.
+       *
+       * This was a stub that returned "isn't wired up in this build yet",
+       * written when `options` was always empty and there was genuinely
+       * nothing to switch to. `workspace_list` fills that list now, so the
+       * stub was the only thing left refusing — including on the path
+       * `CreateWorkspaceDialog` takes right after creating one, which is
+       * how making a workspace ended in an error toast about switching to
+       * it.
+       *
+       * The id is published the same three ways the preload publishes it —
+       * the transport's header, the daemon's cookie, and this store — so a
+       * caller that reloads (see `switchWorkspace`) comes back addressing
+       * the workspace it asked for.
        */
-      async (_workspaceId: string) => ({
-        error: { message: "Switching workspaces isn't wired up in this build yet." },
-      }),
+      async (workspaceId: string) => {
+        const known = ctx.state.get().options.find((w) => w.id === workspaceId);
+        if (!known) {
+          return { error: { message: `No workspace ${workspaceId}.` } };
+        }
+        setWorkspace(workspaceId);
+        if (typeof document !== "undefined") {
+          document.cookie = `x-workspace-id=${encodeURIComponent(workspaceId)}; path=/; max-age=31536000; SameSite=Lax`;
+        }
+        try {
+          const resolved = await resolveWorkspaces(workspaceId);
+          if (resolved) {
+            ctx.state.set((state) => ({
+              ...state,
+              current: resolved.current,
+              options: resolved.options,
+            }));
+          }
+          return { error: undefined as { message: string } | undefined };
+        } catch (err) {
+          return {
+            error: { message: err instanceof Error ? err.message : "Could not switch workspace." },
+          };
+        }
+      },
   )
   .addAction(
     "deleteWorkspace",
-    () =>
-      /** Disclosed stub — same reasoning as `switch` above. */
-      async (_workspaceId: string) => ({
-        error: { message: "Deleting a workspace isn't wired up in this build yet." },
-      }),
+    (ctx) =>
+      /**
+       * Unregisters a workspace. `workspace_delete` is a real command (it
+       * forgets the registration; the directory on disk is left alone) —
+       * this used to refuse before asking.
+       */
+      async (workspaceId: string) => {
+        try {
+          await client.invoke("workspace_delete", {
+            id: workspaceId,
+            _reasoning: "the person asked to remove this workspace from the installation",
+          } as never);
+        } catch (err) {
+          return {
+            error: { message: err instanceof Error ? err.message : "Could not delete workspace." },
+          };
+        }
+        try {
+          const resolved = await resolveWorkspaces(
+            ctx.state.get().current?.id === workspaceId ? undefined : ctx.state.get().current?.id,
+          );
+          ctx.state.set((state) => ({
+            ...state,
+            current: resolved?.current ?? null,
+            options: resolved?.options ?? [],
+          }));
+        } catch {
+          // The delete landed; a failed re-read is a stale list, not a
+          // failed operation.
+        }
+        return { error: undefined as { message: string } | undefined };
+      },
   )
   .build();
 
@@ -357,24 +417,42 @@ const authStore = AosStore.create("auth")
   )
   .addAction(
     "updateProfile",
-    () =>
+    (ctx) =>
       /**
-       * Task 9 addition, disclosed stub: no equivalent in `lib/auth.ts`
-       * (AOS's profile-edit flow, if any, is out of this port's scope).
-       * Returns an explicit error rather than silently pretending success —
-       * see this file's top doc comment on the honest-empty-state policy.
+       * Real since `POST /api/auth/profile` exists (see
+       * `internal/domain/auth`'s `UpdateProfile`). It was a stub, which is
+       * why the account settings page could show a name and never change
+       * one.
        */
-      async (_params: unknown) => ({
-        error: { message: "Profile editing isn't wired up in this build yet." },
-      }),
+      async (params: { name: string; email: string; image?: string }) => {
+        try {
+          const { user } = await updateProfile(params.name, params.email);
+          ctx.state.set((state) => ({
+            ...state,
+            user: { ...(state.user ?? {}), ...user } as unknown as AuthSelfProfile,
+          }));
+          return { error: undefined as { message: string } | undefined };
+        } catch (err) {
+          return {
+            error: { message: err instanceof Error ? err.message : "Could not save the profile." },
+          };
+        }
+      },
   )
   .addAction(
     "updatePassword",
     () =>
-      /** Disclosed stub — same reasoning as `updateProfile` above. */
-      async (_params: unknown) => ({
-        error: { message: "Password change isn't wired up in this build yet." },
-      }),
+      /** Real, backed by `lib/auth.ts`'s `changePassword`. */
+      async (params: { currentPassword: string; newPassword: string }) => {
+        try {
+          await changePassword(params.currentPassword, params.newPassword);
+          return { error: undefined as { message: string } | undefined };
+        } catch (err) {
+          return {
+            error: { message: err instanceof Error ? err.message : "Could not change the password." },
+          };
+        }
+      },
   )
   .addAction(
     "refreshUser",
@@ -401,21 +479,51 @@ const authStore = AosStore.create("auth")
   )
   .build();
 
+/**
+ * Reads a list command into a store, tolerating the two shapes the daemon
+ * answers with: `{<key>: [...]}` for a wrapped list and a bare array for the
+ * commands that answer without a wrapper.
+ *
+ * Returns the previous value on failure rather than emptying the list: a
+ * transient error should not make a populated sidebar look like an empty
+ * workspace.
+ */
+async function loadList<T>(key: "projects_list" | "goals_list", field: string, previous: T[]): Promise<T[]> {
+  try {
+    const answer = (await client.invoke(key, {
+      _reasoning: "refreshing the sidebar list after it changed",
+    } as never)) as Record<string, unknown> | T[] | undefined;
+    if (Array.isArray(answer)) return answer as T[];
+    const items = (answer as Record<string, unknown>)?.[field];
+    return Array.isArray(items) ? (items as T[]) : previous;
+  } catch {
+    return previous;
+  }
+}
+
+/**
+ * These two used to be `async () => {}` — deliberately, because
+ * `project.list`/`goal.list` were dormant when they were written. They are
+ * registered commands now (`command-map.ts` maps both), so the no-op was the
+ * only thing left: the project and goal pages call `refresh()` after every
+ * create, update and delete, and nothing ever happened. Both stores also
+ * preload now, so the sidebar has something to show before anyone edits
+ * anything.
+ */
 const projectsStore = AosStore.create("projects")
   .withState({
     items: [] as Project[],
   })
+  .withPreload(async (ctx) => ({
+    ...ctx.state.get(),
+    items: await loadList<Project>("projects_list", "projects", ctx.state.get().items),
+  }))
   .addAction(
     "refresh",
-    () =>
-      /**
-       * Task 9 addition, no-op: `project.list` is dormant (`command-map.
-       * ts`) — this store never fetches, so there is nothing to
-       * re-fetch. The freshly-copied project detail page calls this
-       * after create/update/delete mutations; kept callable so those
-       * call sites compile without pretending a refetch happens.
-       */
-      async () => {},
+    (ctx) => async () => {
+      const items = await loadList<Project>("projects_list", "projects", ctx.state.get().items);
+      ctx.state.set((state) => ({ ...state, items }));
+    },
   )
   .build();
 
@@ -423,11 +531,16 @@ const goalsStore = AosStore.create("goals")
   .withState({
     items: [] as Goal[],
   })
+  .withPreload(async (ctx) => ({
+    ...ctx.state.get(),
+    items: await loadList<Goal>("goals_list", "goals", ctx.state.get().items),
+  }))
   .addAction(
     "refresh",
-    () =>
-      /** No-op — same reasoning as `projects`'s `refresh` above. */
-      async () => {},
+    (ctx) => async () => {
+      const items = await loadList<Goal>("goals_list", "goals", ctx.state.get().items);
+      ctx.state.set((state) => ({ ...state, items }));
+    },
   )
   .build();
 

@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TunnelUrlHelper } from "@/features/tunnel/presentation/helpers/tunnel-url.helper";
+import { t } from "@/lib/i18n";
 
 const tunnelEnableFormSchema = z.object({
   enabled: z.boolean(),
@@ -75,7 +76,7 @@ export function WorkspaceTunnelSection() {
           toast.success(`Tunnel started! URL: ${publicUrl}`);
         } else {
           await api.tunnel.stop.mutate();
-          toast.success("Tunnel stopped.");
+          toast.success(t("Tunnel stopped."));
         }
 
         await tunnelStatusQuery.refetch();
@@ -126,7 +127,7 @@ export function WorkspaceTunnelSection() {
           const publicUrl = result.data?.url ?? tunnelPublicUrl;
           toast.success(`Tunnel settings saved and started! URL: ${publicUrl}`);
         } else {
-          toast.success("Tunnel settings saved.");
+          toast.success(t("Tunnel settings saved."));
         }
 
         await tunnelStatusQuery.refetch();
@@ -152,10 +153,10 @@ export function WorkspaceTunnelSection() {
     try {
       await navigator.clipboard.writeText(tunnelPublicUrl);
       setCopied(true);
-      toast.success("URL copied to clipboard!");
+      toast.success(t("URL copied to clipboard!"));
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.error("Failed to copy URL");
+      toast.error(t("Failed to copy URL"));
     }
   };
 
@@ -171,15 +172,15 @@ export function WorkspaceTunnelSection() {
         <Form form={activationForm} className="flex flex-1 flex-col">
           <FormSection>
             <FormSectionHeader>
-              <FormSectionTitle>Tunnel</FormSectionTitle>
+              <FormSectionTitle>{t("Tunnel")}</FormSectionTitle>
               <FormSectionDescription>
-                Expose your local AOS instance through a Cloudflare Tunnel.
+                {t("Expose your local AOS instance through a Cloudflare Tunnel.")}
               </FormSectionDescription>
             </FormSectionHeader>
             <FormSectionContent className="divide-y divide-border">
               <div className="flex items-center justify-between gap-4 p-4">
                 <div className="space-y-0.5">
-                  <FormLabel>Status</FormLabel>
+                  <FormLabel>{t("Status")}</FormLabel>
                   <FormDescription>
                     {isBusy
                       ? "Applying tunnel settings..."
@@ -195,22 +196,22 @@ export function WorkspaceTunnelSection() {
                 {isBusy ? (
                   <Badge variant="outline" className="gap-1">
                     <Loader2 className="size-3 animate-spin text-blue-600" />
-                    Connecting
+                    {t("Connecting")}
                   </Badge>
                 ) : isTunnelOnline ? (
                   <Badge variant="outline" className="gap-1">
                     <CircleCheck className="size-3 text-emerald-400" />
-                    Online
+                    {t("Online")}
                   </Badge>
                 ) : isTunnelEnabled ? (
                   <Badge variant="outline" className="gap-1">
                     <CircleDot className="size-3 text-blue-600" />
-                    Connecting
+                    {t("Connecting")}
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="gap-1">
                     <Circle className="size-3 text-muted-foreground" />
-                    Offline
+                    {t("Offline")}
                   </Badge>
                 )}
               </div>
@@ -221,9 +222,9 @@ export function WorkspaceTunnelSection() {
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                     <div className="space-y-0.5">
-                      <FormLabel>Enable Tunnel</FormLabel>
+                      <FormLabel>{t("Enable Tunnel")}</FormLabel>
                       <FormDescription>
-                        Start cloudflared automatically with the saved hostname and token.
+                        {t("Start cloudflared automatically with the saved hostname and token.")}
                       </FormDescription>
                     </div>
                     <FormControl>
@@ -243,9 +244,9 @@ export function WorkspaceTunnelSection() {
         <Form form={credentialsForm} className="flex flex-1 flex-col">
           <FormSection>
             <FormSectionHeader>
-              <FormSectionTitle>Connection</FormSectionTitle>
+              <FormSectionTitle>{t("Connection")}</FormSectionTitle>
               <FormSectionDescription>
-                Configure the fixed hostname and Cloudflare tunnel token for this desktop.
+                {t("Configure the fixed hostname and Cloudflare tunnel token for this desktop.")}
               </FormSectionDescription>
             </FormSectionHeader>
             <FormSectionContent className="divide-y divide-border">
@@ -255,9 +256,9 @@ export function WorkspaceTunnelSection() {
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                     <div className="space-y-0.5">
-                      <FormLabel>Hostname</FormLabel>
+                      <FormLabel>{t("Hostname")}</FormLabel>
                       <FormDescription>
-                        The public URL for this tunnel, like `workspace.example.com`.
+                        {t("The public URL for this tunnel, like `workspace.example.com`.")}
                       </FormDescription>
                     </div>
                     <FormControl>
@@ -278,16 +279,16 @@ export function WorkspaceTunnelSection() {
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                     <div className="space-y-0.5">
-                      <FormLabel>Tunnel Token</FormLabel>
+                      <FormLabel>{t("Tunnel Token")}</FormLabel>
                       <FormDescription>
-                        Cloudflare token used to start the named tunnel.
+                        {t("Cloudflare token used to start the named tunnel.")}
                       </FormDescription>
                     </div>
                     <FormControl>
                       <div className="w-1/2">
                         <Input
                           type="password"
-                          placeholder="Cloudflare tunnel token"
+                          placeholder={t("Cloudflare tunnel token")}
                           autoComplete="off"
                           {...field}
                         />
@@ -298,7 +299,7 @@ export function WorkspaceTunnelSection() {
               />
 
               <div className="p-4 space-y-3">
-                <FormLabel>Public URL</FormLabel>
+                <FormLabel>{t("Public URL")}</FormLabel>
                 {tunnelPublicUrl ? (
                   <div className="flex items-center gap-2">
                     <Input
@@ -332,22 +333,22 @@ export function WorkspaceTunnelSection() {
                 ) : (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Loader2 className="size-4 animate-spin" />
-                    <span className="text-sm">Add a hostname to generate the public URL.</span>
+                    <span className="text-sm">{t("Add a hostname to generate the public URL.")}</span>
                   </div>
                 )}
                 <FormDescription>
-                  Share this URL to allow remote access to your AOS instance.
+                  {t("Share this URL to allow remote access to your AOS instance.")}
                 </FormDescription>
               </div>
 
               <div className="flex items-center justify-between p-4">
                 <div className="space-y-0.5">
-                  <FormLabel>Provider</FormLabel>
+                  <FormLabel>{t("Provider")}</FormLabel>
                   <FormDescription>
-                    Cloudflare Tunnel provides stable remote access for the desktop app.
+                    {t("Cloudflare Tunnel provides stable remote access for the desktop app.")}
                   </FormDescription>
                 </div>
-                <Badge variant="outline">Cloudflare</Badge>
+                <Badge variant="outline">{t("Cloudflare")}</Badge>
               </div>
             </FormSectionContent>
             <FormSectionFooter className="flex justify-end">

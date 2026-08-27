@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { springs } from "@/lib/springs";
 import { openChatTab } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
 import type { Run } from "@/features/routine/interfaces/routine.interfaces";
+import { t } from "@/lib/i18n";
 
 type RunTriggerFilter = NonNullable<Run["trigger"]>;
 type RunStatusFilter = Run["status"];
@@ -147,14 +148,14 @@ function RunStatusBadge({ status }: { status: Run["status"] }) {
         variant="secondary"
         className="border-transparent bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
       >
-        Succeeded
+        {t("Succeeded")}
       </Badge>
     );
   }
 
   return (
     <Badge variant="destructive" className="border-transparent">
-      Failed
+      {t("Failed")}
     </Badge>
   );
 }
@@ -181,10 +182,9 @@ function RunHistoryEmptyState({
         </div>
       </AnimatedEmptyState.Carousel>
       <AnimatedEmptyState.Content>
-        <AnimatedEmptyState.Title>No runs yet</AnimatedEmptyState.Title>
+        <AnimatedEmptyState.Title>{t("No runs yet")}</AnimatedEmptyState.Title>
         <AnimatedEmptyState.Description>
-          Fire this routine manually or wait for a trigger to start building
-          history.
+          {t("Fire this routine manually or wait for a trigger to start building history.")}
         </AnimatedEmptyState.Description>
       </AnimatedEmptyState.Content>
       {onRunNow ? (
@@ -312,7 +312,7 @@ export function RoutineRunHistoryToolbar({
                 ref={searchInputRef}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search runs..."
+                placeholder={t("Search runs...")}
                 className="px-0"
                 onKeyDown={(event) => {
                   if (event.key === "Escape") closeSearch();
@@ -322,7 +322,7 @@ export function RoutineRunHistoryToolbar({
                 <button
                   type="button"
                   onClick={closeSearch}
-                  aria-label="Close search"
+                  aria-label={t("Close search")}
                   className="flex size-5 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                   <X className="size-3.5" />
@@ -342,7 +342,7 @@ export function RoutineRunHistoryToolbar({
               type="button"
               variant="ghost"
               size="icon-sm"
-              aria-label="Search runs"
+              aria-label={t("Search runs")}
               onClick={openSearch}
             >
               <Search className="size-4" />
@@ -357,14 +357,14 @@ export function RoutineRunHistoryToolbar({
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label="Filter runs"
+            aria-label={t("Filter runs")}
             className={cn(activeFilterCount > 0 && "text-foreground")}
           >
             <ListFilter className="size-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuLabel>Trigger</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("Trigger")}</DropdownMenuLabel>
           {TRIGGER_FILTER_OPTIONS.map((option) => (
             <DropdownMenuCheckboxItem
               key={option.value}
@@ -375,7 +375,7 @@ export function RoutineRunHistoryToolbar({
             </DropdownMenuCheckboxItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuLabel>Status</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("Status")}</DropdownMenuLabel>
           {STATUS_FILTER_OPTIONS.map((option) => (
             <DropdownMenuCheckboxItem
               key={option.value}
@@ -389,7 +389,7 @@ export function RoutineRunHistoryToolbar({
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={clearFilters}>
-                Clear filters
+                {t("Clear filters")}
               </DropdownMenuItem>
             </>
           ) : null}
@@ -477,10 +477,10 @@ export function RoutineRunHistory({
 
       <div className="overflow-hidden rounded-lg border">
         <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,0.6fr)_auto] gap-2 border-b bg-muted/20 px-3 py-2 text-[11px] font-medium text-muted-foreground">
-          <span>Trigger</span>
-          <span>Triggered</span>
-          <span>Status</span>
-          <span>Duration</span>
+          <span>{t("Trigger")}</span>
+          <span>{t("Triggered")}</span>
+          <span>{t("Status")}</span>
+          <span>{t("Duration")}</span>
           <span className="w-8" />
         </div>
 
@@ -488,7 +488,7 @@ export function RoutineRunHistory({
           <RunHistoryEmptyState onRunNow={onRunNow} isFiring={isFiring} />
         ) : filteredRuns.length === 0 ? (
           <div className="px-3 py-8 text-center text-sm text-muted-foreground">
-            No runs match the current search or filters.
+            {t("No runs match the current search or filters.")}
           </div>
         ) : (
           <div className="divide-y">
@@ -531,7 +531,7 @@ export function RoutineRunHistory({
                     variant="ghost"
                     size="icon-sm"
                     className="text-muted-foreground"
-                    aria-label="Run actions"
+                    aria-label={t("Run actions")}
                   >
                     <Ellipsis className="size-4" />
                   </Button>

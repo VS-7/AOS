@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { aos } from "@/app/aos";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 /**
  * Sidebar footer account chip: avatar + name/email, settings gear, and
@@ -92,7 +93,7 @@ export function AppSidebarUserAccountDropdown({
                 }}
               >
                 <HugeiconsIcon icon={Logout01Icon} className="size-3.5" />
-                Logout
+                {t("Logout")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -105,7 +106,7 @@ export function AppSidebarUserAccountDropdown({
               "size-8 shrink-0 text-muted-foreground hover:bg-transparent hover:text-foreground",
               isSettingsActive && "text-foreground",
             )}
-            aria-label="Open settings"
+            aria-label={t("Open settings")}
             onClick={() => {
               aos.stores.viewport.actions.openSettings("user.general");
             }}

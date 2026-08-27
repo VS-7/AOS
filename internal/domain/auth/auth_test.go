@@ -552,3 +552,103 @@ func (c *steppingClock) advance(d time.Duration) {
 	defer c.mu.Unlock()
 	c.at = c.at.Add(d)
 }
+
+// TestUpdateProfileChangesWhatTheInterfaceShows.
+//
+// The name is what the sidebar, the account page and every "assigned to" line
+// render. Onboarding was the only place it could ever be set: the settings
+// screen offering to change it had nothing behind it, so the field accepted
+// edits and discarded them.
+func TestUpdateProfileChangesWhatTheInterfaceShows(t *testing.T) {
+	svc, _ := newService(t)
+	out := onboard(t, svc)
+
+	updated, err := svc.UpdateProfile(ctx(), auth.UpdateProfileInput{
+		UserID: out.User.ID, Name: "  Vitor Sérgio  ", Email: "  VITOR@Example.TEST  ",
+	})
+	if err != nil {
+		t.Fatalf("UpdateProfile: %v", err)
+	}
+	if updated.Name != "Vitor Sérgio" {
+		t.Errorf("name = %q, want it trimmed", updated.Name)
+	}
+	// Normalised the same way onboarding normalises it, or the address that
+	// logs in and the address on screen drift apart.
+	if updated.Email != "vitor@example.test" {
+		t.Errorf("email = %q, want it normalised", updated.Email)
+	}
+
+	read, err := svc.Get(ctx(), out.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read.Name != "Vitor Sérgio" {
+		t.Errorf("the change did not survive the store: %q", read.Name)
+	}
+}
+
+// TestUpdateProfileRefusesToBlankTheName. An account with no name is an
+// account nobody can point at in the interface.
+func TestUpdateProfileRefusesToBlankTheName(t *testing.T) {
+	svc, store := newService(t)
+	out := onboard(t, svc)
+	before := store.saves
+
+	if _, err := svc.UpdateProfile(ctx(), auth.UpdateProfileInput{
+		UserID: out.User.ID, Name: "   ", Email: out.User.Email,
+	}); !errors.Is(err, apperr.ErrInvalid) {
+		t.Fatalf("error = %v, want a validation refusal", err)
+	}
+	if store.saves != before {
+		t.Error("a refused update still wrote to the store")
+	}
+}
+
+// TestUpdateProfileRefusesAnEmailAnotherAccountHas. Login accepts either the
+// username or the email, so two accounts on one address makes which of them a
+// password opens a matter of iteration order.
+func TestUpdateProfileRefusesAnEmailAnotherAccountHas(t *testing.T) {
+	svc, store := newService(t)
+	out := onboard(t, svc)
+	store.mu.Lock()
+	store.users = append(store.users, auth.User{
+		ID: "u-second", Name: "Outra", Username: "outra", Email: "outra@example.test", Role: auth.Member,
+	})
+	store.mu.Unlock()
+
+	if _, err := svc.UpdateProfile(ctx(), auth.UpdateProfileInput{
+		UserID: out.User.ID, Name: "Vitor", Email: "outra@example.test",
+	}); !errors.Is(err, apperr.ErrConflict) {
+		t.Fatalf("error = %v, want a conflict", err)
+	}
+}
+
+// TestUpdateProfileKeepsTheEmailWhenNoneIsSent. A form that edits only the
+// name must not clear the address it did not touch.
+func TestUpdateProfileKeepsTheEmailWhenNoneIsSent(t *testing.T) {
+	svc, _ := newService(t)
+	out := onboard(t, svc)
+
+	updated, err := svc.UpdateProfile(ctx(), auth.UpdateProfileInput{
+		UserID: out.User.ID, Name: "Só o nome",
+	})
+	if err != nil {
+		t.Fatalf("UpdateProfile: %v", err)
+	}
+	if updated.Email != out.User.Email {
+		t.Errorf("email = %q, want it untouched (%q)", updated.Email, out.User.Email)
+	}
+}
+
+// TestUpdateProfileOfAnAccountThatIsNotThere says which account, rather than
+// writing a new one.
+func TestUpdateProfileOfAnAccountThatIsNotThere(t *testing.T) {
+	svc, _ := newService(t)
+	onboard(t, svc)
+
+	if _, err := svc.UpdateProfile(ctx(), auth.UpdateProfileInput{
+		UserID: "u-nobody", Name: "Ninguém",
+	}); !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("error = %v, want not found", err)
+	}
+}

@@ -21,6 +21,7 @@ import { useAlert } from "@/components/ui/alert-provider";
 import { getFileTabIcon } from "@/features/file/presentation/helpers/files-explorer.helper";
 import { requestCloseFileTab } from "@/features/file/presentation/helpers/request-close-file-tab.helper";
 import type { ViewportTabState } from "@/features/workspace/presentation/stores/viewport.store";
+import { t } from "@/lib/i18n";
 
 const tabIconTransition = springs.fast;
 
@@ -160,7 +161,7 @@ export function WorkspaceTabItem({
       <span className="min-w-0 flex-1 truncate">{getTabLabel(tab)}</span>
       {isDirty ? (
         <span
-          aria-label="Unsaved changes"
+          aria-label={t("Unsaved changes")}
           className="size-1.5 shrink-0 rounded-md bg-primary"
         />
       ) : null}

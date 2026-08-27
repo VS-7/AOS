@@ -14,6 +14,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { UpsertTaskTypeView } from "./views/upsert-task-type.view";
+import { t } from "@/lib/i18n";
 
 const taskTypesFormSchema = z.object({
   tasks: z.array(WorkspaceTaskTypeSchema).min(1, "At least one task type is required."),
@@ -70,7 +71,7 @@ export function WorkspaceTasksSection() {
         return;
       }
 
-      toast.success("Task settings updated successfully!");
+      toast.success(t("Task settings updated successfully!"));
     },
   });
 
@@ -111,7 +112,7 @@ export function WorkspaceTasksSection() {
 
   function handleDelete(index: number) {
     if (taskTypesFieldArray.fields.length === 1) {
-      toast.error("At least one task type is required.");
+      toast.error(t("At least one task type is required."));
       return;
     }
 
@@ -124,9 +125,9 @@ export function WorkspaceTasksSection() {
       <SettingsSectionShell className="relative">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-1">
-            <h1 className="text-sm font-semibold tracking-tight">Task types</h1>
+            <h1 className="text-sm font-semibold tracking-tight">{t("Task types")}</h1>
             <p className="text-sm text-muted-foreground">
-              Define the task taxonomy used across the workspace, including colors and agent instructions.
+              {t("Define the task taxonomy used across the workspace, including colors and agent instructions.")}
             </p>
           </div>
 
@@ -137,7 +138,7 @@ export function WorkspaceTasksSection() {
                   <SearchIcon />
                 </InputGroupAddon>
                 <InputGroupInput
-                  placeholder="Filter by name..."
+                  placeholder={t("Filter by name...")}
                   className="border-0 p-0 focus:bg-transparent"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
@@ -154,21 +155,21 @@ export function WorkspaceTasksSection() {
               }}
             >
               {!form.isLoading ? <PlusIcon /> : <Spinner />}
-              New task type
+              {t("New task type")}
             </Button>
           </div>
 
           <div className="rounded-md">
             <div className="grid grid-cols-[1.5fr_2fr_100px] items-center gap-4 px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              <div className="flex items-center gap-2">Name</div>
-              <div>Description</div>
-              <div className="text-right">Actions</div>
+              <div className="flex items-center gap-2">{t("Name")}</div>
+              <div>{t("Description")}</div>
+              <div className="text-right">{t("Actions")}</div>
             </div>
 
             <div className="flex flex-col divide-y rounded-md border">
               {filteredTasks.length === 0 ? (
                 <div className="flex h-32 flex-col items-center justify-center gap-2 text-muted-foreground">
-                  <p className="text-sm">No task types found</p>
+                  <p className="text-sm">{t("No task types found")}</p>
                 </div>
               ) : (
                 filteredTasks.map(({ field, index }) => (
@@ -186,7 +187,7 @@ export function WorkspaceTasksSection() {
                     <div className="min-w-0">
                       <span className="line-clamp-1 text-xs text-muted-foreground">
                         {field.description || (
-                          <span className="italic opacity-40">No description</span>
+                          <span className="italic opacity-40">{t("No description")}</span>
                         )}
                       </span>
                     </div>

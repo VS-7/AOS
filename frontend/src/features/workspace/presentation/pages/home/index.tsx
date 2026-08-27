@@ -43,6 +43,7 @@ import { InboxPanel } from "../../components/panels/inbox";
 import { TaskListRow } from "@/features/task/presentation/pages/(main)/components/list/components/task-list-row.component";
 import { GoalListRow } from "@/features/goal/presentation/pages/(main)/components/list/components/goal-list-row.component";
 import { WelcomeDialog } from "../../components/dialogs/welcome/welcome-dialog";
+import { t } from "@/lib/i18n";
 
 const TASK_TABS = TASK_STATUS_ORDER.map((status) => ({
   status,
@@ -154,7 +155,7 @@ export const HomePage = aos
                     </p>
 
                     <h1 className="text-xl font-semibold tracking-tight">
-                      <span className="text-muted-foreground">Hello,</span>{" "}
+                      <span className="text-muted-foreground">{t("Hello,")}</span>{" "}
                       {user.name}
                     </h1>
                   </div>
@@ -226,7 +227,7 @@ export const HomePage = aos
                         className="rounded-md"
                       >
                         <PlusSquare />
-                        Create
+                        {t("Create")}
                         <ChevronDown className="size-4 text-muted-foreground" />
                       </Button>
                     </PopoverTrigger>
@@ -235,9 +236,9 @@ export const HomePage = aos
                       className="w-64 rounded-xl border bg-card/95 p-1 shadow-lg backdrop-blur-xl"
                     >
                       <PopoverHeader className="px-3 py-2">
-                        <PopoverTitle>Create</PopoverTitle>
+                        <PopoverTitle>{t("Create")}</PopoverTitle>
                         <PopoverDescription className="text-xs">
-                          Start a new item in this workspace.
+                          {t("Start a new item in this workspace.")}
                         </PopoverDescription>
                       </PopoverHeader>
                       <div className="grid gap-1">
@@ -295,13 +296,13 @@ export const HomePage = aos
               <div className="grid gap-6">
                 <section>
                   <header className="flex items-center justify-between gap-4 py-4">
-                    <h2 className="text-md">Views</h2>
+                    <h2 className="text-md">{t("Views")}</h2>
                   </header>
                   <main className="flex gap-3">
                     {views.length === 0 && (
                       <div className="flex h-12 w-full items-center justify-center rounded-md border-2 border-dotted">
                         <span className="text-muted-foreground/60">
-                          No views on this workspace yet!
+                          {t("No views on this workspace yet!")}
                         </span>
                       </div>
                     )}
@@ -335,13 +336,13 @@ export const HomePage = aos
 
                 <section>
                   <header className="flex items-center justify-between gap-4 py-4">
-                    <h2 className="text-md">Artifacts</h2>
+                    <h2 className="text-md">{t("Artifacts")}</h2>
                   </header>
                   <main className="flex gap-3">
                     {artifacts.length === 0 && (
                       <div className="flex h-12 w-full items-center justify-center rounded-md border-2 border-dotted">
                         <span className="text-muted-foreground/60">
-                          No artifacts on this workspace yet!
+                          {t("No artifacts on this workspace yet!")}
                         </span>
                       </div>
                     )}
@@ -377,12 +378,12 @@ export const HomePage = aos
                 <section>
                   <header className="flex flex-col items-start justify-between gap-4 py-4">
                     <div className="flex w-full items-center justify-between gap-4">
-                      <h2 className="text-md">Tasks</h2>
+                      <h2 className="text-md">{t("Tasks")}</h2>
                       <Link
                         to="/tasks"
                         className="text-sm text-muted-foreground transition hover:text-foreground"
                       >
-                        Open all
+                        {t("Open all")}
                       </Link>
                     </div>
 
@@ -408,7 +409,7 @@ export const HomePage = aos
                     {filteredTasks.length === 0 ? (
                       <div className="flex h-12 w-full items-center justify-center rounded-md border-2 border-dotted">
                         <span className="text-muted-foreground/60">
-                          No tasks in this status.
+                          {t("No tasks in this status.")}
                         </span>
                       </div>
                     ) : (
@@ -424,12 +425,12 @@ export const HomePage = aos
                 <section>
                   <header className="flex flex-col items-start justify-between gap-4 py-4">
                     <div className="flex w-full items-center justify-between gap-4">
-                      <h2 className="text-md">Goals</h2>
+                      <h2 className="text-md">{t("Goals")}</h2>
                       <Link
                         to="/goals"
                         className="text-sm text-muted-foreground transition hover:text-foreground"
                       >
-                        Open all
+                        {t("Open all")}
                       </Link>
                     </div>
 
@@ -457,7 +458,7 @@ export const HomePage = aos
                     {filteredGoals.length === 0 ? (
                       <div className="flex h-12 w-full items-center justify-center rounded-md border-2 border-dotted">
                         <span className="text-muted-foreground/60">
-                          No goals in this status.
+                          {t("No goals in this status.")}
                         </span>
                       </div>
                     ) : (

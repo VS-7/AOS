@@ -33,6 +33,7 @@ import {
   formatChangesCountLabel,
 } from "@/features/file/presentation/helpers/changes.helper";
 import type { FileExplorerContext } from "@/features/file/interfaces/file.interfaces";
+import { t } from "@/lib/i18n";
 
 interface ChangesHeaderProps {
   explorerContext: FileExplorerContext;
@@ -128,7 +129,7 @@ export function ChangesHeader({
             className="size-8 text-muted-foreground"
             onClick={onRefresh}
             disabled={isRefreshing}
-            aria-label="Refresh changes"
+            aria-label={t("Refresh changes")}
           >
             <RefreshCw
               className={cn("size-3.5", isRefreshing && "animate-spin")}
@@ -142,7 +143,7 @@ export function ChangesHeader({
                 variant="ghost"
                 size="icon"
                 className="size-8 text-muted-foreground"
-                aria-label="Changes options"
+                aria-label={t("Changes options")}
               >
                 <MoreHorizontal className="size-4" />
               </Button>
@@ -150,18 +151,18 @@ export function ChangesHeader({
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
-                  <span className="flex-1">Layout</span>
+                  <span className="flex-1">{t("Layout")}</span>
                   <span className="ml-2 capitalize text-muted-foreground">
                     {preferences.diffStyle}
                   </span>
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
                   <DropdownMenuItem onClick={() => setDiffStyle("unified")}>
-                    Unified
+                    {t("Unified")}
                     {preferences.diffStyle === "unified" ? " ✓" : ""}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setDiffStyle("split")}>
-                    Split
+                    {t("Split")}
                     {preferences.diffStyle === "split" ? " ✓" : ""}
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
@@ -171,7 +172,7 @@ export function ChangesHeader({
                 className="justify-between gap-3"
                 onSelect={(event) => event.preventDefault()}
               >
-                Ignore Whitespace
+                {t("Ignore Whitespace")}
                 <Switch
                   checked={preferences.ignoreWhitespace}
                   onCheckedChange={(checked) =>
@@ -184,7 +185,7 @@ export function ChangesHeader({
                 className="justify-between gap-3"
                 onSelect={(event) => event.preventDefault()}
               >
-                Word Wrap
+                {t("Word Wrap")}
                 <Switch
                   checked={preferences.wordWrap}
                   onCheckedChange={(checked) =>
@@ -197,7 +198,7 @@ export function ChangesHeader({
 
               <DropdownMenuItem onClick={() => onFindOpenChange(true)}>
                 <Search className="size-4" />
-                Find in Changes
+                {t("Find in Changes")}
                 <KbdGroup className="ml-auto">
                   <Kbd>⌘</Kbd>
                   <Kbd>F</Kbd>
@@ -205,7 +206,7 @@ export function ChangesHeader({
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onRefresh}>
                 <RefreshCw className="size-4" />
-                Refresh Changes
+                {t("Refresh Changes")}
                 <KbdGroup className="ml-auto">
                   <Kbd>⌘</Kbd>
                   <Kbd>R</Kbd>
@@ -222,7 +223,7 @@ export function ChangesHeader({
             ref={findInputRef}
             value={findQuery}
             onChange={(event) => onFindQueryChange(event.target.value)}
-            placeholder="Filter changed files…"
+            placeholder={t("Filter changed files…")}
             className="h-8"
             onKeyDown={(event) => {
               if (event.key === "Escape") {
@@ -241,7 +242,7 @@ export function ChangesHeader({
               onFindQueryChange("");
             }}
           >
-            Done
+            {t("Done")}
           </Button>
         </div>
       ) : null}

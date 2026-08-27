@@ -25,6 +25,7 @@ import {
   SetRoutineStatusDropdown,
 } from "@/features/routine/presentation/components/dropdowns";
 import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
+import { t } from "@/lib/i18n";
 
 interface RoutineListRowProps {
   routine: Routine;
@@ -57,7 +58,7 @@ export const RoutineListRow = React.memo(function RoutineListRow({
         );
         router.invalidate();
       } catch {
-        toast.error("Failed to update status");
+        toast.error(t("Failed to update status"));
       }
     },
     [routine.id, router],
@@ -75,7 +76,7 @@ export const RoutineListRow = React.memo(function RoutineListRow({
         );
         router.invalidate();
       } catch {
-        toast.error("Failed to update agent");
+        toast.error(t("Failed to update agent"));
       }
     },
     [agents, routine.id, router],
@@ -90,7 +91,7 @@ export const RoutineListRow = React.memo(function RoutineListRow({
       });
 
       if (result?.error) {
-        toast.error("Failed to start routine");
+        toast.error(t("Failed to start routine"));
         return;
       }
 
@@ -102,7 +103,7 @@ export const RoutineListRow = React.memo(function RoutineListRow({
       );
       router.invalidate();
     } catch {
-      toast.error("Failed to start routine");
+      toast.error(t("Failed to start routine"));
     }
   }, [routine.id, router]);
 
@@ -129,7 +130,7 @@ export const RoutineListRow = React.memo(function RoutineListRow({
       toast.success(`Routine ${routine.id} deleted`);
       router.invalidate();
     } catch {
-      toast.error("Failed to delete routine");
+      toast.error(t("Failed to delete routine"));
     }
   }, [confirm, routine.id, routine.name, router]);
 
@@ -177,7 +178,7 @@ export const RoutineListRow = React.memo(function RoutineListRow({
           </span>
         </TooltipTrigger>
         <TooltipContent sideOffset={6}>
-          {triggersLabel} · Updated {updatedLabel}
+          {triggersLabel} {t("· Updated")} {updatedLabel}
         </TooltipContent>
       </Tooltip>
 

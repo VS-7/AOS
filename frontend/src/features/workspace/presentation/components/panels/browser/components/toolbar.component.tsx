@@ -15,6 +15,7 @@ import {
   Search,
 } from "lucide-react";
 import { ViewportTabState } from "@/features/workspace/presentation/stores/viewport.store";
+import { t } from "@/lib/i18n";
 
 interface BrowserToolbarProps {
   activeTab: ViewportTabState | null;
@@ -54,7 +55,7 @@ export function BrowserToolbar({
               onNavigate();
             }
           }}
-          placeholder="Search the web or enter a URL"
+          placeholder={t("Search the web or enter a URL")}
         />
       </InputGroup>
 
