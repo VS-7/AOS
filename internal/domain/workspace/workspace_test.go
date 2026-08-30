@@ -312,7 +312,7 @@ func TestTheOrchestratorIsBornWithTheWorkspace(t *testing.T) {
 	if out.Orchestrator != "atlas" {
 		t.Fatalf("orchestrator = %q, want the slug of the default name", out.Orchestrator)
 	}
-	seed := h.seeder.seeded[repoRoot]
+	seed := h.seeder.byRoot[repoRoot]
 	if seed.Name != workspace.DefaultOrchestratorName || seed.Role != workspace.DefaultOrchestratorRole {
 		t.Errorf("seed = %+v", seed)
 	}
@@ -335,7 +335,7 @@ func TestOrchestratorDialsBecomeProse(t *testing.T) {
 		},
 	})
 
-	seed := h.seeder.seeded[repoRoot]
+	seed := h.seeder.byRoot[repoRoot]
 	if seed.ID != "luara" || seed.Name != "Luara" {
 		t.Fatalf("seed identity = %q / %q", seed.ID, seed.Name)
 	}
@@ -353,7 +353,7 @@ func TestOrchestratorDialsBecomeProse(t *testing.T) {
 func TestNoDialsMeansNoBehaviourSection(t *testing.T) {
 	h := newHarness(t)
 	h.create(t, workspace.CreateInput{Name: "Project Alpha", Path: repoRoot})
-	if strings.Contains(h.seeder.seeded[repoRoot].Instructions, "Communication & Behaviour") {
+	if strings.Contains(h.seeder.byRoot[repoRoot].Instructions, "Communication & Behaviour") {
 		t.Error("an empty spec produced an empty section")
 	}
 }

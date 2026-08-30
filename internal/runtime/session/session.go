@@ -444,12 +444,36 @@ type liveAnswer struct {
 	agentID   string
 	startedAt time.Time
 
-	mu        sync.Mutex
-	text      strings.Builder
+	mu       sync.Mutex
+	text     strings.Builder
+	calls    []chat.Part
+	results  []chat.Part
+	lastSent time.Time
+
+	// reasoning is the block the current model call is writing; blocks holds
+	// the ones the calls before it finished.
+	//
+	// One turn is several calls and each writes its own thought. Kept in a
+	// single builder, as this was, they arrived glued end to end — the last
+	// sentence of one running straight into the first word of the next — and
+	// rendered as one wall of text.
 	reasoning strings.Builder
-	calls     []chat.Part
-	results   []chat.Part
-	lastSent  time.Time
+	blocks    []string
+}
+
+// StepStarted closes the reasoning block the previous model call wrote.
+// agentloop calls it before each new call; see agentloop.StepStarter.
+func (l *liveAnswer) StepStarted(context.Context) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.closeBlockLocked()
+}
+
+func (l *liveAnswer) closeBlockLocked() {
+	if block := strings.TrimSpace(l.reasoning.String()); block != "" {
+		l.blocks = append(l.blocks, block)
+	}
+	l.reasoning.Reset()
 }
 
 func (l *liveAnswer) Delta(ctx context.Context, c agentloop.Chunk) {
@@ -500,11 +524,16 @@ func (l *liveAnswer) ToolFinished(ctx context.Context, result agentloop.ToolResu
 // way, and the last snapshot is not visibly rearranged when the real one
 // lands.
 func (l *liveAnswer) snapshotLocked() chat.Message {
-	parts := make([]chat.Part, 0, 2+len(l.calls)+len(l.results))
+	parts := make([]chat.Part, 0, 2+len(l.blocks)+len(l.calls)+len(l.results))
 	if text := l.text.String(); text != "" {
 		parts = append(parts, chat.Part{Type: chat.PartText, Text: text})
 	}
-	if reasoning := l.reasoning.String(); reasoning != "" {
+	// One part per block, so the interface renders one thinking step per model
+	// call instead of a single run of text.
+	for _, block := range l.blocks {
+		parts = append(parts, chat.Part{Type: chat.PartReasoning, Text: block})
+	}
+	if reasoning := strings.TrimSpace(l.reasoning.String()); reasoning != "" {
 		parts = append(parts, chat.Part{Type: chat.PartReasoning, Text: reasoning})
 	}
 	parts = append(parts, l.calls...)

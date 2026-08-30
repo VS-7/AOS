@@ -67,11 +67,30 @@ func (s *seeder) SeedOrchestrator(ctx context.Context, in workspace.Orchestrator
 		Description:  in.Description,
 		Content:      in.Instructions,
 		Orchestrator: true,
+		Sandbox:      sandboxFrom(in.Sandbox),
 	})
 	if err != nil {
 		return "", err
 	}
 	return created.ID, nil
+}
+
+// sandboxFrom translates the workspace domain's own sandbox shape into the
+// agent record's. The two are declared separately because the dependency runs
+// one way: workspace knows the Seeder port, not the agent domain.
+func sandboxFrom(in *workspace.SandboxSeed) *agent.Sandbox {
+	if in == nil {
+		return nil
+	}
+	out := &agent.Sandbox{Permissions: in.Permissions}
+	if in.Exec != nil {
+		out.Exec = &agent.Exec{
+			Policy:     in.Exec.Policy,
+			Allow:      in.Exec.Allow,
+			AllowShell: in.Exec.AllowShell,
+		}
+	}
+	return out
 }
 
 // surveyor counts what a workspace holds, collection by collection.

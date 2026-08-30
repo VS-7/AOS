@@ -22,8 +22,39 @@ const DefaultOrchestratorRole = build.DisplayName + " Architect & Workspace Orch
 // "description" is not documentation: it is how the choice gets made.
 const DefaultOrchestratorDescription = "Default workspace orchestrator responsible for triage, delegation, lifecycle guidance and capability routing."
 
-// buildOrchestrator turns the three dials of the create input into the agent
-// record that will be written.
+// DefaultOrchestratorSandbox is what the first agent of a workspace may do.
+//
+// An agent with no sandbox block gets the zero value, which is read-only with
+// no execution at all — deliberately stricter than the original, and the right
+// default for an agent somebody adds later whose job nobody has declared yet.
+//
+// It is the wrong default for this one. The orchestrator is created by the
+// system, on the person's own machine, in the repository they just pointed it
+// at, in answer to them asking for a workspace. Shipping it read-only made the
+// product's first experience an assistant that reads, plans, delegates, and
+// then reports that the sandbox refused it — which is what happened.
+//
+// Execution stays an allowlist (ADR-0006) and the shell stays off: a shell
+// makes an allowlist a suggestion, so it keeps its own opt-in. What is on the
+// list is the set somebody watching an agent work in a repository expects it
+// to reach without being asked twice.
+func DefaultOrchestratorSandbox() *SandboxSeed {
+	return &SandboxSeed{
+		Permissions: []string{"read", "write", "delete", "execute"},
+		Exec: &ExecSeed{
+			Policy: "allowlist",
+			Allow: []string{
+				"git", "go", "node", "npm", "npx", "pnpm", "yarn", "bun",
+				"python3", "pip3", "make", "task", "cargo", "rustc",
+				"ls", "cat", "grep", "find", "rg", "sed", "awk", "head", "tail", "wc", "diff",
+			},
+			AllowShell: false,
+		},
+	}
+}
+
+// buildOrchestrator turns the dials of the create input into the agent record
+// that will be written.
 func buildOrchestrator(w *Workspace, spec *OrchestratorSpec) OrchestratorSeed {
 	name := DefaultOrchestratorName
 	if spec != nil && strings.TrimSpace(spec.Name) != "" {
@@ -36,7 +67,25 @@ func buildOrchestrator(w *Workspace, spec *OrchestratorSpec) OrchestratorSeed {
 		Role:         DefaultOrchestratorRole,
 		Description:  DefaultOrchestratorDescription,
 		Instructions: orchestratorInstructions(w, name, spec),
+		Sandbox:      orchestratorSandbox(spec),
 	}
+}
+
+// orchestratorSandbox honours what the caller asked for, and falls back to the
+// working default. A caller that names a narrower sandbox gets exactly it.
+func orchestratorSandbox(spec *OrchestratorSpec) *SandboxSeed {
+	if spec == nil || spec.Sandbox == nil {
+		return DefaultOrchestratorSandbox()
+	}
+	seed := &SandboxSeed{Permissions: spec.Sandbox.Permissions}
+	if spec.Sandbox.Exec != nil {
+		seed.Exec = &ExecSeed{
+			Policy:     spec.Sandbox.Exec.Policy,
+			Allow:      spec.Sandbox.Exec.Allow,
+			AllowShell: spec.Sandbox.Exec.AllowShell,
+		}
+	}
+	return seed
 }
 
 // orchestratorInstructions renders the Markdown body of the orchestrator: the

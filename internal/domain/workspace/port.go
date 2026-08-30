@@ -77,6 +77,29 @@ type OrchestratorSeed struct {
 	Role         string
 	Description  string
 	Instructions string
+
+	// Sandbox is what this agent may do. Nil would mean the zero value, which
+	// is read-only with no execution — see buildOrchestrator for why the one
+	// agent the system creates for somebody does not get that default.
+	Sandbox *SandboxSeed
+}
+
+// SandboxSeed is the sandbox in the shape the agent repository writes it.
+//
+// It is declared here rather than reused from internal/domain/agent because
+// this package must not import that one: the dependency runs the other way,
+// through the Seeder port.
+type SandboxSeed struct {
+	Permissions []string
+	Exec        *ExecSeed
+}
+
+// ExecSeed is the execution policy, an allowlist and never a blocklist
+// (ADR-0006).
+type ExecSeed struct {
+	Policy     string
+	Allow      []string
+	AllowShell bool
 }
 
 // Surveyor counts what a workspace holds, by collection. It answers the

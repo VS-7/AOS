@@ -213,6 +213,14 @@ func (l *Loop) call(ctx context.Context, s *State) (Response, error) {
 		return resp, nil
 	}
 
+	// A new model call is a new thought. Without this boundary every step's
+	// reasoning ran into the previous one's last sentence — "…no lugar certo e
+	// sem suposições.Agora vou olhar a estrutura…" — because the consumer had
+	// no way to tell one block from the next.
+	if starter, ok := l.emitter.(StepStarter); ok {
+		starter.StepStarted(ctx)
+	}
+
 	stream, err := l.provider.Stream(ctx, req)
 	if err != nil {
 		return Response{}, errProviderFailed(l.provider.Name(), err)

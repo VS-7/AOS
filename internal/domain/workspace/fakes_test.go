@@ -107,14 +107,16 @@ func (g *fakeGit) OriginURL(_ context.Context, _ string) (string, error) {
 // fakeSeeder records the orchestrator that was asked for, so a test can assert
 // on the instruction document without a real agent repository.
 type fakeSeeder struct {
-	seeded  map[string]workspace.OrchestratorSeed
+	// seeded is the most recent seed, for the tests that assert on it directly.
+	seeded  workspace.OrchestratorSeed
+	byRoot  map[string]workspace.OrchestratorSeed
 	present map[string]string
 	err     error
 	calls   int
 }
 
 func newSeeder() *fakeSeeder {
-	return &fakeSeeder{seeded: map[string]workspace.OrchestratorSeed{}, present: map[string]string{}}
+	return &fakeSeeder{byRoot: map[string]workspace.OrchestratorSeed{}, present: map[string]string{}}
 }
 
 func (s *fakeSeeder) FindOrchestrator(_ context.Context, root string) (string, bool, error) {
@@ -130,7 +132,8 @@ func (s *fakeSeeder) SeedOrchestrator(_ context.Context, in workspace.Orchestrat
 		return "", s.err
 	}
 	s.calls++
-	s.seeded[in.Root] = in
+	s.seeded = in
+	s.byRoot[in.Root] = in
 	s.present[in.Root] = in.ID
 	return in.ID, nil
 }

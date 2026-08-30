@@ -8,6 +8,52 @@ em que o release foi cortado.
 
 ## [Unreleased]
 
+## [v0.15.0-fase9] — 2026-08-30
+
+### Corrigido
+
+**O agente parava de responder no meio do trabalho.** A compactação do
+histórico mantinha as chamadas de ferramenta das últimas 15 mensagens e
+removia as mais antigas, por índice. Mas um turno são **duas** mensagens — a do
+assistente que pede a ferramenta e a que responde — e o corte caía entre elas:
+a mensagem que pedia perdia as chamadas e era descartada como vazia, enquanto o
+resultado, um índice adiante, ficava dentro da janela. O que chegava ao
+provider era um `function_call_output` sem o `function_call` correspondente, e a
+API recusava a requisição inteira:
+`No tool call found for function call output with call_id …` →
+`AOS_AGENT_PROVIDER_FAILED`. Toda sessão longa o bastante para compactar morria
+ali. A janela agora só se alarga: o resultado que fica leva junto a chamada que
+ele responde.
+
+**O orquestrador não conseguia fazer nada.** Um agente sem bloco `sandbox`
+recebe o valor zero — somente leitura, sem execução — e o orquestrador, o único
+agente que todo workspace ganha e com quem a pessoa de fato conversa, era criado
+sem um. A experiência padrão do produto era um assistente que lia o workspace,
+não escrevia uma linha nele e não rodava um comando: planejava, delegava, e
+informava que o sandbox tinha recusado. Ele nasce com leitura, escrita, exclusão
+e execução por allowlist (ADR-0006), sem shell. Um `orchestrator.sandbox` no
+`workspace_create` continua valendo e pode restringir.
+
+**O raciocínio saía colado.** Um turno são várias chamadas ao modelo e cada uma
+escreve seu próprio bloco; todas iam para um único acumulador, sem separador —
+"…sem suposições.Agora vou olhar…". Cada chamada vira uma parte própria, e a
+interface mostra um passo por pensamento.
+
+**"Worked for 0s".** O `chat.Message` do Go carrega `createdAt` e `runs` no
+topo e não tem `metadata`; todo consumidor da interface lia
+`message.metadata.createdAt`. Ou seja: `undefined` em todos, e o cabeçalho
+mostrava zero em turnos de minutos. A tradução acontece uma vez, em
+`command-map.ts`.
+
+**O indicador de agente trabalhando.** O "..." repetia o que a marca animada já
+diz e quebrava linha num painel estreito, virando uma fileira de pontos soltos
+sob a frase. Saiu; a marca não encolhe nem quebra, e o texto foi traduzido.
+
+### Mudado
+- `workspace_create` aceita `orchestrator.sandbox` para declarar o que o
+  primeiro agente pode fazer.
+
+
 ## [v0.14.1-fase9] — 2026-08-30
 
 ### Corrigido

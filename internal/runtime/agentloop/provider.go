@@ -154,6 +154,17 @@ type Chunk struct {
 	Done      bool
 }
 
+// StepStarter is an Emitter that also wants to know when a new model call
+// begins.
+//
+// One turn is several calls, and each one produces its own block of reasoning.
+// Concatenated without a boundary they read as a single paragraph whose
+// sentences collide — which is exactly how they were rendered. Optional, like
+// ToolWatcher: an emitter that does not care simply does not implement it.
+type StepStarter interface {
+	StepStarted(ctx context.Context)
+}
+
 // Stream is a streamed answer. Recv returns io.EOF when the answer is complete,
 // after which Response holds the whole of it.
 type Stream interface {

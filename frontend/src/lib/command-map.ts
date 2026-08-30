@@ -117,6 +117,68 @@ export type MapEntry = CommandKey | CommandDescriptor | HttpHandler | null;
 
 const s = (p: Record<string, unknown>, k: string): string => String(p[k] ?? "");
 
+/**
+ * Lifts a stored message's flat fields into the `metadata` block the ported
+ * chat code reads.
+ *
+ * Go's `chat.Message` (`internal/domain/chat/entity.go`) carries `createdAt`
+ * and `runs` at the top level and has no `metadata` at all; every consumer on
+ * this side reads `message.metadata.createdAt`, `metadata.runs` and
+ * `metadata.execution`. So every one of them read `undefined`, which is why
+ * the thinking header showed "Worked for 0s" on turns that took minutes, and
+ * why message timestamps never rendered: `getElapsedMs` finds no start, and
+ * returns zero rather than guessing.
+ *
+ * `execution` is the newest attempt. Go records every attempt in `runs`, and
+ * "is this still running" and "how long did it take" are questions about the
+ * latest one.
+ */
+const withMessageMetadata = (chat: unknown): unknown => {
+  if (chat === null || typeof chat !== "object") return chat;
+  const record = chat as Record<string, unknown>;
+  const messages = record["messages"];
+  if (!Array.isArray(messages)) return chat;
+
+  return {
+    ...record,
+    messages: messages.map((raw) => {
+      if (raw === null || typeof raw !== "object") return raw;
+      const message = raw as Record<string, unknown>;
+      const runs = Array.isArray(message["runs"]) ? (message["runs"] as Record<string, unknown>[]) : [];
+      const latest = runs.length > 0 ? runs[runs.length - 1] : undefined;
+      const role = String(message["role"] ?? "");
+      const author = message["author"] as Record<string, unknown> | undefined;
+
+      return {
+        ...message,
+        metadata: {
+          ...((message["metadata"] as Record<string, unknown>) ?? {}),
+          type: role === "assistant" ? "agent" : role === "system" ? "system" : "user",
+          data: { id: String(author?.["id"] ?? "") },
+          createdAt: message["createdAt"],
+          // Go has no per-message updatedAt; the newest attempt's end is the
+          // closest true answer, and `getElapsedMs` falls back past it when
+          // there is none.
+          updatedAt: latest?.["completedAt"] ?? message["createdAt"],
+          runs,
+          execution: latest
+            ? {
+                agentId: latest["agentId"],
+                jobId: latest["jobId"],
+                // Go's Status has five values; this side's execution status
+                // has two. Anything not finished is still running as far as
+                // the header is concerned.
+                status: latest["completedAt"] ? "completed" : "running",
+                startedAt: latest["startedAt"],
+                completedAt: latest["completedAt"],
+              }
+            : undefined,
+        },
+      };
+    }),
+  };
+};
+
 /** One level in: `nested(p, "user", "name")` reads `p.user.name` as a string. */
 const nested = (p: Record<string, unknown>, group: string, k: string): string => {
   const inner = p[group];
@@ -285,14 +347,14 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "chat.delete": "chats_delete",
   // `wrapOut`, the same as `chat.getById` below: Go answers a bare Chat, and
   // the ported code reads `result.data.chat`.
-  "chat.update": { key: "chats_update", wrapOut: "chat" },
+  "chat.update": { key: "chats_update", mapOut: withMessageMetadata, wrapOut: "chat" },
   // The composer's "clear context" used to call `chat.update` with
   // `{messages: []}` — a field Go's update does not have and must not have,
   // since a rename that can drop a transcript is a rename nobody can trust.
   // It is its own command now, and its own path here.
   "chat.clear": "chats_clear",
-  "chat.create": { key: "chats_create", wrapOut: "chat" },
-  "chat.getById": { key: "chats_get", wrapOut: "chat" },
+  "chat.create": { key: "chats_create", mapOut: withMessageMetadata, wrapOut: "chat" },
+  "chat.getById": { key: "chats_get", mapOut: withMessageMetadata, wrapOut: "chat" },
   "chat.list": "chats_list",
   // task-12 (round 2): `use-chat-composer.ts`'s `sendMessage` calls this
   // with `body: { id: chat.id, message: <ChatMessage: {id, role,

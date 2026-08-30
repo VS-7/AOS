@@ -1566,6 +1566,20 @@ export interface CommandMap {
     "autonomy"?: number;
     /** Display name of the orchestrator. Defaults to "Atlas". */
     "name"?: string;
+    /** What the orchestrator may do. Omit for the working default: read, write, delete, and execution from an allowlist. */
+    "sandbox"?: {
+    /** Which programs it may run. */
+    "exec"?: {
+    /** Binary names this agent may run. */
+    "allow"?: unknown;
+    /** Whether it may reach a shell. A shell makes the allowlist a suggestion. */
+    "allowShell"?: boolean;
+    /** allowlist or deny-all. */
+    "policy"?: string;
+  };
+    /** Any of: read, write, delete, execute. */
+    "permissions"?: unknown;
+  };
     /** One of: concise, balanced, detailed. */
     "style"?: string;
     /** One of: efficient, friendly, professional, candid. */

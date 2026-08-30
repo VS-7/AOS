@@ -98,6 +98,24 @@ type OrchestratorSpec struct {
 	Tone     string  `json:"tone,omitempty" jsonschema:"One of: efficient, friendly, professional, candid." validate:"omitempty,oneof=efficient friendly professional candid"`
 	Style    string  `json:"style,omitempty" jsonschema:"One of: concise, balanced, detailed." validate:"omitempty,oneof=concise balanced detailed"`
 	Autonomy float64 `json:"autonomy,omitempty" jsonschema:"How independently the orchestrator acts, from 0 to 1." validate:"omitempty,gte=0,lte=1"`
+
+	// Sandbox overrides what the orchestrator may do. Omitted, it gets
+	// DefaultOrchestratorSandbox — which is a working agent rather than a
+	// read-only one, for the reason buildOrchestrator gives.
+	Sandbox *SandboxSpec `json:"sandbox,omitempty" jsonschema:"What the orchestrator may do. Omit for the working default: read, write, delete, and execution from an allowlist."`
+}
+
+// SandboxSpec is the caller's own sandbox for the orchestrator.
+type SandboxSpec struct {
+	Permissions []string  `json:"permissions,omitempty" jsonschema:"Any of: read, write, delete, execute."`
+	Exec        *ExecSpec `json:"exec,omitempty" jsonschema:"Which programs it may run."`
+}
+
+// ExecSpec is the execution half of a caller-supplied sandbox.
+type ExecSpec struct {
+	Policy     string   `json:"policy,omitempty" jsonschema:"allowlist or deny-all."`
+	Allow      []string `json:"allow,omitempty" jsonschema:"Binary names this agent may run."`
+	AllowShell bool     `json:"allowShell,omitempty" jsonschema:"Whether it may reach a shell. A shell makes the allowlist a suggestion."`
 }
 
 // The defaults of a new workspace, matching the original value for value. The

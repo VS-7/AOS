@@ -86,6 +86,54 @@ of them, because none of them is guaranteed to have been needed.
         "autonomy": {
           "type": "number",
           "description": "How independently the orchestrator acts, from 0 to 1."
+        },
+        "sandbox": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "permissions": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "Any of: read, write, delete, execute."
+            },
+            "exec": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "properties": {
+                "policy": {
+                  "type": "string",
+                  "description": "allowlist or deny-all."
+                },
+                "allow": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Binary names this agent may run."
+                },
+                "allowShell": {
+                  "type": "boolean",
+                  "description": "Whether it may reach a shell. A shell makes the allowlist a suggestion."
+                }
+              },
+              "description": "Which programs it may run.",
+              "additionalProperties": false
+            }
+          },
+          "description": "What the orchestrator may do. Omit for the working default: read, write, delete, and execution from an allowlist.",
+          "additionalProperties": false
         }
       },
       "description": "Tone, style and autonomy of the orchestrator agent created with the workspace.",

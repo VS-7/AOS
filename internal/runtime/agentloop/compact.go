@@ -64,7 +64,7 @@ func Prune(messages []Message, p Policy) []Message {
 	if len(messages) == 0 {
 		return messages
 	}
-	cutoff := len(messages) - KeepToolCalls
+	cutoff := pairedCutoff(messages, len(messages)-KeepToolCalls)
 	lastUser := -1
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == RoleUser {
@@ -96,6 +96,53 @@ func Prune(messages []Message, p Policy) []Message {
 		out = append(out, m)
 	}
 	return out
+}
+
+// pairedCutoff moves the window back until it no longer splits an exchange.
+//
+// A turn is two messages: the assistant message that asks for a tool and the
+// tool message that answers it. A flat index cut falls between them roughly
+// half the time — the assistant message loses its calls and is dropped as
+// empty, while the results one index later sit inside the window and survive.
+//
+// What reaches the provider is then a function_call_output whose function_call
+// is gone, and the Responses API refuses the entire request:
+//
+//	No tool call found for function call output with call_id call_…
+//
+// Which is to say: every session long enough to compact stopped answering at
+// all. The saving is not worth a conversation the model cannot be sent.
+//
+// So the window is widened, never narrowed: whatever result is being kept, the
+// call it answers is kept with it.
+func pairedCutoff(messages []Message, cutoff int) int {
+	if cutoff <= 0 {
+		return 0
+	}
+	if cutoff >= len(messages) {
+		return len(messages)
+	}
+
+	// Which calls the kept results still need an offer for.
+	needed := map[string]bool{}
+	for _, m := range messages[cutoff:] {
+		if m.Role == RoleTool && m.CallID != "" {
+			needed[m.CallID] = true
+		}
+	}
+	if len(needed) == 0 {
+		return cutoff
+	}
+
+	// The earliest message that offers any of them becomes the new boundary.
+	for i := 0; i < cutoff; i++ {
+		for _, c := range messages[i].ToolCalls {
+			if needed[c.ID] {
+				return i
+			}
+		}
+	}
+	return cutoff
 }
 
 func isEmpty(m Message) bool {
