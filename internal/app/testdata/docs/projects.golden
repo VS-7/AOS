@@ -59,7 +59,13 @@ Start a new organizing boundary for related work. id defaults to a slug of name 
     },
     "status": {
       "type": "string",
-      "description": "Lifecycle status: active, paused, done or archived. Defaults to active."
+      "description": "Lifecycle status: active, paused, done or archived. Defaults to active.",
+      "enum": [
+        "active",
+        "paused",
+        "done",
+        "archived"
+      ]
     },
     "color": {
       "type": "string",
@@ -170,7 +176,13 @@ Every project in the workspace, or only those in one status.
   "properties": {
     "status": {
       "type": "string",
-      "description": "Only projects in this status. Omit for every status."
+      "description": "Only projects in this status. Omit for every status.",
+      "enum": [
+        "active",
+        "paused",
+        "done",
+        "archived"
+      ]
     },
     "_reasoning": {
       "type": "string",
@@ -218,7 +230,13 @@ A field left nil is unchanged; paths, given at all, replaces the field wholesale
         "null",
         "string"
       ],
-      "description": "New lifecycle status. Omit to leave unchanged."
+      "description": "New lifecycle status. Omit to leave unchanged.",
+      "enum": [
+        "active",
+        "paused",
+        "done",
+        "archived"
+      ]
     },
     "color": {
       "type": [

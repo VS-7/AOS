@@ -35,7 +35,7 @@ export function LoginPage({ onSignedIn }: LoginPageProps): JSX.Element {
       await login(identifier, password);
       onSignedIn();
     } catch (err) {
-      setError(err instanceof DomainError ? err.message : "Something went wrong.");
+      setError(err instanceof DomainError ? err.message : t("Something went wrong."));
     } finally {
       setPending(false);
     }
@@ -81,7 +81,7 @@ export function LoginPage({ onSignedIn }: LoginPageProps): JSX.Element {
             disabled={pending || !identifier.trim() || !password.trim()}
             className="h-11 rounded-full"
           >
-            {pending ? "Signing in…" : "Sign In"}
+            {pending ? t("Signing in…") : t("Sign In")}
           </Button>
         </form>
       </div>

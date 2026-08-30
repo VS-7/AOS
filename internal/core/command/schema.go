@@ -48,6 +48,103 @@ func completeSchema(t reflect.Type, s *jsonschema.Schema) error {
 			"the inference library dropped them, and a published schema that omits a field is a lie",
 			strings.Join(missing, ", "))
 	}
+
+	publishEnums(t, s)
+	return nil
+}
+
+// publishEnums copies every closed set the validator already enforces into the
+// schema that publishes it.
+//
+// `validate:"oneof=a b c"` is the single declaration of an accepted set: the
+// validator refuses anything else and the refusal names the values. Until this
+// existed, that refusal was the *only* place they appeared — not in the schema,
+// not in --help — so the way to learn which categories a memory accepts was to
+// store one with the wrong category first (defect #8).
+func publishEnums(t reflect.Type, s *jsonschema.Schema) {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return
+	}
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if f.PkgPath != "" {
+			continue
+		}
+		if f.Anonymous && f.Tag.Get("json") == "" {
+			publishEnums(f.Type, s)
+			continue
+		}
+		name := jsonNameOf(f)
+		if name == "" {
+			continue
+		}
+		prop, published := s.Properties[name]
+		if !published || prop == nil || len(prop.Enum) > 0 {
+			continue
+		}
+		if values := enumOf(f.Type); len(values) > 0 {
+			prop.Enum = values
+			continue
+		}
+		if values := oneOfValues(f.Tag.Get("validate")); len(values) > 0 {
+			prop.Enum = values
+		}
+	}
+}
+
+// Enumerator is implemented by a domain type whose values are a closed set.
+//
+// It exists so that the set is declared once, by the type that owns it, and
+// read by everything that needs it: the type's own Valid(), the schema every
+// surface publishes, and the refusal a wrong value earns. The alternative — a
+// list in the validate tag next to a list in the domain — is two declarations
+// of one truth, and the schema is the copy nobody would notice going stale.
+//
+// Enforcement deliberately stays in the domain: a category the memory service
+// refuses answers with MEMORY_INVALID_CATEGORY and its own call to action,
+// which is more use to a caller than a generic validation failure.
+type Enumerator interface {
+	// EnumValues lists every accepted value, in the order the domain declares
+	// them.
+	EnumValues() []string
+}
+
+// enumOf reads the closed set a field's type declares, if it declares one.
+func enumOf(t reflect.Type) []any {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	e, ok := reflect.Zero(t).Interface().(Enumerator)
+	if !ok {
+		return nil
+	}
+	values := e.EnumValues()
+	out := make([]any, 0, len(values))
+	for _, v := range values {
+		out = append(out, v)
+	}
+	return out
+}
+
+// oneOfValues reads the accepted set out of a validate tag, which spells it
+// `oneof=a b c` among comma-separated rules.
+func oneOfValues(tag string) []any {
+	for _, rule := range strings.Split(tag, ",") {
+		spec, found := strings.CutPrefix(strings.TrimSpace(rule), "oneof=")
+		if !found {
+			continue
+		}
+		out := []any{}
+		for _, v := range strings.Fields(spec) {
+			out = append(out, v)
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
 	return nil
 }
 

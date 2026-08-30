@@ -46,6 +46,17 @@ var Categories = []Category{
 	CatInstruction, CatPreference, CatContext,
 }
 
+// EnumValues publishes the accepted categories in the schema every surface
+// reads, so the way to learn them is not to store one with the wrong category
+// first (defect #8).
+func (c Category) EnumValues() []string {
+	out := make([]string, 0, len(Categories))
+	for _, v := range Categories {
+		out = append(out, string(v))
+	}
+	return out
+}
+
 // Valid reports whether c is one of the thirteen.
 func (c Category) Valid() bool {
 	for _, known := range Categories {
@@ -68,6 +79,15 @@ const (
 
 // Statuses lists every lifecycle state.
 var Statuses = []Status{StatusActive, StatusDeprecated, StatusArchived, StatusTTLExpired}
+
+// EnumValues publishes the lifecycle a memory can be filtered by.
+func (s Status) EnumValues() []string {
+	out := make([]string, 0, len(Statuses))
+	for _, v := range Statuses {
+		out = append(out, string(v))
+	}
+	return out
+}
 
 // Valid reports whether s is one of the four.
 func (s Status) Valid() bool {

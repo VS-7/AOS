@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/OWNER/aos/internal/core/apperr"
+	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/transport/wailsvc"
 )
 
@@ -26,6 +27,7 @@ type Client struct {
 	token     atomic.Pointer[string]
 	workspace atomic.Pointer[string]
 	agent     atomic.Pointer[string]
+	workdir   atomic.Pointer[string]
 	http      *http.Client
 }
 
@@ -52,6 +54,12 @@ type Options struct {
 	// ambientIdentity).
 	Agent string
 
+	// WorkingDir is where this process is standing, sent so the daemon can
+	// resolve "the directory you are in" as the caller's rather than its own.
+	// The terminal sets it; the window does not — it opens a workspace it
+	// names, and the daemon's own directory is the right fallback there.
+	WorkingDir string
+
 	// Timeout bounds one call. A turn is not taken here — the daemon runs it
 	// and the answer arrives over the realtime channel — so this is short.
 	Timeout time.Duration
@@ -70,6 +78,7 @@ func New(opts Options) *Client {
 	c.SetToken(opts.Token)
 	c.SetWorkspace(opts.Workspace)
 	c.SetAgent(opts.Agent)
+	c.SetWorkingDir(opts.WorkingDir)
 	return c
 }
 
@@ -121,6 +130,17 @@ func (c *Client) currentAgent() string {
 	return ""
 }
 
+// SetWorkingDir replaces the directory later calls report themselves as
+// standing in.
+func (c *Client) SetWorkingDir(dir string) { c.workdir.Store(&dir) }
+
+func (c *Client) currentWorkingDir() string {
+	if v := c.workdir.Load(); v != nil {
+		return *v
+	}
+	return ""
+}
+
 // Invoke runs one command.
 //
 // The command key maps to the path the HTTP surface publishes: memories_store
@@ -143,6 +163,9 @@ func (c *Client) Invoke(ctx context.Context, key string, input json.RawMessage) 
 	}
 	if agent := c.currentAgent(); agent != "" {
 		req.Header.Set("x-agent-id", agent)
+	}
+	if dir := c.currentWorkingDir(); dir != "" {
+		req.Header.Set("x-working-dir", dir)
 	}
 
 	res, err := c.http.Do(req)
@@ -336,6 +359,46 @@ func (c *Client) Commands(ctx context.Context) ([]wailsvc.CommandInfo, error) {
 	}
 	return out, nil
 }
+
+// Manifest reads the whole published surface: every group, every command, every
+// input schema.
+//
+// Commands() is what the terminal fetches before every command it runs, so it
+// stays lean. This is the deliberate, heavier question — what `self tools` and
+// `self llms` answer with, and what they used to answer with four commands
+// because the only registry they could see was the terminal's own.
+func (c *Client) Manifest(ctx context.Context) (command.Manifest, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/api/_manifest", nil)
+	if err != nil {
+		return command.Manifest{}, errUnreachable(c.base, err)
+	}
+	if token := c.currentToken(); token != "" {
+		req.Header.Set("authorization", "Bearer "+token)
+	}
+	res, err := c.http.Do(req)
+	if err != nil {
+		return command.Manifest{}, errUnreachable(c.base, err)
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	var envelope struct {
+		Data  command.Manifest `json:"data"`
+		Error *apiError        `json:"error"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&envelope); err != nil {
+		return command.Manifest{}, errUnreadable(c.base, err)
+	}
+	if envelope.Error != nil {
+		return command.Manifest{}, envelope.Error.asError()
+	}
+	return envelope.Data, nil
+}
+
+// SetBaseURL points this client at a different daemon.
+//
+// The terminal offers --base-url on every command it publishes, and a flag
+// that is declared and ignored is worse than one that is absent.
+func (c *Client) SetBaseURL(address string) { c.base = strings.TrimSuffix(address, "/") }
 
 // Ready reports whether the daemon is answering its health check.
 func (c *Client) Ready(ctx context.Context) (bool, error) {

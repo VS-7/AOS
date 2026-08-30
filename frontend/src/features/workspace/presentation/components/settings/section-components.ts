@@ -7,6 +7,8 @@ import { UserAppearanceSection } from "./components/sections/user/appearance";
 import { UserProfileSection } from "./components/sections/user/profile";
 import { UserDevelopersSection } from "./components/sections/user/developers";
 import { UserUsersSection } from "./components/sections/user/users";
+import { UserUpdatesSection } from "./components/sections/user/updates";
+import { WorkspaceJobsSection } from "./components/sections/workspace/jobs";
 import { WorkspaceProfileSection } from "./components/sections/workspace/profile";
 import { WorkspaceMembersSection } from "./components/sections/workspace/members";
 import { WorkspaceAgentsSection } from "./components/sections/workspace/agents";
@@ -67,11 +69,23 @@ export const SETTINGS_SECTION_COMPONENTS: Record<
   "user.profile": UserProfileSection,
   "user.developers": UserDevelopersSection,
   "user.users": dormant("user", UserUsersSection),
+  "user.updates": UserUpdatesSection,
   "user.tunnel": dormant("tunnel", WorkspaceTunnelSection),
   "workspace.profile": WorkspaceProfileSection,
+  // The four membership calls, and not `user.list`.
+  //
+  // `user.list` was in this list, and the gate only fires when *every* listed
+  // path is dormant — so the day `user.list` was lit up against the identity
+  // HTTP surface, this gate silently stopped firing and the section began
+  // rendering a member form over four commands that do nothing. That is the
+  // "Members shows an empty list forever" defect.
+  //
+  // `user.list` is not what this section is for: it fills the picker in the
+  // add-member dialog. The four that decide whether the section can work at
+  // all are the ones gating it.
   "workspace.members": dormantCommands(
     "workspace",
-    ["workspace.addMember", "workspace.listMembers", "workspace.removeMember", "workspace.updateMember", "user.list"],
+    ["workspace.addMember", "workspace.listMembers", "workspace.removeMember", "workspace.updateMember"],
     WorkspaceMembersSection,
   ),
   "workspace.agents": WorkspaceAgentsSection,
@@ -80,4 +94,5 @@ export const SETTINGS_SECTION_COMPONENTS: Record<
   "workspace.tasks": WorkspaceTasksSection,
   "workspace.git": WorkspaceGitSection,
   "workspace.worktrees": WorkspaceWorktreesSection,
+  "workspace.jobs": WorkspaceJobsSection,
 };

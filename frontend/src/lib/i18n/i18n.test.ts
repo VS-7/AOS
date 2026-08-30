@@ -64,6 +64,62 @@ describe("the catalogues", () => {
     expect(uncatalogued, "t() keys with no catalogue entry").toEqual([]);
   });
 
+  /**
+   * The gap the suite above cannot see.
+   *
+   * Every test before this one asks whether a key *passed to `t()`* has a
+   * translation. A string that never reaches `t()` at all is invisible to
+   * them — and that is the failure people actually meet: the first screen of
+   * the application read "Bem-vindo ao AOS" over a button saying "Get
+   * Started" and a counter saying "1 of 6 · Welcome", with the catalogues
+   * perfectly in sync and every existing test green.
+   *
+   * This walks the rendered shapes instead: text between JSX tags, the props
+   * a person reads, and toast copy. It cannot catch a literal that travels
+   * through a variable before reaching the screen — that needs a type system,
+   * not a regex — so it is a floor, not a ceiling.
+   */
+  it("has no rendered copy that skips t() entirely", () => {
+    // Type positions and generic parameters look like JSX text to a regex.
+    const NOISE =
+      /^(Promise|Record|Array|Partial|Omit|Pick|React|JSX|CSSProperties|ReactNode|HTMLElement)\b/;
+    // An all-caps token is an acronym — HTTP, STDIO, CSV — and a protocol
+    // does not have a Portuguese spelling. Translating those would add
+    // catalogue entries whose two sides are identical by definition.
+    const ACRONYM = /^[A-Z0-9]{2,}$/;
+    const shapes: RegExp[] = [
+      />\s*([A-Z][A-Za-z0-9 ,.'\-!?&/()]{3,80}?)\s*</g,
+      /\b(?:placeholder|aria-label|emptyMessage|tooltip)=["']([A-Z][^"']{3,80})["']/g,
+      /toast\.(?:success|error|info|warning)\(\s*["']([A-Z][^"']{3,80})["']/g,
+    ];
+
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name !== "node_modules") walk(path);
+          continue;
+        }
+        if (!/\.tsx$/.test(entry.name) || /\.test\.tsx?$/.test(entry.name)) continue;
+        const source = readFileSync(path, "utf8");
+        for (const shape of shapes) {
+          for (const match of source.matchAll(shape)) {
+            const text = match[1].trim();
+            if (NOISE.test(text) || ACRONYM.test(text)) continue;
+            // Already translated somewhere in this file: the same literal
+            // appearing once wrapped and once bare is the wrapped one.
+            if (source.includes(`t("${text}")`)) continue;
+            offenders.push(`${path}: ${text}`);
+          }
+        }
+      }
+    };
+    walk("src");
+
+    expect(offenders.sort(), "rendered copy that never reaches t()").toEqual([]);
+  });
+
   it("keeps every interpolation the English string declares", () => {
     const placeholders = (s: string) => (s.match(/\{\{\w+\}\}/g) ?? []).sort();
     for (const [key, value] of Object.entries(ptBR)) {

@@ -64,10 +64,15 @@ is stable between calls.`,
 and its Git policy.
 
 With no id, this reads the active workspace — the one named by the environment,
-which is what the managed block in the repository's .env sets.`,
+which is what the managed block in the repository's .env sets.
+
+The identifier is accepted under either name: ` + "`workspace`" + `, which this group has
+always published, or ` + "`id`" + `, which is what every other group calls the identifier
+of its own resource.`,
 		Examples: []command.Example{
 			{Description: "the active workspace", Input: GetInput{}},
 			{Description: "a specific one", Input: GetInput{Workspace: "project-alpha"}},
+			{Description: "the same, under the name the other groups use", Input: GetInput{ID: "project-alpha"}},
 		},
 		Registry:    true,
 		Annotations: command.Annotations{Title: "Read a workspace", ReadOnlyHint: true, IdempotentHint: true},
@@ -116,7 +121,10 @@ of them, because none of them is guaranteed to have been needed.`,
 
 Only the paths you send are changed. The identifier, the path and the creation
 timestamp are the server's: a patch that reached them would orphan every record
-that refers to this workspace.`,
+that refers to this workspace.
+
+Name the workspace with ` + "`workspace`" + ` or ` + "`id`" + `. With neither, this changes the
+active one — the workspace this session is scoped to.`,
 		Examples: []command.Example{
 			{
 				Description: "change the branch prefix and the accent colour",
@@ -154,7 +162,14 @@ unregistering is not a request to delete them.`,
 Git remote and falling back to the directory name.
 
 Running this twice is safe and is the normal thing to do: a repository that is
-already registered is returned unchanged.`,
+already registered is returned unchanged, and this command never answers
+"already exists" — a directory whose repository name is taken by another
+registration is registered under a distinct identifier instead.
+
+"The current repository" is the directory the *caller* is standing in, which
+the terminal reports with every call. A client that has no directory of its own
+— the window, a browser — gets the one the daemon was started against, and can
+always name a path explicitly.`,
 		Examples: []command.Example{
 			{Description: "register the current directory", Input: IntrospectInput{}},
 		},

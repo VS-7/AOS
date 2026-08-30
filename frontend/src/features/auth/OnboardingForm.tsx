@@ -21,7 +21,7 @@ import {
   Zap,
 } from "lucide-react";
 import { onboarding } from "@/lib/auth";
-import { client } from "@/lib/client";
+import { client, system } from "@/lib/client";
 import { DomainError } from "@/lib/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -93,8 +93,7 @@ function defaultData(): WizardData {
 }
 
 // ---------------------------------------------------------------------------
-// Slide transition, ported from the router-bound copy at features/workspace/
-// presentation/pages/onboarding/components/onboarding-form/index.tsx
+// Slide transition
 // ---------------------------------------------------------------------------
 
 const slideVariants = {
@@ -122,26 +121,50 @@ const slideTransition = {
 };
 
 /**
- * The first-run wizard. Logic is unchanged from before this pass — same
- * `WizardData`, same `lib/auth.ts` `onboarding()` call, same best-effort
- * `config_update` for region, same validation — only the rendering changed,
- * brought over from the pixel-identical but router-bound copy at
- * `features/workspace/presentation/pages/onboarding/components/
- * onboarding-form/` (reachable only through the router, which AuthGate
- * never mounts before a session exists, so it was dead weight sitting next
- * to this file's own plain `Card` version).
+ * The first-run wizard, and the only one: AuthGate mounts this whenever the
+ * installation has no account yet.
  *
- * Two steps the original has are still not here, for the same reasons as
- * before: the waitlist gate is pure commercial SaaS gating with no AOS
- * backend behind it, and the welcome step's screenshot carousel has no real
- * screenshots to show yet (it renders the same placeholder image the router
- * copy's own carousel does).
+ * A second implementation of this screen used to live under
+ * `features/workspace/presentation/pages/onboarding/`, registered on the
+ * router at `/onboarding`. It was not a fallback — it could not work at all.
+ * It sent its payload nested (`{user:{…}, security:{…}, orchestrator:{…}}`)
+ * while `command-map.ts` read flat keys off a shallow merge, so every field
+ * arrived empty and the daemon refused it for a zero-length password; and it
+ * treated the answer as a failure unless it carried a `workspaceId`, which
+ * `AuthResult` has never had. Both halves were deleted rather than repaired:
+ * one first-run wizard is the point, and a second one reachable by URL is a
+ * screen that can only disappoint whoever finds it.
+ *
+ * Two steps the original has are still not here: the waitlist gate is pure
+ * commercial SaaS gating with no AOS backend behind it, and the welcome
+ * step's screenshot carousel has no real screenshots to show yet.
  */
 export function OnboardingForm({ onDone }: OnboardingFormProps): JSX.Element {
   const [stepIndex, setStepIndex] = useState(0);
   const [direction, setDirection] = useState(1);
   const [data, setData] = useState<WizardData>(defaultData);
   const [error, setError] = useState<string | null>(null);
+
+  // The folder for the first workspace defaults to wherever the window was
+  // launched, when it was launched somewhere — running the application inside
+  // a repository is how somebody says "this project is the workspace".
+  //
+  // It is a default, not a decision: the field is visible on the workspace
+  // step and can be cleared, and empty means AOS picks a folder, which is what
+  // its placeholder promises. The desktop used to register that directory
+  // itself, before this wizard had asked for anything, which is what made the
+  // name and the copilot's settings collected here get thrown away.
+  useEffect(() => {
+    let cancelled = false;
+    void system.launchDirectory().then((dir) => {
+      if (cancelled || !dir) return;
+      // Only as a default: a person who has already typed a folder keeps it.
+      setData((d) => (d.workspacePath ? d : { ...d, workspacePath: dir }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const step = FORM_STEPS[stepIndex] ?? "welcome";
   const isFirstStep = stepIndex === 0;
@@ -154,15 +177,15 @@ export function OnboardingForm({ onDone }: OnboardingFormProps): JSX.Element {
 
   function validateStep(): string | null {
     if (step === "user") {
-      if (!data.name.trim()) return "Enter your name.";
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) return "Enter a valid email.";
+      if (!data.name.trim()) return t("Enter your name.");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) return t("Enter a valid email.");
     }
     if (step === "security") {
-      if (data.password.length < 12) return "Use at least 12 characters — this account can run shell commands on this machine.";
-      if (data.password !== data.confirmPassword) return "Passwords don't match.";
+      if (data.password.length < 12) return t("Use at least 12 characters — this account can run shell commands on this machine.");
+      if (data.password !== data.confirmPassword) return t("Passwords don't match.");
     }
     if (step === "workspace") {
-      if (!data.workspaceName.trim()) return "Name your workspace.";
+      if (!data.workspaceName.trim()) return t("Name your workspace.");
     }
     return null;
   }
@@ -222,7 +245,11 @@ export function OnboardingForm({ onDone }: OnboardingFormProps): JSX.Element {
     setStepIndex(FORM_STEPS.length - 1);
   }, []);
 
-  const buttonLabel = isFirstStep ? "Get Started" : isLastFormStep ? "Create Workspace" : "Continue";
+  const buttonLabel = isFirstStep
+    ? t("Get Started")
+    : isLastFormStep
+      ? t("Create Workspace")
+      : t("Continue");
   const progressPercentage = ((stepIndex + 1) / FORM_STEPS.length) * 100;
 
   return (
@@ -329,7 +356,7 @@ export function OnboardingForm({ onDone }: OnboardingFormProps): JSX.Element {
                   ))}
                 </div>
                 <span className="text-xs text-muted-foreground font-medium">
-                  {stepIndex + 1} of {FORM_STEPS.length} · {stepTitle(step)}
+                  {t("{{current}} of {{total}}", { current: stepIndex + 1, total: FORM_STEPS.length })} · {stepTitle(step)}
                 </span>
               </div>
 
@@ -360,15 +387,15 @@ export function OnboardingForm({ onDone }: OnboardingFormProps): JSX.Element {
 function stepTitle(step: Step): string {
   switch (step) {
     case "welcome":
-      return "Welcome";
+      return t("Welcome");
     case "user":
-      return "About You";
+      return t("About You");
     case "security":
-      return "Security";
+      return t("Security");
     case "region":
-      return "Preferences";
+      return t("Preferences");
     case "orchestrator":
-      return "Copilot";
+      return t("Copilot");
     default:
       return "";
   }
@@ -545,7 +572,7 @@ function SecurityStep({ data, update }: { data: WizardData; update: Update }): J
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground font-medium">{t("Password Strength")}</span>
               <span className={cn("font-medium transition-colors", data.password ? "text-foreground" : "text-muted-foreground")}>
-                {strength.label}
+                {t(strength.label)}
               </span>
             </div>
             <div className="flex gap-1.5">
@@ -575,7 +602,7 @@ function SecurityStep({ data, update }: { data: WizardData; update: Update }): J
                   )}
                 >
                   <CheckCircle2 className={cn("w-3.5 h-3.5 transition-colors", isMet ? "text-emerald-500" : "text-muted-foreground/30")} />
-                  {req.label}
+                  {t(req.label)}
                 </span>
               );
             })}
@@ -836,7 +863,7 @@ function OrchestratorStep({ data, update }: { data: WizardData; update: Update }
                     )}
                   >
                     <Icon className="w-4 h-4 text-foreground" />
-                    <span className="text-[10px] font-medium leading-tight truncate w-full text-left">{tone.label}</span>
+                    <span className="text-[10px] font-medium leading-tight truncate w-full text-left">{t(tone.label)}</span>
                   </button>
                 );
               })}
@@ -860,7 +887,7 @@ function OrchestratorStep({ data, update }: { data: WizardData; update: Update }
                     )}
                   >
                     <Icon className="w-4 h-4 text-foreground" />
-                    <span className="text-[10px] font-medium leading-tight truncate w-full text-left">{style.label}</span>
+                    <span className="text-[10px] font-medium leading-tight truncate w-full text-left">{t(style.label)}</span>
                   </button>
                 );
               })}
@@ -902,17 +929,33 @@ interface InitStage {
   id: string;
   label: string;
   message: string;
-  duration: number; // ms
+  /** Shortest time this stage stays on screen once it starts, in ms. */
+  minimumDwell: number;
 }
 
+/**
+ * One stage per call this screen actually makes, in the order it makes them.
+ *
+ * They used to advance on a fixed timer with no relation to the work — the
+ * comment on the effect that drove them said so outright, "decorative pacing,
+ * not tied to when the real call resolves". The list was not even in the order
+ * of the calls: it claimed to be preparing the workspace while the region
+ * settings were saving, and claimed to be saving preferences while the
+ * workspace was being created. On a fast machine the whole thing was finished
+ * before the second bullet lit up; on a slow one it sat on "Ready" while the
+ * work was still running.
+ *
+ * `minimumDwell` is the one concession to pacing that survives: a call that
+ * returns in 40 ms would otherwise flash a label nobody can read. It delays
+ * the *display*, never the work, and it cannot make a stage look finished
+ * before it is.
+ */
 const STAGES: InitStage[] = [
-  { id: "account", label: "Creating your account", message: "Hashing your password locally...", duration: 2500 },
-  { id: "workspace", label: "Preparing workspace", message: "Setting up your personal environment...", duration: 2500 },
-  { id: "preferences", label: "Saving your preferences", message: "Applying your region and language...", duration: 1800 },
-  { id: "ready", label: "Ready", message: "Your workspace is prepared.", duration: 1200 },
+  { id: "account", label: "Creating your account", message: "Hashing your password locally...", minimumDwell: 600 },
+  { id: "preferences", label: "Saving your preferences", message: "Applying your region and language...", minimumDwell: 400 },
+  { id: "workspace", label: "Preparing workspace", message: "Setting up your personal environment...", minimumDwell: 600 },
+  { id: "ready", label: "Ready", message: "Your workspace is prepared.", minimumDwell: 400 },
 ];
-
-const TOTAL_DURATION = STAGES.reduce((acc, s) => acc + s.duration, 0);
 
 type InitState = { currentStage: number; completed: boolean; error: boolean };
 type InitAction = { type: "ADVANCE" } | { type: "COMPLETE" } | { type: "ERROR" };
@@ -931,19 +974,26 @@ function stepReducer(state: InitState, action: InitAction): InitState {
 }
 
 /**
- * Registers the first workspace, unless the installation already has one.
+ * Creates the workspace this wizard was filled in for.
  *
- * The check matters on a second run of onboarding against a daemon that was
- * already set up (a reinstalled application over a live state directory):
- * creating a second workspace there would split the person's work in two
- * without saying so.
+ * It used to check whether any workspace existed first and give up if one did
+ * — and one always did, because the desktop registered one behind this screen
+ * the moment the account was created (`cmd/aos-desktop`'s afterAuth). So the
+ * name, the copilot's name, the tone, the style and the autonomy collected
+ * over five screens were read here and then dropped, every single time: the
+ * workspace took the folder's name and the copilot was always called Atlas,
+ * for good, since an agent's id is its file name and `agents_update` cannot
+ * change an id.
+ *
+ * The desktop no longer registers anything during onboarding, and this no
+ * longer gives up. A workspace already registered by something else — the CLI
+ * against a daemon that was running before anyone opened the window — is not a
+ * reason to discard what the person just typed either: they asked for a
+ * workspace, and this creates it. A name whose identifier is taken comes back
+ * as WORKSPACE_ALREADY_EXISTS, which the caller shows so they can pick
+ * another; that is a question for the person, not something to swallow.
  */
 async function ensureWorkspace(data: WizardData): Promise<void> {
-  const listed = (await client.invoke("workspace_list", {
-    _reasoning: "onboarding is finishing and needs to know whether a workspace already exists",
-  })) as { workspaces?: unknown[] } | undefined;
-  if ((listed?.workspaces?.length ?? 0) > 0) return;
-
   const path = data.workspacePath.trim();
   await client.invoke("workspace_create", {
     name: data.workspaceName.trim() || `${data.name.trim() || "My"} workspace`,
@@ -954,7 +1004,7 @@ async function ensureWorkspace(data: WizardData): Promise<void> {
       style: data.style,
       autonomy: data.autonomy,
     },
-    _reasoning: "onboarding is creating the installation's first workspace",
+    _reasoning: "onboarding is creating the workspace this installation was set up for",
   });
 }
 
@@ -968,33 +1018,46 @@ function InitStep({
   onDone: () => void;
 }): JSX.Element {
   const [state, dispatch] = useReducer(stepReducer, { currentStage: 0, completed: false, error: false });
-  const startedAtRef = useRef(0);
   const initStartedRef = useRef(false);
 
-  const progress = state.completed ? 100 : Math.min(100, ((performance.now() - startedAtRef.current) / TOTAL_DURATION) * 100);
+  // How much is done, counted in stages that have actually finished — not in
+  // milliseconds elapsed against a schedule nobody is keeping.
+  const progress = state.completed ? 100 : (state.currentStage / STAGES.length) * 100;
 
   const performInit = useCallback(async () => {
     if (initStartedRef.current) return;
     initStartedRef.current = true;
-    startedAtRef.current = performance.now();
+
+    // Runs one stage: shows its label, does the work, and holds the label
+    // long enough to be read before moving on. The work is never delayed —
+    // only the advance past it.
+    const stage = async (index: number, work: () => Promise<unknown>) => {
+      const startedAt = performance.now();
+      await work();
+      const remaining = STAGES[index].minimumDwell - (performance.now() - startedAt);
+      if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+      dispatch({ type: "ADVANCE" });
+    };
 
     try {
-      await onboarding(data.name.trim(), data.email.trim(), data.password);
+      await stage(0, () => onboarding(data.name.trim(), data.email.trim(), data.password));
 
-      try {
-        await client.invoke("config_update", {
-          set: {
-            "region.language": data.language,
-            "region.timezone": data.timezone,
-            "region.city": data.city,
-            "region.country": data.country,
-          },
-          _reasoning: "the person just finished onboarding and chose these region settings",
-        });
-      } catch {
-        // The account exists and the person is signed in either way; a
-        // region preference that didn't save is not worth failing over.
-      }
+      await stage(1, async () => {
+        try {
+          await client.invoke("config_update", {
+            set: {
+              "region.language": data.language,
+              "region.timezone": data.timezone,
+              "region.city": data.city,
+              "region.country": data.country,
+            },
+            _reasoning: "the person just finished onboarding and chose these region settings",
+          });
+        } catch {
+          // The account exists and the person is signed in either way; a
+          // region preference that didn't save is not worth failing over.
+        }
+      });
 
       // The workspace. This is the step that was missing, and it is not
       // optional: without a registered workspace the daemon has nothing to
@@ -1006,7 +1069,7 @@ function InitStep({
       // `workspace_create` has taken them since it was written; the wizard
       // collected all four and sent none, so the copilot somebody named on
       // the previous screen was always called Atlas.
-      await ensureWorkspace(data);
+      await stage(2, () => ensureWorkspace(data));
 
       dispatch({ type: "COMPLETE" });
       // A short beat so the "Ready" stage is actually seen before AuthGate
@@ -1014,7 +1077,7 @@ function InitStep({
       setTimeout(onDone, 900);
     } catch (err) {
       dispatch({ type: "ERROR" });
-      onError(err instanceof DomainError ? err.message : "Something went wrong.");
+      onError(err instanceof DomainError ? err.message : t("Something went wrong."));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1022,27 +1085,6 @@ function InitStep({
   useEffect(() => {
     void performInit();
   }, [performInit]);
-
-  // Advance the visual stage list on the same fixed schedule the router-bound
-  // copy uses — decorative pacing, not tied to when the real call resolves.
-  useEffect(() => {
-    if (state.completed || state.error) return;
-    const tick = () => {
-      const elapsed = performance.now() - startedAtRef.current;
-      let stageIndex = 0;
-      let cumulative = 0;
-      for (let i = 0; i < STAGES.length; i++) {
-        cumulative += STAGES[i].duration;
-        stageIndex = i;
-        if (elapsed < cumulative) break;
-      }
-      if (stageIndex !== state.currentStage) {
-        dispatch({ type: "ADVANCE" });
-      }
-    };
-    const interval = setInterval(tick, 100);
-    return () => clearInterval(interval);
-  }, [state.currentStage, state.completed, state.error]);
 
   return (
     <div className="flex flex-col items-center justify-center h-full px-8 py-12">
@@ -1056,12 +1098,12 @@ function InitStep({
             )}
           </div>
           <h2 className="text-2xl font-semibold tracking-tight">
-            {state.completed ? "You're all set" : "Getting everything ready"}
+            {state.completed ? t("You're all set") : t("Getting everything ready")}
           </h2>
           <p className="text-muted-foreground text-sm">
             {state.completed
-              ? "Your workspace is live. Let's find out what it can do."
-              : "Just a moment while AOS prepares your workspace..."}
+              ? t("Your workspace is live. Let's find out what it can do.")
+              : t("Just a moment while AOS prepares your workspace...")}
           </p>
         </div>
 
@@ -1101,9 +1143,9 @@ function InitStep({
                         transition={{ duration: 0.3 }}
                       >
                         <p className={`text-sm font-medium ${isStageDone ? "text-muted-foreground" : "text-foreground"}`}>
-                          {isStageDone ? <span className="line-through opacity-60">{stage.label}</span> : stage.label}
+                          {isStageDone ? <span className="line-through opacity-60">{t(stage.label)}</span> : t(stage.label)}
                         </p>
-                        {isStageActive && <p className="text-xs text-muted-foreground mt-0.5">{stage.message}</p>}
+                        {isStageActive && <p className="text-xs text-muted-foreground mt-0.5">{t(stage.message)}</p>}
                       </motion.div>
                     )}
                   </AnimatePresence>

@@ -64,7 +64,12 @@ none is given. Defaults to private visibility.
     },
     "visibility": {
       "type": "string",
-      "description": "One of: private, workspace, by_password. Defaults to private."
+      "description": "One of: private, workspace, by_password. Defaults to private.",
+      "enum": [
+        "private",
+        "workspace",
+        "by_password"
+      ]
     },
     "skill": {
       "type": "string",
@@ -238,7 +243,12 @@ Change the describable parts of an artifact. A field left nil is unchanged.
         "null",
         "string"
       ],
-      "description": "New visibility. Omit to leave unchanged."
+      "description": "New visibility. Omit to leave unchanged.",
+      "enum": [
+        "private",
+        "workspace",
+        "by_password"
+      ]
     },
     "_reasoning": {
       "type": "string",

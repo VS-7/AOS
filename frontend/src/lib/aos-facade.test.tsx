@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { COMMAND_MAP } from "./command-map";
+import { isDormantResult } from "./aos-facade";
 import * as authApi from "./auth";
 
 const invoke = vi.fn();
@@ -283,7 +284,7 @@ describe("useQuery's queryFn", () => {
   // comment for why the earlier "fake useQuery, grab the config" approach
   // stopped working once the hook gained a real `React.useEffect`.
 
-  it("resolves a dormant call to null data, not undefined", async () => {
+  it("resolves a dormant call to a marked value, not undefined and not a bare null", async () => {
     const { wrapper } = withQueryClient();
     // `user.create`, not `collection`/`instruction`/`model`/`user.list`:
     // task-10 lit `collection`, the Phase 8 domain pass lit `instruction`,
@@ -294,7 +295,16 @@ describe("useQuery's queryFn", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(result.current.data).toBeNull();
+    // Still a resolution, never a rejection: a ported screen reading
+    // `q.data?.field` must not crash because Go has no counterpart yet.
+    //
+    // But no longer a bare `null`. Indistinguishable from "the list is
+    // empty", that is what made Settings → Workspace → Members render "no
+    // members" permanently, with nothing anywhere saying the capability does
+    // not exist. `isDormantResult` is how a screen asks.
+    expect(result.current.data).not.toBeUndefined();
+    expect(isDormantResult(result.current.data)).toBe(true);
+    expect((result.current.data as { anything?: unknown })?.anything).toBeUndefined();
     expect(invoke).not.toHaveBeenCalled();
   });
 
@@ -358,12 +368,12 @@ describe("useQuery's onSuccess shim", () => {
     expect(onSuccess).toHaveBeenCalledWith({ tasks: [{ id: "t-1" }] });
   });
 
-  it("does not fire for a dormant resolution's null data on its own merits — but it does fire, since null is still a successful result", async () => {
+  it("fires once for a dormant resolution, since dormant is still a successful result", async () => {
     // Documents the actual, current behavior rather than assuming it:
-    // dormant resolves `isSuccess: true` with `data: null` (see the queryFn
-    // tests above), and this shim's only condition is `result.isSuccess` —
-    // it does not special-case dormant. A dormant screen's `onSuccess`, if
-    // it has one, does get called once with `null`.
+    // dormant resolves `isSuccess: true` (see the queryFn tests above), and
+    // this shim's only condition is `result.isSuccess` — it does not
+    // special-case dormant. A dormant screen's `onSuccess`, if it has one,
+    // does get called once, with the marked value.
     //
     // `user.create`, not `collection`/`instruction`/`model`/`user.list`:
     // task-10 lit `collection`, the Phase 8 domain pass lit `instruction`,
@@ -381,7 +391,7 @@ describe("useQuery's onSuccess shim", () => {
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
 
     expect(invoke).not.toHaveBeenCalled();
-    expect(onSuccess).toHaveBeenCalledWith(null);
+    expect(onSuccess).toHaveBeenCalledWith(expect.objectContaining({ isDormant: true }));
   });
 
   it("fires again when a refetch resolves to genuinely different data", async () => {

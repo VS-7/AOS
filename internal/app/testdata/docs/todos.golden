@@ -208,7 +208,14 @@ reopened rather than deleted, so the record of the attempt survives.
     },
     "status": {
       "type": "string",
-      "description": "One of: pending, in_progress, blocked, finished, skipped."
+      "description": "One of: pending, in_progress, blocked, finished, skipped.",
+      "enum": [
+        "pending",
+        "in_progress",
+        "blocked",
+        "finished",
+        "skipped"
+      ]
     },
     "evidence": {
       "type": "string",
@@ -281,7 +288,14 @@ field that silently did nothing would let you believe the step had moved.
     },
     "status": {
       "type": "string",
-      "description": "Not writable here. Use set-status, which validates the move."
+      "description": "Not writable here. Use set-status, which validates the move.",
+      "enum": [
+        "pending",
+        "in_progress",
+        "blocked",
+        "finished",
+        "skipped"
+      ]
     },
     "_reasoning": {
       "type": "string",

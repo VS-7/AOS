@@ -10,7 +10,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/OWNER/aos/internal/core/command"
-	"github.com/OWNER/aos/internal/core/tokens"
 )
 
 // CompositeInput is the payload of a composite tool.
@@ -24,26 +23,16 @@ type CompositeInput struct {
 
 // ActionDetail is what `schema: true` returns.
 //
-// It mirrors the original's payload, token estimate included, so the agent can
-// budget its own context before deciding to call. The master prompt tells it to
-// inspect before executing; this is what it inspects.
-type ActionDetail struct {
-	Tool        string             `json:"tool"`
-	Action      string             `json:"action"`
-	Description string             `json:"description"`
-	Examples    []command.Example  `json:"examples,omitempty"`
-	InputSchema *jsonschema.Schema `json:"inputSchema"`
-	Tokens      TokenEstimate      `json:"_tokens"`
-}
+// The type lives in the Command Layer because `schema: true` is answered by
+// every surface, not only by this one — the composite shape was the only place
+// that honoured it while the flat HTTP and terminal surfaces validated the
+// question as if it were a call (defect #2). These aliases keep this package's
+// published names.
+type ActionDetail = command.Detail
 
 // TokenEstimate breaks the cost of a detail down by section, so the agent knows
 // what it is about to spend.
-type TokenEstimate struct {
-	Description int `json:"description"`
-	Examples    int `json:"examples"`
-	InputSchema int `json:"inputSchema"`
-	Total       int `json:"total"`
-}
+type TokenEstimate = command.TokenEstimate
 
 // RegisterComposite publishes one tool per group, with an action field.
 func RegisterComposite(s *mcp.Server, reg *command.Registry) {
@@ -232,52 +221,9 @@ func withReasoning(input json.RawMessage, reasoning string) (json.RawMessage, er
 	return json.Marshal(fields)
 }
 
-// actionInputSchema is the per-action schema published by schema:true: the
-// command's own schema without `_reasoning`, because on this shape the field
-// belongs to the composite payload rather than to the action.
-func actionInputSchema(d command.Descriptor) *jsonschema.Schema {
-	original := d.InputSchema()
-	if original == nil {
-		return nil
-	}
-	trimmed := *original
-	trimmed.Properties = make(map[string]*jsonschema.Schema, len(original.Properties))
-	for name, prop := range original.Properties {
-		if name == command.ReasoningField {
-			continue
-		}
-		trimmed.Properties[name] = prop
-	}
-	trimmed.Required = nil
-	for _, name := range original.Required {
-		if name == command.ReasoningField {
-			continue
-		}
-		trimmed.Required = append(trimmed.Required, name)
-	}
-	return &trimmed
-}
-
+// detailOf renders one action's contract. The schema is the command's own
+// without `_reasoning`, because on this shape the field belongs to the
+// composite payload rather than to the action.
 func detailOf(tool string, d command.Descriptor) ActionDetail {
-	detail := ActionDetail{
-		Tool:        tool,
-		Action:      d.Name(),
-		Description: d.Doc(),
-		Examples:    d.Examples(),
-		InputSchema: actionInputSchema(d),
-	}
-	detail.Tokens = estimateOf(detail)
-	return detail
-}
-
-func estimateOf(d ActionDetail) TokenEstimate {
-	est := TokenEstimate{Description: tokens.Estimate(d.Description)}
-	if raw, err := json.Marshal(d.Examples); err == nil {
-		est.Examples = tokens.Estimate(string(raw))
-	}
-	if raw, err := json.Marshal(d.InputSchema); err == nil {
-		est.InputSchema = tokens.Estimate(string(raw))
-	}
-	est.Total = est.Description + est.Examples + est.InputSchema
-	return est
+	return command.DetailOf(tool, d, command.SchemaWithoutReasoning(d))
 }

@@ -64,6 +64,15 @@ func ParseType(raw string) (Type, error) {
 	return "", errTypeUnknown(raw)
 }
 
+// EnumValues publishes the kinds of target to every schema.
+func (t Type) EnumValues() []string {
+	out := make([]string, 0, len(types))
+	for _, v := range types {
+		out = append(out, string(v))
+	}
+	return out
+}
+
 // Valid reports whether t is one of the five declared members.
 func (t Type) Valid() bool {
 	for _, known := range types {

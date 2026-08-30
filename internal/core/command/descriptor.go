@@ -61,6 +61,14 @@ func (d *descriptor[In, Out]) InputType() reflect.Type         { return d.inType
 // Invoke is the one place where a payload becomes a call. Decoding, validation
 // and the handler run here, so the five surfaces cannot validate differently.
 func (d *descriptor[In, Out]) Invoke(ctx context.Context, surface Surface, raw json.RawMessage) (any, error) {
+	// The contract before the call. This is checked ahead of decoding and
+	// validation because it is the answer to "what does this take?", and a
+	// caller that has to satisfy the contract in order to read it has no way in
+	// (defect #2).
+	if asksForSchema(raw) {
+		return FlatDetail(d), nil
+	}
+
 	var in In
 	if len(raw) > 0 && string(raw) != "null" {
 		dec := json.NewDecoder(strings.NewReader(string(raw)))

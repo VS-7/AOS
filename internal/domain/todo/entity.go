@@ -22,6 +22,16 @@ const (
 // Statuses lists them in lifecycle order.
 var Statuses = []Status{Pending, InProgress, Blocked, Finished, Skipped}
 
+// EnumValues publishes the accepted statuses. "done" is the value a model
+// reaches for first and the one this list shows is not here (defect #8).
+func (s Status) EnumValues() []string {
+	out := make([]string, 0, len(Statuses))
+	for _, v := range Statuses {
+		out = append(out, string(v))
+	}
+	return out
+}
+
 // Valid reports whether s is one of the five.
 func (s Status) Valid() bool {
 	for _, known := range Statuses {

@@ -28,6 +28,15 @@ var Statuses = []Status{
 	Suggestion, Backlog, Planning, Todo, InProgress, Stopped, InReview, Finished,
 }
 
+// EnumValues publishes the task lifecycle to every schema.
+func (s Status) EnumValues() []string {
+	out := make([]string, 0, len(Statuses))
+	for _, v := range Statuses {
+		out = append(out, string(v))
+	}
+	return out
+}
+
 // Valid reports whether s is one of the eight.
 func (s Status) Valid() bool {
 	for _, known := range Statuses {
@@ -51,6 +60,15 @@ const (
 
 // Priorities lists them from most to least urgent, after the unset one.
 var Priorities = []Priority{NoPriority, Urgent, High, Medium, Low}
+
+// EnumValues publishes the priorities to every schema.
+func (p Priority) EnumValues() []string {
+	out := make([]string, 0, len(Priorities))
+	for _, v := range Priorities {
+		out = append(out, string(v))
+	}
+	return out
+}
 
 // Valid reports whether p is one of the five.
 func (p Priority) Valid() bool {

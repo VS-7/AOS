@@ -51,6 +51,18 @@ export interface CommandDescriptor {
    */
   renameIn?: Record<string, string>;
   /**
+   * Fields this mapping always sends, whatever the caller passed, keyed by
+   * the name Go expects (so: after `renameIn`, which is when they are
+   * applied).
+   *
+   * It exists for the mappings whose whole meaning is a constant — `task.
+   * start` is `tasks_set-status` with `status: "in_progress"`, and there is
+   * no version of "start" that means anything else. `coerceIn` cannot
+   * express that: it only fires on keys the payload already carries, and a
+   * caller saying "start this" does not send a status to correct.
+   */
+  fixedIn?: Record<string, unknown>;
+  /**
    * Type/shape fixes to apply to individual payload fields before the
    * call reaches Go, keyed by the field name the ported UI actually sends
    * (pre-`renameIn`, so name it the same as the UI's own key, not Go's).
@@ -104,6 +116,13 @@ export interface CommandDescriptor {
 export type MapEntry = CommandKey | CommandDescriptor | HttpHandler | null;
 
 const s = (p: Record<string, unknown>, k: string): string => String(p[k] ?? "");
+
+/** One level in: `nested(p, "user", "name")` reads `p.user.name` as a string. */
+const nested = (p: Record<string, unknown>, group: string, k: string): string => {
+  const inner = p[group];
+  if (inner === null || typeof inner !== "object") return "";
+  return String((inner as Record<string, unknown>)[k] ?? "");
+};
 
 /** One-level `{a, b}` -> `{"prefix.a": a, "prefix.b": b}`, for a `coerceIn` that turns a nested UI object into `patch.Apply`'s dotted-path leaves. */
 const dotted = (prefix: string, value: unknown): Record<string, unknown> =>
@@ -403,6 +422,23 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // comment) rather than something expressible here.
   "memory.graph": "memories_graph",
 
+  // The other four. Only `memory.graph` was mapped, so the desktop could draw
+  // the shape of what an agent knew and could not read, write, revise or
+  // retire a single memory of it — the core of the system, visible only as
+  // dots on a graph.
+  //
+  // `memories_recall` answers `{memories, total, indexed}` and
+  // `memories_reflect` a bare `Memory`, so only the latter needs wrapping.
+  // `memory` is what both address a record by; the ported code calls it
+  // `memory` too, so there is nothing to rename.
+  "memory.list": "memories_recall",
+  "memory.getById": { key: "memories_reflect", wrapOut: "memory" },
+  "memory.create": { key: "memories_store", wrapOut: "memory" },
+  // Not a delete. Forgetting deprecates and keeps the trace, with the reason
+  // it stopped being true — which is why `reason` is required by Go and asked
+  // for by the interface rather than defaulted to something polite.
+  "memory.forget": "memories_forget",
+
   // task-12 correction: the comments this whole `routine.*` block carried
   // said "no live consumer here yet (`routine` isn't a ported feature)".
   // That was wrong — `presentation/pages/($id)/index.tsx` is live and
@@ -584,7 +620,19 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "auth.getStatus": () => authApi.status(),
   "auth.login": (p) => authApi.login(s(p, "identifier"), s(p, "password")),
   "auth.logout": () => authApi.logout(),
-  "auth.onboarding": (p) => authApi.onboarding(s(p, "name"), s(p, "email"), s(p, "password")),
+  // Accepts both spellings on purpose. `flattenArgs` merges params, query and
+  // body one level deep, so a caller that groups its fields — `{user: {name,
+  // email}, security: {password}}`, which is how the deleted second onboarding
+  // screen sent them — leaves nothing under the flat keys, and this read three
+  // empty strings and asked the daemon to create an account with a zero-length
+  // password. Reading through the group as well costs a line and removes a way
+  // to call this and get nothing.
+  "auth.onboarding": (p) =>
+    authApi.onboarding(
+      s(p, "name") || nested(p, "user", "name"),
+      s(p, "email") || nested(p, "user", "email"),
+      s(p, "password") || nested(p, "security", "password"),
+    ),
   "session.get": () => authApi.session(),
   "password.change": (p) => authApi.changePassword(s(p, "current"), s(p, "next")),
   "file.create": (p) => fileApi.write(s(p, "path"), s(p, "content")),
@@ -608,6 +656,45 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
 
   // ── dormant: command missing from a live domain ─────────────────────────
   "activity.listEvents": null,
+  // The approval channel (ADR-0007). Neither is in the agent's own registry —
+  // an agent that could approve its own tool call would make the whole
+  // mechanism decoration — so these are the interface's alone.
+  //
+  // They were unmapped until now, which meant the daemon published
+  // `approval.request`, the chat rendered a tool stuck in `approval-requested`,
+  // and nothing anywhere could answer it: the run waited out its deadline and
+  // was denied by timeout, every time.
+  "approval.list": "approvals_list",
+  "approval.decide": "approvals_decide",
+
+  // Keeping the installation current. `update_check` never downloads;
+  // `update_download` verifies the signature before a single asset is
+  // fetched and stages nothing on a mismatch; `update_apply` swaps and rolls
+  // back on failure. All four existed and none was reachable — a desktop
+  // application that could not tell you a new version was out, let alone
+  // install it.
+  "update.status": "update_status",
+  "update.check": "update_check",
+  "update.download": "update_download",
+  "update.apply": "update_apply",
+
+  // The execution queue. `jobs_list`/`jobs_stats` are what makes a turn that
+  // is queued, running, retrying or dead visible at all; without them the
+  // window showed nothing between "asked" and "answered".
+  "job.list": "jobs_list",
+  "job.stats": "jobs_stats",
+  "job.getById": { key: "jobs_get", renameIn: { job: "id" } },
+  "job.recover": "jobs_recover",
+  "job.purge": "jobs_purge",
+
+  // What the daemon says about itself. Only `status` and `restart` are
+  // mapped: `start` asks a running daemon to start itself, and `stop` would
+  // have the window cut the connection it is speaking over — neither is an
+  // action this surface can offer honestly. Supervision belongs to whatever
+  // launched the daemon (`aos gateway`, or the desktop's own supervisor).
+  "gateway.status": "gateway_status",
+  "gateway.restart": "gateway_restart",
+
   "auth.verifyWaitlist": null,
   // `chat.findOrCreateDm`, `chat.stop` and `chat.toggleReaction` are the
   // three of the five that are still dormant, and each for its own reason:
@@ -617,12 +704,34 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // collection has no shape for. None of the three can be composed out of
   // what exists, which is what separates them from `chat.delete`/`.update`
   // (below) — those were missing commands, and now are not.
+  // Stays dormant deliberately, and is not a broken button: Go has no
+  // find-or-create for chats, and `open-chat-tab.helper.ts` already does the
+  // two steps itself (`chats_list` filtered by kind, then `chats_create`).
+  // Mapping this onto `chats_create` would put a second, competing
+  // implementation behind a name nothing calls.
   "chat.findOrCreateDm": null,
   "chat.stop": null,
   "chat.toggleReaction": null,
 
   "session.updateProfile": null,
-  "task.start": null,
+  // Was dormant, and did not need to be: starting a task is moving it to
+  // `in_progress`, which `tasks_set-status` has always done. The Start button
+  // on the task page called this, got the dormant-domain error, and showed
+  // "Failed to start task" — every time.
+  //
+  // `fixedIn` rather than `coerceIn`: the status is not a correction to
+  // something the caller sent, it is the whole meaning of this mapping, and
+  // `coerceIn` only fires on keys the payload already has.
+  //
+  // The caller also sends `delegate: true`, which `tasks_set-status` has no
+  // field for and the daemon ignores. Starting the task is what the button
+  // says it does; delegating it is a separate capability that does not exist
+  // yet, and is listed as such rather than half-sent here.
+  "task.start": {
+    key: "tasks_set-status",
+    renameIn: { task: "id" },
+    fixedIn: { status: "in_progress" },
+  },
   // `workspace.directory` stays unmapped, and is now unused: there is no
   // single Go command that answers agents+users the way the original's
   // server-side `getDirectory()` did, and there does not need to be.

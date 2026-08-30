@@ -61,6 +61,14 @@ type routedDescriptor struct {
 }
 
 func (r *routedDescriptor) Invoke(ctx context.Context, surface Surface, raw json.RawMessage) (any, error) {
+	// Introspection describes the published surface, and the published surface
+	// is the template's — identical for every workspace, by construction. So it
+	// is answered here rather than routed: asking what a command takes must not
+	// depend on being able to resolve a workspace to run it in.
+	if asksForSchema(raw) {
+		return FlatDetail(r.Descriptor), nil
+	}
+
 	registry, err := r.resolve(ctx)
 	if err != nil {
 		return nil, err

@@ -100,7 +100,7 @@ func errDisabled(id string) error {
 		Status(apperr.StatusForbidden).
 		CTA(apperr.CallToAction{
 			Label: "enable it before calling it",
-			Tool:  "toolsets_update_config",
+			Tool:  "toolsets_update-config",
 		})
 }
 

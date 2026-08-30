@@ -69,11 +69,37 @@ type AuthService struct {
 	// workspace registration: that call needs a token, which a fresh
 	// installation does not have until this moment — see cmd/aos-desktop's
 	// wiring, the only place this is non-nil today.
-	afterAuth func(ctx context.Context)
+	//
+	// It is told which of the two ran, because the right thing to do differs.
+	// Signing in reaches an installation that already has workspaces, and
+	// registering the directory the window names is what "open this project"
+	// means. Onboarding reaches an empty one, and the wizard on the other side
+	// of this call is still holding the name, the tone, the style and the
+	// autonomy the person just chose for it — so anything registered here
+	// would be registered before the answer was known, which is exactly what
+	// used to happen.
+	afterAuth func(ctx context.Context, event AuthEvent)
+}
+
+// AuthEvent says which door a caller came through.
+type AuthEvent int
+
+const (
+	// AuthLogin is a sign-in to an installation that already has an account.
+	AuthLogin AuthEvent = iota
+	// AuthOnboarding is the creation of the installation's first account.
+	AuthOnboarding
+)
+
+func (e AuthEvent) String() string {
+	if e == AuthOnboarding {
+		return "onboarding"
+	}
+	return "login"
 }
 
 // NewAuth builds the service over a caller. afterAuth may be nil.
-func NewAuth(caller AuthCaller, afterAuth func(ctx context.Context)) *AuthService {
+func NewAuth(caller AuthCaller, afterAuth func(ctx context.Context, event AuthEvent)) *AuthService {
 	return &AuthService{caller: caller, afterAuth: afterAuth}
 }
 
@@ -96,7 +122,7 @@ func (s *AuthService) Login(ctx context.Context, identifier, password string) (A
 	}
 	out, err := s.caller.Login(ctx, identifier, password)
 	if err == nil && s.afterAuth != nil {
-		s.afterAuth(ctx)
+		s.afterAuth(ctx, AuthLogin)
 	}
 	return out, err
 }
@@ -108,7 +134,7 @@ func (s *AuthService) Onboarding(ctx context.Context, name, email, password stri
 	}
 	out, err := s.caller.Onboarding(ctx, name, email, password)
 	if err == nil && s.afterAuth != nil {
-		s.afterAuth(ctx)
+		s.afterAuth(ctx, AuthOnboarding)
 	}
 	return out, err
 }

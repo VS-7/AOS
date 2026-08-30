@@ -28,6 +28,15 @@ const (
 // Kinds lists every surface.
 var Kinds = []Kind{KindDM, KindChannel, KindTask, KindRun, KindExternal}
 
+// EnumValues publishes the kinds of conversation to every schema.
+func (k Kind) EnumValues() []string {
+	out := make([]string, 0, len(Kinds))
+	for _, v := range Kinds {
+		out = append(out, string(v))
+	}
+	return out
+}
+
 // Valid reports whether k is one of them.
 func (k Kind) Valid() bool {
 	for _, known := range Kinds {

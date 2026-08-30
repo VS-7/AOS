@@ -6,6 +6,8 @@ import {
   Briefcase01Icon,
   CheckListIcon,
   CloudIcon,
+  DownloadCircle01Icon,
+  Queue01Icon,
   ComputerIcon,
   Folder01Icon,
   GitBranchIcon,
@@ -25,6 +27,7 @@ export type SettingsSectionId =
   | "user.profile"
   | "user.developers"
   | "user.users"
+  | "user.updates"
   | "user.tunnel"
   | "workspace.profile"
   | "workspace.members"
@@ -33,7 +36,8 @@ export type SettingsSectionId =
   | "workspace.templates"
   | "workspace.tasks"
   | "workspace.git"
-  | "workspace.worktrees";
+  | "workspace.worktrees"
+  | "workspace.jobs";
 
 export interface SettingsSectionDefinition {
   id: SettingsSectionId;
@@ -46,6 +50,20 @@ export interface SettingsSectionDefinition {
 export const DEFAULT_SETTINGS_SECTION: SettingsSectionId = "user.general";
 
 export const SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
+  {
+    id: "user.updates",
+    get title() { return t("Updates"); },
+    get description() { return t("Check the release channel and install a new version."); },
+    group: "user",
+    icon: DownloadCircle01Icon,
+  },
+  {
+    id: "workspace.jobs",
+    get title() { return t("Jobs"); },
+    get description() { return t("The execution queue behind every turn, routine and background task."); },
+    group: "workspace",
+    icon: Queue01Icon,
+  },
   {
     id: "user.general",
     get title() { return t("General"); },

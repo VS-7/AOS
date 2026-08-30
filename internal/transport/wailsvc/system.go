@@ -92,6 +92,18 @@ type SystemService struct {
 	// on whichever goroutine Wails dispatches a call from.
 	mu   sync.RWMutex
 	root string
+
+	// launchDir is the directory the window was started in, when it was
+	// started in one — a terminal inside a repository, or a shortcut with a
+	// working directory. It is not the workspace: nothing is registered here,
+	// and it is empty for an application opened from the dock.
+	//
+	// The onboarding wizard reads it to offer a default folder for the first
+	// workspace. Until the wizard existed the desktop registered this
+	// directory itself, behind the person's back and before they had named
+	// anything; offering it instead keeps the useful half of that behaviour
+	// and drops the part that overrode a choice nobody had made yet.
+	launchDir string
 }
 
 // NewSystem builds the system service.
@@ -113,6 +125,26 @@ func NewSystem(platform Platform, health Health, root string) *SystemService {
 
 // ServiceName is what Wails calls this service in the generated bindings.
 func (s *SystemService) ServiceName() string { return "SystemService" }
+
+// SetLaunchDirectory records where the window was started. Called once, at
+// wiring, by cmd/aos-desktop.
+func (s *SystemService) SetLaunchDirectory(dir string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.launchDir = strings.TrimSpace(dir)
+}
+
+// LaunchDirectory is where the window was started, or empty when it was
+// started nowhere in particular.
+//
+// The wizard uses it as the default folder for the first workspace. Empty is a
+// normal answer and means "let AOS pick one", which is what the field's own
+// placeholder already promises.
+func (s *SystemService) LaunchDirectory(context.Context) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.launchDir, nil
+}
 
 // DaemonAddress reports where the daemon is, as an http(s) origin.
 //

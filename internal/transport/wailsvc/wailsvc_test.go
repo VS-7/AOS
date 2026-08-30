@@ -419,7 +419,11 @@ func TestAuthWithNoDaemonSaysSo(t *testing.T) {
 // after a failure would register a workspace nobody is signed in to see.
 func TestAuthRunsAfterAuthOnlyOnSuccess(t *testing.T) {
 	var hookRuns int
-	hook := func(context.Context) { hookRuns++ }
+	var lastEvent wailsvc.AuthEvent
+	hook := func(_ context.Context, event wailsvc.AuthEvent) {
+		hookRuns++
+		lastEvent = event
+	}
 
 	ok := wailsvc.NewAuth(&authCaller{result: wailsvc.AuthResult{User: wailsvc.PublicUser{ID: "u1"}}}, hook)
 	if _, err := ok.Login(ctx(), "vitor", "whatever"); err != nil {
@@ -442,6 +446,12 @@ func TestAuthRunsAfterAuthOnlyOnSuccess(t *testing.T) {
 	}
 	if hookRuns != 2 {
 		t.Fatalf("hookRuns after a successful onboarding = %d, want 2", hookRuns)
+	}
+	// Which door it was is part of the hook's contract: the desktop registers
+	// a workspace after a sign-in and deliberately does not after onboarding,
+	// where the wizard is still holding the name.
+	if lastEvent != wailsvc.AuthOnboarding {
+		t.Errorf("event after onboarding = %v, want onboarding", lastEvent)
 	}
 }
 

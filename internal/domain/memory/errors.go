@@ -5,6 +5,7 @@ import (
 
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/build"
+	"github.com/OWNER/aos/internal/core/env"
 )
 
 // errAgentRequired is what a caller gets when it tries to write a memory
@@ -12,14 +13,25 @@ import (
 // nobody and would be recalled by everybody.
 func errAgentRequired(op string) error {
 	return apperr.New("MEMORY_AGENT_REQUIRED").
-		Causer("memory.Service." + op).
+		Causer("memory.Service."+op).
 		Msgf("a memory belongs to an agent, and this call has no agent identity").
 		Status(apperr.StatusForbidden).
-		CTA(apperr.CallToAction{
-			Label:   "run this as an agent, or name one explicitly",
-			Command: build.Name + " agents me",
-			Tool:    "agents_me",
-		})
+		CTA(
+			// `agents me` was the only thing this named, and it reads an
+			// identity rather than attaching one — so following it changed
+			// nothing and the call failed again identically (defect #4). These
+			// two are what actually attach one.
+			apperr.CallToAction{
+				Label:   "say who is calling: --agent on the command, for this call only",
+				Command: build.Name + " memories store --agent <slug> --set title=… --set category=…",
+			},
+			apperr.CallToAction{
+				Label: "or for the whole session, export " + env.Key(env.KeyAgentID) + "=<slug>. " +
+					"Which slug is yours is what agents me answers",
+				Command: build.Name + " agents me",
+				Tool:    "agents_me",
+			},
+		)
 }
 
 func errNotFound(agent, id string) error {

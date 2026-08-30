@@ -17,6 +17,7 @@ import (
 	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/transport/clix/format"
+	"github.com/OWNER/aos/internal/transport/wailsvc"
 )
 
 // Invoker executes a command. Locally it is the registry itself; from phase 4
@@ -38,6 +39,17 @@ type Config struct {
 	Invoker  Invoker
 	Out      io.Writer
 	Err      io.Writer
+
+	// Daemon is where the rest of the surface lives.
+	//
+	// This binary links four commands — supervision, which cannot be delegated
+	// to the process being supervised — and every other command it publishes
+	// arrives from a daemon. Anything that has to *describe* the surface has to
+	// ask the same source: `self tools` and `self llms` described the local
+	// registry and called it the published tool list, which was 4 of ~140
+	// commands (defect #1). Nil is a binary with no daemon to ask, which falls
+	// back to Registry.
+	Daemon wailsvc.Caller
 
 	// IsTTY reports whether a human is watching. Nil uses the real terminal.
 	IsTTY func() bool

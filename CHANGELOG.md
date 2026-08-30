@@ -8,6 +8,86 @@ em que o release foi cortado.
 
 ## [Unreleased]
 
+## [v0.14.0-fase9] — 2026-08-30
+
+Duas auditorias fechadas: a da API/CLI e a do aplicativo desktop.
+
+### Corrigido
+
+**Onboarding — o copiloto sempre nascia "Atlas".** `AuthService` chamava
+`afterAuth` *dentro* de `Onboarding`, antes de a resposta chegar à janela, e o
+desktop registrava um workspace ali — com o nome da pasta e o orquestrador
+padrão. Quando o `workspace_create` do assistente rodava, já havia workspace, e
+ele desistia. O nome do workspace, o nome do copiloto, o tom, o estilo e a
+autonomia coletados em cinco telas eram descartados, sempre. O assistente passa
+a ser dono do primeiro workspace; o onboarding só adota.
+
+**O canal de aprovação não tinha interface.** O ADR-0007 define que um hook
+pode responder "ask" e a chamada espera por uma pessoa. O daemon tinha tudo —
+broker, `approvals_list`, `approvals_decide`, evento no socket — e nenhuma tela
+chamava nada disso: o agente pedia permissão e esperava o deadline até ser
+negado. Agora há o modal, com Negar / Permitir sempre / Aprovar uma vez.
+
+**Memórias eram invisíveis.** Só `memories_graph` estava ligado; guardar,
+recordar, refletir e esquecer não tinham interface. A aba de memórias do agente
+ganhou lista com busca, filtro por categoria, leitura completa, escrita e o
+esquecer-com-motivo (que descontinua e mantém o rastro).
+
+**Telas que não faziam nada.** `task.start` chamava um comando dormente e
+mostrava "Failed to start task"; a tela de Membros mostrava lista vazia para
+sempre porque o `DormantGate` dela listava um comando que havia sido ligado, e
+o gate só dispara quando todos estão dormentes.
+
+**`schema: true` nunca funcionava.** A validação rodava antes da checagem, então
+o `cta` de toda mensagem de erro mandava fazer algo que caía no mesmo erro.
+Agora é checado antes de decodificar, em todas as superfícies, e `--schema`
+voltou a valer para comandos servidos pelo daemon.
+
+**`self tools` / `self llms` descreviam 4 de 140 comandos.** Liam o registro
+local do binário do terminal. O daemon publica `GET /api/_manifest` e eles
+passam a lê-lo.
+
+**`workspace_introspect` falhava no caso normal.** Colisão de nome respondia
+`ALREADY_EXISTS` em vez de registrar; e resolvia o diretório do *daemon*, não o
+de quem chamou.
+
+**16 CTAs apontavam para comandos inexistentes** — `aos auth token issue`,
+`aos gateway logs`, `tasks_set_status` (o comando é `set-status`) e outros. Um
+teste estático agora falha o build quando um CTA nomeia grupo, comando ou tool
+que não existe.
+
+**A interface misturava idiomas.** A primeira tela dizia "Bem-vindo ao AOS"
+sobre um botão "Get Started". As telas de entrada foram traduzidas, e um teste
+novo falha quando copy renderizada não passa por `t()`.
+
+**O onboarding mentia sobre o progresso.** As etapas avançavam por cronômetro,
+fora da ordem das chamadas reais. Agora cada etapa embrulha a chamada que nomeia.
+
+### Adicionado
+- **Atualizações** e **Daemon** em Configurações: procurar, baixar-e-verificar
+  e instalar uma versão nova; status e reinício do daemon.
+- **Jobs** em Configurações do workspace: a fila de execução, com recuperação
+  dos travados e limpeza dos concluídos.
+- `GET /api/_manifest`: a superfície inteira (documentação e schemas) para
+  clientes que não são o CLI.
+- `--agent`, `--base-url`, `--token` e `--workspace` nos comandos servidos pelo
+  daemon. Sem eles, o CLI não conseguia escrever nada como um agente.
+- Conjuntos fechados viram `enum` de verdade no JSON Schema, pela interface
+  `command.Enumerator` que o próprio tipo do domínio implementa.
+- `workspace_get`/`update`/`delete`/`inventory` aceitam `id`, como todo o resto.
+
+### Mudado
+- O metadado do comando saiu de `issue.tool` para `issue._command`: um comando
+  com campo de domínio chamado `tool` (`toolsets_call`) sobrescrevia o próprio
+  metadado.
+- Uma *query* dormente deixa de resolver para `null` e passa a carregar uma
+  marca, para a tela poder dizer que a capacidade não existe em vez de mostrar
+  lista vazia.
+- Removida a segunda tela de onboarding (rota `/onboarding`), que não podia
+  funcionar: mandava o corpo aninhado onde o mapa lia chaves planas, e exigia
+  um `workspaceId` que a API nunca devolveu.
+
+
 ## [v0.13.0-fase9] — 2026-08-27
 
 ### Adicionado

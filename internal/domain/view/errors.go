@@ -16,7 +16,7 @@ func errComponentUnknown(at, component string) error {
 		Issue("at", at).
 		Issue("component", component).
 		Status(apperr.StatusBadRequest).
-		CTA(apperr.CallToAction{Label: "call Components to see what is available", Tool: "view_components"})
+		CTA(apperr.CallToAction{Label: "call Components to see what is available", Tool: "views_components"})
 }
 
 func errPropRequired(at, component, prop string) error {
@@ -103,7 +103,7 @@ func errNotFound(id string) error {
 		Msgf("no view named %q", id).
 		Issue("id", id).
 		Status(apperr.StatusNotFound).
-		CTA(apperr.CallToAction{Label: "list the views that exist before reading, rendering or deleting one by id", Tool: "view_list"})
+		CTA(apperr.CallToAction{Label: "list the views that exist before reading, rendering or deleting one by id", Tool: "views_list"})
 }
 
 func errIDRequired() error {

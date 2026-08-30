@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/OWNER/aos/internal/core/apperr"
@@ -83,7 +84,7 @@ func (s *Service) List(ctx context.Context, in ListInput) (ListOutput, error) {
 
 // Get reads one workspace, defaulting to the active one.
 func (s *Service) Get(ctx context.Context, in GetInput) (*Workspace, error) {
-	return s.resolve(ctx, in.Workspace)
+	return s.resolve(ctx, in.Target())
 }
 
 // Create registers a workspace and lays it out inside the repository.
@@ -185,7 +186,7 @@ func (s *Service) ensureOrchestrator(ctx context.Context, w *Workspace, spec *Or
 
 // Update patches the workspace record by dotted path.
 func (s *Service) Update(ctx context.Context, in UpdateInput) (*Workspace, error) {
-	current, err := s.resolve(ctx, in.Workspace)
+	current, err := s.resolve(ctx, in.Target())
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +225,10 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Workspace, error
 // directory in it holds agents, memories and instructions the person wrote, and
 // unregistering a workspace is not a request to delete their work.
 func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, error) {
-	id := strings.TrimSpace(in.Workspace)
+	id := in.Target()
+	if id == "" {
+		return DeleteOutput{}, errNotFound("")
+	}
 	current, err := s.store.Get(ctx, id)
 	if err != nil || current == nil {
 		return DeleteOutput{Workspace: id}, errNotFound(id)
@@ -242,11 +246,7 @@ func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, err
 // the zero-configuration entry point: run it at the root of a project and the
 // project becomes a workspace.
 func (s *Service) Introspect(ctx context.Context, in IntrospectInput) (CreateOutput, error) {
-	root := strings.TrimSpace(in.Path)
-	if root == "" {
-		root = s.workingDir
-	}
-	root = path.Clean(root)
+	root := path.Clean(s.rootFor(ctx, in.Path))
 
 	// A repository that is already registered is returned as it is. Running
 	// this twice is a normal thing to do, and the second run must not fail.
@@ -260,7 +260,51 @@ func (s *Service) Introspect(ctx context.Context, in IntrospectInput) (CreateOut
 		}
 	}
 
-	return s.Create(ctx, CreateInput{Name: s.nameFor(ctx, root), Path: root})
+	return s.Create(ctx, CreateInput{Name: s.freeNameFor(ctx, root, known), Path: root})
+}
+
+// rootFor resolves which directory `introspect` is about.
+//
+// The explicit path first, then the directory the *caller* is standing in, and
+// only then this process's own. The middle one is the whole point: a daemon
+// serves many clients from a working directory that belongs to none of them,
+// so resolving straight to it registered the daemon's directory whenever a
+// terminal asked to register its own (defect #3).
+func (s *Service) rootFor(ctx context.Context, explicit string) string {
+	if p := strings.TrimSpace(explicit); p != "" {
+		return p
+	}
+	if p := strings.TrimSpace(identity.From(ctx).WorkingDir); p != "" {
+		return p
+	}
+	return s.workingDir
+}
+
+// freeNameFor derives a name for a repository that no registration is already
+// using.
+//
+// The name comes from the repository, so two checkouts of repositories with
+// the same name — a fork and its upstream, the same project on two machines —
+// derive the same identifier. Create refuses that, which turned the mandatory
+// first step of a session into WORKSPACE_ALREADY_EXISTS with no way forward
+// (defect #3). Registering under a distinct identifier is what a caller
+// standing in an unregistered directory actually wants; the existing
+// workspace, which is somebody else's directory, is left exactly as it is.
+func (s *Service) freeNameFor(ctx context.Context, root string, known []Workspace) string {
+	name := s.nameFor(ctx, root)
+	taken := make(map[string]bool, len(known))
+	for i := range known {
+		taken[known[i].ID] = true
+	}
+	if id := slug.Generate(name); id != "" && !taken[id] {
+		return name
+	}
+	for n := 2; ; n++ {
+		candidate := name + " " + strconv.Itoa(n)
+		if id := slug.Generate(candidate); id != "" && !taken[id] {
+			return candidate
+		}
+	}
 }
 
 // nameFor derives a workspace name from the repository: the origin remote
@@ -296,7 +340,7 @@ func repoNameFromURL(url string) string {
 
 // Inventory reports what a workspace holds, without loading a body.
 func (s *Service) Inventory(ctx context.Context, in InventoryInput) (Inventory, error) {
-	w, err := s.resolve(ctx, in.Workspace)
+	w, err := s.resolve(ctx, in.Target())
 	if err != nil {
 		return Inventory{}, err
 	}

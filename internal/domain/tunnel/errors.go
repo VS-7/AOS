@@ -1,6 +1,9 @@
 package tunnel
 
-import "github.com/OWNER/aos/internal/core/apperr"
+import (
+	"github.com/OWNER/aos/internal/core/apperr"
+	"github.com/OWNER/aos/internal/core/build"
+)
 
 // errInsecureExposure fires when Start is asked to publish the daemon while
 // the API itself is not authenticated. The original checks neither of the
@@ -12,10 +15,29 @@ func errInsecureExposure() error {
 		Causer("tunnel.Service.Start").
 		Msgf("refusing to expose an API without authentication").
 		Status(apperr.StatusForbidden).
-		CTA(apperr.CallToAction{
-			Label:   "enable authentication and issue an API token first",
-			Command: "aos auth token issue --name tunnel",
-		})
+		CTA(
+			// There is no `auth` group, and there never was: this pointed at
+			// `aos auth token issue --name tunnel` for as long as the refusal
+			// existed, so the one error whose whole job is to stop an
+			// unauthenticated API reaching the internet left the reader with a
+			// command that answers `unknown command "auth"` (defect #5).
+			// Authentication is configuration, and this is where it lives.
+			apperr.CallToAction{
+				// `--set set.…` is not a typo: --set addresses a field of the
+				// input, and the field this command takes is itself called
+				// `set`. The line is written the way it has to be typed.
+				Label:   "turn authentication on first",
+				Command: build.Name + " config update --set set.security.enabled=true",
+				Tool:    "config_update",
+				Input:   map[string]any{"set": map[string]any{"security.enabled": true}},
+			},
+			apperr.CallToAction{
+				Label:   "then set the token callers will present, and read it back with " + build.Name + " config get",
+				Command: build.Name + " config update --set set.security.apiToken=<a long random string>",
+				Tool:    "config_update",
+				Input:   map[string]any{"set": map[string]any{"security.apiToken": "<a long random string>"}},
+			},
+		)
 }
 
 // errConfigIncomplete fires when Start is asked to run without both a

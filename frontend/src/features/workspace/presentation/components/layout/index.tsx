@@ -3,6 +3,7 @@ import { WorkspaceSidebar } from "../sidebar";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { WorkspaceCommander } from "../dialogs/commander";
 import { TaskDialog } from "../../../../task/presentation/components/dialogs/create";
+import { ApprovalDialog } from "@/features/approval/presentation/components/approval-dialog";
 import { AlertProvider } from "@/components/ui/alert-provider";
 import { stores } from "@/app/lib/stores";
 import { cn } from "@/lib/utils";
@@ -117,7 +118,7 @@ export function WorkspaceLayout() {
     }
   });
 
-  const routesWithoutLayout = ["/onboarding", "/login"];
+  const routesWithoutLayout = ["/login"];
   if (routesWithoutLayout.some((route) => pathname.startsWith(route))) {
     return (
       <ThemeProvider>
@@ -177,6 +178,10 @@ export function WorkspaceLayout() {
             </main>
           </div>
           <TaskDialog />
+          {/* The approval channel (ADR-0007). On the layout rather than in the
+              chat: a routine or a background task can be the one waiting, and
+              the person has to be able to answer wherever they are. */}
+          <ApprovalDialog />
         </SidebarProvider>
       </AlertProvider>
     </ThemeProvider>

@@ -19,6 +19,15 @@ const (
 // statuses lists every member of the union, in declaration order.
 var statuses = []Status{StatusActive, StatusAchieved, StatusAbandoned, StatusPaused}
 
+// EnumValues publishes the accepted statuses to every schema.
+func (s Status) EnumValues() []string {
+	out := make([]string, 0, len(statuses))
+	for _, v := range statuses {
+		out = append(out, string(v))
+	}
+	return out
+}
+
 // Valid reports whether s is one of the four declared lifecycle states.
 func (s Status) Valid() bool {
 	for _, known := range statuses {

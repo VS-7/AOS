@@ -83,7 +83,7 @@ func errStatusIsNotAField(id string) error {
 		CTA(apperr.CallToAction{
 			Label:   "use set-status, which validates the move and records evidence",
 			Command: build.Name + " todos set-status <task> " + id + " finished",
-			Tool:    "todos_set_status",
+			Tool:    "todos_set-status",
 		})
 }
 

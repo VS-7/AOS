@@ -83,7 +83,14 @@ is not something anyone means to make.
     },
     "kind": {
       "type": "string",
-      "description": "One of: dm, channel, task, run, external. Defaults to channel."
+      "description": "One of: dm, channel, task, run, external. Defaults to channel.",
+      "enum": [
+        "dm",
+        "channel",
+        "task",
+        "run",
+        "external"
+      ]
     },
     "visibility": {
       "type": "string",
@@ -257,7 +264,14 @@ system. Read one with `chats get`.
     },
     "kind": {
       "type": "string",
-      "description": "Narrow to one surface: dm, channel, task, run or external."
+      "description": "Narrow to one surface: dm, channel, task, run or external.",
+      "enum": [
+        "dm",
+        "channel",
+        "task",
+        "run",
+        "external"
+      ]
     },
     "task": {
       "type": "string",

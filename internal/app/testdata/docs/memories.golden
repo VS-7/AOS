@@ -115,7 +115,22 @@ lost — an unlinked trace is one nobody will find again.
     },
     "category": {
       "type": "string",
-      "description": "Narrow the graph to one category."
+      "description": "Narrow the graph to one category.",
+      "enum": [
+        "decision",
+        "intent",
+        "commitment",
+        "relationship",
+        "event",
+        "observation",
+        "error",
+        "learning",
+        "fact",
+        "reference",
+        "instruction",
+        "preference",
+        "context"
+      ]
     },
     "scopes": {
       "type": [
@@ -180,11 +195,32 @@ never deleted — read one with reflect to see why it was retired.
     },
     "category": {
       "type": "string",
-      "description": "Narrow to one category."
+      "description": "Narrow to one category.",
+      "enum": [
+        "decision",
+        "intent",
+        "commitment",
+        "relationship",
+        "event",
+        "observation",
+        "error",
+        "learning",
+        "fact",
+        "reference",
+        "instruction",
+        "preference",
+        "context"
+      ]
     },
     "status": {
       "type": "string",
-      "description": "Lifecycle status to include. Defaults to active."
+      "description": "Lifecycle status to include. Defaults to active.",
+      "enum": [
+        "active",
+        "deprecated",
+        "archived",
+        "ttl_expired"
+      ]
     },
     "agent": {
       "type": "string",
@@ -299,7 +335,22 @@ out not just what you believe but why you changed your mind.
     },
     "category": {
       "type": "string",
-      "description": "One of: decision, intent, commitment, relationship, event, observation, error, learning, fact, reference, instruction, preference, context."
+      "description": "One of: decision, intent, commitment, relationship, event, observation, error, learning, fact, reference, instruction, preference, context.",
+      "enum": [
+        "decision",
+        "intent",
+        "commitment",
+        "relationship",
+        "event",
+        "observation",
+        "error",
+        "learning",
+        "fact",
+        "reference",
+        "instruction",
+        "preference",
+        "context"
+      ]
     },
     "content": {
       "type": "string",

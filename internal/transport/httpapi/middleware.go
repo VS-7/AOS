@@ -18,8 +18,13 @@ const (
 	HeaderWorkspace = "X-Workspace-ID"
 	HeaderAgent     = "X-Agent-ID"
 	HeaderAuthToken = "X-Auth-Token"
-	cookieSession   = "sessionToken"
-	cookieWorkspace = "x-workspace-id"
+
+	// HeaderWorkingDir is where the calling process is standing. The daemon
+	// has a working directory of its own and it belongs to nobody — see
+	// identity.Identity.WorkingDir.
+	HeaderWorkingDir = "X-Working-Dir"
+	cookieSession    = "sessionToken"
+	cookieWorkspace  = "x-workspace-id"
 )
 
 // requestID puts a correlation id on every response, generating one when the
@@ -154,6 +159,10 @@ func ambientIdentity(next http.Handler) http.Handler {
 			r.Header.Get(HeaderAgent),
 			r.URL.Query().Get("agent"),
 		))
+		// Header only, and never the query string: a directory in a URL ends
+		// up in every proxy log between here and the caller, and a link is not
+		// a thing that should be able to say where the reader is standing.
+		ambient.WorkingDir = strings.TrimSpace(r.Header.Get(HeaderWorkingDir))
 
 		ctx := identity.With(r.Context(), ambient)
 		if token := bearerOf(r); token != "" {
@@ -269,7 +278,7 @@ func corsPolicy(allowed []string) func(http.Handler) http.Handler {
 				h.Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
 				h.Set("Access-Control-Allow-Credentials", "true")
 				h.Set("Access-Control-Allow-Headers",
-					strings.Join([]string{"Authorization", "Content-Type", HeaderWorkspace, HeaderAgent, HeaderAuthToken, HeaderRequestID}, ", "))
+					strings.Join([]string{"Authorization", "Content-Type", HeaderWorkspace, HeaderAgent, HeaderAuthToken, HeaderRequestID, HeaderWorkingDir}, ", "))
 				h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 				h.Add("Vary", "Origin")
 			}

@@ -242,7 +242,12 @@ why. Pass force to run it once anyway, without enabling it.
     },
     "trigger": {
       "type": "string",
-      "description": "What to record as the cause. Defaults to manual."
+      "description": "What to record as the cause. Defaults to manual.",
+      "enum": [
+        "scheduled",
+        "webhook",
+        "activity"
+      ]
     },
     "payload": {
       "type": "object",

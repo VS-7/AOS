@@ -24,6 +24,15 @@ const (
 // visibilities lists every member of the union, in declaration order.
 var visibilities = []Visibility{Private, Workspace, ByPassword}
 
+// EnumValues publishes the visibilities to every schema.
+func (v Visibility) EnumValues() []string {
+	out := make([]string, 0, len(visibilities))
+	for _, x := range visibilities {
+		out = append(out, string(x))
+	}
+	return out
+}
+
 // Valid reports whether v is one of the three declared visibilities.
 func (v Visibility) Valid() bool {
 	for _, known := range visibilities {

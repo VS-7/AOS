@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/OWNER/aos/internal/core/apperr"
-	"github.com/OWNER/aos/internal/core/build"
 )
 
 func errPasswordTooShort(got int) error {
@@ -47,8 +46,11 @@ func errUnauthenticated() error {
 		Msgf("this request carries no valid credential").
 		Status(apperr.StatusUnauthorized).
 		CTA(apperr.CallToAction{
-			Label:   "issue a token and send it as a bearer credential",
-			Command: build.Name + " auth token issue",
+			// `aos auth token issue` is not a command and never was — this
+			// domain has no command group at all, by design (see the package
+			// doc), so there is nothing to name here (defect #5).
+			Label: "sign in through the application, which writes the credential this machine's terminal reads, " +
+				"and send it as a bearer credential",
 		})
 }
 
@@ -59,8 +61,10 @@ func errUserNotFound(id string) error {
 		Issue("user", id).
 		Status(apperr.StatusNotFound).
 		CTA(apperr.CallToAction{
-			Label:   "list the accounts on this installation",
-			Command: build.Name + " auth users list",
+			// There is no `aos auth users list`: accounts are the
+			// installation's identity, which the application owns and no
+			// command group publishes (defect #5).
+			Label: "accounts are managed in the application — check the identifier there",
 		})
 }
 
@@ -105,8 +109,10 @@ func errAlreadyOnboarded() error {
 		Msgf("this installation already has an account, so onboarding is closed").
 		Status(apperr.StatusConflict).
 		CTA(apperr.CallToAction{
-			Label:   "sign in instead",
-			Command: build.Name + " auth login",
+			// There is no `aos auth login`: signing in happens in the
+			// application, over /api/auth, which is deliberately not a command
+			// group — see this package's own doc (defect #5).
+			Label: "sign in instead, in the application",
 		})
 }
 
@@ -117,8 +123,9 @@ func errTokenNotFound(id string) error {
 		Issue("tokenId", id).
 		Status(apperr.StatusNotFound).
 		CTA(apperr.CallToAction{
-			Label:   "list the tokens of this account",
-			Command: build.Name + " auth token list",
+			// Same as above: tokens belong to the account, and the account is
+			// the application's, not a command group's.
+			Label: "the tokens of this account are listed in the application",
 		})
 }
 

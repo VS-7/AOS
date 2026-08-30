@@ -63,8 +63,13 @@ and its Git policy.
 With no id, this reads the active workspace — the one named by the environment,
 which is what the managed block in the repository's .env sets.
 
+The identifier is accepted under either name: `workspace`, which this group has
+always published, or `id`, which is what every other group calls the identifier
+of its own resource.
+
 - the active workspace
 - a specific one
+- the same, under the name the other groups use
 
 ### `workspace_introspect`
 
@@ -74,7 +79,14 @@ Register the current repository as a workspace, deriving its name from the
 Git remote and falling back to the directory name.
 
 Running this twice is safe and is the normal thing to do: a repository that is
-already registered is returned unchanged.
+already registered is returned unchanged, and this command never answers
+"already exists" — a directory whose repository name is taken by another
+registration is registered under a distinct identifier instead.
+
+"The current repository" is the directory the *caller* is standing in, which
+the terminal reports with every call. A client that has no directory of its own
+— the window, a browser — gets the one the daemon was started against, and can
+always name a path explicitly.
 
 - register the current directory
 
@@ -113,6 +125,9 @@ Change one or more fields of a workspace, addressed by dotted path.
 Only the paths you send are changed. The identifier, the path and the creation
 timestamp are the server's: a patch that reached them would orphan every record
 that refers to this workspace.
+
+Name the workspace with `workspace` or `id`. With neither, this changes the
+active one — the workspace this session is scoped to.
 
 - change the branch prefix and the accent colour
 

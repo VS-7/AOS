@@ -150,6 +150,14 @@ export const REALTIME_EVENT_MAP: Record<string, RealtimeMapEntry> = {
   // its absence degrades the toast, not the data) and `workspaceId`, read
   // off the event envelope's own `Workspace` field rather than `Activity`
   // itself.
+  // The approval channel's own event (`internal/app/runtime.go`'s
+  // `approvalNotifier`), which fires twice per request: once when an agent
+  // asks, and once when the request settles — the second carrying
+  // `{id, settled: true, approved, reason}` instead of the request itself.
+  // `ApprovalDialog` refetches on either, so a request answered from another
+  // window (or expired) leaves this one's queue on its own.
+  "approval:requested": "approval.request",
+
   "activity:created": {
     type: "activity",
     adapt: (event) => ({ ...(event.data as Record<string, unknown>), workspaceId: event.workspace }),

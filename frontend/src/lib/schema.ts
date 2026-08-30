@@ -215,7 +215,7 @@ export interface CommandMap {
     /** Skill that owns this artifact, if any. */
     "skill"?: string;
     /** One of: private, workspace, by_password. Defaults to private. */
-    "visibility"?: string;
+    "visibility"?: "private" | "workspace" | "by_password";
   }; output: unknown };
   /** Remove an artifact. */
   "artifacts_delete": { input: {
@@ -258,7 +258,7 @@ export interface CommandMap {
     /** New name. Omit to leave unchanged. */
     "name"?: unknown;
     /** New visibility. Omit to leave unchanged. */
-    "visibility"?: unknown;
+    "visibility"?: "private" | "workspace" | "by_password";
   }; output: unknown };
   /** Empty a conversation, keeping the conversation. */
   "chats_clear": { input: {
@@ -283,7 +283,7 @@ export interface CommandMap {
     "userId"?: string;
   };
     /** One of: dm, channel, task, run, external. Defaults to channel. */
-    "kind"?: string;
+    "kind"?: "dm" | "channel" | "task" | "run" | "external";
     /** Who is in it. Empty on a workspace-visible channel means everyone. */
     "participants"?: unknown;
     /** Routine this conversation belongs to. */
@@ -314,7 +314,7 @@ export interface CommandMap {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
     /** Narrow to one surface: dm, channel, task, run or external. */
-    "kind"?: string;
+    "kind"?: "dm" | "channel" | "task" | "run" | "external";
     /** Maximum number to return. Defaults to 50. */
     "limit"?: number;
     /** Filter by title, identifier, task or routine. */
@@ -545,7 +545,7 @@ export interface CommandMap {
     /** Skill installing this goal, if any. */
     "skill"?: string;
     /** One of: active, achieved, abandoned, paused. Defaults to active. */
-    "status"?: string;
+    "status"?: "active" | "achieved" | "abandoned" | "paused";
     /** What this goal is. */
     "title": string;
   }; output: unknown };
@@ -591,7 +591,7 @@ export interface CommandMap {
     /** New project this goal belongs to. Empty string clears it. Omit to leave unchanged. */
     "project"?: unknown;
     /** New lifecycle status: active, achieved, abandoned, or paused. Omit to leave unchanged. */
-    "status"?: unknown;
+    "status"?: "active" | "achieved" | "abandoned" | "paused";
     /** New title. Omit to leave unchanged. */
     "title"?: unknown;
   }; output: unknown };
@@ -674,7 +674,7 @@ export interface CommandMap {
     /** One of: chat, task, routine, workspace. */
     "queue"?: string;
     /** One of: pending, claimed, succeeded, failed, dead. */
-    "status"?: string;
+    "status"?: "pending" | "claimed" | "succeeded" | "failed" | "dead";
     /** Only jobs of this workspace. */
     "workspace"?: string;
   }; output: unknown };
@@ -746,7 +746,7 @@ export interface CommandMap {
     /** Whose graph to map. Defaults to your own. */
     "agent"?: string;
     /** Narrow the graph to one category. */
-    "category"?: string;
+    "category"?: "decision" | "intent" | "commitment" | "relationship" | "event" | "observation" | "error" | "learning" | "fact" | "reference" | "instruction" | "preference" | "context";
     /** Return only the memories with no links at all — the ones most likely to be lost. */
     "isolated"?: boolean;
     /** Maximum number of nodes. Defaults to 1000. */
@@ -765,7 +765,7 @@ export interface CommandMap {
     /** Whose memories to read. Defaults to your own. */
     "agent"?: string;
     /** Narrow to one category. */
-    "category"?: string;
+    "category"?: "decision" | "intent" | "commitment" | "relationship" | "event" | "observation" | "error" | "learning" | "fact" | "reference" | "instruction" | "preference" | "context";
     /** Reverse the ordering. */
     "desc"?: boolean;
     /** Maximum number of memories to return. Defaults to 10. */
@@ -781,7 +781,7 @@ export interface CommandMap {
     /** strict excludes memories with no scopes; lax includes them. Defaults to lax. */
     "scopesMode"?: string;
     /** Lifecycle status to include. Defaults to active. */
-    "status"?: string;
+    "status"?: "active" | "deprecated" | "archived" | "ttl_expired";
   }; output: unknown };
   /** Read one memory in full. */
   "memories_reflect": { input: {
@@ -797,7 +797,7 @@ export interface CommandMap {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
     /** One of: decision, intent, commitment, relationship, event, observation, error, learning, fact, reference, instruction, preference, context. */
-    "category": string;
+    "category": "decision" | "intent" | "commitment" | "relationship" | "event" | "observation" | "error" | "learning" | "fact" | "reference" | "instruction" | "preference" | "context";
     /** From 0 to 1. Defaults to 1. Be honest — an inflated number is how future-you gets misled. */
     "confidence"?: unknown;
     /** The Markdown body of the memory. */
@@ -845,7 +845,7 @@ export interface CommandMap {
     /** Absolute host directory this project is bound to. Validated: must be absolute, exist, and be a directory. */
     "source"?: string;
     /** Lifecycle status: active, paused, done or archived. Defaults to active. */
-    "status"?: string;
+    "status"?: "active" | "paused" | "done" | "archived";
   }; output: unknown };
   /** Remove a project's own record. */
   "projects_delete": { input: {
@@ -866,7 +866,7 @@ export interface CommandMap {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
     /** Only projects in this status. Omit for every status. */
-    "status"?: string;
+    "status"?: "active" | "paused" | "done" | "archived";
   }; output: unknown };
   /** Change a project's describable fields. */
   "projects_update": { input: {
@@ -889,7 +889,7 @@ export interface CommandMap {
     /** New source directory — an absolute, existing path. Omit to leave unchanged. */
     "source"?: unknown;
     /** New lifecycle status. Omit to leave unchanged. */
-    "status"?: unknown;
+    "status"?: "active" | "paused" | "done" | "archived";
   }; output: unknown };
   /** Declare a routine. */
   "routines_create": { input: {
@@ -937,7 +937,7 @@ export interface CommandMap {
     /** What to hand the routine. */
     "payload"?: Record<string, unknown>;
     /** What to record as the cause. Defaults to manual. */
-    "trigger"?: string;
+    "trigger"?: "scheduled" | "webhook" | "activity";
   }; output: unknown };
   /** Read one routine. */
   "routines_get": { input: {
@@ -1072,11 +1072,11 @@ export interface CommandMap {
     /** What the work is. Example: "Denial patterns never match a command line". */
     "name": string;
     /** One of: no_priority, urgent, high, medium, low. */
-    "priority"?: string;
+    "priority"?: "no_priority" | "urgent" | "high" | "medium" | "low";
     /** Project this belongs to. */
     "project"?: string;
     /** Where it starts: suggestion, backlog, planning or todo. Defaults to backlog. */
-    "status"?: string;
+    "status"?: "suggestion" | "backlog" | "planning" | "todo" | "in_progress" | "stopped" | "in_review" | "finished";
     /** One-paragraph statement of the work. */
     "summary"?: string;
     /** One of the workspace's task types. Example: "bug". */
@@ -1113,7 +1113,7 @@ export interface CommandMap {
     /** Only tasks in this project. */
     "project"?: string;
     /** Only tasks in this status. */
-    "status"?: string;
+    "status"?: "suggestion" | "backlog" | "planning" | "todo" | "in_progress" | "stopped" | "in_review" | "finished";
     /** Only tasks of this workspace type. Example: "bug". */
     "type"?: string;
   }; output: unknown };
@@ -1126,7 +1126,7 @@ export interface CommandMap {
     /** Why. Recorded on the checkpoint when stopping. */
     "reason"?: string;
     /** One of: suggestion, backlog, planning, todo, in_progress, stopped, in_review, finished. */
-    "status": string;
+    "status": "suggestion" | "backlog" | "planning" | "todo" | "in_progress" | "stopped" | "in_review" | "finished";
   }; output: unknown };
   /** Change what a task says. */
   "tasks_update": { input: {
@@ -1149,11 +1149,11 @@ export interface CommandMap {
     /** New name. The slug follows it. */
     "name"?: unknown;
     /** New priority. */
-    "priority"?: unknown;
+    "priority"?: "no_priority" | "urgent" | "high" | "medium" | "low";
     /** New project. */
     "project"?: unknown;
     /** Not writable here. Use set-status, which validates the move and runs the guards. */
-    "status"?: string;
+    "status"?: "suggestion" | "backlog" | "planning" | "todo" | "in_progress" | "stopped" | "in_review" | "finished";
     /** New summary. */
     "summary"?: unknown;
     /** New workspace task type. */
@@ -1329,7 +1329,7 @@ export interface CommandMap {
     /** Identifier of the step. */
     "id": string;
     /** One of: pending, in_progress, blocked, finished, skipped. */
-    "status": string;
+    "status": "pending" | "in_progress" | "blocked" | "finished" | "skipped";
     /** Identifier of the parent task. */
     "task": string;
   }; output: unknown };
@@ -1346,7 +1346,7 @@ export interface CommandMap {
     /** New position in the plan. */
     "order"?: unknown;
     /** Not writable here. Use set-status, which validates the move. */
-    "status"?: string;
+    "status"?: "pending" | "in_progress" | "blocked" | "finished" | "skipped";
     /** Identifier of the parent task. */
     "task": string;
     /** New title. */
@@ -1578,13 +1578,17 @@ export interface CommandMap {
   "workspace_delete": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
+    /** Workspace id to unregister. The same thing as workspace, under the name every other group uses. */
+    "id"?: string;
     /** Workspace id to unregister. */
-    "workspace": string;
+    "workspace"?: string;
   }; output: unknown };
   /** Read one workspace. */
   "workspace_get": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
+    /** Workspace id. The same thing as workspace, under the name every other group uses. */
+    "id"?: string;
     /** Workspace id. Omit to read the active one, taken from the environment. */
     "workspace"?: string;
   }; output: unknown };
@@ -1599,6 +1603,8 @@ export interface CommandMap {
   "workspace_inventory": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
+    /** Workspace id. The same thing as workspace, under the name every other group uses. */
+    "id"?: string;
     /** Workspace id. Omit to survey the active one. */
     "workspace"?: string;
   }; output: unknown };
@@ -1613,9 +1619,11 @@ export interface CommandMap {
   "workspace_update": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
+    /** Workspace id. The same thing as workspace, under the name every other group uses. */
+    "id"?: string;
     /** Fields to change, addressed by dotted path. Example: { "git.branchPrefix": "feat", "color": "#10b981" }. */
     "set": Record<string, unknown>;
-    /** Workspace id. Omit to update the active one. */
+    /** Workspace id. Omit to update the active one — the one this session is scoped to. */
     "workspace"?: string;
   }; output: unknown };
 }

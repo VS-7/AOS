@@ -1,6 +1,10 @@
 package workspace
 
-import "github.com/OWNER/aos/internal/core/command"
+import (
+	"strings"
+
+	"github.com/OWNER/aos/internal/core/command"
+)
 
 // ListInput is the payload of `workspace list`.
 type ListInput struct {
@@ -16,11 +20,21 @@ type ListOutput struct {
 }
 
 // GetInput is the payload of `workspace get`.
+//
+// Two names for one identifier. `workspace` is what this group has always
+// published and what every existing caller sends; `id` is what the other
+// twelve groups call the identifier of their own resource, so a caller
+// building calls by convention — a generated form, an agent that has learned
+// the shape of the rest of the surface — is right too (defect #7).
 type GetInput struct {
 	Workspace string `json:"workspace,omitempty" cli:"arg" jsonschema:"Workspace id. Omit to read the active one, taken from the environment."`
+	ID        string `json:"id,omitempty" jsonschema:"Workspace id. The same thing as workspace, under the name every other group uses."`
 
 	command.Reasoning
 }
+
+// Target is the workspace this payload addresses, under either name.
+func (in GetInput) Target() string { return firstNamed(in.Workspace, in.ID) }
 
 // CreateInput registers a new workspace.
 type CreateInput struct {
@@ -51,18 +65,30 @@ type CreateOutput struct {
 // the configuration commands, so that a caller can change one nested value
 // without sending the whole record back and racing another writer.
 type UpdateInput struct {
-	Workspace string         `json:"workspace,omitempty" cli:"arg" jsonschema:"Workspace id. Omit to update the active one."`
+	Workspace string         `json:"workspace,omitempty" cli:"arg" jsonschema:"Workspace id. Omit to update the active one — the one this session is scoped to."`
+	ID        string         `json:"id,omitempty" jsonschema:"Workspace id. The same thing as workspace, under the name every other group uses."`
 	Set       map[string]any `json:"set" jsonschema:"Fields to change, addressed by dotted path. Example: { \"git.branchPrefix\": \"feat\", \"color\": \"#10b981\" }." validate:"required,min=1"`
 
 	command.Reasoning
 }
 
+// Target is the workspace this payload addresses, under either name.
+func (in UpdateInput) Target() string { return firstNamed(in.Workspace, in.ID) }
+
 // DeleteInput removes a workspace from the registry.
+//
+// Either name identifies it, but one of the two is required: unregistering
+// resolves nothing implicitly, because "the active one" is not something to
+// guess at when the answer is destructive.
 type DeleteInput struct {
-	Workspace string `json:"workspace" cli:"arg" jsonschema:"Workspace id to unregister." validate:"required,notblank"`
+	Workspace string `json:"workspace,omitempty" cli:"arg" jsonschema:"Workspace id to unregister."`
+	ID        string `json:"id,omitempty" jsonschema:"Workspace id to unregister. The same thing as workspace, under the name every other group uses."`
 
 	command.Reasoning
 }
+
+// Target is the workspace this payload addresses, under either name.
+func (in DeleteInput) Target() string { return firstNamed(in.Workspace, in.ID) }
 
 // DeleteOutput reports what was unregistered, and what was deliberately left
 // behind.
@@ -82,8 +108,24 @@ type IntrospectInput struct {
 // InventoryInput asks what a workspace holds.
 type InventoryInput struct {
 	Workspace string `json:"workspace,omitempty" cli:"arg" jsonschema:"Workspace id. Omit to survey the active one."`
+	ID        string `json:"id,omitempty" jsonschema:"Workspace id. The same thing as workspace, under the name every other group uses."`
 
 	command.Reasoning
+}
+
+// Target is the workspace this payload addresses, under either name.
+func (in InventoryInput) Target() string { return firstNamed(in.Workspace, in.ID) }
+
+// firstNamed picks whichever of the two spellings of the identifier the caller
+// used. `workspace` wins when both are sent, because it is the one this group
+// published first.
+func firstNamed(values ...string) string {
+	for _, v := range values {
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 // Inventory is the panoramic view an agent reads to orient itself: what exists

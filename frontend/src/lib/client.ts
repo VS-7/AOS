@@ -212,6 +212,28 @@ export const system = {
     return (await Call.ByName(`${WAILSVC_PKG}.SystemService.DaemonAddress`)) as string;
   },
 
+  /**
+   * The directory the window was launched in, or "" when it was launched
+   * nowhere in particular (from the dock, from Spotlight) and in a browser.
+   *
+   * The onboarding wizard offers it as the default folder for the first
+   * workspace. Until this existed the desktop registered that directory
+   * itself, before the wizard had asked for a name — which is what made the
+   * first workspace always take the folder's name and the copilot always
+   * take the default one.
+   */
+  async launchDirectory(): Promise<string> {
+    try {
+      return ((await Call.ByName(`${WAILSVC_PKG}.SystemService.LaunchDirectory`)) as string) ?? "";
+    } catch {
+      // A browser tab has no window to have been launched anywhere, and a
+      // desktop whose bridge is still warming up answers later. Neither is
+      // worth an error: the field simply stays empty, which is a valid
+      // choice the wizard already supports.
+      return "";
+    }
+  },
+
   async setAppearance(appearance: string, windows: string): Promise<void> {
     await Call.ByName(`${WAILSVC_PKG}.SystemService.SetAppearance`, appearance, windows);
   },

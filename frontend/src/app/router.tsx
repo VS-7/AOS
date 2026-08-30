@@ -28,7 +28,6 @@
 import { AosRouter } from "@/app/builders";
 import { aos } from "@/app/aos";
 import { HomePage } from "@/features/workspace/presentation/pages/home";
-import { OnboardingPage } from "@/features/workspace/presentation/pages/onboarding";
 import { TasksPage } from "@/features/task/presentation/pages/(main)";
 import { TaskDetailsPage } from "@/features/task/presentation/pages/($id)";
 import { ChatPage } from "@/features/chat/presentation/pages/($id)";
@@ -224,7 +223,6 @@ export const router = AosRouter.create(aos)
   .addRoute(ViewPage)
   .addRoute(TasksPage)
   .addRoute(TaskDetailsPage)
-  .addRoute(OnboardingPage)
   .addRoute(ChatPage)
   .addRoute(LoginPage)
   .addRoute(ActivitiesPage)

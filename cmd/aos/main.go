@@ -96,7 +96,13 @@ func run(ctx context.Context, args []string) error {
 		return serveMCP(ctx, resolver, paths, supervisor, logger)
 	}
 
-	cfg := clix.Config{Registry: reg, IsTTY: isTTY, Out: os.Stdout, Err: os.Stderr}
+	// The daemon is built before the tree, not after: the built-ins that
+	// *describe* the surface — `self tools`, `self llms` — have to ask it too.
+	// Reading this binary's own registry instead is what made them answer with
+	// four commands out of ~140 (defect #1).
+	daemon := newDaemonClient(resolver, paths)
+
+	cfg := clix.Config{Registry: reg, Daemon: daemon, IsTTY: isTTY, Out: os.Stdout, Err: os.Stderr}
 	root := clix.NewRoot(cfg)
 
 	// The rest of the tree — every domain command — is not linked into this
@@ -104,7 +110,6 @@ func run(ctx context.Context, args []string) error {
 	// answers within a few seconds. A daemon that is not up yet leaves root
 	// exactly as NewRoot built it, which is what lets `gateway start` itself
 	// run with nothing attached.
-	daemon := newDaemonClient(resolver, paths)
 	discover, cancel := context.WithTimeout(ctx, 3*time.Second)
 	attachErr := clix.AttachDaemon(discover, root, daemon, cfg)
 	cancel()
@@ -143,6 +148,11 @@ func newDaemonClient(resolver *env.Resolver, paths corecfg.Paths) *daemonclient.
 		// says so with AOS_AGENT_ID, and is then that agent for every call —
 		// which is what `agents_me` answers and what a memory belongs to.
 		Agent: resolver.String(env.KeyAgentID, ""),
+		// Where this terminal is standing. The daemon's own working directory
+		// is wherever the supervisor launched it, so without this
+		// `workspace introspect` registered that instead of the repository the
+		// person was in.
+		WorkingDir: workingDir(),
 	})
 }
 
@@ -229,3 +239,14 @@ func printVersion(args []string, out *os.File) error {
 }
 
 func isTTY() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
+
+// workingDir is where this terminal is standing, or empty when the directory
+// cannot be read — a deleted working directory is not a reason to refuse every
+// command, and the daemon falls back to its own resolution.
+func workingDir() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return dir
+}

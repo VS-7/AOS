@@ -41,7 +41,7 @@ func errPasswordRequired(id string) error {
 		Status(apperr.StatusConflict).
 		CTA(apperr.CallToAction{
 			Label: "set a password before sharing a by_password link",
-			Tool:  "artifacts_set_password",
+			Tool:  "artifacts_set-password",
 		})
 }
 

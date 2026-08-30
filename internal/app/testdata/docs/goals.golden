@@ -52,7 +52,13 @@ Create a strategic outcome. Its id is derived from the title.
     },
     "status": {
       "type": "string",
-      "description": "One of: active, achieved, abandoned, paused. Defaults to active."
+      "description": "One of: active, achieved, abandoned, paused. Defaults to active.",
+      "enum": [
+        "active",
+        "achieved",
+        "abandoned",
+        "paused"
+      ]
     },
     "project": {
       "type": "string",
@@ -221,7 +227,13 @@ Change the describable parts of a goal, including moving it to achieved or aband
         "null",
         "string"
       ],
-      "description": "New lifecycle status: active, achieved, abandoned, or paused. Omit to leave unchanged."
+      "description": "New lifecycle status: active, achieved, abandoned, or paused. Omit to leave unchanged.",
+      "enum": [
+        "active",
+        "achieved",
+        "abandoned",
+        "paused"
+      ]
     },
     "project": {
       "type": [

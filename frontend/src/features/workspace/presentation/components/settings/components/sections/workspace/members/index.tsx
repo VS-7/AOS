@@ -4,7 +4,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { toast } from "sonner";
 
 import { aos } from "@/app/aos";
-import { api } from "@/lib/aos-facade";
+import { api, isDormantResult } from "@/lib/aos-facade";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -63,7 +63,15 @@ export function WorkspaceMembersSection() {
     enabled: Boolean(workspaceId),
   });
 
-  const members = (membersQuery.data as WorkspaceMember[] | undefined) ?? [];
+  // The daemon has no workspace-membership commands yet, so this query comes
+  // back dormant. Saying "no members yet" for that is the wrong sentence in
+  // the wrong place: this workspace may well have members, and the screen was
+  // reporting on a capability that does not exist as though it had asked and
+  // been told nothing.
+  const membersUnavailable = isDormantResult(membersQuery.data);
+  const members = membersUnavailable
+    ? []
+    : ((membersQuery.data as WorkspaceMember[] | undefined) ?? []);
   const users = (usersQuery.data as UserPublic[] | undefined) ?? [];
 
   const usersById = React.useMemo(
@@ -183,7 +191,16 @@ export function WorkspaceMembersSection() {
                 {t("Owners can manage membership. Members can collaborate in the workspace.")}
               </p>
             </div>
-            <Button type="button" size="sm" onClick={() => setCreateOpen(true)}>
+            <Button
+              type="button"
+              size="sm"
+              // Nothing to add a member to yet. Left enabled, the click showed
+              // the dormant error verbatim — "the workspace domain does not
+              // exist in the Go backend yet" — which is a sentence for whoever
+              // is writing the backend, not for whoever is using it.
+              disabled={membersUnavailable}
+              onClick={() => setCreateOpen(true)}
+            >
               <HugeiconsIcon icon={Add01Icon} className="size-3.5" />
               {t("Add Member")}
             </Button>
@@ -192,6 +209,10 @@ export function WorkspaceMembersSection() {
           <div className="divide-y divide-border">
             {membersQuery.isLoading ? (
               <p className="p-4 text-sm text-muted-foreground">{t("Loading members...")}</p>
+            ) : membersUnavailable ? (
+              <p className="p-4 text-sm text-muted-foreground">
+                {t("Workspace membership is not available in this build yet.")}
+              </p>
             ) : members.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground">{t("No members yet.")}</p>
             ) : (

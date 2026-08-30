@@ -124,6 +124,10 @@ unregistering is not a request to delete them.
       "type": "string",
       "description": "Workspace id to unregister."
     },
+    "id": {
+      "type": "string",
+      "description": "Workspace id to unregister. The same thing as workspace, under the name every other group uses."
+    },
     "_reasoning": {
       "type": "string",
       "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
@@ -131,7 +135,6 @@ unregistering is not a request to delete them.
     }
   },
   "required": [
-    "workspace",
     "_reasoning"
   ],
   "additionalProperties": false
@@ -148,6 +151,10 @@ and its Git policy.
 With no id, this reads the active workspace — the one named by the environment,
 which is what the managed block in the repository's .env sets.
 
+The identifier is accepted under either name: `workspace`, which this group has
+always published, or `id`, which is what every other group calls the identifier
+of its own resource.
+
 ```json
 {
   "type": "object",
@@ -155,6 +162,10 @@ which is what the managed block in the repository's .env sets.
     "workspace": {
       "type": "string",
       "description": "Workspace id. Omit to read the active one, taken from the environment."
+    },
+    "id": {
+      "type": "string",
+      "description": "Workspace id. The same thing as workspace, under the name every other group uses."
     },
     "_reasoning": {
       "type": "string",
@@ -177,7 +188,14 @@ Register the current repository as a workspace, deriving its name from the
 Git remote and falling back to the directory name.
 
 Running this twice is safe and is the normal thing to do: a repository that is
-already registered is returned unchanged.
+already registered is returned unchanged, and this command never answers
+"already exists" — a directory whose repository name is taken by another
+registration is registered under a distinct identifier instead.
+
+"The current repository" is the directory the *caller* is standing in, which
+the terminal reports with every call. A client that has no directory of its own
+— the window, a browser — gets the one the daemon was started against, and can
+always name a path explicitly.
 
 ```json
 {
@@ -219,6 +237,10 @@ question.
     "workspace": {
       "type": "string",
       "description": "Workspace id. Omit to survey the active one."
+    },
+    "id": {
+      "type": "string",
+      "description": "Workspace id. The same thing as workspace, under the name every other group uses."
     },
     "_reasoning": {
       "type": "string",
@@ -273,13 +295,20 @@ Only the paths you send are changed. The identifier, the path and the creation
 timestamp are the server's: a patch that reached them would orphan every record
 that refers to this workspace.
 
+Name the workspace with `workspace` or `id`. With neither, this changes the
+active one — the workspace this session is scoped to.
+
 ```json
 {
   "type": "object",
   "properties": {
     "workspace": {
       "type": "string",
-      "description": "Workspace id. Omit to update the active one."
+      "description": "Workspace id. Omit to update the active one — the one this session is scoped to."
+    },
+    "id": {
+      "type": "string",
+      "description": "Workspace id. The same thing as workspace, under the name every other group uses."
     },
     "set": {
       "type": "object",

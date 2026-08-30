@@ -64,6 +64,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { ChatInlineMentionTag } from '@/features/chat/presentation/components/tags/chat-inline-mention-tag';
 import { ChatInlineSourceTag } from '@/features/chat/presentation/components/tags/chat-inline-source-tag';
 import { ChatInlineRichText } from '@/features/chat/presentation/components/tags/chat-inline-rich-text';
+import { t } from "@/lib/i18n";
 
 // Spotify icon component
 const SpotifyIcon = ({ className }: { className?: string }) => (
@@ -779,7 +780,7 @@ const CodeBlock: React.FC<CodeBlockProps> = React.memo(
                 </div>
               </div>
               <div className="font-mono text-sm leading-relaxed p-2 text-muted-foreground">
-                <div className="animate-pulse">Loading code block...</div>
+                <div className="animate-pulse">{t("Loading code block...")}</div>
               </div>
             </div>
           }
@@ -1916,13 +1917,13 @@ const MarkdownTableWithActions: React.FC<{ children: React.ReactNode }> = React.
               variant="secondary"
               className="size-7 text-xs shadow-sm rounded-sm"
               onClick={handleDownloadCsv}
-              aria-label="Download CSV"
+              aria-label={t("Download CSV")}
             >
               <Download className="size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="right" sideOffset={2}>
-            Download CSV
+            {t("Download CSV")}
           </TooltipContent>
         </Tooltip>
       </div>
@@ -2139,7 +2140,7 @@ const AppLinkPreview = React.memo(({ href, title }: { href: string; title?: stri
           {hasScreenshotError || !screenshotSrc ? (
             <span className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_top,#ffffff14,transparent_55%),linear-gradient(180deg,#0f172a,#111827)] text-white/85">
               <Globe className="size-8 opacity-60" />
-              <span className="px-4 text-center text-[11px] leading-relaxed text-white/50">Live app</span>
+              <span className="px-4 text-center text-[11px] leading-relaxed text-white/50">{t("Live app")}</span>
             </span>
           ) : (
             <img
@@ -2529,7 +2530,7 @@ const FileLinkPreview = React.memo(({ href, title }: { href: string; title?: str
           onClick={handleDownload}
         >
           {isDownloading ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-          <span className="sr-only">Download file</span>
+          <span className="sr-only">{t("Download file")}</span>
         </Button>
       </span>
     </span>
@@ -2662,7 +2663,7 @@ const ImageWithPreview = React.memo(({ src, alt, title }: { src: string; alt?: s
               className="h-7 w-7 rounded-md bg-background/95 backdrop-blur-md border border-border/50 shadow-none hover:bg-accent"
             >
               <MoreVertical className="h-3.5 w-3.5" />
-              <span className="sr-only">Image options</span>
+              <span className="sr-only">{t("Image options")}</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" sideOffset={4}>
@@ -2672,7 +2673,7 @@ const ImageWithPreview = React.memo(({ src, alt, title }: { src: string; alt?: s
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleOpenInNewTab}>
               <ExternalLink className="h-3.5 w-3.5" />
-              Open in new tab
+              {t("Open in new tab")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

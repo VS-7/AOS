@@ -32,6 +32,15 @@ const (
 // Statuses lists them all.
 var Statuses = []Status{Pending, Claimed, Succeeded, Failed, Dead}
 
+// EnumValues publishes the job lifecycle to every schema.
+func (s Status) EnumValues() []string {
+	out := make([]string, 0, len(Statuses))
+	for _, v := range Statuses {
+		out = append(out, string(v))
+	}
+	return out
+}
+
 // Valid reports whether s is one of the five.
 func (s Status) Valid() bool {
 	for _, known := range Statuses {

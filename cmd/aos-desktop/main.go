@@ -25,6 +25,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 
 	"github.com/OWNER/aos/internal/adapters/supervise"
+	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/clockx"
 	corecfg "github.com/OWNER/aos/internal/core/config"
@@ -181,7 +182,6 @@ func main() {
 	// goes through and to the relay. Without this the bridge kept addressing
 	// the workspace the window opened with, whatever the person picked.
 	domainSvc := wailsvc.NewDomain(daemon)
-	domainSvc.OnWorkspaceChange(func(id string) { startRealtime(id) })
 
 	platform := &wailsPlatform{}
 	// The system service starts without a workspace and is told which one it
@@ -190,6 +190,10 @@ func main() {
 	// as this used to, confined "inside the workspace" to "/" for an
 	// application launched from Finder, which confines nothing.
 	systemSvc := wailsvc.NewSystem(platform, daemon, "")
+	// Where this window was started, offered to the onboarding wizard as the
+	// default folder for the first workspace. Registering it outright is what
+	// this process used to do, before the person had named anything.
+	systemSvc.SetLaunchDirectory(root)
 
 	// adopt is the one place the resolved workspace is applied, so the two
 	// callers below — the daemon supervisor's first attempt and the one after
@@ -200,21 +204,59 @@ func main() {
 		startRealtime(opened.ID)
 	}
 
+	// What the interface picks is adopted the same way, and that means all
+	// three halves of it.
+	//
+	// This used to start the realtime relay and nothing else, so the file
+	// root stayed wherever the window opened: after switching workspace, the
+	// explorer, the editor and every path the shell was asked to open were
+	// still confined to the previous one. It is also the path a first run
+	// arrives by now — onboarding no longer registers anything, so the
+	// workspace the wizard creates reaches this process here, and only here.
+	domainSvc.OnWorkspaceChange(func(id string) {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			// Re-point what does not need the path first: a slow or failing
+			// lookup must not leave the window addressing the old workspace.
+			startRealtime(id)
+			w, err := readWorkspace(ctx, daemon, id)
+			if err != nil {
+				log.Warn("the workspace the interface opened could not be read", "workspace", id, "err", err)
+				return
+			}
+			adopt(workspaceRef{ID: w.ID, Path: w.Path})
+		}()
+	})
+
 	desktop := application.New(application.Options{
 		Name:        build.DisplayName,
 		Description: "An operating system for AI agents.",
 		Services: []application.Service{
 			application.NewService(systemSvc),
 			application.NewService(domainSvc),
-			application.NewService(wailsvc.NewAuth(daemon, func(ctx context.Context) {
+			application.NewService(wailsvc.NewAuth(daemon, func(ctx context.Context, event wailsvc.AuthEvent) {
 				// A successful login or onboarding is the first moment this
 				// client can call anything past /api/auth — workspace
 				// registration needed a token it didn't have until now.
-				if opened, err := openWorkspace(ctx, daemon, root); err == nil {
+				//
+				// Which door it was decides whether anything may be
+				// registered: after onboarding the wizard is still holding the
+				// name and the copilot's settings, so this only adopts. See
+				// openWorkspace.
+				opened, err := openWorkspace(ctx, daemon, root, event)
+				if err == nil {
 					adopt(opened)
-				} else {
-					log.Warn("could not open a workspace", "path", root, "err", err)
+					return
 				}
+				if event == wailsvc.AuthOnboarding {
+					// Expected on a first run, and not a problem: the wizard
+					// creates the workspace moments later and says so through
+					// DomainService.SetWorkspace.
+					log.Debug("no workspace to adopt yet; the wizard is creating it", "path", root)
+					return
+				}
+				log.Warn("could not open a workspace", "path", root, "err", err)
 			})),
 		},
 		Assets: application.AssetOptions{
@@ -307,7 +349,11 @@ func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, root
 		return
 	}
 
-	if opened, err := openWorkspace(ctx, client, root); err != nil {
+	// The startup probe has the same permissions a sign-in does: an
+	// installation that already has an account and a workspace is adopted, and
+	// a window launched inside a repository registers it. Only onboarding is
+	// restricted, and only because onboarding has a wizard still deciding.
+	if opened, err := openWorkspace(ctx, client, root, wailsvc.AuthLogin); err != nil {
 		log.Warn("could not open a workspace yet", "path", root, "err", err)
 	} else {
 		adopt(opened)
@@ -351,11 +397,21 @@ func daemonEnv(root string) []string {
 // run the desktop inside a repository and the repository becomes the
 // workspace.
 //
-// The daemon resolves the same way for the same reasons (internal/app's
-// resolveWorkspaceRoot), so an empty registry here means a first run, and the
-// workspace the daemon created for itself is the one this returns.
-func openWorkspace(ctx context.Context, client *daemonclient.Client, root string) (opened workspaceRef, err error) {
-	if root != "" {
+// event is what separates the two doors, and it is the correction for the
+// defect where the copilot was always called Atlas.
+//
+// AuthService runs this hook *inside* Onboarding, before the answer reaches
+// the window — so on a first run this used to register a workspace while the
+// wizard was still holding the name, the tone, the style and the autonomy the
+// person had just chosen. The wizard's own workspace_create then found a
+// workspace already there and did nothing, and the agent kept the default
+// name for good: an agent's id is its file name, and agents_update cannot
+// change an id.
+//
+// So onboarding adopts and never creates. The wizard owns the first workspace,
+// because it is the only party that knows what to call it.
+func openWorkspace(ctx context.Context, client *daemonclient.Client, root string, event wailsvc.AuthEvent) (opened workspaceRef, err error) {
+	if event != wailsvc.AuthOnboarding && root != "" {
 		return introspectWorkspace(ctx, client, root)
 	}
 
@@ -369,9 +425,30 @@ func openWorkspace(ctx context.Context, client *daemonclient.Client, root string
 		}
 	}
 
+	if event == wailsvc.AuthOnboarding {
+		// Nothing to adopt, and nothing to create: the wizard is about to do
+		// that with the answers this side does not have. It reports which
+		// workspace it made through DomainService.SetWorkspace, and adoptByID
+		// picks it up from there.
+		return workspaceRef{}, errNoWorkspaceYet()
+	}
+
 	// Nothing registered: the daemon serves a directory it chose for itself,
 	// and asking it to introspect with no path is asking for exactly that one.
 	return introspectWorkspace(ctx, client, "")
+}
+
+// errNoWorkspaceYet is the answer while the onboarding wizard is still
+// deciding. It is not a failure — the caller logs it at debug and waits for
+// the interface to say which workspace it created.
+func errNoWorkspaceYet() error {
+	return apperr.New("DESKTOP_NO_WORKSPACE_YET").
+		Causer("main.openWorkspace").
+		Msgf("this installation has no workspace yet; the onboarding wizard is creating it").
+		Status(apperr.StatusNotFound).
+		CTA(apperr.CallToAction{
+			Label: "finish onboarding — the workspace it creates is the one this window will open",
+		})
 }
 
 // workspaceRef is the workspace this window addresses: the id every call is
@@ -413,6 +490,36 @@ func listWorkspaces(ctx context.Context, client *daemonclient.Client) ([]registe
 		return nil, fmt.Errorf("%s", envelope.Error.Message)
 	}
 	return envelope.Data.Workspaces, nil
+}
+
+// readWorkspace reads one registered workspace, for the id the interface
+// reports. It is workspace_get rather than a scan of workspace_list because
+// the interface has already resolved which one it means.
+func readWorkspace(ctx context.Context, client *daemonclient.Client, id string) (registeredWorkspace, error) {
+	input, err := json.Marshal(map[string]string{
+		"workspace":  id,
+		"_reasoning": "the window is following the workspace the interface opened",
+	})
+	if err != nil {
+		return registeredWorkspace{}, err
+	}
+	raw, err := client.Invoke(ctx, "workspace_get", input)
+	if err != nil {
+		return registeredWorkspace{}, err
+	}
+	var envelope struct {
+		Data  registeredWorkspace `json:"data"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return registeredWorkspace{}, err
+	}
+	if envelope.Error != nil {
+		return registeredWorkspace{}, fmt.Errorf("%s", envelope.Error.Message)
+	}
+	return envelope.Data, nil
 }
 
 // introspectWorkspace registers root as a workspace (idempotent — a directory

@@ -54,8 +54,11 @@ func errDaemonExited(pid int) error {
 		Issue("pid", pid).
 		Status(apperr.StatusInternalServerError).
 		CTA(apperr.CallToAction{
+			// `aos gateway logs` is not a command — this group is start, stop,
+			// restart and status. Naming the file is what the reader can
+			// actually act on (defect #5).
 			Label:   "read the daemon log — the reason it exited is the last thing in it",
-			Command: build.Name + " gateway logs",
+			Command: "tail -n 50 ~/" + build.StateDir + "/runtime/gateway/gateway.log",
 		})
 }
 
@@ -74,7 +77,7 @@ func errNeverBecameHealthy(host string, port int, waited time.Duration) error {
 			},
 			apperr.CallToAction{
 				Label:   "read the daemon log",
-				Command: build.Name + " gateway logs",
+				Command: "tail -n 50 ~/" + build.StateDir + "/runtime/gateway/gateway.log",
 			},
 		)
 }

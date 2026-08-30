@@ -70,6 +70,15 @@ func checkTags(t reflect.Type) error {
 			problems = append(problems, fmt.Sprintf(
 				"field %s has no jsonschema description — it is what the model reads to fill the payload", f.Name))
 		}
+		// `schema` is reserved on every surface as the question about the
+		// contract. A command that declared one of its own would be
+		// uninspectable, and only from the outside would that look like a
+		// command whose introspection silently stopped working.
+		if name == SchemaField {
+			problems = append(problems, fmt.Sprintf(
+				"field %s is named %q, which is reserved: it is how every surface asks for the contract instead of running the command",
+				f.Name, SchemaField))
+		}
 	}
 	if len(problems) > 0 {
 		return fmt.Errorf("%s", strings.Join(problems, "; "))

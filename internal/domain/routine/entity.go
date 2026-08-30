@@ -41,6 +41,15 @@ const (
 // TriggerTypes lists the three.
 var TriggerTypes = []TriggerType{Scheduled, Webhook, Activity}
 
+// EnumValues publishes the trigger kinds to every schema.
+func (t TriggerType) EnumValues() []string {
+	out := make([]string, 0, len(TriggerTypes))
+	for _, v := range TriggerTypes {
+		out = append(out, string(v))
+	}
+	return out
+}
+
 // Valid reports whether t is one of the three.
 func (t TriggerType) Valid() bool {
 	for _, known := range TriggerTypes {

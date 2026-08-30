@@ -19,6 +19,15 @@ const (
 // through them on rails the way a Task does.
 var Statuses = []Status{Active, Paused, Done, Archived}
 
+// EnumValues publishes the project lifecycle to every schema.
+func (s Status) EnumValues() []string {
+	out := make([]string, 0, len(Statuses))
+	for _, v := range Statuses {
+		out = append(out, string(v))
+	}
+	return out
+}
+
 // Valid reports whether s is one of the four.
 func (s Status) Valid() bool {
 	for _, known := range Statuses {

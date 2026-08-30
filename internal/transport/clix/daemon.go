@@ -141,17 +141,28 @@ func buildDaemonCommand(info wailsvc.CommandInfo, client wailsvc.Caller, cfg Con
 		Short: info.Summary,
 		Long: info.Summary + "\n\nRuns against the daemon. Provide input with --json, or with " +
 			"repeated --set path=value flags (JSON-decoded when the value parses, a plain " +
-			"string otherwise). --reason sets the _reasoning field every command requires.",
+			"string otherwise). --reason sets the _reasoning field every command requires, " +
+			"and --schema asks the daemon what this command takes instead of running it.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			out := resolveOutput(cmd, cfg)
-			if schemaOnly(cmd) {
-				return fmt.Errorf("--schema is not available for commands served by the daemon")
-			}
+			applyTransportFlags(cmd, client)
 
 			payload, err := buildPayload(jsonBody, sets, reason)
 			if err != nil {
 				return err
+			}
+			// The contract, not the call. This used to be refused outright —
+			// "--schema is not available for commands served by the daemon" —
+			// which is every command but the four this binary links in, so
+			// there was no way at all to discover what a command takes short
+			// of sending a wrong payload and reading the refusal (defect #2).
+			// The daemon answers it now, on the command's own route.
+			if schemaOnly(cmd) {
+				payload, err = askForSchema(payload)
+				if err != nil {
+					return err
+				}
 			}
 			raw, err := client.Invoke(cmd.Context(), info.Key, payload)
 			if err != nil {
@@ -177,7 +188,73 @@ func buildDaemonCommand(info wailsvc.CommandInfo, client wailsvc.Caller, cfg Con
 	c.Flags().StringVar(&jsonBody, flagJSON, "", "full JSON input body")
 	c.Flags().StringArrayVar(&sets, flagSet, nil, "set a field of the input: path=value (repeatable)")
 	c.Flags().StringVar(&reason, flagReason, "", "why this is being run, sent as _reasoning")
+	// The daemon is a remote API even when it is on loopback, so a command it
+	// serves gets the flags that say which daemon, as whom, and in which
+	// workspace. Their absence here is defect #4: `agents me` resolved an
+	// identity and printed it, but nothing could attach one to a call, so
+	// every write refused with "this call has no agent identity" and the
+	// documented workaround was curl with the header set by hand.
+	addTransportFlags(c.Flags())
 	return c
+}
+
+// askForSchema turns a payload into the question about the payload.
+//
+// It is spliced into whatever the caller already typed rather than replacing
+// it, so `--set category=x --schema` still reads as "what does this take?"
+// without the caller having to clear the flags first.
+func askForSchema(payload json.RawMessage) (json.RawMessage, error) {
+	fields := map[string]any{}
+	if len(payload) > 0 {
+		if err := json.Unmarshal(payload, &fields); err != nil {
+			return nil, err
+		}
+	}
+	fields[command.SchemaField] = true
+	return json.Marshal(fields)
+}
+
+// identity is the part of a daemon client the transport flags address: which
+// daemon, with which credential, in which workspace, as whom.
+//
+// Each is its own interface so that a client implementing some of them is
+// still configurable in those respects — and so that a test double does not
+// have to implement four methods to exercise one.
+type (
+	baseURLSetter   interface{ SetBaseURL(string) }
+	tokenSetter     interface{ SetToken(string) }
+	workspaceSetter interface{ SetWorkspace(string) }
+	agentSetter     interface{ SetAgent(string) }
+)
+
+// applyTransportFlags points the client at what this one execution named.
+//
+// Only flags the caller actually set are applied: an unset --agent must leave
+// AOS_AGENT_ID in place rather than clearing the identity the environment
+// already established.
+func applyTransportFlags(cmd *cobra.Command, client wailsvc.Caller) {
+	set := func(name string, apply func(string)) {
+		if apply == nil || !cmd.Flags().Changed(name) {
+			return
+		}
+		value, err := cmd.Flags().GetString(name)
+		if err != nil {
+			return
+		}
+		apply(strings.TrimSpace(value))
+	}
+	if c, ok := client.(baseURLSetter); ok {
+		set(flagBaseURL, c.SetBaseURL)
+	}
+	if c, ok := client.(tokenSetter); ok {
+		set(flagToken, c.SetToken)
+	}
+	if c, ok := client.(workspaceSetter); ok {
+		set(flagWorkspace, c.SetWorkspace)
+	}
+	if c, ok := client.(agentSetter); ok {
+		set(flagAgent, c.SetAgent)
+	}
 }
 
 // buildPayload merges --json, --set and --reason into one input body, in that

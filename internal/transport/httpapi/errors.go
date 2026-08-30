@@ -10,10 +10,22 @@ func errUnauthenticated() error {
 		Causer("httpapi.authenticate").
 		Msgf("this request carries no valid credential").
 		Status(apperr.StatusUnauthorized).
-		CTA(apperr.CallToAction{
-			Label:   "send the token in the Authorization header — a token in the query string is ignored",
-			Command: build.Name + " auth token issue",
-		})
+		CTA(
+			// Not `aos auth token issue`, which this named for as long as it
+			// existed and which no build has ever had: there is no `auth`
+			// group (defect #5). A credential comes from signing in, which
+			// writes the one this machine's terminal reads, or from the API
+			// token in the configuration.
+			apperr.CallToAction{
+				Label: "send the token in the Authorization header — a token in the query string is ignored",
+			},
+			apperr.CallToAction{
+				Label: "on this machine, sign in through the application: it writes the credential " +
+					build.Name + " reads. For a caller from elsewhere, present the configured API token",
+				Command: build.Name + " config get",
+				Tool:    "config_get",
+			},
+		)
 }
 
 func errPanic(requestID string) error {

@@ -215,16 +215,27 @@ func TestDaemonCommandRejectsInvalidJSON(t *testing.T) {
 	}
 }
 
-func TestDaemonCommandSchemaFlagIsRejected(t *testing.T) {
+// TestDaemonCommandSchemaFlagAsksTheDaemon replaces the assertion that used to
+// stand here, which pinned the defect: --schema was refused for every command
+// the daemon serves, which is every command but the four this binary links in.
+// The daemon answers the question on the command's own route now, so the flag
+// asks it rather than refusing.
+func TestDaemonCommandSchemaFlagAsksTheDaemon(t *testing.T) {
 	client := &fakeCaller{infos: []wailsvc.CommandInfo{
 		{Key: "gateway.start", Group: "gateway", Name: "start", Summary: "Start."},
 	}}
-	_, _, err := runWithDaemon(t, client, "gateway", "start", "--schema")
-	if err == nil {
-		t.Fatal("expected --schema to be rejected for a daemon-served command")
+	if _, _, err := runWithDaemon(t, client, "gateway", "start", "--schema"); err != nil {
+		t.Fatalf("--schema must reach the daemon: %v", err)
 	}
-	if client.lastKey != "" {
-		t.Error("--schema must not reach the daemon")
+	if client.lastKey != "gateway.start" {
+		t.Fatalf("key = %q, want the command being inspected", client.lastKey)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(client.lastInput, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload[command.SchemaField] != true {
+		t.Errorf("payload = %s, want %s:true", client.lastInput, command.SchemaField)
 	}
 }
 

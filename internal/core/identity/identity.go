@@ -23,6 +23,17 @@ type Identity struct {
 	AgentID     string
 	UserID      string
 	RequestID   string
+
+	// WorkingDir is where the caller is standing, when the caller is a process
+	// with a directory of its own — the terminal, essentially.
+	//
+	// The daemon has a working directory too, and it is nobody's: it is
+	// wherever the supervisor happened to launch it. `workspace introspect`
+	// resolved "the working directory" to that one, so registering the
+	// repository you were standing in registered the daemon's instead
+	// (defect #3). Empty is the normal case and means "the daemon's own",
+	// which is what the desktop and a browser rely on.
+	WorkingDir string
 }
 
 type ctxKey struct{}

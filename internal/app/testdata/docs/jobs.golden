@@ -81,7 +81,14 @@ The jobs the daemon holds, newest first, filtered by queue, status, workspace or
     },
     "status": {
       "type": "string",
-      "description": "One of: pending, claimed, succeeded, failed, dead."
+      "description": "One of: pending, claimed, succeeded, failed, dead.",
+      "enum": [
+        "pending",
+        "claimed",
+        "succeeded",
+        "failed",
+        "dead"
+      ]
     },
     "workspace": {
       "type": "string",

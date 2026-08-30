@@ -117,11 +117,28 @@ to a person and the system tracks it without executing it.
     },
     "status": {
       "type": "string",
-      "description": "Where it starts: suggestion, backlog, planning or todo. Defaults to backlog."
+      "description": "Where it starts: suggestion, backlog, planning or todo. Defaults to backlog.",
+      "enum": [
+        "suggestion",
+        "backlog",
+        "planning",
+        "todo",
+        "in_progress",
+        "stopped",
+        "in_review",
+        "finished"
+      ]
     },
     "priority": {
       "type": "string",
-      "description": "One of: no_priority, urgent, high, medium, low."
+      "description": "One of: no_priority, urgent, high, medium, low.",
+      "enum": [
+        "no_priority",
+        "urgent",
+        "high",
+        "medium",
+        "low"
+      ]
     },
     "assigned": {
       "type": "string",
@@ -259,7 +276,17 @@ its plan progress, and the dependencies still standing in its way.
   "properties": {
     "status": {
       "type": "string",
-      "description": "Only tasks in this status."
+      "description": "Only tasks in this status.",
+      "enum": [
+        "suggestion",
+        "backlog",
+        "planning",
+        "todo",
+        "in_progress",
+        "stopped",
+        "in_review",
+        "finished"
+      ]
     },
     "type": {
       "type": "string",
@@ -320,7 +347,17 @@ beginning.
     },
     "status": {
       "type": "string",
-      "description": "One of: suggestion, backlog, planning, todo, in_progress, stopped, in_review, finished."
+      "description": "One of: suggestion, backlog, planning, todo, in_progress, stopped, in_review, finished.",
+      "enum": [
+        "suggestion",
+        "backlog",
+        "planning",
+        "todo",
+        "in_progress",
+        "stopped",
+        "in_review",
+        "finished"
+      ]
     },
     "reason": {
       "type": "string",
@@ -385,7 +422,14 @@ system would have no way to say so later.
         "null",
         "string"
       ],
-      "description": "New priority."
+      "description": "New priority.",
+      "enum": [
+        "no_priority",
+        "urgent",
+        "high",
+        "medium",
+        "low"
+      ]
     },
     "summary": {
       "type": [
@@ -441,7 +485,17 @@ system would have no way to say so later.
     },
     "status": {
       "type": "string",
-      "description": "Not writable here. Use set-status, which validates the move and runs the guards."
+      "description": "Not writable here. Use set-status, which validates the move and runs the guards.",
+      "enum": [
+        "suggestion",
+        "backlog",
+        "planning",
+        "todo",
+        "in_progress",
+        "stopped",
+        "in_review",
+        "finished"
+      ]
     },
     "_reasoning": {
       "type": "string",

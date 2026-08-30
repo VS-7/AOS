@@ -69,7 +69,7 @@ func errNotAnEntryPoint(status Status) error {
 		Status(apperr.StatusUnprocessableEntity).
 		CTA(apperr.CallToAction{
 			Label: "create it in one of the four entry states and move it from there, so the guards on the way run",
-			Tool:  "tasks_set_status",
+			Tool:  "tasks_set-status",
 		})
 }
 
@@ -98,7 +98,7 @@ func errStatusIsNotAField(id string) error {
 		CTA(apperr.CallToAction{
 			Label:   "use set-status, which validates the move and runs the guards on it",
 			Command: build.Name + " tasks set-status " + id + " in_review",
-			Tool:    "tasks_set_status",
+			Tool:    "tasks_set-status",
 			Input:   map[string]any{"id": id, "status": "in_review"},
 		})
 }

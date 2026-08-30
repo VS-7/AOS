@@ -9,6 +9,26 @@ import type { CommandKey } from "./schema";
 export const DORMANT_CODE = "AOS_DOMAIN_DORMANT";
 
 /**
+ * What a dormant `useQuery` resolves to.
+ *
+ * It has to be a value rather than an error: the ported screens read
+ * `q.data?.field` and would crash on a rejection. It also has to be
+ * distinguishable from an empty answer, which plain `null` was not — that is
+ * how Settings → Workspace → Members came to show "no members" permanently on
+ * a workspace that has them, with nothing on screen or in the console saying
+ * the capability does not exist.
+ *
+ * `isDormant` is the mark a screen reads to say so out loud. Every other
+ * property access on it is `undefined`, exactly as `null` was.
+ */
+export const DORMANT_RESULT = Object.freeze({ isDormant: true as const });
+
+/** Whether a query result came back because the Go side has no such command. */
+export function isDormantResult(data: unknown): boolean {
+  return typeof data === "object" && data !== null && (data as { isDormant?: boolean }).isDormant === true;
+}
+
+/**
  * The code the UI recognizes as "this call path was never registered in
  * `COMMAND_MAP` at all" — distinct from {@link DORMANT_CODE}, which means
  * the map explicitly knows Go has no such command. This means nobody told
@@ -207,7 +227,12 @@ export async function call(feature: string, action: string, opts?: CallOpts): Pr
     // a shape whose fields vary per command — the real safety net is Go's
     // own input validation on the other side.
     const descriptor = resolveDescriptor(entry);
-    const payload = applyRenameIn(applyCoerceIn(rawPayload, descriptor.coerceIn), descriptor.renameIn);
+    const payload = {
+      ...applyRenameIn(applyCoerceIn(rawPayload, descriptor.coerceIn), descriptor.renameIn),
+      // Last, and keyed in Go's own names: a fixed field is the mapping's
+      // meaning, not a default the caller may talk it out of.
+      ...(descriptor.fixedIn ?? {}),
+    };
     const raw = await client.invoke(descriptor.key as CommandKey, { ...payload, _reasoning: `interface: ${path}` } as never);
     // Only a defined result gets wrapped — an empty/void response has
     // nothing worth nesting, and wrapping `undefined` as `{ [key]:
@@ -298,7 +323,14 @@ function actionNode(feature: string, action: string): ActionNode {
           // `{ data: undefined, error }` shape for dormant calls — that
           // asymmetry with this hook is intentional, not a mismatch to fix.
           if (r.error) {
-            if (r.error.code === DORMANT_CODE) return null;
+            // Dormant still resolves rather than throwing — a ported screen
+            // reading `q.data?.field` must not crash because the Go side has
+            // no counterpart yet. But `null` alone is indistinguishable from
+            // "the list is empty", which is how the Members screen came to
+            // render "no members" forever, with no spinner and no error, on a
+            // workspace that has them. `DORMANT_RESULT` is that same benign
+            // value carrying a mark the screen can read (`isDormant`).
+            if (r.error.code === DORMANT_CODE) return DORMANT_RESULT;
             // C4 of the final review made `EnvelopeError` a real `Error`
             // subclass (see its own doc comment) — `r.error` already *is*
             // what this used to construct by hand (`Object.assign(new

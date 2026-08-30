@@ -166,6 +166,12 @@ func New(cfg Config) *Server {
 			// can say "the window and the daemon are different versions"
 			// instead of failing halfway through a screen.
 			guarded.Get("/_commands", s.commands)
+			// The same surface, described in full: group documentation,
+			// per-command documentation and input schemas. /_commands stays
+			// lean because the terminal fetches it before every command it
+			// runs; this one is asked for deliberately, by whatever has to
+			// *describe* the surface rather than route to it.
+			guarded.Get("/_manifest", s.manifest)
 			s.mountCommands(guarded)
 			if cfg.Files != nil {
 				guarded.Mount("/file", cfg.Files)
@@ -245,6 +251,19 @@ func (s *Server) commands(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(out); err != nil {
 		s.cfg.Log.Warn("the command listing could not be written", "err", err)
 	}
+	_ = r
+}
+
+// manifest answers with the whole published surface.
+//
+// It exists because the surface is not linked into every process that has to
+// describe it: `aos self tools` and `aos self llms` ran off the terminal
+// binary's own registry, which holds four commands, and reported that as the
+// published tool list (defect #1). A client that is not the CLI — the window,
+// another MCP host — gets the same answer here without shelling out.
+func (s *Server) manifest(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, command.Wrap(
+		command.ManifestOf(s.cfg.Registry, build.Current().Version), nil))
 	_ = r
 }
 
