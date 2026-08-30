@@ -68,6 +68,15 @@ function RouteErrorFallback({ error, reset }: ErrorComponentProps) {
     ? `${errorMessage.slice(0, 100)}…`
     : errorMessage;
 
+  // The stack, behind a disclosure.
+  //
+  // This screen used to show a name and a truncated message and nothing else,
+  // which is a dead end for whoever hits it and for whoever has to fix it:
+  // `undefined is not an object (evaluating 't.filter')` names a minified
+  // variable and no file. The build ships source maps, so a stack pasted from
+  // here resolves to real files and lines.
+  const stack = isErrorInstance ? error.stack : undefined;
+
   return (
     <div className="eb-root eb-root--section" role="alert">
       <style>{ROUTE_FALLBACK_STYLES}</style>
@@ -105,6 +114,19 @@ function RouteErrorFallback({ error, reset }: ErrorComponentProps) {
           <span className="eb-error-msg">{displayMessage}</span>
         </div>
 
+        {stack ? (
+          <details className="eb-stack">
+            <summary>{t("Technical details")}</summary>
+            <pre>{stack}</pre>
+            <button
+              className="eb-btn"
+              onClick={() => void navigator.clipboard?.writeText(`${errorName}: ${errorMessage}\n\n${stack}`)}
+            >
+              {t("Copy")}
+            </button>
+          </details>
+        ) : null}
+
         {/* Action */}
         <div className="eb-actions" style={{ maxWidth: "220px" }}>
           <button id="route-error-retry" className="eb-btn eb-btn--primary" onClick={reset}>
@@ -120,6 +142,11 @@ function RouteErrorFallback({ error, reset }: ErrorComponentProps) {
 }
 
 const ROUTE_FALLBACK_STYLES = `
+.eb-stack { width: 100%; max-width: 640px; margin-top: 12px; text-align: left; font-size: 11px; }
+.eb-stack summary { cursor: pointer; opacity: 0.65; user-select: none; }
+.eb-stack pre { max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  margin: 8px 0; padding: 8px; border-radius: 8px; background: rgba(127,127,127,0.12); }
+
   @keyframes eb-fade-up {
     from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: translateY(0); }
