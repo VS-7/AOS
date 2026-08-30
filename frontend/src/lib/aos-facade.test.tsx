@@ -3,7 +3,6 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { COMMAND_MAP } from "./command-map";
-import { isDormantResult } from "./aos-facade";
 import * as authApi from "./auth";
 
 const invoke = vi.fn();
@@ -284,7 +283,7 @@ describe("useQuery's queryFn", () => {
   // comment for why the earlier "fake useQuery, grab the config" approach
   // stopped working once the hook gained a real `React.useEffect`.
 
-  it("resolves a dormant call to a marked value, not undefined and not a bare null", async () => {
+  it("resolves a dormant call to null data, and says so on the result", async () => {
     const { wrapper } = withQueryClient();
     // `user.create`, not `collection`/`instruction`/`model`/`user.list`:
     // task-10 lit `collection`, the Phase 8 domain pass lit `instruction`,
@@ -298,14 +297,24 @@ describe("useQuery's queryFn", () => {
     // Still a resolution, never a rejection: a ported screen reading
     // `q.data?.field` must not crash because Go has no counterpart yet.
     //
-    // But no longer a bare `null`. Indistinguishable from "the list is
-    // empty", that is what made Settings → Workspace → Members render "no
-    // members" permanently, with nothing anywhere saying the capability does
-    // not exist. `isDormantResult` is how a screen asks.
-    expect(result.current.data).not.toBeUndefined();
-    expect(isDormantResult(result.current.data)).toBe(true);
-    expect((result.current.data as { anything?: unknown })?.anything).toBeUndefined();
+    // And `null`, not a marker object. A marker in `data` broke the settings
+    // menu outright — `(query.data ?? []).some(...)` stopped short-circuiting
+    // and threw `.some is not a function` before Settings could render. The
+    // distinction a screen needs rides on the *result* instead.
+    expect(result.current.data).toBeNull();
+    expect(result.current.isDormant).toBe(true);
     expect(invoke).not.toHaveBeenCalled();
+  });
+
+  // The flag is read from COMMAND_MAP, so it is right on the first render and
+  // false for a path that does have a Go command behind it.
+  it("does not call a live path dormant", async () => {
+    invoke.mockResolvedValueOnce({ tasks: [] });
+    const { wrapper } = withQueryClient();
+    const { result } = renderHook(() => api.task!.list!.useQuery(), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.isDormant).toBe(false);
   });
 
   it("resolves a successful call with no body to null, not undefined", async () => {
@@ -391,7 +400,7 @@ describe("useQuery's onSuccess shim", () => {
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
 
     expect(invoke).not.toHaveBeenCalled();
-    expect(onSuccess).toHaveBeenCalledWith(expect.objectContaining({ isDormant: true }));
+    expect(onSuccess).toHaveBeenCalledWith(null);
   });
 
   it("fires again when a refetch resolves to genuinely different data", async () => {

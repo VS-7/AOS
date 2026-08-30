@@ -4,7 +4,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { toast } from "sonner";
 
 import { aos } from "@/app/aos";
-import { api, isDormantResult } from "@/lib/aos-facade";
+import { api } from "@/lib/aos-facade";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -68,7 +68,7 @@ export function WorkspaceMembersSection() {
   // the wrong place: this workspace may well have members, and the screen was
   // reporting on a capability that does not exist as though it had asked and
   // been told nothing.
-  const membersUnavailable = isDormantResult(membersQuery.data);
+  const membersUnavailable = membersQuery.isDormant;
   const members = membersUnavailable
     ? []
     : ((membersQuery.data as WorkspaceMember[] | undefined) ?? []);

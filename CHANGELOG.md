@@ -8,6 +8,21 @@ em que o release foi cortado.
 
 ## [Unreleased]
 
+## [v0.14.1-fase9] — 2026-08-30
+
+### Corrigido
+- **Configurações não abriam.** A v0.14.0 fez uma *query* dormente resolver
+  para um objeto marcado em vez de `null`, para a tela poder distinguir "não
+  existe" de "lista vazia". Isso quebrou todo call site escrito contra o
+  `null`: o menu de configurações faz `(query.data ?? []).some(...)`, o `??`
+  deixou de curto-circuitar, e a tela inteira caía com
+  `.some is not a function` antes de renderizar.
+
+  A distinção agora fica no **resultado** (`query.isDormant`), lida do próprio
+  `COMMAND_MAP` — vale desde o primeiro render, sem ida ao daemon — e `data`
+  volta a ser `null`, que é contra o que todo o código portado foi escrito.
+
+
 ## [v0.14.0-fase9] — 2026-08-30
 
 Duas auditorias fechadas: a da API/CLI e a do aplicativo desktop.

@@ -2,31 +2,13 @@ import * as React from "react";
 import { useMutation, useQuery, type UseMutationResult, type UseQueryResult } from "@tanstack/react-query";
 import type { UseMutationOptions } from "@tanstack/react-query";
 import { client } from "./client";
-import { COMMAND_MAP, type CommandDescriptor, type MapEntry } from "./command-map";
+import { COMMAND_MAP, isCommandDormant, type CommandDescriptor, type MapEntry } from "./command-map";
 import type { CommandKey } from "./schema";
 
 /** The code the UI recognizes as "the Go side doesn't have this yet". */
 export const DORMANT_CODE = "AOS_DOMAIN_DORMANT";
 
-/**
- * What a dormant `useQuery` resolves to.
- *
- * It has to be a value rather than an error: the ported screens read
- * `q.data?.field` and would crash on a rejection. It also has to be
- * distinguishable from an empty answer, which plain `null` was not — that is
- * how Settings → Workspace → Members came to show "no members" permanently on
- * a workspace that has them, with nothing on screen or in the console saying
- * the capability does not exist.
- *
- * `isDormant` is the mark a screen reads to say so out loud. Every other
- * property access on it is `undefined`, exactly as `null` was.
- */
-export const DORMANT_RESULT = Object.freeze({ isDormant: true as const });
 
-/** Whether a query result came back because the Go side has no such command. */
-export function isDormantResult(data: unknown): boolean {
-  return typeof data === "object" && data !== null && (data as { isDormant?: boolean }).isDormant === true;
-}
 
 /**
  * The code the UI recognizes as "this call path was never registered in
@@ -272,7 +254,14 @@ export async function call(feature: string, action: string, opts?: CallOpts): Pr
 interface ActionNode {
   query<T = any>(opts?: CallOpts): Promise<Envelope<T>>;
   mutate<T = any>(opts?: CallOpts): Promise<Envelope<T>>;
-  useQuery<T = any>(opts?: CallOpts): UseQueryResult<T>;
+  /**
+   * `isDormant` says the Go side publishes no command for this path — known
+   * from `COMMAND_MAP`, so it is true from the first render rather than
+   * after a round trip. `data` is `null` in that case, exactly as it is
+   * before the first fetch resolves, which is what keeps every ported
+   * `q.data?.field` call site working unchanged.
+   */
+  useQuery<T = any>(opts?: CallOpts): UseQueryResult<T> & { isDormant: boolean };
   /**
    * `options` accepts the same `onSuccess`/`onError`/`onSettled` callbacks
    * `@tanstack/react-query`'s own `useMutation` does — `mutationFn` is
@@ -323,14 +312,18 @@ function actionNode(feature: string, action: string): ActionNode {
           // `{ data: undefined, error }` shape for dormant calls — that
           // asymmetry with this hook is intentional, not a mismatch to fix.
           if (r.error) {
-            // Dormant still resolves rather than throwing — a ported screen
-            // reading `q.data?.field` must not crash because the Go side has
-            // no counterpart yet. But `null` alone is indistinguishable from
-            // "the list is empty", which is how the Members screen came to
-            // render "no members" forever, with no spinner and no error, on a
-            // workspace that has them. `DORMANT_RESULT` is that same benign
-            // value carrying a mark the screen can read (`isDormant`).
-            if (r.error.code === DORMANT_CODE) return DORMANT_RESULT;
+            // Dormant resolves rather than throwing — a ported screen reading
+            // `q.data?.field` must not crash because the Go side has no
+            // counterpart yet — and it resolves to `null`, which is what
+            // every call site in this tree was written against.
+            //
+            // A first attempt at telling dormant apart from empty put a
+            // marker object here instead. It broke the settings menu outright:
+            // `(query.data ?? []).some(...)` stopped short-circuiting on
+            // `null`, got an object, and threw `.some is not a function`
+            // before Settings could render at all. The distinction belongs on
+            // the *result*, not in the data — see `isDormant` below.
+            if (r.error.code === DORMANT_CODE) return null;
             // C4 of the final review made `EnvelopeError` a real `Error`
             // subclass (see its own doc comment) — `r.error` already *is*
             // what this used to construct by hand (`Object.assign(new
@@ -388,7 +381,15 @@ function actionNode(feature: string, action: string): ActionNode {
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, [result.isSuccess, result.data]);
 
-      return result;
+      // Whether this path has a Go counterpart at all.
+      //
+      // Read from `COMMAND_MAP` rather than from the answer: dormancy is a
+      // static property of the mapping, known before the first fetch, and a
+      // screen asking "can this work here?" should not have to wait for a
+      // round trip to find out. It rides on the result rather than in
+      // `data` so that `data` stays exactly the `null` every existing caller
+      // already handles.
+      return Object.assign(result, { isDormant: isCommandDormant(`${feature}.${action}`) });
     },
 
     useMutation: (options): any => {
