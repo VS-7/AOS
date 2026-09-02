@@ -134,6 +134,45 @@ func (s *Service) Read(ctx context.Context, in ReadInput) (Content, error) {
 	return content, nil
 }
 
+// Content opens in.Path for streaming, for the viewer route that serves a
+// file's bytes as themselves.
+//
+// It goes through the same resolve every other method here does, so the
+// workspace boundary holds: a path that climbs out of the root is refused
+// before anything is opened, not after.
+func (s *Service) Content(ctx context.Context, in ReadInput) (ContentStream, error) {
+	_, real, err := s.resolve(ctx, in.Path)
+	if err != nil {
+		return ContentStream{}, err
+	}
+	info, err := s.fs.Stat(ctx, real)
+	if err != nil {
+		if errors.Is(err, ErrNotExist) {
+			return ContentStream{}, errNoSuchFile(in.Path)
+		}
+		return ContentStream{}, errFSFailed("stat", in.Path, err)
+	}
+	if info.Dir {
+		return ContentStream{}, errIsDirectory("Content", in.Path)
+	}
+
+	body, err := s.fs.Open(ctx, real)
+	if err != nil {
+		if errors.Is(err, ErrNotExist) {
+			return ContentStream{}, errNoSuchFile(in.Path)
+		}
+		return ContentStream{}, errFSFailed("open", in.Path, err)
+	}
+
+	return ContentStream{
+		Name:      info.Name,
+		MediaType: mediaTypeFor(in.Path),
+		ModTime:   info.ModTime,
+		Size:      info.Size,
+		Body:      body,
+	}, nil
+}
+
 // Write persists content at in.Path, creating the file — and any missing
 // parent directories — when nothing was there yet.
 func (s *Service) Write(ctx context.Context, in WriteInput) error {

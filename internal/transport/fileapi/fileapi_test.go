@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path"
@@ -121,6 +122,23 @@ func (f *fakeFS) ReadFile(_ context.Context, p string, limit int64) ([]byte, boo
 	}
 	return e.data, false, nil
 }
+
+// Open hands back the whole entry, uncapped — the fake's half of the reason
+// /content exists. A bytes.Reader is already a ReadSeeker; the Close is the
+// no-op that makes it a ReadSeekCloser.
+func (f *fakeFS) Open(_ context.Context, p string) (io.ReadSeekCloser, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	e, ok := f.entries[path.Clean(p)]
+	if !ok || e.dir {
+		return nil, file.ErrNotExist
+	}
+	return nopSeekCloser{bytes.NewReader(e.data)}, nil
+}
+
+type nopSeekCloser struct{ *bytes.Reader }
+
+func (nopSeekCloser) Close() error { return nil }
 
 func (f *fakeFS) WriteFile(_ context.Context, p string, data []byte) error {
 	f.put(p, data)
@@ -637,5 +655,113 @@ func TestChangesOnACleanTreeIsAnEmptyList(t *testing.T) {
 	}
 	if out.Files == nil {
 		t.Error("a clean tree answered null rather than an empty list")
+	}
+}
+
+// The Files panel's image, PDF and video viewers each want a URL they can put
+// in a src attribute, not a JSON envelope they would have to decode and
+// re-encode as a blob. /content is that URL: the raw bytes, the media type,
+// and the Range support a <video> needs in order to seek.
+//
+// Reading them through /read instead is what these tests exist to rule out.
+// That route answers base64 inside an envelope and stops at maxReadBytes (4
+// MiB), so every larger image or video would arrive truncated — decodable,
+// silently wrong, and impossible to tell apart from a corrupt file.
+
+func TestContentServesTheRawBytesUnderTheirMediaType(t *testing.T) {
+	png := []byte("\x89PNG\r\n\x1a\n fake pixels")
+	fs := newFakeFS()
+	fs.put(root+"/logo.png", png)
+	srv := newServer(t, fs, fakeGit{}, fixedWorkspace{root: root})
+
+	res, raw := do(t, srv, http.MethodGet, "/content?path=logo.png", nil)
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.StatusCode, http.StatusOK)
+	}
+	if !bytes.Equal(raw, png) {
+		t.Fatalf("body = %q, want the file's own bytes %q", raw, png)
+	}
+	if got := res.Header.Get("Content-Type"); !strings.HasPrefix(got, "image/png") {
+		t.Fatalf("Content-Type = %q, want image/png", got)
+	}
+}
+
+func TestContentServesAByteRangeSoVideoCanSeek(t *testing.T) {
+	fs := newFakeFS()
+	fs.put(root+"/clip.mp4", []byte("0123456789"))
+	srv := newServer(t, fs, fakeGit{}, fixedWorkspace{root: root})
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/content?path=clip.mp4", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Range", "bytes=2-5")
+	res, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	raw, err := readAll(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if res.StatusCode != http.StatusPartialContent {
+		t.Fatalf("status = %d, want %d", res.StatusCode, http.StatusPartialContent)
+	}
+	if string(raw) != "2345" {
+		t.Fatalf("body = %q, want %q", raw, "2345")
+	}
+}
+
+// The whole reason this route exists rather than reusing /read's base64.
+func TestContentIsNotTruncatedByTheReadCap(t *testing.T) {
+	big := bytes.Repeat([]byte("a"), (4<<20)+1024)
+	fs := newFakeFS()
+	fs.put(root+"/big.bin", big)
+	srv := newServer(t, fs, fakeGit{}, fixedWorkspace{root: root})
+
+	_, raw := do(t, srv, http.MethodGet, "/content?path=big.bin", nil)
+
+	if len(raw) != len(big) {
+		t.Fatalf("served %d bytes of a %d-byte file", len(raw), len(big))
+	}
+}
+
+func TestContentRefusesADirectory(t *testing.T) {
+	fs := newFakeFS()
+	fs.mkdirAll(root + "/docs")
+	srv := newServer(t, fs, fakeGit{}, fixedWorkspace{root: root})
+
+	res, _ := do(t, srv, http.MethodGet, "/content?path=docs", nil)
+
+	if res.StatusCode == http.StatusOK {
+		t.Fatal("a directory was served as a file")
+	}
+}
+
+// The sandbox boundary holds on this route too — it reaches the filesystem
+// through the same Resolve every other one does.
+func TestContentRefusesAPathOutsideTheWorkspace(t *testing.T) {
+	fs := newFakeFS()
+	fs.put("/etc/passwd", []byte("root:x:0:0"))
+	srv := newServer(t, fs, fakeGit{}, fixedWorkspace{root: root})
+
+	res, raw := do(t, srv, http.MethodGet, "/content?path=../etc/passwd", nil)
+
+	if res.StatusCode == http.StatusOK {
+		t.Fatalf("a path outside the workspace was served: %s", raw)
+	}
+}
+
+func TestContentReportsAMissingFile(t *testing.T) {
+	fs := newFakeFS()
+	srv := newServer(t, fs, fakeGit{}, fixedWorkspace{root: root})
+
+	res, _ := do(t, srv, http.MethodGet, "/content?path=absent.png", nil)
+
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", res.StatusCode, http.StatusNotFound)
 	}
 }

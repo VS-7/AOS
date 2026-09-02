@@ -1,6 +1,9 @@
 package file
 
-import "time"
+import (
+	"io"
+	"time"
+)
 
 // Node is one entry in a workspace file tree.
 type Node struct {
@@ -46,6 +49,21 @@ type Change struct {
 
 	// OldPath is where a renamed entry came from. Empty for everything else.
 	OldPath string `json:"oldPath,omitempty"`
+}
+
+// ContentStream is one file open for reading, for the viewer route that
+// serves it as bytes rather than as JSON.
+//
+// It is deliberately not a Content: that one carries the file inside itself
+// (text, or base64, capped at maxReadBytes) because it travels in an
+// envelope. This one carries a handle, so a 300 MB video costs the same
+// memory as a 3 KB icon. Body is the caller's to close.
+type ContentStream struct {
+	Name      string
+	MediaType string
+	ModTime   time.Time
+	Size      int64
+	Body      io.ReadSeekCloser
 }
 
 type Diff struct {

@@ -1,8 +1,10 @@
 package file_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"path"
 	"sort"
 	"strings"
@@ -114,6 +116,23 @@ func (f *fakeFS) ReadFile(_ context.Context, p string, limit int64) ([]byte, boo
 	}
 	return e.data, false, nil
 }
+
+// Open is ReadFile without the cap — what Content streams from. A
+// bytes.Reader already seeks; the no-op Close is what makes it a
+// ReadSeekCloser.
+func (f *fakeFS) Open(_ context.Context, p string) (io.ReadSeekCloser, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	e, ok := f.entries[p]
+	if !ok {
+		return nil, file.ErrNotExist
+	}
+	return nopSeekCloser{bytes.NewReader(e.data)}, nil
+}
+
+type nopSeekCloser struct{ *bytes.Reader }
+
+func (nopSeekCloser) Close() error { return nil }
 
 func (f *fakeFS) WriteFile(_ context.Context, p string, data []byte) error {
 	f.mu.Lock()
@@ -538,7 +557,7 @@ type brokenFS struct {
 	*fakeFS
 	fail error
 
-	on string // "resolve", "stat", "readdir", "read", "write", "mkdir", "rename", "remove"
+	on string // "resolve", "stat", "readdir", "read", "open", "write", "mkdir", "rename", "remove"
 }
 
 func (b brokenFS) Resolve(ctx context.Context, root, p string) (string, error) {
@@ -553,6 +572,13 @@ func (b brokenFS) Stat(ctx context.Context, p string) (file.Info, error) {
 		return file.Info{}, b.fail
 	}
 	return b.fakeFS.Stat(ctx, p)
+}
+
+func (b brokenFS) Open(ctx context.Context, p string) (io.ReadSeekCloser, error) {
+	if b.on == "open" {
+		return nil, b.fail
+	}
+	return b.fakeFS.Open(ctx, p)
 }
 
 func (b brokenFS) ReadDir(ctx context.Context, p string) ([]file.Info, error) {

@@ -53,6 +53,16 @@ export function ChangesContent({
 
   const snapshot = changesQuery.data?.snapshot;
   const files: FileChangeEntry[] = snapshot?.files ?? [];
+  // `?.` on the summary as well as the snapshot: `useQuery` hands back `any`,
+  // so nothing read off `snapshot` here is checked against
+  // `FileExplorerSnapshot`. A snapshot that resolved without a summary threw
+  // on this read ("undefined is not an object") instead of falling back to
+  // zero, which is what the guard on `snapshot` alone was there to prevent.
+  const summary = {
+    fileCount: snapshot?.summary?.fileCount ?? 0,
+    additions: snapshot?.summary?.additions ?? 0,
+    deletions: snapshot?.summary?.deletions ?? 0,
+  };
   const filteredFiles = React.useMemo(() => {
     const query = findQuery.trim().toLowerCase();
     if (!query) return files;
@@ -121,9 +131,9 @@ export function ChangesContent({
     >
       <ChangesHeader
         explorerContext={explorerContext}
-        fileCount={snapshot?.summary.fileCount ?? 0}
-        additions={snapshot?.summary.additions ?? 0}
-        deletions={snapshot?.summary.deletions ?? 0}
+        fileCount={summary.fileCount}
+        additions={summary.additions}
+        deletions={summary.deletions}
         readOnly={snapshot?.readOnly ?? false}
         isRefreshing={changesQuery.isFetching}
         preferences={preferences}

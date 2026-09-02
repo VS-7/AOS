@@ -51,6 +51,22 @@ func errNotDirectory(path string) error {
 		CTA(apperr.CallToAction{Label: "list its parent directory instead, or read it directly"})
 }
 
+// errNoSuchFile is the one file error that answers 404 rather than 400.
+//
+// Every other read in this domain is an RPC-shaped call whose caller reads
+// the envelope; Content is a URL a browser puts in a src, and a browser is
+// entitled to be told "there is nothing here" in the status line it already
+// understands. FILE_IO_FAILED's 400 would have an <img> report a malformed
+// request for a picture that has merely been deleted.
+func errNoSuchFile(path string) error {
+	return apperr.New("FILE_NOT_FOUND").
+		Causer("file.Service.Content").
+		Msgf("nothing exists at %q", path).
+		Issue("path", path).
+		Status(apperr.StatusNotFound).
+		CTA(apperr.CallToAction{Label: "check the path, or list the directory to see what is there"})
+}
+
 func errIsDirectory(op, path string) error {
 	return apperr.New("FILE_IS_A_DIRECTORY").
 		Causer("file.Service."+op).
