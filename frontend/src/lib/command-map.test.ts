@@ -129,3 +129,77 @@ describe("chat.send separates what was typed from what was attached", () => {
     expect(COMPOSER_CONTEXT_PREFIX).toBe(COMPOSER_PROMPT_PART_PREFIX);
   });
 });
+
+// Every routine with a schedule failed to save. The interface builds a
+// trigger as `{type, config: {cron}}` — the shape Go *stores* and answers
+// with — while `routine.TriggerInput` is flat, so `cron` arrived empty and
+// the daemon refused with AOS_ROUTINE_INVALID_CRON. An activity trigger lost
+// its namespace, event and filters the same way, silently.
+describe("routine triggers are flattened onto the shape Go's input takes", () => {
+  const flatten = (triggers: unknown) => {
+    const entry = COMMAND_MAP["routine.create"] as {
+      coerceIn: Record<string, (v: unknown) => unknown>;
+    };
+    return entry.coerceIn.triggers(triggers) as { triggers: Array<Record<string, unknown>> };
+  };
+
+  it("lifts a schedule's cron out of config", () => {
+    const { triggers } = flatten([{ type: "scheduled", config: { cron: "0 9 * * *" } }]);
+    expect(triggers).toEqual([{ type: "scheduled", cron: "0 9 * * *" }]);
+  });
+
+  it("lifts an activity trigger's namespace, event and filters", () => {
+    const { triggers } = flatten([
+      {
+        type: "activity",
+        config: { namespace: "task", event: "created", filters: [{ field: "type", value: "bug" }] },
+      },
+    ]);
+    expect(triggers).toEqual([
+      {
+        type: "activity",
+        namespace: "task",
+        event: "created",
+        filters: [{ field: "type", value: "bug" }],
+      },
+    ]);
+  });
+
+  // The webhook secret is minted by the daemon; a client that sends one is
+  // choosing its own secret.
+  it("does not send a webhook token", () => {
+    const { triggers } = flatten([{ type: "webhook", config: { token: "chosen-by-the-client" } }]);
+    expect(triggers).toEqual([{ type: "webhook" }]);
+  });
+});
+
+// The marketplace list rendered nothing and its search filtered nothing: the
+// screens read `.items` and sent `query`/`category`, while Go answers a bare
+// array and searches on `text`/`tag`.
+describe("marketplace descriptors", () => {
+  it("nests the list under items and renames the search fields", () => {
+    const entry = COMMAND_MAP["marketplace.list"] as {
+      key: string;
+      renameIn: Record<string, string>;
+      wrapOut: string;
+    };
+    expect(entry.key).toBe("marketplace_discovery");
+    expect(entry.renameIn).toEqual({ query: "text", category: "tag" });
+    expect(entry.wrapOut).toBe("items");
+  });
+
+  it("nests the detail under skill", () => {
+    const entry = COMMAND_MAP["marketplace.getByName"] as { wrapOut: string };
+    expect(entry.wrapOut).toBe("skill");
+  });
+});
+
+// Declared dormant although POST /api/auth/profile has existed since the
+// identity surface was built, so saving the profile reported "the session
+// domain does not exist in the Go backend yet".
+describe("session.updateProfile", () => {
+  it("is not dormant", () => {
+    expect(COMMAND_MAP["session.updateProfile"]).not.toBeNull();
+    expect(isDormant("session.updateProfile")).toBe(false);
+  });
+});

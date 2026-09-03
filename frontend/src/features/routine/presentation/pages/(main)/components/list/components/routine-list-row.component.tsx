@@ -49,7 +49,7 @@ export const RoutineListRow = React.memo(function RoutineListRow({
   const handleStatusChange = useCallback(
     async (nextStatus: Routine["status"]) => {
       try {
-        await aos.client.routine.update.mutate({
+        await aos.client.routine.update.mutateOrThrow({
           params: { routine: routine.id },
           body: { status: nextStatus },
         });
@@ -67,7 +67,7 @@ export const RoutineListRow = React.memo(function RoutineListRow({
   const handleAgentChange = useCallback(
     async (agent: string) => {
       try {
-        await aos.client.routine.update.mutate({
+        await aos.client.routine.update.mutateOrThrow({
           params: { routine: routine.id },
           body: { agent },
         });
@@ -84,7 +84,7 @@ export const RoutineListRow = React.memo(function RoutineListRow({
 
   const handleFire = useCallback(async () => {
     try {
-      const result = await aos.client.routine.fire.mutate({
+      const result = await aos.client.routine.fire.mutateOrThrow({
         params: { routine: routine.id },
         query: {},
         body: {},
@@ -124,7 +124,7 @@ export const RoutineListRow = React.memo(function RoutineListRow({
     if (!confirmed) return;
 
     try {
-      await aos.client.routine.delete.mutate({
+      await aos.client.routine.delete.mutateOrThrow({
         params: { routine: routine.id },
       });
       toast.success(`Routine ${routine.id} deleted`);

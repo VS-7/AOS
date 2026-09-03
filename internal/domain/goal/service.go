@@ -123,6 +123,7 @@ type CreateInput struct {
 	Title       string     `json:"title" jsonschema:"What this goal is." validate:"required,notblank"`
 	Description string     `json:"description,omitempty" jsonschema:"One line summarising the outcome."`
 	Status      Status     `json:"status,omitempty" jsonschema:"One of: active, achieved, abandoned, paused. Defaults to active."`
+	Priority    Priority   `json:"priority,omitempty" jsonschema:"How urgent this goal is. Defaults to no_priority."`
 	Project     string     `json:"project,omitempty" jsonschema:"Project this goal belongs to, if any."`
 	DueAt       *time.Time `json:"dueAt,omitempty" jsonschema:"When this goal is due, if it has a deadline."`
 	Skill       string     `json:"skill,omitempty" jsonschema:"Skill installing this goal, if any."`
@@ -151,10 +152,19 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Goal, error) {
 		return nil, errStatusInvalid(string(status))
 	}
 
+	priority := in.Priority
+	if priority == "" {
+		priority = NoPriority
+	}
+	if !priority.Valid() {
+		return nil, errPriorityInvalid(string(priority))
+	}
+
 	now := s.clock.Now()
 	g := Goal{
 		ID: id, Title: title, Description: in.Description, Status: status,
-		Project: in.Project, DueAt: in.DueAt, Skill: in.Skill, Measure: in.Measure,
+		Priority: priority,
+		Project:  in.Project, DueAt: in.DueAt, Skill: in.Skill, Measure: in.Measure,
 		Content:   in.Content,
 		CreatedAt: now, UpdatedAt: now,
 	}
@@ -172,6 +182,7 @@ type UpdateInput struct {
 	Title       *string    `json:"title,omitempty" jsonschema:"New title. Omit to leave unchanged."`
 	Description *string    `json:"description,omitempty" jsonschema:"New one-line summary of the outcome. Omit to leave unchanged."`
 	Status      *Status    `json:"status,omitempty" jsonschema:"New lifecycle status: active, achieved, abandoned, or paused. Omit to leave unchanged."`
+	Priority    *Priority  `json:"priority,omitempty" jsonschema:"New priority: no_priority, urgent, high, medium or low. Omit to leave unchanged."`
 	Project     *string    `json:"project,omitempty" jsonschema:"New project this goal belongs to. Empty string clears it. Omit to leave unchanged."`
 	DueAt       *time.Time `json:"dueAt,omitempty" jsonschema:"New due date. Omit to leave unchanged."`
 	Measure     *string    `json:"measure,omitempty" jsonschema:"New measure that makes this goal checkable rather than aspirational. Omit to leave unchanged."`
@@ -199,6 +210,12 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Goal, error) {
 			return nil, errStatusInvalid(string(*in.Status))
 		}
 		current.Status = *in.Status
+	}
+	if in.Priority != nil {
+		if !in.Priority.Valid() {
+			return nil, errPriorityInvalid(string(*in.Priority))
+		}
+		current.Priority = *in.Priority
 	}
 	if in.Project != nil {
 		current.Project = *in.Project

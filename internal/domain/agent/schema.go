@@ -41,8 +41,12 @@ type CreateInput struct {
 	// an agent from the application failed with "id is required", every time.
 	// Every other domain that owns a slug already derives it (workspace,
 	// task, goal, instruction, project); this one simply never did.
-	ID           string    `json:"id,omitempty" cli:"arg" jsonschema:"Unique agent identifier (slug). Lowercase, no spaces. Defaults to a slug of name. Example: \"atlas\"." validate:"max=64"`
-	Name         string    `json:"name,omitempty" jsonschema:"Human-readable display name. Defaults to the slug."`
+	ID   string `json:"id,omitempty" cli:"arg" jsonschema:"Unique agent identifier (slug). Lowercase, no spaces. Defaults to a slug of name. Example: \"atlas\"." validate:"max=64"`
+	Name string `json:"name,omitempty" jsonschema:"Human-readable display name. Defaults to the slug."`
+	// Image is on the entity and was not on either input, so the avatar the
+	// settings form edits was accepted by the decoder and dropped: the field
+	// existed in the interface, in the record, and nowhere in between.
+	Image        string    `json:"image,omitempty" jsonschema:"Avatar URL or data URI."`
 	Description  string    `json:"description,omitempty" jsonschema:"Orchestrator-facing summary of when to delegate to this agent."`
 	Role         string    `json:"role,omitempty" jsonschema:"Functional role label shown in delegation prompts."`
 	Leader       string    `json:"leader,omitempty" jsonschema:"Slug of the leader agent in a hierarchical team."`
@@ -63,6 +67,7 @@ type CreateInput struct {
 type UpdateInput struct {
 	ID           string  `json:"id" cli:"arg" jsonschema:"Agent slug to update." validate:"required"`
 	Name         *string `json:"name,omitempty" jsonschema:"New display name."`
+	Image        *string `json:"image,omitempty" jsonschema:"New avatar URL or data URI. Empty string clears it."`
 	Description  *string `json:"description,omitempty" jsonschema:"New orchestrator-facing summary."`
 	Role         *string `json:"role,omitempty" jsonschema:"New functional role label."`
 	Leader       *string `json:"leader,omitempty" jsonschema:"New leader slug."`

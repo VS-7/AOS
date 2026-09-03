@@ -103,6 +103,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Agent, error) {
 	a := &Agent{
 		ID:           id,
 		Name:         in.Name,
+		Image:        in.Image,
 		Description:  in.Description,
 		Role:         in.Role,
 		Leader:       leader,
@@ -142,6 +143,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Agent, error) {
 		return nil, err
 	}
 	applyString(&current.Name, in.Name)
+	applyString(&current.Image, in.Image)
 	applyString(&current.Description, in.Description)
 	applyString(&current.Role, in.Role)
 	applyString(&current.Provider, in.Provider)

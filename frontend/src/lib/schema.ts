@@ -74,6 +74,8 @@ export interface CommandMap {
     "description"?: string;
     /** Unique agent identifier (slug). Lowercase, no spaces. Defaults to a slug of name. Example: "atlas". */
     "id"?: string;
+    /** Avatar URL or data URI. */
+    "image"?: string;
     /** Slug of the leader agent in a hierarchical team. */
     "leader"?: string;
     /** LLM model id for this agent. Example: "gpt-4o". */
@@ -147,6 +149,8 @@ export interface CommandMap {
     "description"?: unknown;
     /** Agent slug to update. */
     "id": string;
+    /** New avatar URL or data URI. Empty string clears it. */
+    "image"?: unknown;
     /** New leader slug. */
     "leader"?: unknown;
     /** New LLM model id. */
@@ -542,6 +546,8 @@ export interface CommandMap {
     "dueAt"?: unknown;
     /** How to tell this goal was actually served. */
     "measure"?: string;
+    /** How urgent this goal is. Defaults to no_priority. */
+    "priority"?: "no_priority" | "urgent" | "high" | "medium" | "low";
     /** Project this goal belongs to, if any. */
     "project"?: string;
     /** Skill installing this goal, if any. */
@@ -590,6 +596,8 @@ export interface CommandMap {
     "id": string;
     /** New measure that makes this goal checkable rather than aspirational. Omit to leave unchanged. */
     "measure"?: unknown;
+    /** New priority: no_priority, urgent, high, medium or low. Omit to leave unchanged. */
+    "priority"?: "no_priority" | "urgent" | "high" | "medium" | "low";
     /** New project this goal belongs to. Empty string clears it. Omit to leave unchanged. */
     "project"?: unknown;
     /** New lifecycle status: active, achieved, abandoned, or paused. Omit to leave unchanged. */
@@ -1112,8 +1120,12 @@ export interface CommandMap {
     "limit"?: number;
     /** How many to skip. */
     "offset"?: number;
+    /** Only tasks at this priority. */
+    "priority"?: "no_priority" | "urgent" | "high" | "medium" | "low";
     /** Only tasks in this project. */
     "project"?: string;
+    /** Substring match over name and summary. */
+    "query"?: string;
     /** Only tasks in this status. */
     "status"?: "suggestion" | "backlog" | "planning" | "todo" | "in_progress" | "stopped" | "in_review" | "finished";
     /** Only tasks of this workspace type. Example: "bug". */

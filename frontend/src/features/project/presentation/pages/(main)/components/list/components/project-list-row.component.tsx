@@ -27,7 +27,7 @@ export function ProjectListRow({ project }: ProjectListRowProps) {
 
   const handleDelete = async () => {
     try {
-      await aos.client.project.delete.mutate({
+      await aos.client.project.delete.mutateOrThrow({
         params: { project: project.id },
       });
       toast.success(`Project ${project.id} deleted`);

@@ -38,7 +38,7 @@ export function GoalListRow({ goal }: GoalListRowProps) {
 
   const handlePriorityChange = async (priority: Goal["priority"]) => {
     try {
-      await aos.client.goal.update.mutate({
+      await aos.client.goal.update.mutateOrThrow({
         params: { goal: goal.id },
         body: { priority },
       });
@@ -53,7 +53,7 @@ export function GoalListRow({ goal }: GoalListRowProps) {
 
   const handleStatusChange = async (status: Goal["status"]) => {
     try {
-      await aos.client.goal.update.mutate({
+      await aos.client.goal.update.mutateOrThrow({
         params: { goal: goal.id },
         body: { status },
       });
@@ -66,7 +66,7 @@ export function GoalListRow({ goal }: GoalListRowProps) {
 
   const handleDelete = async () => {
     try {
-      await aos.client.goal.delete.mutate({ params: { goal: goal.id } });
+      await aos.client.goal.delete.mutateOrThrow({ params: { goal: goal.id } });
       toast.success(`Goal ${goal.id} deleted`);
       router.invalidate();
     } catch {

@@ -71,7 +71,7 @@ export const TaskKanbanCard = React.memo(function TaskKanbanCard({
   const handlePriorityChange = useCallback(
     async (priority: Task["priority"]) => {
       try {
-        await aos.client.task.update.mutate({
+        await aos.client.task.update.mutateOrThrow({
           params: { task: task.id },
           body: { priority },
         });
@@ -89,7 +89,7 @@ export const TaskKanbanCard = React.memo(function TaskKanbanCard({
   const handleAssigneeChange = useCallback(
     async (assignee: string | undefined) => {
       try {
-        await aos.client.task.update.mutate({
+        await aos.client.task.update.mutateOrThrow({
           params: { task: task.id },
           body: { assigned: assignee },
         });
@@ -112,8 +112,13 @@ export const TaskKanbanCard = React.memo(function TaskKanbanCard({
 
   const handleStatusChange = useCallback(
     async (status: Task["status"]) => {
+      // `task.setStatus`, not `task.update`: a task's status is *moved*, not
+      // written. `tasks_update` refuses it outright
+      // (AOS_TASK_STATUS_NOT_WRITABLE, "a task's status is moved, not
+      // written") — so picking a status here showed "Moved to In Progress"
+      // and left the task exactly where it was.
       try {
-        await aos.client.task.update.mutate({
+        await aos.client.task.setStatus.mutateOrThrow({
           params: { task: task.id },
           body: { status },
         });
@@ -129,7 +134,7 @@ export const TaskKanbanCard = React.memo(function TaskKanbanCard({
   const handleDueDateChange = useCallback(
     async (dueAt: string | undefined) => {
       try {
-        await aos.client.task.update.mutate({
+        await aos.client.task.update.mutateOrThrow({
           params: { task: task.id },
           body: { dueAt },
         });
@@ -144,7 +149,7 @@ export const TaskKanbanCard = React.memo(function TaskKanbanCard({
 
   const handleDelete = useCallback(async () => {
     try {
-      await aos.client.task.delete.mutate({ params: { task: task.id } });
+      await aos.client.task.delete.mutateOrThrow({ params: { task: task.id } });
       toast.success(`Task ${task.id} deleted`);
       router.invalidate();
     } catch (error) {
@@ -176,7 +181,7 @@ export const TaskKanbanCard = React.memo(function TaskKanbanCard({
   const handleTypeChange = useCallback(
     async (type: string) => {
       try {
-        await aos.client.task.update.mutate({
+        await aos.client.task.update.mutateOrThrow({
           params: { task: task.id },
           body: { type },
         });
@@ -192,7 +197,7 @@ export const TaskKanbanCard = React.memo(function TaskKanbanCard({
   const handleProjectChange = useCallback(
     async (projectId: string | undefined) => {
       try {
-        await aos.client.task.update.mutate({
+        await aos.client.task.update.mutateOrThrow({
           params: { task: task.id },
           body: { project: projectId },
         });

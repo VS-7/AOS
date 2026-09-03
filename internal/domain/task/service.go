@@ -75,6 +75,9 @@ func (s *Service) List(ctx context.Context, in ListInput) (ListOutput, error) {
 	if in.Status != "" && !in.Status.Valid() {
 		return ListOutput{}, errInvalidStatus(string(in.Status))
 	}
+	if in.Priority != "" && !in.Priority.Valid() {
+		return ListOutput{}, errInvalidPriority(string(in.Priority))
+	}
 	found, err := s.repo.List(ctx, collections.Query{IncludeContent: false})
 	if err != nil {
 		return ListOutput{}, errReadFailed("List", err)
@@ -96,6 +99,18 @@ func (s *Service) List(ctx context.Context, in ListInput) (ListOutput, error) {
 		}
 		if in.Goal != "" && t.Goal != in.Goal {
 			continue
+		}
+		if in.Priority != "" && t.Priority != in.Priority {
+			continue
+		}
+		// A naive substring match over what a person can see in the list, not
+		// the weighted search the index does — the same honesty
+		// instruction.ListInput's own Query field states.
+		if q := strings.ToLower(strings.TrimSpace(in.Query)); q != "" {
+			if !strings.Contains(strings.ToLower(t.Name), q) &&
+				!strings.Contains(strings.ToLower(t.Summary), q) {
+				continue
+			}
 		}
 		matched = append(matched, t)
 	}

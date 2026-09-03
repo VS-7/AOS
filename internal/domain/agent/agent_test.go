@@ -315,3 +315,26 @@ func TestRegisterPublishesTheWholeGroup(t *testing.T) {
 		}
 	}
 }
+
+// The settings form has edited the avatar since the port, and neither input
+// carried it: the field existed in the interface, in the record, and nowhere
+// in between, so every save dropped it silently.
+func TestTheAvatarIsWritable(t *testing.T) {
+	svc, _ := newService(t)
+	created, err := svc.Create(ctx(), agent.CreateInput{ID: "luara", Image: "https://example.test/a.png"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Image != "https://example.test/a.png" {
+		t.Errorf("image = %q, want the one that was sent", created.Image)
+	}
+
+	blank := ""
+	cleared, err := svc.Update(ctx(), agent.UpdateInput{ID: "luara", Image: &blank})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.Image != "" {
+		t.Errorf("image = %q, want it cleared", cleared.Image)
+	}
+}

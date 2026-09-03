@@ -47,6 +47,10 @@ agent rather than two.
       "type": "string",
       "description": "Human-readable display name. Defaults to the slug."
     },
+    "image": {
+      "type": "string",
+      "description": "Avatar URL or data URI."
+    },
     "description": {
       "type": "string",
       "description": "Orchestrator-facing summary of when to delegate to this agent."
@@ -333,6 +337,13 @@ Only the fields you send are changed; the rest are left alone. Sending
         "string"
       ],
       "description": "New display name."
+    },
+    "image": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New avatar URL or data URI. Empty string clears it."
     },
     "description": {
       "type": [

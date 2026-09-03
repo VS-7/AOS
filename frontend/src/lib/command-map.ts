@@ -140,6 +140,34 @@ export const COMPOSER_CONTEXT_PREFIX = "[system-reminder]:";
  */
 const withMessageMetadata = (chat: unknown): unknown => toUiChat(chat);
 
+/**
+ * A routine trigger, flattened onto the shape Go's input takes.
+ *
+ * Go stores a trigger nested (`{type, config: {cron}}`) and answers with it
+ * nested, but `routine.TriggerInput` is flat (`{type, cron, namespace, event,
+ * filters}`) — the shape a model can fill in without a nested object. The
+ * interface, ported against the stored shape, sent the nested one on write:
+ * `cron` arrived empty and every scheduled routine was refused with
+ * AOS_ROUTINE_INVALID_CRON, while an activity trigger silently lost its
+ * namespace, event and filters.
+ *
+ * `token` is not copied across: the webhook secret is minted by the daemon,
+ * and a client that sends one is asking for a secret it chose itself.
+ */
+const flattenTriggers = (value: unknown): unknown => {
+  if (!Array.isArray(value)) return { triggers: value };
+  return {
+    triggers: value.map((raw) => {
+      if (!raw || typeof raw !== "object") return raw;
+      const trigger = raw as Record<string, unknown>;
+      const config = (trigger["config"] ?? {}) as Record<string, unknown>;
+      const { config: _nested, ...flat } = trigger;
+      const { token: _minted, ...carried } = config;
+      return { ...flat, ...carried };
+    }),
+  };
+};
+
 /** One level in: `nested(p, "user", "name")` reads `p.user.name` as a string. */
 const nested = (p: Record<string, unknown>, group: string, k: string): string => {
   const inner = p[group];
@@ -498,7 +526,14 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // decoder and the required `id` arrived empty, so every one of those
   // four 400'd on every call (`validate:"required,notblank"`). `create`
   // and `update`'s body also sends `prompt`; Go's field is `content`.
-  "routine.create": { key: "routines_create", renameIn: { prompt: "content" } },
+  // `coerceIn` on triggers, and it is not cosmetic: every routine with a
+  // schedule failed to save. The interface builds a trigger as
+  // `{type, config: {cron}}` (the shape Go *stores* and answers with), while
+  // `routine.TriggerInput` is flat — `{type, cron}` — so `Cron` arrived empty
+  // and the daemon refused with AOS_ROUTINE_INVALID_CRON. An activity trigger
+  // lost its namespace, event and filters the same way, silently. `token` is
+  // dropped on the way in because Go mints the webhook secret itself.
+  "routine.create": { key: "routines_create", renameIn: { prompt: "content" }, coerceIn: { triggers: flattenTriggers } },
   "routine.delete": { key: "routines_delete", renameIn: { routine: "id" } },
   // NOT `wrapOut: "run"`, on purpose. Go's `routines_fire` returns a
   // single bare `*Run` (`internal/domain/routine/commands.go`), but the
@@ -514,7 +549,11 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "routine.fire": { key: "routines_fire", renameIn: { routine: "id" } },
   "routine.getById": { key: "routines_get", renameIn: { routine: "id" }, wrapOut: "routine" },
   "routine.list": "routines_list",
-  "routine.update": { key: "routines_update", renameIn: { routine: "id", prompt: "content" } },
+  "routine.update": { key: "routines_update", renameIn: { routine: "id", prompt: "content" }, coerceIn: { triggers: flattenTriggers } },
+  // The runs of one routine. The routine page reads `routine.runs`, which
+  // `routine.View` has never carried — the history panel was empty for every
+  // routine — while `routines_runs` was a live command nothing called.
+  "routine.runs": { key: "routines_runs", renameIn: { routine: "id" } },
 
   // Every `tasks_*` command that names one task takes `id`
   // (`internal/domain/task/schema.go`'s `GetInput`/`UpdateInput`/
@@ -758,7 +797,11 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "chat.stop": null,
   "chat.toggleReaction": null,
 
-  "session.updateProfile": null,
+  // Not dormant: `POST /api/auth/profile` has existed since the identity
+  // surface was built (`internal/transport/authapi`), and `lib/auth.ts`
+  // already wraps it. Declaring it null made the profile screen's save
+  // report "the session domain does not exist in the Go backend yet".
+  "session.updateProfile": (p) => authApi.updateProfile(s(p, "name"), s(p, "email")),
   // Was dormant, and did not need to be: starting a task is moving it to
   // `in_progress`, which `tasks_set-status` has always done. The Start button
   // on the task page called this, got the dormant-domain error, and showed
@@ -1054,8 +1097,19 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // `marketplace_get`, which takes `source` — `renameIn: { name: "source" }`
   // is a guess at the UI's own param name, not yet confirmed against the
   // call site; `install` has no live caller yet.
-  "marketplace.list": "marketplace_discovery",
-  "marketplace.getByName": { key: "marketplace_get", renameIn: { name: "source" } },
+  // The marketplace screens read `.items` off the list and `.skill` off the
+  // detail, and sent `query`/`category`/`page`/`pageSize`. Go answers a bare
+  // `[]Listing` and a bare `*Listing`, and its search takes `text`/`tag` —
+  // so the list rendered nothing (`data.items` was undefined on an array)
+  // and the search box filtered nothing. `page`/`pageSize` have no Go
+  // counterpart at all and are dropped rather than sent to be ignored.
+  "marketplace.list": {
+    key: "marketplace_discovery",
+    renameIn: { query: "text", category: "tag" },
+    coerceIn: { page: () => ({}), pageSize: () => ({}) },
+    wrapOut: "items",
+  },
+  "marketplace.getByName": { key: "marketplace_get", renameIn: { name: "source" }, wrapOut: "skill" },
   "marketplace.install": "marketplace_install",
 
   // Same bug class as goal.* just above: projects_list/-get/-create all

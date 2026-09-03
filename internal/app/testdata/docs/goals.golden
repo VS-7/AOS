@@ -60,6 +60,17 @@ Create a strategic outcome. Its id is derived from the title.
         "paused"
       ]
     },
+    "priority": {
+      "type": "string",
+      "description": "How urgent this goal is. Defaults to no_priority.",
+      "enum": [
+        "no_priority",
+        "urgent",
+        "high",
+        "medium",
+        "low"
+      ]
+    },
     "project": {
       "type": "string",
       "description": "Project this goal belongs to, if any."
@@ -233,6 +244,20 @@ Change the describable parts of a goal, including moving it to achieved or aband
         "achieved",
         "abandoned",
         "paused"
+      ]
+    },
+    "priority": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New priority: no_priority, urgent, high, medium or low. Omit to leave unchanged.",
+      "enum": [
+        "no_priority",
+        "urgent",
+        "high",
+        "medium",
+        "low"
       ]
     },
     "project": {

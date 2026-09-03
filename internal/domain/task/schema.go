@@ -10,6 +10,13 @@ type ListInput struct {
 	Project  string `json:"project,omitempty" cli:"flag" jsonschema:"Only tasks in this project."`
 	Goal     string `json:"goal,omitempty" cli:"flag" jsonschema:"Only tasks serving this goal."`
 
+	// Query and Priority are what the task list's own search box and
+	// priority filter send. They had no field here, so the daemon's decoder
+	// dropped them and answered the unfiltered list: typing in the search
+	// box changed nothing, and neither did picking a priority.
+	Query    string   `json:"query,omitempty" cli:"flag" jsonschema:"Substring match over name and summary."`
+	Priority Priority `json:"priority,omitempty" cli:"flag" jsonschema:"Only tasks at this priority."`
+
 	Limit  int `json:"limit,omitempty" cli:"flag" jsonschema:"How many to return."`
 	Offset int `json:"offset,omitempty" cli:"flag" jsonschema:"How many to skip."`
 
