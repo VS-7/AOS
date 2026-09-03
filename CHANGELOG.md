@@ -8,6 +8,71 @@ em que o release foi cortado.
 
 ## [Unreleased]
 
+## [v0.15.2-fase9] — 2026-09-03
+
+Cinco telas que a interface pedia e nunca recebia. Cada correção tem teste que
+falha no código anterior, e as três superfícies novas foram verificadas contra
+um daemon limpo e isolado.
+
+### Adicionado
+
+- **O catálogo de eventos.** `activity_events` responde quais pares
+  `(namespace, event)` existem e quais chaves cada um carrega — os campos que
+  um filtro de gatilho pode casar. O Go casa gatilhos de atividade desde que o
+  domínio de rotinas foi escrito (`routine.Trigger.Matches`) e o seletor da
+  tela estava pronto; o catálogo que ele lia não respondia nada. Ou seja: o
+  único tipo de gatilho que reage ao workspace era inalcançável, e declarar um
+  significava adivinhar um namespace e um evento. `TestEveryPublishedEventIsIn
+  TheCatalogue` exercita as mutações de verdade e falha se qualquer coisa
+  chegar ao log sem estar declarada.
+- **O que falta para um toolset conectar.** `toolsets_get-config` era um alias
+  de `toolsets_get` e respondia um toolset pelado, então `requirements` era
+  sempre indefinido — e a aba Configuração aparece ou não pelo tamanho desse
+  array. Um toolset que precisa de três credenciais parecia exatamente um que
+  não precisa de nenhuma. As variáveis só eram lidas pelo `Interpolate`, na
+  hora de conectar, uma por vez, falhando na primeira que faltasse: configurar
+  um toolset era conectar, ler o erro, preencher uma variável e conectar de
+  novo. Os valores nunca viajam; "configurado" é tudo o que a tela precisa
+  dizer.
+
+### Corrigido
+
+**A ocupação de um agente não sobrevivia a um reload.** "Atlas está
+trabalhando…" era só evento: `chat.started` e `chat.done` e mais nada. Uma
+janela aberta durante um turno mostrava um agente ocioso, e uma janela
+recarregada durante um turno perdia o fato. Agora a execução entra no registro
+no momento em que o turno começa — `chats.MarkRun` a grava como `running`, e o
+`Reply` **completa aquela mesma execução** em vez de anexar uma segunda, que é
+o que deixaria a conversa com uma tentativa que nunca termina ao lado de uma
+que terminou. `chats_list` responde quem está trabalhando em `active`, e a
+store de agentes semeia o indicador a partir dela.
+
+**Toda view desenhava o painel "sem spec renderizável".** O Go responde
+`views_render` com a árvore composta ao lado dos registros que selecionou —
+composição e dados, separados, com os vínculos ainda por resolver — e o
+`@json-render` desenha um spec plano `{root, elements, state}`. Nada traduzia
+um no outro, e a página lia um invólucro `.result` que o daemon nunca enviou.
+`lib/view-spec.ts` é essa tradução: o nó mais baixo que contém todos os
+vínculos se repete uma vez por registro (nem cada folha vinculada, que
+intercala cinco negócios em quinze linhas sem dono; nem a árvore inteira, que
+desenharia uma barra lateral fixa uma vez por registro), as props vinculadas
+viram ponteiros `{$state}` para os registros semeados — de modo que os
+`updates` de uma ação, que chegam como JSON pointers, redesenhem o que
+mudaram — e uma `Table` recebe as linhas que o scaffold deixa vazias de
+propósito.
+
+**Três filtros nomeavam escolhas que não existem.** `orderBy: "updatedAt"` no
+`chats_list`, `query: ""` no `skills_list`, `routine: true` no catálogo de
+eventos: todos descartados pelo decodificador, todos parecendo um ajuste que
+alguém poderia mudar. Metas e rotinas ganharam o `limit` e o `query` que as
+chamadas já enviavam.
+
+**Uma suposição de teste deixou de valer.** O `waitForAnswer` tratava a
+existência de uma execução como prova de que o turno tinha acabado — que é
+exatamente o que gravar a tentativa no início torna falso. Agora espera uma
+execução concluída.
+
+
 ## [v0.15.1-fase9] — 2026-09-03
 
 A rodada que fez o aplicativo funcionar de fato. Onze correções, cada uma com
@@ -323,7 +388,12 @@ fora da ordem das chamadas reais. Agora cada etapa embrulha a chamada que nomeia
 ## [v0.4.0-fase3] — 2026-08-15
 - Domínio núcleo: workspace, agent, memory, chat.
 
-[Unreleased]: https://github.com/VS-7/AOS/compare/v0.13.0-fase9...HEAD
+[Unreleased]: https://github.com/VS-7/AOS/compare/v0.15.2-fase9...HEAD
+[v0.15.2-fase9]: https://github.com/VS-7/AOS/compare/v0.15.1-fase9...v0.15.2-fase9
+[v0.15.1-fase9]: https://github.com/VS-7/AOS/compare/v0.15.0-fase9...v0.15.1-fase9
+[v0.15.0-fase9]: https://github.com/VS-7/AOS/compare/v0.14.1-fase9...v0.15.0-fase9
+[v0.14.1-fase9]: https://github.com/VS-7/AOS/compare/v0.14.0-fase9...v0.14.1-fase9
+[v0.14.0-fase9]: https://github.com/VS-7/AOS/compare/v0.13.0-fase9...v0.14.0-fase9
 [v0.13.0-fase9]: https://github.com/VS-7/AOS/compare/v0.12.3-fase9...v0.13.0-fase9
 [v0.12.3-fase9]: https://github.com/VS-7/AOS/compare/v0.12.2-fase9...v0.12.3-fase9
 [v0.12.2-fase9]: https://github.com/VS-7/AOS/compare/v0.12.1-fase9...v0.12.2-fase9
