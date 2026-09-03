@@ -21,3 +21,14 @@ type Repository interface {
 // Clock is the only source of time in this package. Injected, so that a golden
 // file built from an agent record does not change every second.
 type Clock interface{ Now() time.Time }
+
+// Notifier publishes what happened to an agent.
+//
+// Best-effort and unable to fail the mutation, the same contract task's own
+// Notifier has. It exists because nothing published anything: an agent
+// created by the orchestrator, by the CLI or from the settings screen
+// produced no activity, so the inbox never mentioned it and no routine could
+// trigger on it.
+type Notifier interface {
+	AgentChanged(ctx context.Context, event string, a *Agent)
+}

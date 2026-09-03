@@ -156,6 +156,47 @@ that state holds.`,
 		Handler: svc.Clear,
 	})
 
+	command.MustRegister(reg, command.Command[StopInput, StopOutput]{
+		Group:   "chats",
+		Name:    "stop",
+		Summary: "Stop the turn running on a conversation.",
+		Doc: `Ask the agent working on this conversation to stop.
+
+The turn ends where it is: what it had already written is kept, and the
+attempt is recorded as interrupted rather than as an error, because somebody
+stopping an agent is not the agent failing.
+
+Answering ` + "`stopped: false`" + ` is not a refusal. A person presses this
+when they see an agent working, and by the time the call lands the turn may
+have finished on its own.`,
+		Examples: []command.Example{
+			{Description: "it is going the wrong way", Input: StopInput{Chat: "c-1"}},
+		},
+		Registry:    true,
+		Annotations: command.Annotations{Title: "Stop a turn", IdempotentHint: true},
+		Handler:     svc.Stop,
+	})
+
+	command.MustRegister(reg, command.Command[ReactInput, *Chat]{
+		Group:   "chats",
+		Name:    "react",
+		Summary: "Toggle a reaction on a message.",
+		Doc: `Leave a mark on one message, or take it back.
+
+Sending the same reaction twice removes it — which is what clicking the same
+emoji twice means, and what keeps one actor from stacking three identical
+marks on one message.
+
+Who is reacting comes from the identity of the call, never from the payload:
+a caller that could name the actor could react as somebody else.`,
+		Examples: []command.Example{
+			{Description: "agree with an answer", Input: ReactInput{Chat: "c-1", Message: "m-2", Value: "👍"}},
+		},
+		Registry:    true,
+		Annotations: command.Annotations{Title: "React to a message", IdempotentHint: true},
+		Handler:     svc.React,
+	})
+
 	command.MustRegister(reg, command.Command[DeleteInput, DeleteOutput]{
 		Group:   "chats",
 		Name:    "delete",

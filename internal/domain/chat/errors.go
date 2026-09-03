@@ -75,3 +75,46 @@ func errReadFailed(op string, cause error) error {
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)
 }
+
+// errNoRuntime is what a build with no agent runtime answers when asked to
+// stop a turn: the button can never work here, and saying so beats reporting
+// "there was nothing running" forever.
+func errNoRuntime(chatID string) error {
+	return apperr.New("CHAT_NO_RUNTIME").
+		Causer("chat.Service.Stop").
+		Msgf("this installation has no agent runtime, so no turn can be running").
+		Issue("chat", chatID).
+		Status(apperr.StatusServiceUnavailable).
+		CTA(apperr.CallToAction{Label: "start the daemon, which is what runs turns"})
+}
+
+// errNoActor refuses a reaction nobody owns. A reaction is a person's mark on
+// a message; without an identity there is nothing to attribute it to, and an
+// anonymous one could never be removed by whoever left it.
+func errNoActor(chatID string) error {
+	return apperr.New("CHAT_ACTOR_REQUIRED").
+		Causer("chat.Service.React").
+		Msgf("a reaction belongs to whoever left it, and this call has no identity").
+		Issue("chat", chatID).
+		Status(apperr.StatusForbidden).
+		CTA(apperr.CallToAction{Label: "sign in, or say who is calling with --agent"})
+}
+
+func errReactionEmpty(chatID string) error {
+	return apperr.New("CHAT_REACTION_EMPTY").
+		Causer("chat.Service.React").
+		Msgf("a reaction with no value is not a reaction").
+		Issue("chat", chatID).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{Label: "send the emoji to apply, such as \"👍\""})
+}
+
+func errMessageNotFound(chatID, messageID string) error {
+	return apperr.New("CHAT_MESSAGE_NOT_FOUND").
+		Causer("chat.Service.React").
+		Msgf("no message %q in conversation %q", messageID, chatID).
+		Issue("chat", chatID).
+		Issue("message", messageID).
+		Status(apperr.StatusNotFound).
+		CTA(apperr.CallToAction{Label: "read the conversation to see which messages it holds", Tool: "chats_get"})
+}

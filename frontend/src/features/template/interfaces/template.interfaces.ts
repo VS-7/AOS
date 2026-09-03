@@ -30,9 +30,29 @@ export const TemplateSchema = z.object({
    */
   output: z.string().optional().describe("Default output relative path when rendering without passing a path explicitly. You can use Liquid syntax here. eg. '.aos/artifacts/plans/{{name}}.plan.md'"),
   /**
-   * @description Optional JSON Schema for the template variables.
+   * @description The JSON Schema the original stored. Go does not have it,
+   * and never accepted it: `templates_create`/`templates_update` take
+   * `variables`, so anything written here was dropped by the decoder and no
+   * template ever kept it. Read-only, and kept only so an older record that
+   * still carries one does not fail to parse.
    */
-  schema: z.any().optional().describe("JSON Schema (as a stringified JSON) to enforce validation on the input data before rendering. eg. '{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}}}'"),
+  schema: z.any().optional().describe("Unused. Go's template declares `variables`; see below."),
+  /**
+   * @description The variables this template declares, which is what the
+   * Liquid body reads by name and what the daemon actually stores.
+   */
+  variables: z
+    .array(
+      z.object({
+        name: z.string(),
+        type: z.string().optional(),
+        description: z.string().optional(),
+        required: z.boolean().optional(),
+        default: z.any().optional(),
+      }),
+    )
+    .optional()
+    .describe("The variables this template declares. eg. [{\"name\":\"title\",\"type\":\"string\",\"required\":true}]"),
   /**
    * @description Optional array of rules specifying when and how agents should use this template.
    */

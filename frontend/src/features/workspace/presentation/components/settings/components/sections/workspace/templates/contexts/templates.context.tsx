@@ -18,7 +18,7 @@ const templateFormSchema = z.object({
   skill: z.string().optional(),
   description: z.string().trim().min(1, "Description is required"),
   output: z.string().optional(),
-  schemaText: z.string().optional(),
+  variablesText: z.string().optional(),
   content: z.string().optional(),
 });
 
@@ -56,19 +56,35 @@ function buildTemplateFormValues(
     skill: template?.skill ?? "",
     description: template?.description ?? "",
     output: template?.output ?? "",
-    schemaText: template?.schema
-      ? JSON.stringify(template.schema, null, 2)
+    variablesText: template?.variables?.length
+      ? JSON.stringify(template.variables, null, 2)
       : "",
     content: template?.content ?? "",
   };
 }
 
-function parseTemplateSchema(schemaText?: string) {
-  const trimmed = schemaText?.trim();
-
+/**
+ * The declared variables, as the daemon stores them.
+ *
+ * This textarea used to be labelled "JSON schema" and sent under a `schema`
+ * key — a field `templates_create`/`templates_update` do not have, so the
+ * decoder dropped it and nothing a person wrote here was ever saved. Go's
+ * template carries `variables`: a list of `{name, type, description,
+ * required, default}`, which is also what the Liquid body reads by name.
+ *
+ * Anything that is not a list is refused here rather than sent to be ignored
+ * — the failure a person can act on is "this is not a list of variables",
+ * not a save that quietly does nothing.
+ */
+function parseTemplateVariables(variablesText?: string) {
+  const trimmed = variablesText?.trim();
   if (!trimmed) return undefined;
 
-  return JSON.parse(trimmed);
+  const parsed = JSON.parse(trimmed);
+  if (!Array.isArray(parsed)) {
+    throw new Error(t("Variables are a list, such as [{ \"name\": \"title\", \"type\": \"string\" }]."));
+  }
+  return parsed;
 }
 
 function getTemplatePayload(values: TemplateFormValues) {
@@ -77,7 +93,7 @@ function getTemplatePayload(values: TemplateFormValues) {
     skill: values.skill?.trim() || undefined,
     description: values.description.trim(),
     output: values.output?.trim() || undefined,
-    schema: parseTemplateSchema(values.schemaText),
+    variables: parseTemplateVariables(values.variablesText),
     content: values.content?.trim() || undefined,
   };
 }
@@ -142,7 +158,7 @@ export function TemplatesProvider({
           skill: body.skill,
           description: body.description,
           output: body.output,
-          schema: body.schema,
+          variables: body.variables,
           content: body.content,
         },
       });

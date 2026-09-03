@@ -93,20 +93,22 @@ export function SelectedTemplateDetail() {
 
         <SplitPageLayout.Widget>
           <SplitPageLayout.WidgetHeader>
-            <SplitPageLayout.WidgetTitle>{t("Schema")}</SplitPageLayout.WidgetTitle>
+            <SplitPageLayout.WidgetTitle>{t("Variables")}</SplitPageLayout.WidgetTitle>
           </SplitPageLayout.WidgetHeader>
           <SplitPageLayout.WidgetContent>
             <FormField
               control={form.control}
-              name="schemaText"
+              name="variablesText"
               render={({ field }) => (
                 <FormItem className="w-full space-y-2">
                   <FormLabel className="text-xs text-muted-foreground">
-                    {t("JSON schema for template variables")}
+                    {t("The variables this template declares, as JSON")}
                   </FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder={'{\n  "type": "object"\n}'}
+                      placeholder={
+                        '[\n  {\n    "name": "title",\n    "type": "string",\n    "description": "What it is called",\n    "required": true\n  }\n]'
+                      }
                       className="min-h-40 resize-none font-mono text-xs"
                       {...field}
                       value={field.value ?? ""}

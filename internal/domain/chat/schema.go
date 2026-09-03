@@ -128,3 +128,32 @@ type SendOutput struct {
 	// wait for a reply that is not coming.
 	Dispatched bool `json:"dispatched" jsonschema:"True when a turn was handed to the agent runtime."`
 }
+
+// StopInput names the conversation whose turn to end.
+type StopInput struct {
+	Chat string `json:"chat" cli:"arg" jsonschema:"Conversation whose running turn should stop." validate:"required,notblank"`
+
+	command.Reasoning
+}
+
+// StopOutput says whether there was a turn to stop.
+//
+// `false` is an answer, not a failure: a person presses the button when they
+// see an agent working, and the turn may finish on its own before the call
+// lands.
+type StopOutput struct {
+	Chat    string `json:"chat" jsonschema:"The conversation."`
+	Stopped bool   `json:"stopped" jsonschema:"True when a turn was running and has been asked to stop."`
+}
+
+// ReactInput toggles one reaction on one message.
+//
+// It carries no actor: who is reacting comes from the ambient identity, and a
+// caller that could name it could react as somebody else.
+type ReactInput struct {
+	Chat    string `json:"chat" cli:"arg" jsonschema:"Conversation the message belongs to." validate:"required,notblank"`
+	Message string `json:"message" jsonschema:"Message to react to." validate:"required,notblank"`
+	Value   string `json:"value" jsonschema:"The reaction, usually an emoji. Sending the same one again removes it." validate:"required,notblank"`
+
+	command.Reasoning
+}

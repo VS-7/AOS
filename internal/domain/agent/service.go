@@ -13,13 +13,40 @@ import (
 // Service is the agent aggregate. It governs one aggregate and nothing else:
 // it does not write memories, and it does not start chats.
 type Service struct {
-	repo  Repository
-	clock Clock
+	repo     Repository
+	clock    Clock
+	notifier Notifier
+}
+
+// Option configures the service. There is one, and it is optional because a
+// CLI process has nothing to publish to.
+type Option func(*Service)
+
+// WithNotifier records what happened to an agent, for the inbox and for
+// routine triggers.
+func WithNotifier(n Notifier) Option {
+	return func(s *Service) { s.notifier = n }
 }
 
 // NewService wires the service over its ports.
-func NewService(repo Repository, clock Clock) *Service {
-	return &Service{repo: repo, clock: clock}
+//
+// The two ports stay positional — every caller has them — and anything
+// optional arrives as an Option rather than turning two arguments into a
+// struct nobody else needed.
+func NewService(repo Repository, clock Clock, opts ...Option) *Service {
+	s := &Service{repo: repo, clock: clock}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
+
+// notify is best-effort: an activity log that is down must not stop work.
+func (s *Service) notify(ctx context.Context, event string, a *Agent) {
+	if s.notifier == nil || a == nil {
+		return
+	}
+	s.notifier.AgentChanged(ctx, event, a)
 }
 
 // List returns the agents of the workspace, ordered by id.
@@ -132,6 +159,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Agent, error) {
 			return nil, err
 		}
 	}
+	s.notify(ctx, "created", a)
 	return a, nil
 }
 
@@ -175,6 +203,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Agent, error) {
 			return nil, err
 		}
 	}
+	s.notify(ctx, "updated", current)
 	return current, nil
 }
 
@@ -188,6 +217,7 @@ func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, err
 	if err := s.repo.Delete(ctx, collections.Key{"id": id}); err != nil {
 		return DeleteOutput{ID: id}, err
 	}
+	s.notify(ctx, "deleted", &Agent{ID: id})
 	return DeleteOutput{ID: id, Deleted: true}, nil
 }
 

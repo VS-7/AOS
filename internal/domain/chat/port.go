@@ -46,6 +46,22 @@ type Turn struct {
 	Routine   string
 }
 
+// Canceller ends a turn that is already running.
+//
+// It is the other half of Dispatcher, and it was missing: a turn was handed
+// to the runtime and there was no way to ask for it back. The composer's Stop
+// button called a command that did not exist, answered "no active run was
+// found to stop", and the agent kept working.
+//
+// Nil is a legitimate wiring — a daemon with no runtime cannot stop what it
+// never started — and Stop says so rather than pretending.
+type Canceller interface {
+	// Stop reports whether there was a turn to stop. A conversation that has
+	// already finished is not an error: it is somebody pressing the button a
+	// moment late.
+	Stop(ctx context.Context, chatID string) (stopped bool, err error)
+}
+
 // Clock is the only source of time in this package.
 type Clock interface{ Now() time.Time }
 

@@ -20,6 +20,7 @@ type Service struct {
 	repo       Repository
 	directory  Directory
 	dispatcher Dispatcher
+	canceller  Canceller
 	clock      Clock
 	ids        IDs
 	log        *slog.Logger
@@ -38,6 +39,10 @@ type Deps struct {
 	// happens in production when the runtime is down.
 	Dispatcher Dispatcher
 
+	// Canceller ends a turn already running. Optional for the same reason
+	// Dispatcher is: a build with no runtime has nothing to cancel.
+	Canceller Canceller
+
 	Log *slog.Logger
 }
 
@@ -49,7 +54,8 @@ func NewService(d Deps) *Service {
 	}
 	return &Service{
 		repo: d.Repo, directory: d.Directory, dispatcher: d.Dispatcher,
-		clock: d.Clock, ids: d.IDs, log: log,
+		canceller: d.Canceller,
+		clock:     d.Clock, ids: d.IDs, log: log,
 	}
 }
 
@@ -151,6 +157,87 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Chat, error) {
 //
 // Clearing one that is already empty is not an error: the caller asked for a
 // state, and that state holds.
+// Stop ends the turn running on a conversation.
+//
+// Answering "there was nothing to stop" is not a refusal: a person presses
+// the button when they see an agent working, and by the time the call lands
+// the turn may have finished on its own. What *is* a refusal is a build with
+// no runtime at all, because then the button can never work and saying so is
+// the only honest answer.
+func (s *Service) Stop(ctx context.Context, in StopInput) (StopOutput, error) {
+	id := strings.TrimSpace(in.Chat)
+	if _, err := s.repo.Get(ctx, collections.Key{"id": id}); err != nil {
+		return StopOutput{}, errNotFound(id)
+	}
+	if s.canceller == nil {
+		return StopOutput{}, errNoRuntime(id)
+	}
+
+	stopped, err := s.canceller.Stop(ctx, id)
+	if err != nil {
+		return StopOutput{}, err
+	}
+	return StopOutput{Chat: id, Stopped: stopped}, nil
+}
+
+// React toggles one reaction on one message.
+//
+// Toggling rather than adding, because that is what a person means by
+// clicking the same emoji twice — and because two entries for the same actor
+// and value would render as two, which is a bug nobody would report as one.
+//
+// The actor comes from the ambient identity, never from the payload: a caller
+// that could name the actor could react as somebody else.
+func (s *Service) React(ctx context.Context, in ReactInput) (*Chat, error) {
+	id := strings.TrimSpace(in.Chat)
+	current, err := s.repo.Get(ctx, collections.Key{"id": id})
+	if err != nil {
+		return nil, errNotFound(id)
+	}
+
+	actor, _ := identity.Actor(ctx)
+	if actor == "" {
+		return nil, errNoActor(id)
+	}
+	value := strings.TrimSpace(in.Value)
+	if value == "" {
+		return nil, errReactionEmpty(id)
+	}
+
+	messageID := strings.TrimSpace(in.Message)
+	at := -1
+	for i := range current.Messages {
+		if current.Messages[i].ID == messageID {
+			at = i
+			break
+		}
+	}
+	if at < 0 {
+		return nil, errMessageNotFound(id, messageID)
+	}
+
+	message := &current.Messages[at]
+	kept := make([]Reaction, 0, len(message.Reactions))
+	removed := false
+	for _, r := range message.Reactions {
+		if r.Actor == actor && r.Value == value {
+			removed = true
+			continue
+		}
+		kept = append(kept, r)
+	}
+	if !removed {
+		kept = append(kept, Reaction{Actor: actor, Value: value, Timestamp: s.clock.Now()})
+	}
+	message.Reactions = kept
+
+	current.UpdatedAt = s.clock.Now()
+	if err := s.repo.Update(ctx, current, collections.Version{}); err != nil {
+		return nil, errWriteFailed("React", err)
+	}
+	return current, nil
+}
+
 func (s *Service) Clear(ctx context.Context, in ClearInput) (ClearOutput, error) {
 	id := strings.TrimSpace(in.Chat)
 	current, err := s.repo.Get(ctx, collections.Key{"id": id})
@@ -415,6 +502,12 @@ type ReplyInput struct {
 	// is a conversation where somebody is still waiting.
 	Failure *RunError
 
+	// Interrupted marks a turn a person stopped, which is not the same thing
+	// as one that failed. StatusInterrupted has existed on Run since this
+	// aggregate was written and nothing ever assigned it, because nothing
+	// could stop a turn.
+	Interrupted bool
+
 	// StartedAt is when the turn began, so the record shows how long it took
 	// rather than only when it ended.
 	StartedAt time.Time
@@ -479,6 +572,9 @@ func (s *Service) Reply(ctx context.Context, in ReplyInput) (ReplyOutput, error)
 	}
 	if in.Failure != nil {
 		run.Status, run.Error = StatusError, in.Failure
+	}
+	if in.Interrupted {
+		run.Status = StatusInterrupted
 	}
 
 	var out ReplyOutput

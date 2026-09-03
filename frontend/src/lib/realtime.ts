@@ -134,6 +134,16 @@ export function useRealtime(queryClient: QueryClient): ConnectionState {
     // even be refused there. Every live update in the desktop was lost to
     // that, silently.
     if (declaredDaemon) {
+      // The daemon's own health, relayed by the application process, which
+      // is the only thing that can see a daemon that stopped answering (a
+      // failed call cannot tell "gone" from "refused"). Without it the
+      // indicator read "open" from the moment the page loaded, whatever the
+      // relay was actually doing.
+      const offDaemon = Events.On("aos:daemon", (event: { data?: unknown }) => {
+        const payload = event?.data as { healthy?: boolean } | Array<{ healthy?: boolean }> | undefined;
+        const one = Array.isArray(payload) ? payload[0] : payload;
+        setState(one?.healthy === false ? "reconnecting" : "open");
+      });
       const off = Events.On("aos:realtime", (event: { data?: unknown }) => {
         const payload = event?.data as RealtimeEvent | RealtimeEvent[] | undefined;
         // Wails delivers a single emitted value as a one-element array in
@@ -149,6 +159,7 @@ export function useRealtime(queryClient: QueryClient): ConnectionState {
         closed = true;
         setState("closed");
         off();
+        offDaemon();
       };
     }
 

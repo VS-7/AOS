@@ -14,21 +14,27 @@ import (
 // what feeds the workspace inventory in Prompt Assembly — "check active goals
 // before planning or executing significant work."
 type Service struct {
-	repo  Repository
-	tasks Tasks
-	clock Clock
+	repo     Repository
+	tasks    Tasks
+	notifier Notifier
+	clock    Clock
 }
 
 // Deps is what the service is built from.
 type Deps struct {
 	Repo  Repository
 	Tasks Tasks
+
+	// Notifier records what happened, for the inbox and for routine
+	// triggers. Nil publishes nothing.
+	Notifier Notifier
+
 	Clock Clock
 }
 
 // NewService wires the service over its ports.
 func NewService(d Deps) *Service {
-	return &Service{repo: d.Repo, tasks: d.Tasks, clock: d.Clock}
+	return &Service{repo: d.Repo, tasks: d.Tasks, notifier: d.Notifier, clock: d.Clock}
 }
 
 // Query filters List and Active.
@@ -171,6 +177,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Goal, error) {
 	if err := s.repo.Create(ctx, &g); err != nil {
 		return nil, errWriteFailed("Create", err)
 	}
+	s.notify(ctx, "created", &g)
 	return &g, nil
 }
 
@@ -235,6 +242,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Goal, error) {
 	if err := s.repo.Update(ctx, &toWrite, collections.Version{}); err != nil {
 		return nil, errWriteFailed("Update", err)
 	}
+	s.notify(ctx, "updated", current)
 	return current, nil
 }
 
@@ -263,5 +271,14 @@ func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, err
 	if err := s.repo.Delete(ctx, collections.Key{"id": id}); err != nil {
 		return DeleteOutput{}, errWriteFailed("Delete", err)
 	}
+	s.notify(ctx, "deleted", &Goal{ID: id})
 	return DeleteOutput{ID: id}, nil
+}
+
+// notify is best-effort: an activity log that is down must not stop work.
+func (s *Service) notify(ctx context.Context, event string, g *Goal) {
+	if s.notifier == nil || g == nil {
+		return
+	}
+	s.notifier.GoalChanged(ctx, event, g)
 }

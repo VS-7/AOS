@@ -15,7 +15,7 @@ transcript of an autonomous run is the same structure in a different place.
 - Not to store what you learned — that is a memory
 - Not to track work — that is a task
 
-Composite tool `Chat` with 7 actions: clear, create, delete, get, list, send, update.
+Composite tool `Chat` with 9 actions: clear, create, delete, get, list, react, send, stop, update.
 
 Address a specific agent with @slug. With no mention, a direct message goes to
 the one agent in it, and anything else goes to the workspace orchestrator — the
@@ -298,6 +298,51 @@ system. Read one with `chats get`.
 }
 ```
 
+### chats_react
+
+Toggle a reaction on a message.
+
+Leave a mark on one message, or take it back.
+
+Sending the same reaction twice removes it — which is what clicking the same
+emoji twice means, and what keeps one actor from stacking three identical
+marks on one message.
+
+Who is reacting comes from the identity of the call, never from the payload:
+a caller that could name the actor could react as somebody else.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "chat": {
+      "type": "string",
+      "description": "Conversation the message belongs to."
+    },
+    "message": {
+      "type": "string",
+      "description": "Message to react to."
+    },
+    "value": {
+      "type": "string",
+      "description": "The reaction, usually an emoji. Sending the same one again removes it."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "chat",
+    "message",
+    "value",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
 ### chats_send
 
 Write to a conversation.
@@ -345,6 +390,42 @@ waiting through.
   "required": [
     "chat",
     "text",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### chats_stop
+
+Stop the turn running on a conversation.
+
+Ask the agent working on this conversation to stop.
+
+The turn ends where it is: what it had already written is kept, and the
+attempt is recorded as interrupted rather than as an error, because somebody
+stopping an agent is not the agent failing.
+
+Answering `stopped: false` is not a refusal. A person presses this
+when they see an agent working, and by the time the call lands the turn may
+have finished on its own.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "chat": {
+      "type": "string",
+      "description": "Conversation whose running turn should stop."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "chat",
     "_reasoning"
   ],
   "additionalProperties": false

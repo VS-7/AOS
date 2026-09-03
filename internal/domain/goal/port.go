@@ -30,3 +30,13 @@ type Tasks interface {
 
 // Clock is the only source of time this package needs.
 type Clock interface{ Now() time.Time }
+
+// Notifier publishes what happened to a goal.
+//
+// Best-effort and unable to fail the mutation, the same contract task's own
+// Notifier has. It exists because nothing published anything: a goal created
+// by an agent, by the CLI or by another window produced no activity, so the
+// inbox never mentioned it and no routine could trigger on it.
+type Notifier interface {
+	GoalChanged(ctx context.Context, event string, g *Goal)
+}
