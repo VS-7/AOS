@@ -8,6 +8,64 @@ em que o release foi cortado.
 
 ## [Unreleased]
 
+### Corrigido
+
+**A janela estava inscrita num canal em que o daemon nunca publicou.** O
+`active` do `wire.go` só tem valor quando o escopo foi *fixado* — um workspace
+secundário resolvido para um chamador, ou `AOS_WORKSPACE_ID`. Numa instalação
+desktop ou de terminal não há nenhum dos dois: o supervisor passa o *caminho*
+do workspace, e o workspace é registrado depois, pelo `workspace_introspect`
+da própria janela. Então toda atividade, toda mudança de coleção e todo pedido
+de aprovação saíam em `workspace::` enquanto a janela ouvia `workspace::<id>`.
+
+É isso inteiro o "nada atualiza sozinho" — um projeto, uma meta ou uma tarefa
+criada por um agente nunca aparecia, a caixa de entrada não se mexia — e, pior,
+o diálogo de aprovação nunca abria: toda ferramenta com aprovação esperava o
+prazo e era negada. O agente informava que não conseguiu; a pessoa nunca foi
+perguntada. Um único resolvedor preguiçoso agora responde para o sink de
+atividade, o publicador de coleções, o notificador de aprovação e o próprio
+turno.
+
+**Toda repositório publica `collection.changed`**, que estava ligado só em oito
+coleções, e o evento ganhou tags json — ele é a carga de um frame do WebSocket
+e estava sendo serializado com os nomes de campo do Go. A interface passa a
+agir sobre ele, inclusive atualizando as stores pré-carregadas por trás da
+barra lateral, que invalidação de cache nenhuma alcança.
+
+**O agente podia parar o próprio daemon.** `gateway_stop`, oferecido a um
+modelo como ferramenta comum, encerra o processo em que o turno está rodando.
+Os quatro comandos de `gateway` e `workspace_create`/`delete` saíram do
+registro do agente.
+
+**Todo agente que o orquestrador criava só sabia ler** — o valor zero do
+sandbox é certo para um AGENT.md escrito à mão e errado para uma criação, então
+todo especialista era recusado no primeiro Write ou Bash.
+
+**Cada ferramenta aparecia duas vezes no chat e nunca como "executando"**, todo
+turno terminado dizia "Worked for 0s", o raciocínio transmitido era descartado
+ao salvar, e a mensagem que a pessoa enviava sumia quando o daemon confirmava.
+
+**28 telas relatavam sucesso sobre recusas do daemon** — a `mutate` do facade
+resolve com `{data, error}` e nunca rejeita, e o código portado foi escrito
+como `try { await mutate() } catch`. Mover uma tarefa por `tasks_update`, que
+recusa status, era a mais visível.
+
+**Nenhuma imagem, PDF ou vídeo carregava** no painel de arquivos, e um terminal
+dentro de um repositório endereçava outro workspace.
+
+**A janela pedia senha a cada abertura**, recarregar a transformava numa aba de
+navegador quebrada, e uma sessão expirada não tinha caminho de volta ao login.
+
+### Mudado
+- `agents_create` deriva o slug do nome; `agents_create`/`update` aceitam
+  `image`; `goal` tem `priority`; `tasks_list` filtra por `query` e `priority`;
+  `chats_send` aceita `context`, separado do que a pessoa digitou;
+  `memories_store` aceita `agent`.
+- `gateway_status` responde por si mesmo em vez de descrever o registro do
+  supervisor, e `gateway_restart` recusa de dentro do daemon em vez de mandar
+  um sinal para o próprio processo.
+- `AOS_APPROVAL_DEADLINE` passa a ser lido.
+
 ## [v0.15.0-fase9] — 2026-08-30
 
 ### Corrigido
