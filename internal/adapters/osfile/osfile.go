@@ -78,6 +78,16 @@ func (FS) ReadFile(_ context.Context, path string, limit int64) ([]byte, bool, e
 	return buf[:n], false, nil
 }
 
+// Open returns the file itself, unbounded and seekable — see the port's own
+// comment for why the viewer route cannot be served out of ReadFile.
+func (FS) Open(_ context.Context, path string) (io.ReadSeekCloser, error) {
+	f, err := os.Open(path) //nolint:gosec // path was resolved and confined by pathx before this call
+	if err != nil {
+		return nil, wrapNotExist(err)
+	}
+	return f, nil
+}
+
 func (FS) WriteFile(_ context.Context, path string, data []byte) error {
 	return os.WriteFile(path, data, 0o644) //nolint:gosec // workspace files are not secrets
 }

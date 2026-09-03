@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/OWNER/aos/internal/core/build"
@@ -36,6 +37,7 @@ type Service struct {
 
 	host         string
 	port         int
+	inside       bool
 	startTimeout time.Duration
 	stopTimeout  time.Duration
 }
@@ -54,6 +56,21 @@ type Deps struct {
 	Host string
 	Port int
 
+	// Inside marks the service as living *in* the daemon rather than
+	// supervising it from outside.
+	//
+	// The same service is built twice: once by whatever launches the daemon
+	// (the desktop, `aos gateway`), and once by the daemon itself, which
+	// registers the group so `aos gateway status` can be answered over HTTP.
+	// Two of its methods are wrong when it is the second, and silently so —
+	// Status describes a bookkeeping record that only the *supervisor* writes,
+	// so a daemon started any other way (a server's systemd unit, `task dev`,
+	// a developer running aosd by hand) reported itself stopped while
+	// answering the call; and Restart signalled the pid in that record, which
+	// is this process, so the daemon terminated itself mid-request, answered
+	// an unclassified 500, and never came back.
+	Inside bool
+
 	StartTimeout time.Duration
 	StopTimeout  time.Duration
 }
@@ -63,7 +80,7 @@ func NewService(d Deps) *Service {
 	s := &Service{
 		procs: d.Processes, health: d.Health, store: d.Store, locker: d.Locker,
 		resolver: d.Resolver, clock: d.Clock, sleeper: d.Sleeper, log: d.Log,
-		host: d.Host, port: d.Port,
+		host: d.Host, port: d.Port, inside: d.Inside,
 		startTimeout: d.StartTimeout, stopTimeout: d.StopTimeout,
 	}
 	if s.log == nil {
@@ -89,6 +106,24 @@ func (s *Service) Status(ctx context.Context, _ StatusInput) (State, error) {
 	state, err := s.read(ctx)
 	if err != nil {
 		return State{}, err
+	}
+	// A daemon answering this call is running, whatever the record says.
+	//
+	// The record is the *supervisor's* bookkeeping, written by whatever
+	// spawned the daemon. A daemon started any other way — a server's systemd
+	// unit, `task dev`, a developer running `aosd serve` by hand — leaves it
+	// absent, and this method then reported "stopped" to the very client it
+	// was talking to. The window drew a red badge and offered to restart a
+	// process that was healthy.
+	if s.inside {
+		meta := state.Meta
+		if meta == nil {
+			meta = &Meta{
+				PID: os.Getpid(), Host: s.host, Port: s.port,
+				Version: build.Version, StartedAt: s.clock.Now(),
+			}
+		}
+		return State{Status: Running, Meta: meta, Healthy: true}, nil
 	}
 	if state.Status == Running {
 		state.Healthy = s.health.Probe(ctx, s.host, state.Meta.Port) == nil
@@ -264,6 +299,18 @@ func (s *Service) Stop(ctx context.Context, _ StopInput) (StopOutput, error) {
 // property of the transport rather than of this method — see the command's
 // documentation.
 func (s *Service) Restart(ctx context.Context, _ RestartInput) (State, error) {
+	// A daemon cannot restart itself through this path, and trying was worse
+	// than refusing: Stop signals the pid in the record — this process — so
+	// the daemon terminated itself while executing the request, the caller
+	// got an unclassified 500 as the connection died, and nothing brought it
+	// back. The window then had no daemon at all until the application was
+	// relaunched.
+	//
+	// Restarting belongs to whatever launched it, which is exactly who has a
+	// working copy of this service. The refusal says so.
+	if s.inside {
+		return State{}, errSelfRestart()
+	}
 	if _, err := s.Stop(ctx, StopInput{}); err != nil {
 		return State{}, err
 	}

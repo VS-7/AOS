@@ -35,6 +35,14 @@ type ReflectInput struct {
 
 // StoreInput records new durable knowledge.
 type StoreInput struct {
+	// Agent is whose memory this is. It is the one field the other three
+	// memory commands had and this one did not, and its absence made the
+	// application's own "Record a memory" impossible: Store resolved the
+	// owner from the ambient identity only, the desktop window is a *user*
+	// identity, and so every write from the agent's Memories tab came back
+	// AOS_MEMORY_AGENT_REQUIRED with a call to action telling the person to
+	// pass `--agent` on a command line they were not using.
+	Agent       string   `json:"agent,omitempty" jsonschema:"Whose memory this is. Defaults to your own."`
 	Title       string   `json:"title" jsonschema:"Sharp, specific headline. It is what you will scan later." validate:"required,notblank"`
 	Description string   `json:"description" jsonschema:"Dense, keyword-rich summary written to be found by search." validate:"required,notblank"`
 	Category    Category `json:"category" jsonschema:"One of: decision, intent, commitment, relationship, event, observation, error, learning, fact, reference, instruction, preference, context." validate:"required"`

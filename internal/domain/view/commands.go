@@ -79,6 +79,25 @@ type CreateRequest struct {
 }
 
 // Register declares the group on the registry.
+// ExampleTree is the tree the published example of views_create carries — the
+// one a model copies on its first view.
+//
+// It is a named value rather than a literal inside the example because it was
+// wrong twice over. It used to read
+// `{"component":"Table","bind":{"rows":"contacts"}}`, which this domain's own
+// validator refuses on both counts: Table requires `columns` and nothing gave
+// or bound it (AOS_VIEW_PROP_REQUIRED), and `bind` names a *field* of the
+// source collection, not the collection itself (AOS_VIEW_BIND_UNKNOWN_FIELD).
+// Every surface published it — the tool description, `--help`, SKILL.md — so
+// a model following the documentation was refused on its first attempt, twice.
+//
+// What it says now is what scaffoldTree actually produces for a table: the
+// columns literally, `rows` empty, and no bind at all — the renderer fills
+// the rows from the source. TestTheExampleViewsCreateTreeIsAccepted validates
+// this exact value, so the example cannot drift back out of the contract it
+// exists to demonstrate.
+const ExampleTree = `{"component":"Table","props":{"columns":["name","email"],"rows":[]}}`
+
 func Register(reg *command.Registry, svc *Service) {
 	reg.DescribeGroup(GroupDoc)
 
@@ -140,7 +159,7 @@ discovered later as a blank screen.`,
 			{Description: "a scaffolded table, composed by hand", Input: CreateRequest{
 				ID: "contacts-table", Title: "Contacts",
 				Source: Source{Collection: "contacts"},
-				Tree:   json.RawMessage(`{"component":"Table","bind":{"rows":"contacts"}}`),
+				Tree:   json.RawMessage(ExampleTree),
 			}},
 		},
 		Registry:    true,

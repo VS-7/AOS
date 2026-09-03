@@ -32,16 +32,18 @@ import (
 // collections.Publisher, so it plugs into this same adapter without a
 // second one.
 type collectionPublisher struct {
-	hub       *realtime.Hub
-	workspace string
+	hub   *realtime.Hub
+	scope *eventScope
 }
 
 func (p collectionPublisher) Publish(ctx context.Context, ev collections.Changed) {
 	if p.hub == nil {
 		return
 	}
-	p.hub.Publish(ctx, realtime.ChannelFor(p.workspace), realtime.Event{
-		Type: realtime.EventCollectionChanged, Workspace: p.workspace, Data: ev,
+	// Resolved per publish, not captured at wiring: see eventScope.
+	workspaceID := p.scope.ID(ctx)
+	p.hub.Publish(ctx, realtime.ChannelFor(workspaceID), realtime.Event{
+		Type: realtime.EventCollectionChanged, Workspace: workspaceID, Data: ev,
 	})
 }
 

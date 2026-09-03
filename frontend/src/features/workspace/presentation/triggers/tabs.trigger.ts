@@ -2,6 +2,7 @@ import { AosTriggerGroup } from "@/app/builders/trigger";
 import z from "zod";
 import type { ViewportTabState } from "../stores/viewport.store";
 import { normalizeBrowserUrl } from "../stores/browser.store";
+import { reloadHere } from "@/lib/wails";
 
 export const tabsGroup = AosTriggerGroup.create("Tabs")
   .withOrder(0) // Priorities tabs
@@ -54,7 +55,7 @@ export const tabsGroup = AosTriggerGroup.create("Tabs")
         // there is no native embed to ask for a reload instead.
         stores.viewport.actions.updateTab(activeId, { reloadNonce: (tab.reloadNonce ?? 0) + 1 });
       } else {
-        window.location.reload();
+        reloadHere();
       }
     },
   })

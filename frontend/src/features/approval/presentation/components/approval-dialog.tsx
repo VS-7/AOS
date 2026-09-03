@@ -140,10 +140,8 @@ export function ApprovalDialog(): JSX.Element | null {
           </div>
           <DialogDescription>
             {current.agent
-              ? t("{agent} wants to run {tool}.")
-                  .replace("{agent}", current.agent)
-                  .replace("{tool}", current.tool)
-              : t("An agent wants to run {tool}.").replace("{tool}", current.tool)}
+              ? t("{{agent}} wants to run {{tool}}.", { agent: current.agent, tool: current.tool })
+              : t("An agent wants to run {{tool}}.", { tool: current.tool })}
           </DialogDescription>
         </DialogHeader>
 
@@ -165,18 +163,14 @@ export function ApprovalDialog(): JSX.Element | null {
           <p className="text-xs text-muted-foreground">
             {expired
               ? t("This request has expired. Unanswered requests are refused, never allowed.")
-              : t("Refused automatically in {seconds}s if nobody answers.").replace(
-                  "{seconds}",
-                  String(secondsLeft ?? 0),
-                )}
+              : t("Refused automatically in {{seconds}}s if nobody answers.", {
+                  seconds: secondsLeft ?? 0,
+                })}
           </p>
 
           {pending.length > 1 ? (
             <p className="text-xs text-muted-foreground">
-              {t("{count} more waiting after this one.").replace(
-                "{count}",
-                String(pending.length - 1),
-              )}
+              {t("{{count}} more waiting after this one.", { count: pending.length - 1 })}
             </p>
           ) : null}
         </div>

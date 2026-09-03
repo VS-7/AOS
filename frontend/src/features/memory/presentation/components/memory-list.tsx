@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 /** The thirteen the daemon accepts, in the order it declares them. */
 const CATEGORIES = [
@@ -43,6 +44,36 @@ const CATEGORIES = [
 ] as const;
 
 type Category = (typeof CATEGORIES)[number];
+
+/**
+ * What each category is called, for a person.
+ *
+ * The ids are Go's enum — they are the wire, and they were being rendered
+ * straight into the picker and onto every badge, so a Portuguese interface
+ * showed "decision", "learning", "fact". Keyed in English and translated at
+ * the point of render, not here: `t()` in a module runs once, at import,
+ * before the locale is read.
+ */
+const CATEGORY_LABEL: Record<Category, string> = {
+  decision: "Decision",
+  intent: "Intent",
+  commitment: "Commitment",
+  relationship: "Relationship",
+  event: "Event",
+  observation: "Observation",
+  error: "Error",
+  learning: "Learning",
+  fact: "Fact",
+  reference: "Reference",
+  instruction: "Instruction",
+  preference: "Preference",
+  context: "Context",
+};
+
+function categoryLabel(category: string): string {
+  const known = CATEGORY_LABEL[category as Category];
+  return known ? t(known) : category;
+}
 
 interface MemoryRow {
   id: string;
@@ -137,7 +168,7 @@ export function MemoryList({ agentId }: { agentId: string }): JSX.Element {
         <div className="ml-auto flex items-center gap-2">
           {deprecated > 0 ? (
             <span className="text-xs text-muted-foreground">
-              {t("{count} deprecated").replace("{count}", String(deprecated))}
+              {t("{{count}} deprecated", { count: deprecated })}
             </span>
           ) : null}
           <Button size="sm" variant="secondary" onClick={() => setComposing(true)}>
@@ -170,7 +201,7 @@ export function MemoryList({ agentId }: { agentId: string }): JSX.Element {
                 >
                   <div className="flex items-center gap-2">
                     <span className="truncate text-sm font-medium">{memory.title}</span>
-                    <Badge variant="secondary">{memory.category}</Badge>
+                    <Badge variant="secondary">{categoryLabel(memory.category)}</Badge>
                     {(memory.status ?? "active") !== "active" ? (
                       <Badge variant="outline">{memory.status}</Badge>
                     ) : null}
@@ -202,6 +233,7 @@ export function MemoryList({ agentId }: { agentId: string }): JSX.Element {
       />
       <ComposeDialog
         open={composing}
+        agentId={agentId}
         onClose={() => setComposing(false)}
         onDone={() => {
           setComposing(false);
@@ -253,10 +285,10 @@ function MemoryDetail({
           <DialogDescription>{memory.description}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary">{memory.category}</Badge>
+          <Badge variant="secondary">{categoryLabel(memory.category)}</Badge>
           {typeof memory.confidence === "number" ? (
             <Badge variant="outline">
-              {t("confidence {value}").replace("{value}", memory.confidence.toFixed(2))}
+              {t("confidence {{value}}", { value: memory.confidence.toFixed(2) })}
             </Badge>
           ) : null}
           {(memory.tags ?? []).map((tag) => (
@@ -353,10 +385,12 @@ function ForgetDialog({
 
 function ComposeDialog({
   open,
+  agentId,
   onClose,
   onDone,
 }: {
   open: boolean;
+  agentId: string;
   onClose: () => void;
   onDone: () => void;
 }): JSX.Element | null {
@@ -380,6 +414,12 @@ function ComposeDialog({
     setBusy(true);
     try {
       await client.invoke("memories_store", {
+        // Whose memory this is. Store used to resolve the owner from the
+        // ambient identity alone, and the window is a *user* identity — so
+        // every write from this dialog came back AOS_MEMORY_AGENT_REQUIRED,
+        // telling the person to pass --agent on a command line they were not
+        // using. Forget and Recall on this same screen already name it.
+        agent: agentId,
         title: title.trim(),
         description: description.trim(),
         category,
@@ -403,7 +443,7 @@ function ComposeDialog({
         <DialogHeader>
           <DialogTitle>{t("Write a memory")}</DialogTitle>
           <DialogDescription>
-            {t("It belongs to whoever is signed in — say who you are with --agent to write as one.")}
+            {t("Recorded as {{agent}}, alongside everything else it remembers.", { agent: agentId })}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -434,7 +474,7 @@ function ComposeDialog({
               <SelectContent>
                 {CATEGORIES.map((name) => (
                   <SelectItem key={name} value={name}>
-                    {name}
+                    {categoryLabel(name)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -442,12 +482,11 @@ function ComposeDialog({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="memory-content">{t("Body (optional)")}</Label>
-            <textarea
+            <Textarea
               id="memory-content"
               value={content}
               onChange={(event) => setContent(event.target.value)}
               rows={5}
-              className="w-full rounded-lg border border-border/60 bg-background/60 p-2 text-sm"
             />
           </div>
         </div>

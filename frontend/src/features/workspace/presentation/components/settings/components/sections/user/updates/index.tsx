@@ -1,73 +1,29 @@
 import * as React from "react";
 import { toast } from "sonner";
 
-import { client } from "@/lib/client";
+import { aos } from "@/app/aos";
+import { system } from "@/lib/client";
+import { isDesktopWindow } from "@/lib/wails";
 import { t } from "@/lib/i18n";
+import { useAlert } from "@/components/ui/alert-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   FormSection,
   FormSectionContent,
   FormSectionDescription,
+  FormSectionFooter,
   FormSectionHeader,
+  FormSectionItem,
   FormSectionTitle,
 } from "@/components/ui/form-section";
-
-interface UpdateStatus {
-  current: string;
-  channel: string;
-  latestKnown?: string;
-  checkedAt?: string;
-}
-
-/**
- * A release, shaped exactly as `update_check` returns it and `update_download`
- * takes it back.
- *
- * The interface reads two of these fields and passes the rest through
- * untouched — it never constructs one. The full shape is spelled out anyway
- * because the generated command types check it, and a looser type here would
- * only mean a cast that stops checking anything.
- */
-interface Release {
-  version: string;
-  channel: string;
-  checksumsUrl: string;
-  signatureUrl: string;
-  publishedAt: string;
-  assets: unknown;
-  notes?: string;
-}
-
-/** What `update_download` staged, handed straight back to `update_apply`. */
-interface Staged {
-  version: string;
-  dir: string;
-  binaries: Record<string, string>;
-}
-
-interface CheckResult {
-  upToDate: boolean;
-  current: string;
-  channel: string;
-  release?: Release;
-}
-
-
-interface GatewayMeta {
-  pid: number;
-  port: number;
-  host: string;
-  version?: string;
-}
-
-interface GatewayState {
-  status: string;
-  healthy: boolean;
-  meta?: GatewayMeta;
-}
-
-type Phase = "idle" | "checking" | "downloading" | "applying";
+import { SettingsSectionShell } from "../../../section-shell";
+import type {
+  CheckResult,
+  GatewayState,
+  Staged,
+  UpdateStatus,
+} from "@/features/update/interfaces/update.interfaces";
 
 /**
  * Keeping this installation current.
@@ -88,144 +44,146 @@ type Phase = "idle" | "checking" | "downloading" | "applying";
  * failures are exactly what somebody needs to see.
  */
 function UpdatesPanel(): React.JSX.Element {
-  const [status, setStatus] = React.useState<UpdateStatus | null>(null);
   const [check, setCheck] = React.useState<CheckResult | null>(null);
   const [staged, setStaged] = React.useState<Staged | null>(null);
-  const [phase, setPhase] = React.useState<Phase>("idle");
 
-  const readStatus = React.useCallback(async () => {
-    try {
-      const answer = (await client.invoke("update_status", {
-        _reasoning: "the settings screen is showing which version this installation runs",
-      })) as UpdateStatus | undefined;
-      setStatus(answer ?? null);
-    } catch {
-      // An installation whose release feed is switched off (AOS_UPDATE_BASE_URL
-      // unset) answers nothing useful here; the section says what it knows.
-      setStatus(null);
-    }
-  }, []);
+  const statusQuery = aos.client.update.status.useQuery<UpdateStatus>();
 
-  React.useEffect(() => {
-    void readStatus();
-  }, [readStatus]);
-
-  const runCheck = async () => {
-    setPhase("checking");
-    setStaged(null);
-    try {
-      const answer = (await client.invoke("update_check", {
-        _reasoning: "a person asked whether a newer release exists",
-      })) as CheckResult | undefined;
+  const { mutate: runCheck, loading: isChecking } = aos.client.update.check.useMutation({
+    onSuccess: (result: any) => {
+      const answer = result?.data as CheckResult | undefined;
       setCheck(answer ?? null);
+      setStaged(null);
       if (answer?.upToDate) toast.success(t("You are on the newest release."));
-      await readStatus();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("The release channel could not be reached."));
-    } finally {
-      setPhase("idle");
-    }
-  };
+      void statusQuery.refetch();
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.error?.message ?? error?.message ?? t("The release channel could not be reached."),
+      );
+    },
+  });
 
-  const runDownload = async () => {
-    if (!check?.release) return;
-    setPhase("downloading");
-    try {
-      const answer = (await client.invoke("update_download", {
-        release: check.release,
-        _reasoning: "a person asked to fetch and verify the release that was found",
-      })) as { staged?: Staged } | undefined;
-      setStaged(answer?.staged ?? null);
+  const { mutate: runDownload, loading: isDownloading } = aos.client.update.download.useMutation({
+    onSuccess: (result: any) => {
+      setStaged((result?.data?.staged as Staged | undefined) ?? null);
       toast.success(t("Downloaded and verified."));
-    } catch (error) {
+    },
+    onError: (error: any) => {
       // A signature or checksum failure lands here, and it is the one message
       // in this screen that must not be softened.
-      toast.error(error instanceof Error ? error.message : t("The download could not be verified."));
-    } finally {
-      setPhase("idle");
-    }
-  };
+      toast.error(
+        error?.error?.message ?? error?.message ?? t("The download could not be verified."),
+      );
+    },
+  });
 
-  const runApply = async () => {
-    if (!staged) return;
-    setPhase("applying");
-    try {
-      await client.invoke("update_apply", {
-        staged,
-        _reasoning: "a person asked to install the staged release",
-      });
+  const { mutate: runApply, loading: isApplying } = aos.client.update.apply.useMutation({
+    onSuccess: () => {
       toast.success(t("Installed. The daemon restarted on the new version."));
       setCheck(null);
       setStaged(null);
-      await readStatus();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("The update could not be applied."));
-    } finally {
-      setPhase("idle");
-    }
-  };
+      void statusQuery.refetch();
+    },
+    onError: (error: any) => {
+      toast.error(error?.error?.message ?? error?.message ?? t("The update could not be applied."));
+    },
+  });
 
-  const busy = phase !== "idle";
+  const status = statusQuery.data ?? null;
+  const busy = isChecking || isDownloading || isApplying;
 
   return (
-    <FormSection>
-      <FormSectionHeader>
-        <FormSectionTitle>{t("Updates")}</FormSectionTitle>
-        <FormSectionDescription>
-          {t("Check the release channel, verify what it offers, and install it.")}
-        </FormSectionDescription>
-      </FormSectionHeader>
-      <FormSectionContent>
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm">{t("Running")}</span>
-            <Badge variant="secondary">{status?.current ?? "—"}</Badge>
-            {status?.channel ? <Badge variant="outline">{status.channel}</Badge> : null}
-            <Button
-              size="sm"
-              className="ml-auto"
-              disabled={busy}
-              onClick={runCheck}
-            >
-              {phase === "checking" ? t("Checking…") : t("Check for updates")}
-            </Button>
-          </div>
+    <>
+      <FormSection>
+        <FormSectionHeader>
+          <FormSectionTitle>{t("Updates")}</FormSectionTitle>
+          <FormSectionDescription>
+            {t("Check the release channel, verify what it offers, and install it.")}
+          </FormSectionDescription>
+        </FormSectionHeader>
 
-          {check && !check.upToDate && check.release ? (
-            <div className="space-y-3 rounded-lg border border-border/60 p-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">
-                  {t("{{version}} is available").replace("{{version}}", check.release.version)}
-                </span>
-                <Badge>{check.channel}</Badge>
-              </div>
-              {check.release.notes ? (
-                <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-muted/40 p-2 text-xs">
-                  {check.release.notes}
-                </pre>
-              ) : null}
-              <div className="flex gap-2">
-                <Button size="sm" variant="secondary" disabled={busy || Boolean(staged)} onClick={runDownload}>
-                  {phase === "downloading" ? t("Downloading…") : t("Download and verify")}
-                </Button>
-                <Button size="sm" disabled={busy || !staged} onClick={runApply}>
-                  {phase === "applying" ? t("Installing…") : t("Install and restart")}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {staged
-                  ? t("Verified and staged. Installing restarts the daemon; in-flight work finishes first.")
-                  : t("Nothing is installed until you download it and the signature checks out.")}
+        <FormSectionContent>
+          <FormSectionItem>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">{t("Running")}</p>
+              <p className="text-sm text-muted-foreground">
+                {status?.checkedAt
+                  ? t("Last checked {{when}}.", { when: status.checkedAt })
+                  : t("This installation has not been checked against the release channel yet.")}
               </p>
             </div>
-          ) : null}
+
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">{status?.current ?? "—"}</Badge>
+              {status?.channel ? <Badge variant="outline">{status.channel}</Badge> : null}
+              <Button type="button" size="sm" disabled={busy} onClick={() => void runCheck({})}>
+                {isChecking ? t("Checking…") : t("Check for updates")}
+              </Button>
+            </div>
+          </FormSectionItem>
 
           {check?.upToDate ? (
-            <p className="text-sm text-muted-foreground">{t("You are on the newest release.")}</p>
+            <FormSectionItem>
+              <p className="text-sm text-muted-foreground">{t("You are on the newest release.")}</p>
+            </FormSectionItem>
           ) : null}
-        </div>
-      </FormSectionContent>
-    </FormSection>
+        </FormSectionContent>
+      </FormSection>
+
+      {check && !check.upToDate && check.release ? (
+        <FormSection>
+          <FormSectionHeader>
+            <FormSectionTitle>
+              {t("{{version}} is available", { version: check.release.version })}
+            </FormSectionTitle>
+            <FormSectionDescription>
+              {staged
+                ? t("Verified and staged. Installing restarts the daemon; in-flight work finishes first.")
+                : t("Nothing is installed until you download it and the signature checks out.")}
+            </FormSectionDescription>
+          </FormSectionHeader>
+
+          <FormSectionContent>
+            <FormSectionItem>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">{t("Release notes")}</p>
+                {check.release.notes ? (
+                  <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-sm text-muted-foreground">
+                    {check.release.notes}
+                  </pre>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {t("This release carries no notes.")}
+                  </p>
+                )}
+              </div>
+              <Badge variant="outline">{check.channel}</Badge>
+            </FormSectionItem>
+          </FormSectionContent>
+
+          <FormSectionFooter className="flex justify-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={busy || Boolean(staged)}
+              onClick={() => void runDownload({ body: { release: check.release } })}
+            >
+              {isDownloading ? t("Downloading…") : t("Download and verify")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={busy || !staged}
+              onClick={() => void runApply({ body: { staged } })}
+            >
+              {isApplying ? t("Installing…") : t("Install and restart")}
+            </Button>
+          </FormSectionFooter>
+        </FormSection>
+      ) : null}
+    </>
   );
 }
 
@@ -235,47 +193,43 @@ function UpdatesPanel(): React.JSX.Element {
  * Only status and restart. Starting a daemon that is already answering this
  * very call is meaningless, and stopping it would have the window cut the
  * connection it is speaking over — supervision belongs to whatever launched
- * the daemon (`aos gateway`, or the desktop's own supervisor), not to a panel
- * inside the thing being supervised.
+ * the daemon, not to a panel inside the thing being supervised.
  *
- * Restart earns its place: it is what a hung worker or a configuration change
- * needs, and until now the only way to ask for it was the terminal.
+ * Restart earns its place, and it goes through the window's own supervisor
+ * rather than through `gateway_restart`: asked over HTTP, the daemon would
+ * signal its own pid, terminate mid-request, answer nothing, and never come
+ * back. It refuses that now (AOS_GATEWAY_SELF_RESTART), and the process that
+ * launched it does the work.
  */
 export function DaemonStatusPanel(): React.JSX.Element {
-  const [state, setState] = React.useState<GatewayState | null>(null);
-  const [busy, setBusy] = React.useState(false);
-
-  const read = React.useCallback(async () => {
-    try {
-      const answer = (await client.invoke("gateway_status", {
-        _reasoning: "the settings screen is showing whether the daemon is healthy",
-      })) as GatewayState | undefined;
-      setState(answer ?? null);
-    } catch {
-      setState(null);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    void read();
-  }, [read]);
+  const { confirm } = useAlert();
+  const [isRestarting, setRestarting] = React.useState(false);
+  const stateQuery = aos.client.gateway.status.useQuery<GatewayState>();
+  const state = stateQuery.data ?? null;
 
   const restart = async () => {
-    setBusy(true);
+    const confirmed = await confirm({
+      title: t("Restart the daemon?"),
+      description: t(
+        "Work in flight finishes first. The window reconnects on its own once the daemon is back.",
+      ),
+      confirmText: t("Restart"),
+    });
+    if (!confirmed) return;
+
+    setRestarting(true);
     try {
-      await client.invoke("gateway_restart", {
-        _reasoning: "a person asked to restart the daemon",
-      });
+      await system.restartDaemon();
       toast.success(t("The daemon is restarting."));
-      // Deliberately unawaited-then-read: the daemon drops this connection
-      // while it comes back, so the first status read after a restart is
-      // expected to fail. Giving it a beat is the difference between showing
-      // "stopped" for a second and showing the truth.
-      setTimeout(() => void read(), 2500);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("The daemon could not be restarted."));
+      // The daemon drops this connection while it comes back, so the first
+      // status read after a restart is expected to fail. Giving it a beat is
+      // the difference between showing "stopped" for a second and showing
+      // the truth.
+      setTimeout(() => void stateQuery.refetch(), 2500);
+    } catch (error: any) {
+      toast.error(error?.message ?? t("The daemon could not be restarted."));
     } finally {
-      setBusy(false);
+      setRestarting(false);
     }
   };
 
@@ -287,26 +241,59 @@ export function DaemonStatusPanel(): React.JSX.Element {
           {t("The process that owns the workspace. The window is a client of it.")}
         </FormSectionDescription>
       </FormSectionHeader>
+
       <FormSectionContent>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={state?.healthy ? "secondary" : "destructive"}>
-            {state?.healthy ? t("Healthy") : (state?.status ?? t("Unknown"))}
-          </Badge>
-          {state?.meta?.version ? <Badge variant="outline">{state.meta.version}</Badge> : null}
-          {state?.meta ? (
-            <span className="text-xs text-muted-foreground">
-              {state.meta.host}:{state.meta.port} · pid {state.meta.pid}
-            </span>
-          ) : null}
-          <div className="ml-auto flex gap-2">
-            <Button size="sm" variant="secondary" disabled={busy} onClick={read}>
+        <FormSectionItem>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">{t("Status")}</p>
+            <p className="text-sm text-muted-foreground">
+              {state?.meta
+                ? t("{{host}}:{{port}} · pid {{pid}}", {
+                    host: state.meta.host,
+                    port: state.meta.port,
+                    pid: state.meta.pid,
+                  })
+                : t("The daemon has not reported where it is listening.")}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Badge variant={state?.healthy ? "secondary" : "outline"}>
+              {state?.healthy ? t("Healthy") : (state?.status ?? t("Unknown"))}
+            </Badge>
+            {state?.meta?.version ? <Badge variant="outline">{state.meta.version}</Badge> : null}
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={stateQuery.isFetching || isRestarting}
+              onClick={() => void stateQuery.refetch()}
+            >
               {t("Refresh")}
             </Button>
-            <Button size="sm" variant="secondary" disabled={busy} onClick={restart}>
-              {t("Restart daemon")}
-            </Button>
+            {/* A browser tab did not launch the daemon and has no bridge to
+                one; saying so beats a button that always fails. */}
+            {isDesktopWindow ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={isRestarting}
+                onClick={restart}
+              >
+                {isRestarting ? t("Restarting…") : t("Restart daemon")}
+              </Button>
+            ) : null}
           </div>
-        </div>
+        </FormSectionItem>
+
+        {isDesktopWindow ? null : (
+          <FormSectionItem>
+            <p className="text-sm text-muted-foreground">
+              {t("Restarting belongs to whatever launched this daemon — try `aos gateway restart`.")}
+            </p>
+          </FormSectionItem>
+        )}
       </FormSectionContent>
     </FormSection>
   );
@@ -321,9 +308,9 @@ export function DaemonStatusPanel(): React.JSX.Element {
  */
 export function UserUpdatesSection(): React.JSX.Element {
   return (
-    <div className="space-y-6">
+    <SettingsSectionShell>
       <UpdatesPanel />
       <DaemonStatusPanel />
-    </div>
+    </SettingsSectionShell>
   );
 }

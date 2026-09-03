@@ -42,6 +42,7 @@ func New(cfg Config) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/tree", s.tree)
 	r.Get("/read", s.read)
+	r.Get("/content", s.content)
 	r.Put("/write", s.write)
 	r.Put("/move", s.move)
 	r.Delete("/delete", s.delete)
@@ -76,6 +77,28 @@ func (s *server) read(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, out)
+}
+
+// content serves one file as its own bytes — the route the Files panel's
+// image, PDF and video viewers put straight in a src attribute.
+//
+// The only handler here that does not answer the JSON envelope, on purpose:
+// an <img> cannot decode one. http.ServeContent does the rest — Range (so a
+// video can seek), 304 against If-Modified-Since, and the Content-Length the
+// player needs to draw a scrub bar.
+func (s *server) content(w http.ResponseWriter, r *http.Request) {
+	out, err := s.svc.Content(r.Context(), file.ReadInput{Path: r.URL.Query().Get("path")})
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	defer func() { _ = out.Body.Close() }()
+
+	// Set before ServeContent, which only sniffs when the header is absent:
+	// the domain already knows the type from the extension, and sniffing
+	// reads the first 512 bytes back off the handle to guess it again.
+	w.Header().Set("Content-Type", out.MediaType)
+	http.ServeContent(w, r, out.Name, out.ModTime, out.Body)
 }
 
 func (s *server) write(w http.ResponseWriter, r *http.Request) {

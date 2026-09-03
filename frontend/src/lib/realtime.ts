@@ -290,13 +290,70 @@ function dispatch(queryClient: QueryClient, event: RealtimeEvent): void {
         void queryClient.invalidateQueries({ queryKey: [event.data["namespace"] as string] });
       }
       break;
+    case "collection.changed": {
+      // Every repository write publishes this — a project or goal an agent
+      // created, an agent added from another window, a memory the
+      // subconscious formed. It used to fall through to `default: break`, so
+      // the daemon said "this changed" and the interface did nothing with
+      // it, which is most of "the screen does not update by itself".
+      const collection = event.data?.["collection"];
+      if (typeof collection !== "string" || collection === "") break;
+      const feature = FEATURE_OF_COLLECTION[collection];
+      if (feature) {
+        void queryClient.invalidateQueries({ queryKey: [feature] });
+        break;
+      }
+      // A collection nobody declared a feature for is a *dynamic* one — a
+      // collection an agent or a skill created. Those are read through the
+      // `collection` feature's own record actions, so the invalidation goes
+      // there rather than being dropped.
+      void queryClient.invalidateQueries({ queryKey: ["collection"] });
+      break;
+    }
     case "approval.request":
-      void queryClient.invalidateQueries({ queryKey: ["approvals"] });
+      // `["approval"]`, not `["approvals"]`: the facade keys a query by its
+      // feature name (`aos-facade.ts`'s `actionNode`), and the feature is
+      // `approval` — `approval.list` in `command-map.ts`. The plural was a
+      // leftover from a hand-built dialog that no longer exists, and it
+      // matched nothing.
+      void queryClient.invalidateQueries({ queryKey: ["approval"] });
       break;
     default:
       break;
   }
 }
+
+/**
+ * Which facade feature a collection's writes belong to.
+ *
+ * The daemon names collections in the plural, because that is the directory
+ * under `.aos/`; the interface keys its cache by the singular feature name in
+ * `command-map.ts` (`project.list`, `goal.get`, …). This is the one place
+ * that spelling difference is resolved — the same role `command-map.ts` plays
+ * for calls and `realtime-event-map.ts` for event names.
+ *
+ * A collection missing from this table is not an error: it is a dynamic
+ * collection, handled by the `default` above.
+ */
+const FEATURE_OF_COLLECTION: Record<string, string> = {
+  agents: "agent",
+  artifacts: "artifact",
+  chats: "chat",
+  collections: "collection",
+  comments: "comment",
+  goals: "goal",
+  instructions: "instruction",
+  memories: "memory",
+  projects: "project",
+  routines: "routine",
+  runs: "routine",
+  skills: "skill",
+  tasks: "task",
+  templates: "template",
+  todos: "todo",
+  toolsets: "toolset",
+  views: "view",
+};
 
 // Disclosed gap, not fixed here: nothing in the tree currently reads
 // `["chat", <id>, "streaming"]`. The ported chat UI (`use-chat.ts`) only

@@ -1,4 +1,5 @@
 import type { CommandKey } from "./schema";
+import { toUiChat, toUiMessage } from "./chat-message";
 import * as fileApi from "./file";
 import * as fileExplorer from "./file-explorer";
 import * as authApi from "./auth";
@@ -118,63 +119,51 @@ export type MapEntry = CommandKey | CommandDescriptor | HttpHandler | null;
 const s = (p: Record<string, unknown>, k: string): string => String(p[k] ?? "");
 
 /**
- * Lifts a stored message's flat fields into the `metadata` block the ported
- * chat code reads.
+ * The marker the composer puts on material it attached rather than the person
+ * typed (`COMPOSER_PROMPT_PART_PREFIX` in `composer.helper.ts`, and the same
+ * string the message renderer hides on).
  *
- * Go's `chat.Message` (`internal/domain/chat/entity.go`) carries `createdAt`
- * and `runs` at the top level and has no `metadata` at all; every consumer on
- * this side reads `message.metadata.createdAt`, `metadata.runs` and
- * `metadata.execution`. So every one of them read `undefined`, which is why
- * the thinking header showed "Worked for 0s" on turns that took minutes, and
- * why message timestamps never rendered: `getElapsedMs` finds no start, and
- * returns zero rather than guessing.
- *
- * `execution` is the newest attempt. Go records every attempt in `runs`, and
- * "is this still running" and "how long did it take" are questions about the
- * latest one.
+ * Declared here too rather than imported, so this map — which every feature
+ * loads — does not pull a presentation helper and its transitive imports in
+ * with it. The renderer and the composer already agree on the literal; a test
+ * pins all three together.
  */
-const withMessageMetadata = (chat: unknown): unknown => {
-  if (chat === null || typeof chat !== "object") return chat;
-  const record = chat as Record<string, unknown>;
-  const messages = record["messages"];
-  if (!Array.isArray(messages)) return chat;
+export const COMPOSER_CONTEXT_PREFIX = "[system-reminder]:";
 
+/**
+ * A chat, with every message translated for the ported components.
+ *
+ * The translation itself lives in `lib/chat-message.ts`, because a message
+ * arrives through three doors — a chat read, the echo of a send, and the live
+ * snapshot on the realtime channel — and only the first went through this
+ * one. See that file for what it fixes and why.
+ */
+const withMessageMetadata = (chat: unknown): unknown => toUiChat(chat);
+
+/**
+ * A routine trigger, flattened onto the shape Go's input takes.
+ *
+ * Go stores a trigger nested (`{type, config: {cron}}`) and answers with it
+ * nested, but `routine.TriggerInput` is flat (`{type, cron, namespace, event,
+ * filters}`) — the shape a model can fill in without a nested object. The
+ * interface, ported against the stored shape, sent the nested one on write:
+ * `cron` arrived empty and every scheduled routine was refused with
+ * AOS_ROUTINE_INVALID_CRON, while an activity trigger silently lost its
+ * namespace, event and filters.
+ *
+ * `token` is not copied across: the webhook secret is minted by the daemon,
+ * and a client that sends one is asking for a secret it chose itself.
+ */
+const flattenTriggers = (value: unknown): unknown => {
+  if (!Array.isArray(value)) return { triggers: value };
   return {
-    ...record,
-    messages: messages.map((raw) => {
-      if (raw === null || typeof raw !== "object") return raw;
-      const message = raw as Record<string, unknown>;
-      const runs = Array.isArray(message["runs"]) ? (message["runs"] as Record<string, unknown>[]) : [];
-      const latest = runs.length > 0 ? runs[runs.length - 1] : undefined;
-      const role = String(message["role"] ?? "");
-      const author = message["author"] as Record<string, unknown> | undefined;
-
-      return {
-        ...message,
-        metadata: {
-          ...((message["metadata"] as Record<string, unknown>) ?? {}),
-          type: role === "assistant" ? "agent" : role === "system" ? "system" : "user",
-          data: { id: String(author?.["id"] ?? "") },
-          createdAt: message["createdAt"],
-          // Go has no per-message updatedAt; the newest attempt's end is the
-          // closest true answer, and `getElapsedMs` falls back past it when
-          // there is none.
-          updatedAt: latest?.["completedAt"] ?? message["createdAt"],
-          runs,
-          execution: latest
-            ? {
-                agentId: latest["agentId"],
-                jobId: latest["jobId"],
-                // Go's Status has five values; this side's execution status
-                // has two. Anything not finished is still running as far as
-                // the header is concerned.
-                status: latest["completedAt"] ? "completed" : "running",
-                startedAt: latest["startedAt"],
-                completedAt: latest["completedAt"],
-              }
-            : undefined,
-        },
-      };
+    triggers: value.map((raw) => {
+      if (!raw || typeof raw !== "object") return raw;
+      const trigger = raw as Record<string, unknown>;
+      const config = (trigger["config"] ?? {}) as Record<string, unknown>;
+      const { config: _nested, ...flat } = trigger;
+      const { token: _minted, ...carried } = config;
+      return { ...flat, ...carried };
     }),
   };
 };
@@ -378,17 +367,39 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // it further (e.g. rejecting the send, or showing the user their
   // attachment won't arrive) is a UI decision for whoever owns the
   // composer, not something this map can express.
+  //
+  // The reminder parts go to `context`, not into `text`. They used to be
+  // joined into it — and they come *first*, since the composer attaches
+  // instructions ahead of what was typed — so a workspace with a single
+  // workspace-wide instruction produced a user message whose text began
+  // "[system-reminder]: …". The renderer hides a text part that starts with
+  // that prefix and renders nothing when none is left, so every message the
+  // person sent appeared while it was an optimistic echo and vanished the
+  // moment the daemon confirmed it. The model also read the reminder as part
+  // of the user's own words.
   "chat.send": {
     key: "chats_send",
     coerceIn: {
       message: (value) => {
         const parts = (value as { parts?: Array<{ type: string; text?: string }> } | undefined)?.parts ?? [];
-        const text = parts
+        const texts = parts
           .filter((part) => part.type === "text" && typeof part.text === "string")
-          .map((part) => part.text)
-          .join("\n\n");
-        return { text };
+          .map((part) => part.text as string);
+        return {
+          text: texts.filter((text) => !text.startsWith(COMPOSER_CONTEXT_PREFIX)).join("\n\n"),
+          context: texts.filter((text) => text.startsWith(COMPOSER_CONTEXT_PREFIX)),
+        };
       },
+    },
+    // The echo the composer swaps in for its optimistic message. Without
+    // this it arrived raw, so the confirmed message lost the timestamp and
+    // the day divider its echo had, and got them back only on the next
+    // refetch.
+    mapOut: (out) => {
+      if (!out || typeof out !== "object") return out;
+      const answered = out as Record<string, unknown>;
+      if (!answered["message"]) return out;
+      return { ...answered, message: toUiMessage(answered["message"]) };
     },
   },
 
@@ -515,7 +526,14 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // decoder and the required `id` arrived empty, so every one of those
   // four 400'd on every call (`validate:"required,notblank"`). `create`
   // and `update`'s body also sends `prompt`; Go's field is `content`.
-  "routine.create": { key: "routines_create", renameIn: { prompt: "content" } },
+  // `coerceIn` on triggers, and it is not cosmetic: every routine with a
+  // schedule failed to save. The interface builds a trigger as
+  // `{type, config: {cron}}` (the shape Go *stores* and answers with), while
+  // `routine.TriggerInput` is flat — `{type, cron}` — so `Cron` arrived empty
+  // and the daemon refused with AOS_ROUTINE_INVALID_CRON. An activity trigger
+  // lost its namespace, event and filters the same way, silently. `token` is
+  // dropped on the way in because Go mints the webhook secret itself.
+  "routine.create": { key: "routines_create", renameIn: { prompt: "content" }, coerceIn: { triggers: flattenTriggers } },
   "routine.delete": { key: "routines_delete", renameIn: { routine: "id" } },
   // NOT `wrapOut: "run"`, on purpose. Go's `routines_fire` returns a
   // single bare `*Run` (`internal/domain/routine/commands.go`), but the
@@ -531,7 +549,11 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "routine.fire": { key: "routines_fire", renameIn: { routine: "id" } },
   "routine.getById": { key: "routines_get", renameIn: { routine: "id" }, wrapOut: "routine" },
   "routine.list": "routines_list",
-  "routine.update": { key: "routines_update", renameIn: { routine: "id", prompt: "content" } },
+  "routine.update": { key: "routines_update", renameIn: { routine: "id", prompt: "content" }, coerceIn: { triggers: flattenTriggers } },
+  // The runs of one routine. The routine page reads `routine.runs`, which
+  // `routine.View` has never carried — the history panel was empty for every
+  // routine — while `routines_runs` was a live command nothing called.
+  "routine.runs": { key: "routines_runs", renameIn: { routine: "id" } },
 
   // Every `tasks_*` command that names one task takes `id`
   // (`internal/domain/task/schema.go`'s `GetInput`/`UpdateInput`/
@@ -775,7 +797,11 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "chat.stop": null,
   "chat.toggleReaction": null,
 
-  "session.updateProfile": null,
+  // Not dormant: `POST /api/auth/profile` has existed since the identity
+  // surface was built (`internal/transport/authapi`), and `lib/auth.ts`
+  // already wraps it. Declaring it null made the profile screen's save
+  // report "the session domain does not exist in the Go backend yet".
+  "session.updateProfile": (p) => authApi.updateProfile(s(p, "name"), s(p, "email")),
   // Was dormant, and did not need to be: starting a task is moving it to
   // `in_progress`, which `tasks_set-status` has always done. The Start button
   // on the task page called this, got the dormant-domain error, and showed
@@ -1071,8 +1097,19 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // `marketplace_get`, which takes `source` — `renameIn: { name: "source" }`
   // is a guess at the UI's own param name, not yet confirmed against the
   // call site; `install` has no live caller yet.
-  "marketplace.list": "marketplace_discovery",
-  "marketplace.getByName": { key: "marketplace_get", renameIn: { name: "source" } },
+  // The marketplace screens read `.items` off the list and `.skill` off the
+  // detail, and sent `query`/`category`/`page`/`pageSize`. Go answers a bare
+  // `[]Listing` and a bare `*Listing`, and its search takes `text`/`tag` —
+  // so the list rendered nothing (`data.items` was undefined on an array)
+  // and the search box filtered nothing. `page`/`pageSize` have no Go
+  // counterpart at all and are dropped rather than sent to be ignored.
+  "marketplace.list": {
+    key: "marketplace_discovery",
+    renameIn: { query: "text", category: "tag" },
+    coerceIn: { page: () => ({}), pageSize: () => ({}) },
+    wrapOut: "items",
+  },
+  "marketplace.getByName": { key: "marketplace_get", renameIn: { name: "source" }, wrapOut: "skill" },
   "marketplace.install": "marketplace_install",
 
   // Same bug class as goal.* just above: projects_list/-get/-create all

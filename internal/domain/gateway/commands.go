@@ -7,6 +7,18 @@ import (
 	"github.com/OWNER/aos/internal/core/command"
 )
 
+// None of these four is in the agent's registry, and that is the privilege
+// boundary command.Command's own doc comment names: "gateway, auth and tunnels
+// stay out of the agent's reach".
+//
+// They were in it. `gateway_stop`, offered to a model as an ordinary tool,
+// terminates the process the turn is running inside: the daemon reads the
+// record it wrote for itself and signals that pid. The turn dies with nothing
+// recorded in the conversation, and the window loses the daemon it is talking
+// to. `gateway_restart` is the same act with an extra step. They remain
+// available on the CLI, over MCP and over HTTP, which is where supervision
+// belongs — with whoever launched the daemon, not with what it is running.
+//
 // GroupDoc is what a model reads before choosing this group.
 var GroupDoc = command.GroupDoc{
 	Name:    "gateway",
@@ -51,7 +63,7 @@ A process can be alive and not serving, and the two are worth telling apart.`,
 			{Description: "is it up", Input: StatusInput{}},
 		},
 		Local:       true,
-		Registry:    true,
+		Registry:    false,
 		Annotations: command.Annotations{Title: "Gateway status", ReadOnlyHint: true, IdempotentHint: true},
 		Handler:     svc.Status,
 	})
@@ -72,7 +84,7 @@ this reports it as one.`,
 			{Description: "bring it up", Input: StartInput{}},
 		},
 		Local:       true,
-		Registry:    true,
+		Registry:    false,
 		Annotations: command.Annotations{Title: "Start the daemon", IdempotentHint: true},
 		Handler:     svc.Start,
 	})
@@ -87,7 +99,7 @@ It is asked politely first and killed after the shutdown timeout. The result
 says which happened: a daemon that had to be killed is a daemon that lost
 whatever it had not yet written, and that is worth knowing.`,
 		Local:       true,
-		Registry:    true,
+		Registry:    false,
 		Annotations: command.Annotations{Title: "Stop the daemon", DestructiveHint: true, IdempotentHint: true},
 		Handler:     svc.Stop,
 	})
@@ -103,7 +115,7 @@ about to restart, and this call will not return to you. That is not a bug and it
 is not avoidable — the connection carrying your request ends with the process
 serving it. Say what you are doing before you call it.`,
 		Local:       true,
-		Registry:    true,
+		Registry:    false,
 		Annotations: command.Annotations{Title: "Restart the daemon", DestructiveHint: true},
 		Handler:     svc.Restart,
 	})

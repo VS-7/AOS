@@ -68,6 +68,39 @@ type Exec struct {
 	AllowShell bool     `yaml:"allowShell,omitempty" json:"allowShell,omitempty" jsonschema:"Whether this agent may reach a shell. A shell makes the allowlist a suggestion, so it takes its own opt-in."`
 }
 
+// DefaultSandbox is what an agent created through this domain may do.
+//
+// The zero value — read-only, no execution — is the right default for a
+// *record*: an AGENT.md somebody hand-writes without a sandbox block has
+// declared nothing, and nothing is what it should be able to do.
+//
+// It is the wrong default for a *creation*. The orchestrator's own
+// instructions tell it to create focused specialists, and the settings screen
+// offers a "New agent" form with no sandbox field at all; every agent either
+// produced could read the workspace and nothing else, so its first Write or
+// Bash came back AOS_SANDBOX_PERMISSION_DENIED and the specialist was useless
+// from the moment it existed.
+//
+// This is not an escalation: whoever calls Create — the orchestrator, or a
+// person at the settings screen — already holds these powers. Execution stays
+// an allowlist (ADR-0006) and the shell stays off, because a shell makes an
+// allowlist a suggestion. A caller that names a narrower sandbox gets exactly
+// what it named, and agents_update replaces the block whole.
+func DefaultSandbox() *Sandbox {
+	return &Sandbox{
+		Permissions: []string{"read", "write", "delete", "execute"},
+		Exec: &Exec{
+			Policy: "allowlist",
+			Allow: []string{
+				"git", "go", "node", "npm", "npx", "pnpm", "yarn", "bun",
+				"python3", "pip3", "make", "task", "cargo", "rustc",
+				"ls", "cat", "grep", "find", "rg", "sed", "awk", "head", "tail", "wc", "diff",
+			},
+			AllowShell: false,
+		},
+	}
+}
+
 // DisplayName falls back to the slug, as the original does on create.
 func (a Agent) DisplayName() string {
 	if a.Name != "" {

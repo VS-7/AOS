@@ -1,5 +1,6 @@
 import { Call } from "@wailsio/runtime";
 import { daemonURL } from "./daemon-origin";
+import { isDesktopWindow } from "./wails";
 import type { CommandInput, CommandKey, CommandOutput } from "./schema";
 import { desktopRetryDelays, isDesktopConfirmed, markDesktopConfirmed, sleep } from "./desktop-transport";
 
@@ -89,9 +90,34 @@ interface Envelope<T> {
  * surface is outside the command registry (see File (Go)'s "não tem grupo de
  * comando") but still answers in the same envelope shape.
  */
+/**
+ * The event the page fires when the daemon says the credential is no good.
+ *
+ * A session lasts thirty days, and it can also be revoked — a logout from
+ * another window, a daemon whose accounts were reset. There was no path back
+ * from either: `AuthGate` asks once, at mount, so the application stayed on
+ * its screens and answered every action with "this request carries no valid
+ * credential" as a toast. The only ways out were a reload (browser) or a
+ * restart (desktop).
+ *
+ * The transports fire this; AuthGate listens and re-asks, which sends the
+ * person to the Login screen exactly once and by the front door.
+ */
+export const UNAUTHENTICATED_EVENT = "aos:unauthenticated";
+
+function announceIfUnauthenticated(error: { code?: string; status?: number }): void {
+  const unauthenticated =
+    error.status === 401 ||
+    error.code === "AOS_HTTP_UNAUTHENTICATED" ||
+    error.code === "HTTP_UNAUTHENTICATED";
+  if (!unauthenticated || typeof window === "undefined") return;
+  window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
+}
+
 export function unwrap<T>(raw: unknown): T {
   const envelope = raw as Envelope<T>;
   if (envelope && typeof envelope === "object" && "error" in envelope && envelope.error) {
+    announceIfUnauthenticated(envelope.error);
     throw new DomainError(envelope.error);
   }
   if (envelope && typeof envelope === "object" && "data" in envelope) {
@@ -210,6 +236,23 @@ export const system = {
    */
   async daemonAddress(): Promise<string> {
     return (await Call.ByName(`${WAILSVC_PKG}.SystemService.DaemonAddress`)) as string;
+  },
+
+  /**
+   * Stops the daemon and starts it again.
+   *
+   * Not a command, and deliberately: inside the daemon `gateway_restart`
+   * refuses, because Stop would signal its own pid — which is exactly what
+   * used to happen, leaving the window with a terminated daemon, an
+   * unclassified 500 from the connection dropping, and no way back short of
+   * relaunching the application. Supervision belongs to whatever launched
+   * the daemon, and in the desktop that is the window's own process.
+   *
+   * A browser tab has no supervisor and the bridge is absent; the caller
+   * shows the terminal instruction instead.
+   */
+  async restartDaemon(): Promise<void> {
+    await Call.ByName(`${WAILSVC_PKG}.SystemService.RestartDaemon`);
   },
 
   /**
@@ -413,6 +456,15 @@ function workspaceHeader(): Record<string, string> {
  */
 export const client: Client = {
   async invoke(key, input) {
+    // A browser tab does not probe the bridge. `isDesktopWindow` is a
+    // synchronous fact — the window states it in the URL it opens
+    // (`?daemon=`) — and trying anyway cost a rejected `POST /wails/runtime`
+    // per call, logged by the daemon at WARN, plus the full cold-start retry
+    // budget on the first few: roughly seven seconds before a server
+    // installation drew its first screen.
+    if (!isDesktopWindow) {
+      return http.invoke(key, input);
+    }
     try {
       return await desktop.invoke(key, input);
     } catch {

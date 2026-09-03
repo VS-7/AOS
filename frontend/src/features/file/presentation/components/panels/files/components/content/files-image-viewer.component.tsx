@@ -2,6 +2,7 @@ import { t } from "@/lib/i18n";
 import React from "react"
 import { Maximize, RotateCw, Scan, ZoomIn, ZoomOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { contentURL } from "@/lib/file"
 import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces"
 
 interface FilesImageViewerProps {
@@ -18,10 +19,7 @@ export function FilesImageViewer({ file }: FilesImageViewerProps) {
   const [position, setPosition] = React.useState({ x: 0, y: 0 })
   const isPanningRef = React.useRef(false)
   const panOriginRef = React.useRef({ x: 0, y: 0 })
-  const contentUrl = React.useMemo(
-    () => `/api/files/content?path=${encodeURIComponent(file.path)}`,
-    [file.path],
-  )
+  const contentUrl = React.useMemo(() => contentURL(file.path), [file.path])
 
   function clampScale(value: number) {
     return Math.max(MIN_SCALE, Math.min(MAX_SCALE, value))

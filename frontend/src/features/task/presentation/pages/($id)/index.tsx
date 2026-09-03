@@ -67,7 +67,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
 
     async function handlePriorityChange(priority: TaskPriority) {
       try {
-        await aos.client.task.update.mutate({ params: { task: task.id }, body: { priority } });
+        await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { priority } });
         toast.success(t("Priority updated"));
         router.invalidate();
       } catch {
@@ -77,7 +77,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
 
     async function handleAssigneeChange(assignee: string | undefined) {
       try {
-        await aos.client.task.update.mutate({ params: { task: task.id }, body: { assigned: assignee } });
+        await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { assigned: assignee } });
         toast.success(assignee ? "Assigned" : "Unassigned");
         router.invalidate();
       } catch {
@@ -87,7 +87,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
 
     async function handleTypeChange(type: string) {
       try {
-        await aos.client.task.update.mutate({ params: { task: task.id }, body: { type } });
+        await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { type } });
         toast.success(t("Type updated"));
         router.invalidate();
       } catch {
@@ -97,7 +97,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
 
     async function handleDueDateChange(dueAt: string | undefined) {
       try {
-        await aos.client.task.update.mutate({ params: { task: task.id }, body: { dueAt } });
+        await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { dueAt } });
         toast.success(dueAt ? "Due date set" : "Due date removed");
         router.invalidate();
       } catch {
@@ -107,7 +107,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
 
     async function handleProjectChange(project: string | undefined) {
       try {
-        await aos.client.task.update.mutate({ params: { task: task.id }, body: { project } });
+        await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { project } });
         toast.success(project ? "Project updated" : "Project cleared");
         router.invalidate();
       } catch {
@@ -117,7 +117,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
 
     async function handleGoalChange(goal: string | undefined) {
       try {
-        await aos.client.task.update.mutate({ params: { task: task.id }, body: { goal } });
+        await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { goal } });
         toast.success(goal ? "Goal updated" : "Goal cleared");
         router.invalidate();
       } catch {

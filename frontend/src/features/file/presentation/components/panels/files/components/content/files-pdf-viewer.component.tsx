@@ -3,6 +3,7 @@ import React from "react"
 import { ExternalLink, Search, ZoomIn, ZoomOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { contentURL } from "@/lib/file"
 import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces"
 
 interface FilesPdfViewerProps {
@@ -18,10 +19,7 @@ export function FilesPdfViewer({ file, onOpenExternal }: FilesPdfViewerProps) {
   const [zoom, setZoom] = React.useState(1)
   const [search, setSearch] = React.useState("")
 
-  const contentUrl = React.useMemo(
-    () => `/api/files/content?path=${encodeURIComponent(file.path)}`,
-    [file.path],
-  )
+  const contentUrl = React.useMemo(() => contentURL(file.path), [file.path])
 
   const iframeUrl = React.useMemo(() => {
     const hashParts = [`zoom=${Math.round(zoom * 100)}`]

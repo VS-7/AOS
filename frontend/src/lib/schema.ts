@@ -72,8 +72,10 @@ export interface CommandMap {
     "content"?: string;
     /** Orchestrator-facing summary of when to delegate to this agent. */
     "description"?: string;
-    /** Unique agent identifier (slug). Lowercase, no spaces. Example: "atlas". */
-    "id": string;
+    /** Unique agent identifier (slug). Lowercase, no spaces. Defaults to a slug of name. Example: "atlas". */
+    "id"?: string;
+    /** Avatar URL or data URI. */
+    "image"?: string;
     /** Slug of the leader agent in a hierarchical team. */
     "leader"?: string;
     /** LLM model id for this agent. Example: "gpt-4o". */
@@ -88,7 +90,7 @@ export interface CommandMap {
     "reasoning"?: string;
     /** Functional role label shown in delegation prompts. */
     "role"?: string;
-    /** Filesystem and execution policy. Absent means read-only with no execution at all. */
+    /** Filesystem and execution policy. Omit for the working default: read, write, delete and execution by allowlist, without a shell. */
     "sandbox"?: {
     /** Which programs this agent may run. */
     "exec"?: {
@@ -147,6 +149,8 @@ export interface CommandMap {
     "description"?: unknown;
     /** Agent slug to update. */
     "id": string;
+    /** New avatar URL or data URI. Empty string clears it. */
+    "image"?: unknown;
     /** New leader slug. */
     "leader"?: unknown;
     /** New LLM model id. */
@@ -332,6 +336,8 @@ export interface CommandMap {
     "agent"?: string;
     /** Conversation to write to. */
     "chat": string;
+    /** Material attached to the message for the agent to read, kept apart from what the person typed. */
+    "context"?: unknown;
     /** What to say. Address a specific agent with @slug. */
     "text": string;
   }; output: unknown };
@@ -540,6 +546,8 @@ export interface CommandMap {
     "dueAt"?: unknown;
     /** How to tell this goal was actually served. */
     "measure"?: string;
+    /** How urgent this goal is. Defaults to no_priority. */
+    "priority"?: "no_priority" | "urgent" | "high" | "medium" | "low";
     /** Project this goal belongs to, if any. */
     "project"?: string;
     /** Skill installing this goal, if any. */
@@ -588,6 +596,8 @@ export interface CommandMap {
     "id": string;
     /** New measure that makes this goal checkable rather than aspirational. Omit to leave unchanged. */
     "measure"?: unknown;
+    /** New priority: no_priority, urgent, high, medium or low. Omit to leave unchanged. */
+    "priority"?: "no_priority" | "urgent" | "high" | "medium" | "low";
     /** New project this goal belongs to. Empty string clears it. Omit to leave unchanged. */
     "project"?: unknown;
     /** New lifecycle status: active, achieved, abandoned, or paused. Omit to leave unchanged. */
@@ -796,6 +806,8 @@ export interface CommandMap {
   "memories_store": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
+    /** Whose memory this is. Defaults to your own. */
+    "agent"?: string;
     /** One of: decision, intent, commitment, relationship, event, observation, error, learning, fact, reference, instruction, preference, context. */
     "category": "decision" | "intent" | "commitment" | "relationship" | "event" | "observation" | "error" | "learning" | "fact" | "reference" | "instruction" | "preference" | "context";
     /** From 0 to 1. Defaults to 1. Be honest — an inflated number is how future-you gets misled. */
@@ -1110,8 +1122,12 @@ export interface CommandMap {
     "limit"?: number;
     /** How many to skip. */
     "offset"?: number;
+    /** Only tasks at this priority. */
+    "priority"?: "no_priority" | "urgent" | "high" | "medium" | "low";
     /** Only tasks in this project. */
     "project"?: string;
+    /** Substring match over name and summary. */
+    "query"?: string;
     /** Only tasks in this status. */
     "status"?: "suggestion" | "backlog" | "planning" | "todo" | "in_progress" | "stopped" | "in_review" | "finished";
     /** Only tasks of this workspace type. Example: "bug". */

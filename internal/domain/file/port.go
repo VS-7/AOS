@@ -2,6 +2,7 @@ package file
 
 import (
 	"context"
+	"io"
 	"time"
 )
 
@@ -39,6 +40,20 @@ type FS interface {
 	// file held more than that — the caller decides what a truncated read
 	// means to the person looking at it.
 	ReadFile(ctx context.Context, path string, limit int64) (data []byte, truncated bool, err error)
+
+	// Open hands back the whole file as a stream, for the one caller that
+	// must not truncate it: the viewer route serving a picture, a PDF or a
+	// video straight into an element's src.
+	//
+	// ReadFile cannot do that job. Its limit is the point of it — every
+	// other reader here wants a bounded slice in memory — and a video
+	// answered as bytes is a video that cannot be seeked, because seeking is
+	// the client asking for a byte range the server has to satisfy from the
+	// file itself. A ReadSeeker is what http.ServeContent needs to answer
+	// one.
+	//
+	// The caller closes it.
+	Open(ctx context.Context, path string) (io.ReadSeekCloser, error)
 
 	WriteFile(ctx context.Context, path string, data []byte) error
 	MkdirAll(ctx context.Context, path string) error

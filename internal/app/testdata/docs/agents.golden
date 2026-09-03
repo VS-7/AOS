@@ -41,11 +41,15 @@ agent rather than two.
   "properties": {
     "id": {
       "type": "string",
-      "description": "Unique agent identifier (slug). Lowercase, no spaces. Example: \"atlas\"."
+      "description": "Unique agent identifier (slug). Lowercase, no spaces. Defaults to a slug of name. Example: \"atlas\"."
     },
     "name": {
       "type": "string",
       "description": "Human-readable display name. Defaults to the slug."
+    },
+    "image": {
+      "type": "string",
+      "description": "Avatar URL or data URI."
     },
     "description": {
       "type": "string",
@@ -158,7 +162,7 @@ agent rather than two.
           "additionalProperties": false
         }
       },
-      "description": "Filesystem and execution policy. Absent means read-only with no execution at all.",
+      "description": "Filesystem and execution policy. Omit for the working default: read, write, delete and execution by allowlist, without a shell.",
       "additionalProperties": false
     },
     "content": {
@@ -172,7 +176,6 @@ agent rather than two.
     }
   },
   "required": [
-    "id",
     "_reasoning"
   ],
   "additionalProperties": false
@@ -334,6 +337,13 @@ Only the fields you send are changed; the rest are left alone. Sending
         "string"
       ],
       "description": "New display name."
+    },
+    "image": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "New avatar URL or data URI. Empty string clears it."
     },
     "description": {
       "type": [

@@ -325,6 +325,10 @@ out not just what you believe but why you changed your mind.
 {
   "type": "object",
   "properties": {
+    "agent": {
+      "type": "string",
+      "description": "Whose memory this is. Defaults to your own."
+    },
     "title": {
       "type": "string",
       "description": "Sharp, specific headline. It is what you will scan later."

@@ -151,6 +151,25 @@ export function reloadAt(path: string): void {
   window.location.replace(desktopURL(path));
 }
 
+/**
+ * Reloads the page it is on, keeping the desktop window's parameters.
+ *
+ * `window.location.reload()` does not, and that is the trap: the router
+ * rewrites the URL on the first navigation, so by the time anybody presses
+ * Reload the `?daemon=` and `?platform=` the window opened with are gone. The
+ * bundle restarts without them, `isDesktopWindow` reads false, the native
+ * bridge is never installed, `/api/*` resolves against the asset host and the
+ * event channel opens against nothing — the window becomes a broken browser
+ * tab until the application is restarted.
+ *
+ * The error screen's own Reload button was one of the four callers, which is
+ * the worst of them: the surface meant for recovery was the one that made the
+ * state unrecoverable.
+ */
+export function reloadHere(): void {
+  reloadAt(window.location.pathname + window.location.search + window.location.hash);
+}
+
 /* -------------------------------------------------------------------------
  * The operating system's own facilities
  * ---------------------------------------------------------------------- */

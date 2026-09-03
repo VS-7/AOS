@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -250,6 +251,31 @@ func TestAToolHoldsOnlyTheInterfaceItNeeds(t *testing.T) {
 	for i := range writer.NumMethod() {
 		if name := writer.Method(i).Name; name == "ReadFile" {
 			t.Errorf("sandbox.FileWriter can read; Write was supposed to be unable to")
+		}
+	}
+}
+
+// Every tool the agent can call carries the same contract, and `_reasoning` is
+// the part of it the master prompt makes non-negotiable. These six inferred
+// their schema without the repair every registry command gets, so the model
+// was never asked for a reason — and `additionalProperties: false` made
+// sending one anyway a violation.
+func TestEveryNativeToolAsksForItsReasoning(t *testing.T) {
+	box, err := sandbox.New(sandbox.Options{WorkspacePath: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range tools.FS(box) {
+		schema := tool.Spec().InputSchema
+		if schema == nil {
+			t.Errorf("%s publishes no input schema at all", tool.Name())
+			continue
+		}
+		if _, ok := schema.Properties["_reasoning"]; !ok {
+			t.Errorf("%s does not ask the model for a reason", tool.Name())
+		}
+		if !slices.Contains(schema.Required, "_reasoning") {
+			t.Errorf("%s does not require a reason", tool.Name())
 		}
 	}
 }

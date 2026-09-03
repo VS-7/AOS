@@ -93,3 +93,21 @@ func errKillFailed(pid int, cause error) error {
 			Label: "stop the process by hand — it is holding the port",
 		})
 }
+
+// errSelfRestart is what the daemon answers when asked to restart itself.
+//
+// The alternative was not "it works": Stop signals the pid in the record,
+// which is this process, so the daemon terminated itself mid-request and the
+// caller received an unclassified 500 as the connection dropped — the shape
+// AGENTS.md calls a defect. Whoever launched the daemon has a working copy of
+// this same service; the call to action points there.
+func errSelfRestart() error {
+	return apperr.New("GATEWAY_SELF_RESTART").
+		Causer("gateway.Service.Restart").
+		Msgf("the daemon cannot restart itself; ask whatever supervises it").
+		Status(apperr.StatusConflict).
+		CTA(apperr.CallToAction{
+			Label:   "restart it from the application, or from a terminal",
+			Command: build.Name + " gateway restart",
+		})
+}

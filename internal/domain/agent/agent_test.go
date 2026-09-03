@@ -3,6 +3,7 @@ package agent_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -75,6 +76,73 @@ func TestCreateRejectsAnEmptySlugWithACallToAction(t *testing.T) {
 	e, _ := apperr.As(err)
 	if len(e.Actions) == 0 {
 		t.Error("the caller must be told what a usable slug looks like")
+	}
+}
+
+// The interface's "New agent" form asks for a name, not a slug — it was
+// ported from an app whose server minted the id. Requiring one here is what
+// made every create from the application fail with "id is required".
+func TestCreateDerivesTheSlugFromTheName(t *testing.T) {
+	svc, _ := newService(t)
+	got, err := svc.Create(ctx(), agent.CreateInput{Name: "Luara Ávila"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != "luara-avila" {
+		t.Errorf("id = %q, want the slug of the name", got.ID)
+	}
+	if got.Name != "Luara Ávila" {
+		t.Errorf("name = %q, want the name as it was written", got.Name)
+	}
+}
+
+// A name that slugs to nothing is still nothing to name a file after.
+func TestCreateRejectsANameThatSlugsToNothing(t *testing.T) {
+	svc, _ := newService(t)
+	if _, err := svc.Create(ctx(), agent.CreateInput{Name: "  ***  "}); err == nil {
+		t.Fatal("an agent with no usable slug has no identity")
+	}
+}
+
+// The orchestrator's instructions tell it to create focused specialists, and
+// the settings screen's New Agent form has no sandbox field. Every agent
+// either produced was read-only with no execution, so its first Write or Bash
+// was refused and the specialist was useless from the moment it existed.
+func TestACreatedAgentCanActInTheWorkspace(t *testing.T) {
+	svc, _ := newService(t)
+	got, err := svc.Create(ctx(), agent.CreateInput{ID: "helper"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Sandbox == nil {
+		t.Fatal("a created agent has no sandbox, so it can read and nothing else")
+	}
+	for _, want := range []string{"read", "write", "execute"} {
+		if !slices.Contains(got.Sandbox.Permissions, want) {
+			t.Errorf("permissions %v do not include %q", got.Sandbox.Permissions, want)
+		}
+	}
+	if got.Sandbox.Exec == nil || got.Sandbox.Exec.Policy != "allowlist" {
+		t.Errorf("exec policy = %+v, want an allowlist (ADR-0006)", got.Sandbox.Exec)
+	}
+	if got.Sandbox.Exec != nil && got.Sandbox.Exec.AllowShell {
+		t.Error("the default handed out a shell, which makes the allowlist a suggestion")
+	}
+}
+
+// A caller that says what the agent may do gets exactly that, and nothing is
+// added to it.
+func TestADeclaredSandboxIsNotWidened(t *testing.T) {
+	svc, _ := newService(t)
+	got, err := svc.Create(ctx(), agent.CreateInput{
+		ID:      "reader",
+		Sandbox: &agent.Sandbox{Permissions: []string{"read"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Sandbox.Permissions) != 1 || got.Sandbox.Permissions[0] != "read" {
+		t.Errorf("permissions = %v, want exactly what was declared", got.Sandbox.Permissions)
 	}
 }
 
@@ -245,5 +313,28 @@ func TestRegisterPublishesTheWholeGroup(t *testing.T) {
 				t.Errorf("%s must be announced destructive", d.Key())
 			}
 		}
+	}
+}
+
+// The settings form has edited the avatar since the port, and neither input
+// carried it: the field existed in the interface, in the record, and nowhere
+// in between, so every save dropped it silently.
+func TestTheAvatarIsWritable(t *testing.T) {
+	svc, _ := newService(t)
+	created, err := svc.Create(ctx(), agent.CreateInput{ID: "luara", Image: "https://example.test/a.png"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Image != "https://example.test/a.png" {
+		t.Errorf("image = %q, want the one that was sent", created.Image)
+	}
+
+	blank := ""
+	cleared, err := svc.Update(ctx(), agent.UpdateInput{ID: "luara", Image: &blank})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.Image != "" {
+		t.Errorf("image = %q, want it cleared", cleared.Image)
 	}
 }

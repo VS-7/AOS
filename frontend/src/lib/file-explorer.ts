@@ -19,6 +19,7 @@ import { tree, changes as rawChanges, type FileNode } from "./file";
 import { client } from "./client";
 import type {
   FileChangeEntry,
+  FileChangesSummary,
   FileExplorerSnapshot,
   WorkspaceFile,
 } from "@/features/file/interfaces/file.interfaces";
@@ -132,7 +133,14 @@ export async function explorer(
 ): Promise<{ snapshot: FileExplorerSnapshot }> {
   const [walked, changed, tasks] = await Promise.all([
     tree("", true).catch(() => ({ path: "", nodes: [] as FileNode[] })),
-    changes().catch(() => ({ snapshot: { paths: [], pathIndex: {}, files: [] } })),
+    changes().catch(() => ({
+      snapshot: {
+        paths: [],
+        pathIndex: {},
+        files: [],
+        summary: summarize([]),
+      },
+    })),
     options.includeContexts === false ? Promise.resolve([]) : listTasks(),
   ]);
 
@@ -155,11 +163,31 @@ export async function explorer(
       pathIndex,
       tasks,
       files,
+      summary: changed.snapshot.summary,
       readOnly: false,
       // The shape @pierre/trees' setGitStatus takes, straight through.
       gitStatus: files.map((file) => ({ path: file.path, status: file.status })),
-    } as FileExplorerSnapshot,
+    },
   };
+}
+
+/**
+ * The aggregate the Changes header draws, folded out of the file list.
+ *
+ * The original server answers this beside the list rather than making the
+ * panel count for itself, and the panel reads it straight through — so it is
+ * computed once, here, and every snapshot this module builds carries one.
+ * Omitting it is what made the header throw on a resolved snapshot.
+ */
+function summarize(files: FileChangeEntry[]): FileChangesSummary {
+  return files.reduce<FileChangesSummary>(
+    (summary, file) => ({
+      fileCount: summary.fileCount + 1,
+      additions: summary.additions + (file.additions ?? 0),
+      deletions: summary.deletions + (file.deletions ?? 0),
+    }),
+    { fileCount: 0, additions: 0, deletions: 0 },
+  );
 }
 
 /** `file.changes`: what the working tree differs from HEAD at. */
@@ -171,7 +199,8 @@ export async function changes(): Promise<{ snapshot: FileExplorerSnapshot }> {
       paths: files.map((file) => file.path),
       pathIndex: {},
       files,
-    } as FileExplorerSnapshot,
+      summary: summarize(files),
+    },
   };
 }
 

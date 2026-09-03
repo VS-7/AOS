@@ -37,6 +37,18 @@ func errStatusInvalid(raw string) error {
 		CTA(apperr.CallToAction{Label: "use one of active, achieved, abandoned, paused"})
 }
 
+// errPriorityInvalid mirrors errStatusInvalid: a closed set, and a refusal
+// that names the accepted values rather than saying only "invalid".
+func errPriorityInvalid(raw string) error {
+	return apperr.New("GOAL_PRIORITY_INVALID").
+		Causer("goal.Service").
+		Msgf("%q is not a goal priority", raw).
+		Issue("priority", raw).
+		Issue("allowed", "no_priority, urgent, high, medium, low").
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{Label: "use one of no_priority, urgent, high, medium, low"})
+}
+
 // errReadFailed wraps a repository failure that is not "not found".
 func errReadFailed(op string, cause error) error {
 	return apperr.New("GOAL_READ_FAILED").

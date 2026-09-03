@@ -116,6 +116,23 @@ const SETTINGS_TRIGGERS: SettingsTriggerDef[] = [
     section: "workspace.worktrees",
     group: "Workspace Settings",
   },
+  // The two sections the last audit added. The file's own comment below says
+  // this list is 1:1 with SETTINGS_SECTIONS, and it had stopped being: neither
+  // Updates nor Jobs could be opened from the command palette at all.
+  {
+    id: "settings.user.updates",
+    label: "Open Updates Settings",
+    icon: "CloudDownload",
+    section: "user.updates",
+    group: "User Settings",
+  },
+  {
+    id: "settings.workspace.jobs",
+    label: "Open Jobs Settings",
+    icon: "ListOrdered",
+    section: "workspace.jobs",
+    group: "Workspace Settings",
+  },
 ];
 
 /**

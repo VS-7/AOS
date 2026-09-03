@@ -326,6 +326,16 @@ waiting through.
       "type": "string",
       "description": "Answer with this agent regardless of what the text mentions."
     },
+    "context": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "Material attached to the message for the agent to read, kept apart from what the person typed."
+    },
     "_reasoning": {
       "type": "string",
       "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",

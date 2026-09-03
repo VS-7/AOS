@@ -7,6 +7,7 @@ import (
 
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/identity"
+	"github.com/OWNER/aos/internal/core/slug"
 )
 
 // Service is the agent aggregate. It governs one aggregate and nothing else:
@@ -72,9 +73,24 @@ func (s *Service) Me(ctx context.Context, _ MeInput) (*Agent, error) {
 	return found, nil
 }
 
+// sandboxFor honours what the caller declared, and falls back to the working
+// default. See DefaultSandbox for why the fallback is not the zero value.
+func sandboxFor(declared *Sandbox) *Sandbox {
+	if declared != nil {
+		return declared
+	}
+	return DefaultSandbox()
+}
+
 // Create writes a new agent.
 func (s *Service) Create(ctx context.Context, in CreateInput) (*Agent, error) {
 	id := normalizeID(in.ID)
+	if id == "" {
+		// A name is enough. slug.Generate is the same rule every other
+		// slug-owning domain here uses, and the one the original app applied
+		// server-side — "Luara" becomes "luara", accents and all.
+		id = normalizeID(slug.Generate(in.Name))
+	}
 	if id == "" {
 		return nil, errInvalidID(in.ID)
 	}
@@ -87,6 +103,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Agent, error) {
 	a := &Agent{
 		ID:           id,
 		Name:         in.Name,
+		Image:        in.Image,
 		Description:  in.Description,
 		Role:         in.Role,
 		Leader:       leader,
@@ -96,7 +113,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Agent, error) {
 		Channels:     in.Channels,
 		Orchestrator: in.Orchestrator,
 		Reasoning:    in.Reasoning_,
-		Sandbox:      in.Sandbox,
+		Sandbox:      sandboxFor(in.Sandbox),
 		Content:      in.Content,
 		CreatedAt:    now,
 		UpdatedAt:    now,
@@ -126,6 +143,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Agent, error) {
 		return nil, err
 	}
 	applyString(&current.Name, in.Name)
+	applyString(&current.Image, in.Image)
 	applyString(&current.Description, in.Description)
 	applyString(&current.Role, in.Role)
 	applyString(&current.Provider, in.Provider)

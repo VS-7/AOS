@@ -506,3 +506,39 @@ func TestInvokeWithAnEmptyPayload(t *testing.T) {
 		t.Fatalf("null payload: %v", err)
 	}
 }
+
+// A json.RawMessage is "whatever JSON the caller sends, kept verbatim". The
+// inference library sees the underlying []byte and publishes an array of
+// integers 0-255 — so `toolsets_call.input` told every model that the
+// arguments of an external tool were a byte array, and no model following the
+// schema could call one. The daemon accepted objects regardless, which is why
+// nothing caught it: the contract was wrong only where a model could read it.
+func TestARawMessageFieldIsPublishedAsAnythingRatherThanBytes(t *testing.T) {
+	type In struct {
+		Input json.RawMessage `json:"input,omitempty" jsonschema:"Arguments for the tool."`
+		command.Reasoning
+	}
+
+	reg := command.NewRegistry()
+	if err := command.Register(reg, command.Command[In, struct{}]{
+		Group: "probe", Name: "call", Summary: "Probe.",
+		Handler: func(context.Context, In) (struct{}, error) { return struct{}{}, nil },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	d, _, ok := reg.Lookup("probe_call")
+	if !ok {
+		t.Fatal("the command was not registered")
+	}
+
+	field := d.InputSchema().Properties["input"]
+	if field == nil {
+		t.Fatal("the schema does not mention input at all")
+	}
+	if field.Type == "array" || field.Items != nil {
+		t.Errorf("input is published as %q with items %+v, want an open schema", field.Type, field.Items)
+	}
+	if field.Description == "" {
+		t.Error("the description was dropped, which is the model's only guidance about the shape")
+	}
+}

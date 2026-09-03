@@ -89,6 +89,49 @@ export function WorkspaceLayout() {
     [invalidate],
   );
 
+  // A record was written anywhere in the workspace, by anyone — the person
+  // in another window, an agent's tool, a routine, the CLI.
+  //
+  // The route loaders catch up through the coalesced invalidate; the stores
+  // do not, and cannot: they are preloaded once when the application starts
+  // (`app/builders/app.tsx` skips a store that is already initialized), so
+  // the sidebar's Projects group, the agent pickers and the goal selectors
+  // showed whatever existed at launch until something on the page happened
+  // to call `refresh()` itself. That is why a project an agent created never
+  // appeared anywhere until the window was reloaded.
+  useRealtime(
+    "records:changed",
+    (payload: { collection?: string }) => {
+      invalidate();
+
+      switch (payload.collection) {
+        case "projects":
+          void aos.stores.projects.actions.refresh();
+          break;
+        case "goals":
+          void aos.stores.goals.actions.refresh();
+          break;
+        case "agents":
+          void aos.stores.agent.actions.refresh();
+          break;
+        case "artifacts":
+          void aos.stores.artifact.actions.refresh();
+          break;
+        case "views":
+          void aos.stores.view.actions.refresh();
+          break;
+        case "collections":
+          void aos.stores.collections.actions.refresh();
+          break;
+        default:
+          // Every other collection is read through react-query or a route
+          // loader, both of which the two calls above already cover.
+          break;
+      }
+    },
+    [invalidate],
+  );
+
   const { setProcessing } = aos.stores.agent.useActions();
 
   // Listen for real-time processing events

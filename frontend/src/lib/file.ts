@@ -121,6 +121,26 @@ function parseBody(body: string, status: number): unknown {
   }
 }
 
+/**
+ * A URL for one file's own bytes, for an element that takes a `src`.
+ *
+ * Deliberately relative, and it works in both modes for two different
+ * reasons. In a browser the daemon serves this page, so the request is
+ * same-origin and the session cookie goes with it. In the desktop window it
+ * reaches the application's own asset host, where a middleware forwards it to
+ * the daemon with the token this process holds (`cmd/aos-desktop`'s
+ * bridgeContent) — an `<img>` cannot carry a bearer, and the Wails bridge
+ * answers a JSON string, which is not a picture.
+ *
+ * The viewers used to build `/api/files/content` by hand: plural, a path no
+ * daemon has ever served, and in the window resolved against `wails://` where
+ * nothing would have answered anyway. Every image, PDF and video in the Files
+ * panel failed to load.
+ */
+export function contentURL(path: string): string {
+  return `/api/file/content?path=${encodeURIComponent(path)}`;
+}
+
 export async function tree(path: string, recursive = false): Promise<FileTree> {
   const qs = new URLSearchParams({ path, recursive: String(recursive) });
   return request(`/api/file/tree?${qs}`, { headers: headers() });

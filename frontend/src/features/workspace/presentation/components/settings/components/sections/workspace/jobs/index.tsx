@@ -2,8 +2,8 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { aos } from "@/app/aos";
-import { client } from "@/lib/client";
 import { t } from "@/lib/i18n";
+import { useAlert } from "@/components/ui/alert-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,27 +11,11 @@ import {
   FormSectionContent,
   FormSectionDescription,
   FormSectionHeader,
+  FormSectionItem,
   FormSectionTitle,
 } from "@/components/ui/form-section";
-
-interface QueueStats {
-  total: number;
-  byStatus?: Record<string, number>;
-  byQueue?: Record<string, number>;
-  dead?: string[];
-  stale?: string[];
-  at?: string;
-}
-
-interface JobRow {
-  id: string;
-  queue: string;
-  kind: string;
-  status: string;
-  attempts: number;
-  maxTries: number;
-  runAt?: string;
-}
+import { SettingsSectionShell } from "../../../section-shell";
+import type { Job, QueueStats } from "@/features/job/interfaces/job.interfaces";
 
 const STATUS_TONE: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   pending: "secondary",
@@ -40,6 +24,29 @@ const STATUS_TONE: Record<string, "default" | "secondary" | "destructive" | "out
   failed: "destructive",
   dead: "destructive",
 };
+
+/**
+ * The words a person reads for each of Go's job states.
+ *
+ * Keyed in English and translated where they are rendered, not where the
+ * table is declared: `t()` in a module runs once, at import, before the
+ * locale has been read — which would freeze whichever language happened to
+ * be the default inside the constant. The same reason the onboarding
+ * wizard's TONES and STYLES tables are written this way.
+ */
+const STATUS_LABEL: Record<string, string> = {
+  pending: "Pending",
+  claimed: "Running",
+  succeeded: "Succeeded",
+  failed: "Failed",
+  dead: "Dead",
+  retrying: "Retrying",
+};
+
+function statusLabel(status: string): string {
+  const known = STATUS_LABEL[status];
+  return known ? t(known) : status;
+}
 
 /**
  * The execution queue, which was invisible.
@@ -57,144 +64,174 @@ const STATUS_TONE: Record<string, "default" | "secondary" | "destructive" | "out
  */
 export function WorkspaceJobsSection(): React.JSX.Element {
   const workspaceId = aos.stores.workspace.useState((state) => state.current?.id);
-  const [stats, setStats] = React.useState<QueueStats | null>(null);
-  const [jobs, setJobs] = React.useState<JobRow[]>([]);
-  const [busy, setBusy] = React.useState(false);
+  const { confirm } = useAlert();
 
-  const refresh = React.useCallback(async () => {
-    if (!workspaceId) return;
-    try {
-      const [statsAnswer, listAnswer] = await Promise.all([
-        client.invoke("jobs_stats", {
-          workspace: workspaceId,
-          _reasoning: "the settings screen is showing the shape of the execution queue",
-        }) as Promise<QueueStats | undefined>,
-        client.invoke("jobs_list", {
-          workspace: workspaceId,
-          limit: 50,
-          _reasoning: "the settings screen is listing what the queue holds",
-        }) as Promise<{ jobs?: JobRow[] } | undefined>,
-      ]);
-      setStats(statsAnswer ?? null);
-      setJobs(listAnswer?.jobs ?? []);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("The queue could not be read."));
-    }
-  }, [workspaceId]);
+  // Through the facade, like every sibling section: the cache is keyed by
+  // feature so a realtime event can invalidate it, the loading state comes
+  // from the query rather than from a flag this file would have to keep, and
+  // the `_reasoning` every call carries is written once, in one place.
+  const statsQuery = aos.client.job.stats.useQuery<QueueStats>({
+    query: { workspace: workspaceId },
+    enabled: Boolean(workspaceId),
+  });
+  const jobsQuery = aos.client.job.list.useQuery<{ jobs?: Job[] }>({
+    query: { workspace: workspaceId, limit: 50 },
+    enabled: Boolean(workspaceId),
+  });
 
-  React.useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const refresh = React.useCallback(() => {
+    void statsQuery.refetch();
+    void jobsQuery.refetch();
+  }, [statsQuery.refetch, jobsQuery.refetch]);
 
-  const recover = async () => {
-    setBusy(true);
-    try {
-      const answer = (await client.invoke("jobs_recover", {
-        _reasoning: "a person is handing back the jobs whose worker stopped reporting",
-      })) as { recovered?: number } | undefined;
+  const { mutate: recoverJobs, loading: isRecovering } = aos.client.job.recover.useMutation({
+    onSuccess: (result: any) => {
       toast.success(
-        t("{{count}} jobs handed back to the queue.").replace("{{count}}", String(answer?.recovered ?? 0)),
+        t("{{count}} jobs handed back to the queue.", { count: result?.data?.recovered ?? 0 }),
       );
-      await refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("The jobs could not be recovered."));
-    } finally {
-      setBusy(false);
-    }
-  };
+      refresh();
+    },
+    onError: (error: any) => {
+      toast.error(error?.error?.message ?? error?.message ?? t("The jobs could not be recovered."));
+    },
+  });
+
+  const { mutate: purgeJobs, loading: isPurging } = aos.client.job.purge.useMutation({
+    onSuccess: (result: any) => {
+      toast.success(t("{{count}} finished jobs removed.", { count: result?.data?.removed ?? 0 }));
+      refresh();
+    },
+    onError: (error: any) => {
+      toast.error(error?.error?.message ?? error?.message ?? t("The queue could not be purged."));
+    },
+  });
 
   const purge = async () => {
-    setBusy(true);
-    try {
-      const answer = (await client.invoke("jobs_purge", {
-        _reasoning: "a person is clearing finished jobs older than the retention window",
-      })) as { removed?: number } | undefined;
-      toast.success(
-        t("{{count}} finished jobs removed.").replace("{{count}}", String(answer?.removed ?? 0)),
-      );
-      await refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("The queue could not be purged."));
-    } finally {
-      setBusy(false);
-    }
+    // Purge removes finished jobs across the whole installation, not just
+    // this workspace — the queue is one database for all of them. That is
+    // worth asking about once, the way every other destructive action here
+    // does, rather than being discovered from the count in the toast.
+    const confirmed = await confirm({
+      title: t("Remove finished jobs?"),
+      description: t(
+        "This removes succeeded and dead jobs older than the retention window, across every workspace of this installation. Work still queued or running is untouched.",
+      ),
+      confirmText: t("Remove"),
+      variant: "destructive",
+    });
+    if (!confirmed) return;
+    void purgeJobs({});
   };
 
+  const stats = statsQuery.data ?? null;
+  const jobs = jobsQuery.data?.jobs ?? [];
   const stale = stats?.stale ?? [];
   const dead = stats?.dead ?? [];
+  const busy = isRecovering || isPurging;
 
   return (
-    <FormSection>
-      <FormSectionHeader>
-        <FormSectionTitle>{t("Jobs")}</FormSectionTitle>
-        <FormSectionDescription>
-          {t("Every turn, routine and background task runs through this queue.")}
-        </FormSectionDescription>
-      </FormSectionHeader>
-      <FormSectionContent>
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">
-              {t("{{count}} total").replace("{{count}}", String(stats?.total ?? 0))}
-            </Badge>
-            {Object.entries(stats?.byStatus ?? {}).map(([status, count]) => (
-              <Badge key={status} variant={STATUS_TONE[status] ?? "outline"}>
-                {status}: {count}
-              </Badge>
-            ))}
-            <div className="ml-auto flex gap-2">
-              <Button size="sm" variant="secondary" disabled={busy} onClick={refresh}>
+    <SettingsSectionShell>
+      <FormSection>
+        <FormSectionHeader>
+          <FormSectionTitle>{t("Jobs")}</FormSectionTitle>
+          <FormSectionDescription>
+            {t("Every turn, routine and background task runs through this queue.")}
+          </FormSectionDescription>
+        </FormSectionHeader>
+
+        <FormSectionContent>
+          <FormSectionItem>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">{t("Queue")}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <Badge variant="secondary">
+                  {t("{{count}} total", { count: stats?.total ?? 0 })}
+                </Badge>
+                {Object.entries(stats?.byStatus ?? {}).map(([status, count]) => (
+                  <Badge key={status} variant={STATUS_TONE[status] ?? "outline"}>
+                    {statusLabel(status)}: {count}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={busy || statsQuery.isFetching}
+                onClick={refresh}
+              >
                 {t("Refresh")}
               </Button>
-              <Button size="sm" variant="secondary" disabled={busy || stale.length === 0} onClick={recover}>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={busy || stale.length === 0}
+                onClick={() => void recoverJobs({})}
+              >
                 {t("Recover stalled")}
               </Button>
-              <Button size="sm" variant="secondary" disabled={busy} onClick={purge}>
+              <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={purge}>
                 {t("Purge finished")}
               </Button>
             </div>
-          </div>
+          </FormSectionItem>
 
           {stale.length > 0 ? (
-            <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm">
-              {t(
-                "{{count}} jobs are held by a worker that stopped reporting. Recovering hands them back to the queue.",
-              ).replace("{{count}}", String(stale.length))}
-            </p>
-          ) : null}
-          {dead.length > 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {t("{{count}} jobs failed their last attempt.").replace("{{count}}", String(dead.length))}
-            </p>
+            <FormSectionItem>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-destructive">{t("Stalled work")}</p>
+                <p className="text-sm text-muted-foreground">
+                  {t(
+                    "{{count}} jobs are held by a worker that stopped reporting. Recovering hands them back to the queue.",
+                    { count: stale.length },
+                  )}
+                </p>
+              </div>
+            </FormSectionItem>
           ) : null}
 
-          <div className="overflow-auto rounded-lg border border-border/60">
-            {jobs.length === 0 ? (
+          {dead.length > 0 ? (
+            <FormSectionItem>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">{t("Failed work")}</p>
+                <p className="text-sm text-muted-foreground">
+                  {t("{{count}} jobs failed their last attempt.", { count: dead.length })}
+                </p>
+              </div>
+            </FormSectionItem>
+          ) : null}
+
+          <div className="divide-y divide-border">
+            {jobsQuery.isLoading ? (
+              <p className="p-4 text-sm text-muted-foreground">{t("Loading jobs...")}</p>
+            ) : jobs.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground">{t("The queue is empty.")}</p>
             ) : (
-              <ul className="divide-y divide-border/60">
-                {jobs.map((job) => (
-                  <li key={job.id} className="flex items-center gap-3 p-3 text-sm">
-                    <Badge variant={STATUS_TONE[job.status] ?? "outline"}>{job.status}</Badge>
-                    <span className="font-medium">{job.kind}</span>
-                    <span className="text-xs text-muted-foreground">{job.queue}</span>
-                    {job.attempts > 0 ? (
-                      <span className="text-xs text-muted-foreground">
-                        {t("attempt {{n}} of {{max}}")
-                          .replace("{{n}}", String(job.attempts))
-                          .replace("{{max}}", String(job.maxTries))}
-                      </span>
-                    ) : null}
-                    <span className="ml-auto font-mono text-[11px] text-muted-foreground">
-                      {job.id.slice(0, 8)}
+              jobs.map((job) => (
+                <div key={job.id} className="flex flex-wrap items-center gap-3 p-4">
+                  <Badge variant={STATUS_TONE[job.status] ?? "outline"}>
+                    {statusLabel(job.status)}
+                  </Badge>
+                  <span className="text-sm font-medium text-foreground">{job.kind}</span>
+                  <span className="text-sm text-muted-foreground">{job.queue}</span>
+                  {job.attempts > 0 ? (
+                    <span className="text-sm text-muted-foreground">
+                      {t("attempt {{n}} of {{max}}", { n: job.attempts, max: job.maxTries })}
                     </span>
-                  </li>
-                ))}
-              </ul>
+                  ) : null}
+                  <span className="ml-auto font-mono text-xs text-muted-foreground">
+                    {job.id.slice(0, 8)}
+                  </span>
+                </div>
+              ))
             )}
           </div>
-        </div>
-      </FormSectionContent>
-    </FormSection>
+        </FormSectionContent>
+      </FormSection>
+    </SettingsSectionShell>
   );
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/OWNER/aos/internal/core/apperr"
@@ -92,9 +93,24 @@ func (a *App) scopeFor(ctx context.Context) (*App, error) {
 	if a.scopes == nil {
 		return a, nil
 	}
-	id := identity.From(ctx).WorkspaceID
+	who := identity.From(ctx)
+	id := who.WorkspaceID
 	if id == "" {
-		return a, nil
+		// Nobody named a workspace, but the caller said where it is standing.
+		//
+		// A terminal inside a registered repository, or a coding agent
+		// reaching AOS over MCP from one, means *that* workspace — and until
+		// now every such call silently addressed the daemon's primary scope
+		// instead. `aos tasks list` run inside repo B listed repo A's tasks
+		// and reported nothing missing.
+		//
+		// The audit that fixed which directory `workspace_introspect`
+		// registers left this half undone: X-Working-Dir arrived, and only
+		// that one command read it.
+		id = a.workspaceAt(ctx, who.WorkingDir)
+		if id == "" {
+			return a, nil
+		}
 	}
 
 	target, err := a.scopes.forID(ctx, a.Workspaces, id)
@@ -105,6 +121,43 @@ func (a *App) scopeFor(ctx context.Context) (*App, error) {
 		return nil, err
 	}
 	return target, nil
+}
+
+// workspaceAt names the registered workspace a directory belongs to, or "".
+//
+// The longest registered path that is a prefix of dir wins, so a workspace
+// nested inside another resolves to the inner one — which is what somebody
+// standing in it means.
+func (a *App) workspaceAt(ctx context.Context, dir string) string {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return ""
+	}
+	dir = filepath.Clean(dir)
+
+	out, err := a.Workspaces.List(ctx, workspace.ListInput{
+		Reasoning: command.Reasoning{
+			Reasoning: "resolving which workspace the caller's directory belongs to",
+		},
+	})
+	if err != nil {
+		return ""
+	}
+
+	best, bestLen := "", 0
+	for _, w := range out.Workspaces {
+		root := filepath.Clean(w.Path)
+		if root == "." || root == string(filepath.Separator) {
+			continue
+		}
+		if dir != root && !strings.HasPrefix(dir, root+string(filepath.Separator)) {
+			continue
+		}
+		if len(root) > bestLen {
+			best, bestLen = w.ID, len(root)
+		}
+	}
+	return best
 }
 
 // forID finds or builds the services for one workspace id.

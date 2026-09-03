@@ -237,7 +237,7 @@ func (s *Service) Reflect(ctx context.Context, in ReflectInput) (*Memory, error)
 // fails, the knowledge still exists and the inconsistency is visible, whereas
 // deprecating first could leave the agent with neither.
 func (s *Service) Store(ctx context.Context, in StoreInput) (StoreOutput, error) {
-	owner := s.resolveAgent(ctx, "")
+	owner := s.resolveAgent(ctx, in.Agent)
 	if owner == "" {
 		return StoreOutput{}, errAgentRequired("Store")
 	}

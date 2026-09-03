@@ -304,6 +304,21 @@ its plan progress, and the dependencies still standing in its way.
       "type": "string",
       "description": "Only tasks serving this goal."
     },
+    "query": {
+      "type": "string",
+      "description": "Substring match over name and summary."
+    },
+    "priority": {
+      "type": "string",
+      "description": "Only tasks at this priority.",
+      "enum": [
+        "no_priority",
+        "urgent",
+        "high",
+        "medium",
+        "low"
+      ]
+    },
     "limit": {
       "type": "integer",
       "description": "How many to return."

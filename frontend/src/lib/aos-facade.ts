@@ -255,6 +255,23 @@ interface ActionNode {
   query<T = any>(opts?: CallOpts): Promise<Envelope<T>>;
   mutate<T = any>(opts?: CallOpts): Promise<Envelope<T>>;
   /**
+   * `mutate`, but a refusal is thrown rather than returned.
+   *
+   * `mutate` resolves with `{data, error}` and never rejects, which is the
+   * right shape for a caller that reads the envelope — and a trap for one
+   * written as `try { await …mutate(); toast.success() } catch { … }`. That
+   * shape was everywhere in the ported code, inherited from a generated
+   * client whose mutations *did* throw, and the consequence was uniform:
+   * every daemon refusal was reported to the person as a success. A task
+   * whose status the daemon refused to write showed "Moved to In Progress"
+   * over a task that had not moved.
+   *
+   * Both spellings are now available and neither is silently wrong. Reading
+   * the envelope stays the better one when the caller wants to show the
+   * message; this exists so the try/catch shape means what it says.
+   */
+  mutateOrThrow<T = any>(opts?: CallOpts): Promise<T>;
+  /**
    * `isDormant` says the Go side publishes no command for this path — known
    * from `COMMAND_MAP`, so it is true from the first render rather than
    * after a round trip. `data` is `null` in that case, exactly as it is
@@ -294,6 +311,11 @@ function actionNode(feature: string, action: string): ActionNode {
     // honest as the old fixed `<any>` was, just deferred to the call site.
     query: (opts) => call(feature, action, opts) as any,
     mutate: (opts) => call(feature, action, opts) as any,
+    mutateOrThrow: async (opts) => {
+      const answer = await call(feature, action, opts);
+      if (answer.error) throw answer.error;
+      return answer.data as any;
+    },
 
     // The ported code reads `q.data?.tasks`, not `q.data.data.tasks` — so
     // the hook unwraps the envelope and hands back the payload directly,

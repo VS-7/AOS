@@ -305,16 +305,18 @@ func (t routineTriggers) OnActivity(ctx context.Context, a activity.Activity) {
 
 // realtimeSink pushes an activity to whoever is watching.
 type realtimeSink struct {
-	hub       *realtime.Hub
-	workspace string
+	hub   *realtime.Hub
+	scope *eventScope
 }
 
 func (s realtimeSink) OnActivity(ctx context.Context, a activity.Activity) {
 	if s.hub == nil {
 		return
 	}
-	s.hub.Publish(ctx, realtime.ChannelFor(s.workspace), realtime.Event{
-		Type: realtime.EventActivity, Workspace: s.workspace, Data: a,
+	// Resolved per publish, not captured at wiring: see eventScope.
+	workspaceID := s.scope.ID(ctx)
+	s.hub.Publish(ctx, realtime.ChannelFor(workspaceID), realtime.Event{
+		Type: realtime.EventActivity, Workspace: workspaceID, Data: a,
 	})
 }
 

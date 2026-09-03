@@ -1,5 +1,6 @@
 import { AosTriggerGroup } from "@/app/builders/trigger";
 import type { WorkspaceContext } from "../stores/workspace.store";
+import { reloadHere } from "@/lib/wails";
 
 /**
  * Workspace-level triggers (switch workspace only).
@@ -23,7 +24,7 @@ export const workspaceGroup = AosTriggerGroup.create("Workspaces")
           return;
         }
         if (typeof window !== "undefined") {
-          window.location.reload();
+          reloadHere();
         }
       },
     }));

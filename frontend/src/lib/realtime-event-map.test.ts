@@ -27,27 +27,51 @@ function subscribeEvent(name: string, callback: (payload: unknown) => void): () 
 }
 
 describe("REALTIME_EVENT_MAP, exercised through the real delivery pipeline", () => {
-  it("chat:refresh fires on the daemon's chat.done, with chatId lifted from event.data.chat", () => {
+  // `replace: true` is the point of this one. At the end of a turn the stored
+  // transcript is authoritative and the local one is not — a partial answer
+  // from a turn that failed mid-stream, or a snapshot the merge preferred
+  // because it had more parts, stayed on screen otherwise.
+  it("chat:refresh asks for a verbatim replace on the daemon's chat.done", () => {
     const payloads: any[] = [];
     const unsubscribe = subscribeEvent("chat:refresh", (p) => payloads.push(p));
 
     const daemonEvent: RealtimeEvent = { type: "chat.done", data: { chat: "c-42", usage: { tokens: 10 } } };
     deliver(fakeQueryClient() as any, daemonEvent);
 
-    expect(payloads).toEqual([{ chatId: "c-42" }]);
+    expect(payloads).toEqual([{ chatId: "c-42", replace: true }]);
     unsubscribe();
   });
 
-  it("chat:refresh carries the snapshot on chat.message, which is what renders a turn as it happens", () => {
+  it("chat:refresh carries a translated snapshot on chat.message, which is what renders a turn as it happens", () => {
     const payloads: any[] = [];
     const unsubscribe = subscribeEvent("chat:refresh", (p) => payloads.push(p));
 
-    const message = { id: "m-1", role: "assistant", parts: [{ type: "tool-call", toolName: "memories_recall" }] };
+    const message = {
+      id: "m-1",
+      role: "assistant",
+      author: { type: "agent", id: "atlas" },
+      parts: [{ type: "tool-call", toolName: "memories_recall", toolCallId: "c-1" }],
+      createdAt: "2026-09-01T10:00:00Z",
+    };
     deliver(fakeQueryClient() as any, { type: "chat.message", data: { chat: "c-42", message } });
 
-    // `message` present is the branch use-chat.ts patches in locally; absent
-    // is the branch that refetches. Both have to reach the same callback.
-    expect(payloads).toEqual([{ chatId: "c-42", message }]);
+    // The snapshot goes through the same translator a stored message does. It
+    // used to be passed through raw, so the answer being written had no
+    // metadata: attributed to the chat's title rather than the agent, with no
+    // timestamp, and with each tool call rendered twice and never as running.
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0].chatId).toBe("c-42");
+    expect(payloads[0].message.metadata.type).toBe("agent");
+    expect(payloads[0].message.metadata.execution.status).toBe("running");
+    expect(payloads[0].message.parts).toEqual([
+      {
+        type: "tool-memories_recall",
+        toolCallId: "c-1",
+        toolName: "memories_recall",
+        input: undefined,
+        state: "input-available",
+      },
+    ]);
     unsubscribe();
   });
 

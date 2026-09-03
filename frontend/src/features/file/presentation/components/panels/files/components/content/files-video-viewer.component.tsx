@@ -2,6 +2,7 @@ import { t } from "@/lib/i18n";
 import React from "react"
 import { Maximize, Pause, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { contentURL } from "@/lib/file"
 import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces"
 
 interface FilesVideoViewerProps {
@@ -11,10 +12,7 @@ interface FilesVideoViewerProps {
 export function FilesVideoViewer({ file }: FilesVideoViewerProps) {
   const [playbackRate, setPlaybackRate] = React.useState(1)
   const videoRef = React.useRef<HTMLVideoElement>(null)
-  const contentUrl = React.useMemo(
-    () => `/api/files/content?path=${encodeURIComponent(file.path)}`,
-    [file.path],
-  )
+  const contentUrl = React.useMemo(() => contentURL(file.path), [file.path])
 
   return (
     <div className="grid h-full grid-rows-[auto_1fr]">

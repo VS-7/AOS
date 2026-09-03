@@ -236,11 +236,20 @@ type Query struct {
 }
 
 // Changed is published on the event bus after every successful write.
+//
+// The json tags are not decoration: this value is the payload of the
+// `collection.changed` frame the daemon puts on the WebSocket
+// (internal/app's collectionPublisher), so its field names are a wire
+// contract the interface reads. Without them it marshalled as Go names —
+// `Collection`, `Op`, `Path` — and every consumer on the other side, which
+// reads `collection`/`op`/`path`, saw undefined: the file panel filtered an
+// always-empty change list, and nothing could tell which collection had
+// moved.
 type Changed struct {
-	Collection string
-	Key        Key
-	Op         string // "create" | "update" | "delete"
-	Path       string
+	Collection string `json:"collection"`
+	Key        Key    `json:"key,omitempty"`
+	Op         string `json:"op"` // "create" | "update" | "delete"
+	Path       string `json:"path,omitempty"`
 }
 
 // Publisher is the slice of the event bus this engine needs.

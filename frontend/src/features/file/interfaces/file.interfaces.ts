@@ -318,6 +318,24 @@ export interface FileChangeEntry {
 }
 
 /**
+ * What the Changes header counts: how many files differ, and how many lines
+ * were added and removed across them.
+ *
+ * `additions`/`deletions` read 0 for now on every entry the daemon reports:
+ * `internal/adapters/gitcli.Changes` builds the list from
+ * `git status --porcelain`, which names paths and states and carries no line
+ * counts, and `internal/domain/file.Change` has no field for them either.
+ * They are summed rather than hardcoded so that the day the daemon reports
+ * per-file counts (a `git diff --numstat` pass beside the status one) the
+ * header starts showing them without a change here.
+ */
+export interface FileChangesSummary {
+  fileCount: number;
+  additions: number;
+  deletions: number;
+}
+
+/**
  * The file explorer/changes panel's combined server snapshot — flat path
  * list plus an index for O(1) directory/file lookups, the task list used
  * to label a `{ type: "task" }` context, and the changed-files list the
@@ -331,6 +349,14 @@ export interface FileExplorerSnapshot {
   pathIndex: Record<string, { type: "file" | "directory"; [key: string]: unknown }>;
   tasks?: Array<{ id: string; title: string }>;
   files?: FileChangeEntry[];
+  /**
+   * The aggregate the Changes header draws above the list. Required, not
+   * optional: `changes-content.tsx` reads it straight through
+   * (`snapshot.summary.fileCount`), so a snapshot that omits it is one the
+   * panel throws on — which is exactly what it did until every construction
+   * site was made to answer this field.
+   */
+  summary: FileChangesSummary;
   /** True for a read-only context (e.g. a non-checked-out branch). */
   readOnly?: boolean;
   /**

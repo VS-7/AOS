@@ -81,6 +81,16 @@ type SystemService struct {
 	health   Health
 	address  Addressable
 
+	// supervisor is what actually restarts the daemon, when this window has
+	// one. The daemon refuses to restart itself — Stop would signal its own
+	// pid — so the button in Settings › Daemon had nothing behind it: it
+	// asked the daemon to terminate itself, got a dropped connection, and
+	// left the window with no daemon at all.
+	//
+	// Nil in a build with no supervisor (a browser tab against a server), and
+	// the method says so rather than pretending.
+	supervisor Supervisor
+
 	// root is the workspace the window is looking at. Paths handed to the
 	// operating system are resolved inside it, because a renderer that could
 	// ask the shell to open any path is a renderer with a filesystem browser
@@ -112,6 +122,37 @@ type SystemService struct {
 // the workspace is resolved over HTTP after sign-in, long after this service
 // has to exist. Until then nothing is inside the workspace and every path is
 // refused, which is the safe end of that gap rather than the convenient one.
+// Supervisor is the slice of gateway.Service this window needs: bring the
+// daemon back, and say what state it ended in.
+type Supervisor interface {
+	Restart(ctx context.Context) error
+}
+
+// SetSupervisor installs what can restart the daemon. Called once, at wiring,
+// by cmd/aos-desktop — which is the process that launched it.
+func (s *SystemService) SetSupervisor(sup Supervisor) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.supervisor = sup
+}
+
+// RestartDaemon stops the daemon and starts it again.
+//
+// It lives here rather than being a command because of who is allowed to do
+// it: supervision belongs to whatever launched the daemon, and inside the
+// daemon `gateway_restart` now refuses (AOS_GATEWAY_SELF_RESTART) instead of
+// signalling its own pid and dying mid-request. This window is that
+// supervisor, so this is the one path that can honour the button.
+func (s *SystemService) RestartDaemon(ctx context.Context) error {
+	s.mu.RLock()
+	sup := s.supervisor
+	s.mu.RUnlock()
+	if sup == nil {
+		return errNoSupervisor()
+	}
+	return sup.Restart(ctx)
+}
+
 func NewSystem(platform Platform, health Health, root string) *SystemService {
 	svc := &SystemService{platform: platform, health: health, root: cleanRoot(root)}
 	// The health port is the daemon client in every real wiring, and it is
@@ -480,4 +521,20 @@ func errUnknownWindows(windows string) error {
 		Issue("valid", []string{"solid", "blur"}).
 		Status(apperr.StatusBadRequest).
 		CTA(apperr.CallToAction{Label: "use solid or blur"})
+}
+
+// errNoSupervisor is what a window with nothing behind it answers.
+//
+// A browser tab against a server daemon is the honest case: it is a client of
+// a process it did not launch, and restarting belongs to whatever did — a
+// systemd unit, or a terminal.
+func errNoSupervisor() error {
+	return apperr.New("DESKTOP_NO_SUPERVISOR").
+		Causer("wailsvc.SystemService.RestartDaemon").
+		Msgf("this client did not launch the daemon and cannot restart it").
+		Status(apperr.StatusConflict).
+		CTA(apperr.CallToAction{
+			Label:   "restart it where it was started, or from a terminal",
+			Command: build.Name + " gateway restart",
+		})
 }

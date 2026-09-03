@@ -97,12 +97,17 @@ func main() {
 
 	daemon := daemonclient.New(daemonclient.Options{
 		BaseURL: address,
-		// No token at construction: the first boot no longer self-provisions
-		// an account (see AuthService) — the window opens signed out, and
-		// AuthService.Login/Onboarding fills this in once a person has.
-		// AOS_TOKEN still overrides it, for pointing this window at a daemon
-		// it did not start and is already signed into.
-		Token:     resolver.String("TOKEN", ""),
+		// AOS_TOKEN first, for pointing this window at a daemon it did not
+		// start; then the installation's own credential, which is what makes
+		// the application remember you.
+		//
+		// It read neither. The token lived only in this process's memory and
+		// was set by AuthService.Login, so every launch of the application
+		// showed the Login page — while `aos` in a terminal on the same
+		// machine, as the same person, needed no password at all, because it
+		// reads exactly this file. There was nothing to log *into*: the
+		// account already existed and the credential was already on disk.
+		Token:     localToken(resolver, paths),
 		Workspace: resolver.String(env.KeyWorkspaceID, ""),
 	})
 
@@ -194,6 +199,10 @@ func main() {
 	// default folder for the first workspace. Registering it outright is what
 	// this process used to do, before the person had named anything.
 	systemSvc.SetLaunchDirectory(root)
+	// What actually restarts the daemon. Inside the daemon `gateway_restart`
+	// refuses — it would signal its own pid — so the button in Settings ›
+	// Daemon has to reach the process that launched it, which is this one.
+	systemSvc.SetSupervisor(daemonSupervisor{supervisor})
 
 	// adopt is the one place the resolved workspace is applied, so the two
 	// callers below — the daemon supervisor's first attempt and the one after
@@ -261,6 +270,10 @@ func main() {
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
+			// The one daemon path the window has to serve itself: an <img>
+			// cannot carry a bearer, and the bridge answers strings. See
+			// bridgeContent.
+			Middleware: bridgeContent(daemon, log),
 		},
 		LogLevel: slog.LevelWarn,
 	})
@@ -319,6 +332,33 @@ func main() {
 		log.Error("the window closed with an error", "err", err)
 		exitCode = 1
 	}
+}
+
+// localToken is the credential this installation already holds.
+//
+// `~/.aos/local.token` is written once, at onboarding, as the same-machine
+// credential (authapi's own doc comment); `aos` has always read it and the
+// window never did. Missing or unreadable is the ordinary case before
+// anybody has onboarded, and it means the window opens signed out — which is
+// correct, not a failure.
+func localToken(resolver *env.Resolver, paths corecfg.Paths) string {
+	if token := strings.TrimSpace(resolver.String("TOKEN", "")); token != "" {
+		return token
+	}
+	raw, err := os.ReadFile(paths.LocalToken())
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+// daemonSupervisor adapts the gateway service to the narrow slice the window's
+// bridge needs: bring the daemon back.
+type daemonSupervisor struct{ svc *gateway.Service }
+
+func (d daemonSupervisor) Restart(ctx context.Context) error {
+	_, err := d.svc.Restart(ctx, gateway.RestartInput{})
+	return err
 }
 
 // ensureDaemon starts the daemon if nothing is already answering, then tries

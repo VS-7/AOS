@@ -32,6 +32,14 @@ func (s *Sandbox) VerifyExec(name string, args []string) (string, error) {
 	if strings.TrimSpace(name) == "" {
 		return "", errExecNotFound(name)
 	}
+	// A whole command line in `command` is the most common mistake a model
+	// makes with this tool, and reporting it as a missing binary sent the
+	// model looking for the wrong problem: it would try other spellings of a
+	// program that is in fact installed, and the call to action pointed at
+	// the allowlist. The shape of the argument is what is wrong.
+	if strings.ContainsAny(name, " \t|&;<>()$`") {
+		return "", errExecNotACommandLine(name)
+	}
 
 	found, resolved, err := s.lookPath(name)
 	if err != nil {

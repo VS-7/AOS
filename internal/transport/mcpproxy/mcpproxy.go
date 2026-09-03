@@ -48,6 +48,16 @@ type Options struct {
 	// fail with nothing the client can do about it.
 	Agent string
 
+	// WorkingDir is where the client stands, forwarded as the same
+	// X-Working-Dir header the CLI sends.
+	//
+	// Without it a coding agent operating AOS from inside repository B
+	// addressed whatever the daemon's primary workspace happened to be:
+	// `workspace_introspect` registered the daemon's own directory, and
+	// every read and write landed in another repository's `.aos/` with
+	// nothing to say it had.
+	WorkingDir string
+
 	// Name and Version identify this proxy to the daemon and to the client
 	// on stdio.
 	Name    string
@@ -87,7 +97,7 @@ func Connect(ctx context.Context, opts Options) (*Proxy, error) {
 	upstream := *base
 	upstream.Transport = &identifying{
 		next: base.Transport, token: opts.Token,
-		workspace: opts.Workspace, agent: opts.Agent,
+		workspace: opts.Workspace, agent: opts.Agent, workingDir: opts.WorkingDir,
 	}
 
 	client := mcp.NewClient(&mcp.Implementation{Name: opts.Name + "-proxy", Version: opts.Version}, nil)
@@ -174,10 +184,11 @@ func forward(session *mcp.ClientSession, name string) mcp.ToolHandler {
 
 // identifying adds the daemon's credentials to every upstream request.
 type identifying struct {
-	next      http.RoundTripper
-	token     string
-	workspace string
-	agent     string
+	next       http.RoundTripper
+	token      string
+	workspace  string
+	agent      string
+	workingDir string
 }
 
 func (i *identifying) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -194,6 +205,9 @@ func (i *identifying) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	if i.agent != "" {
 		cloned.Header.Set("X-Agent-Id", i.agent)
+	}
+	if i.workingDir != "" {
+		cloned.Header.Set("X-Working-Dir", i.workingDir)
 	}
 	return next.RoundTrip(cloned)
 }

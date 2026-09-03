@@ -260,7 +260,7 @@ type publisher struct {
 
 	// channel names the workspace to publish under when the turn does not.
 	// See channelFor.
-	channel func(ctx context.Context, workspaceID string) string
+	scope *eventScope
 }
 
 // channelFor picks the channel a turn's events go out on.
@@ -282,8 +282,8 @@ type publisher struct {
 // daemon is up (`workspace_introspect`, from the desktop's own start-up),
 // so anything computed at wiring time would still be empty.
 func (p publisher) channelFor(ctx context.Context, workspaceID string) string {
-	if workspaceID == "" && p.channel != nil {
-		workspaceID = p.channel(ctx, workspaceID)
+	if workspaceID == "" {
+		workspaceID = p.scope.ID(ctx)
 	}
 	return realtime.ChannelFor(workspaceID)
 }
@@ -330,8 +330,8 @@ func (p publisher) ChatDone(ctx context.Context, workspaceID, chatID, agentID st
 
 // approvalNotifier turns a waiting approval into an event the desktop can show.
 type approvalNotifier struct {
-	hub       *realtime.Hub
-	workspace string
+	hub   *realtime.Hub
+	scope *eventScope
 }
 
 func (n approvalNotifier) ApprovalRequested(ctx context.Context, req event.ApprovalRequest) {
@@ -340,7 +340,12 @@ func (n approvalNotifier) ApprovalRequested(ctx context.Context, req event.Appro
 	}
 	workspaceID := req.Workspace
 	if workspaceID == "" {
-		workspaceID = n.workspace
+		// Resolved per publish, not captured at wiring: see eventScope. This
+		// is the fallback that made the approval dialog reachable at all —
+		// a request whose own Workspace is empty used to be published to
+		// ChannelFor(""), so nobody was ever asked and the call waited for
+		// its deadline.
+		workspaceID = n.scope.ID(ctx)
 	}
 	n.hub.Publish(ctx, realtime.ChannelFor(workspaceID), realtime.Event{
 		Type: realtime.EventApprovalRequest, Workspace: workspaceID, Data: req,
@@ -353,7 +358,12 @@ func (n approvalNotifier) ApprovalSettled(ctx context.Context, req event.Approva
 	}
 	workspaceID := req.Workspace
 	if workspaceID == "" {
-		workspaceID = n.workspace
+		// Resolved per publish, not captured at wiring: see eventScope. This
+		// is the fallback that made the approval dialog reachable at all —
+		// a request whose own Workspace is empty used to be published to
+		// ChannelFor(""), so nobody was ever asked and the call waited for
+		// its deadline.
+		workspaceID = n.scope.ID(ctx)
 	}
 	n.hub.Publish(ctx, realtime.ChannelFor(workspaceID), realtime.Event{
 		Type: realtime.EventApprovalRequest, Workspace: workspaceID,

@@ -150,15 +150,6 @@ discovered later as a blank screen.
       "additionalProperties": false
     },
     "tree": {
-      "type": [
-        "null",
-        "array"
-      ],
-      "items": {
-        "type": "integer",
-        "minimum": 0,
-        "maximum": 255
-      },
       "description": "The composed tree of catalog components: {component, props?, bind?, children?, actions?}, nested arbitrarily. Call views_components first to see what a component accepts."
     },
     "_reasoning": {

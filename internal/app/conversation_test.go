@@ -26,6 +26,8 @@ import (
 	"github.com/OWNER/aos/internal/runtime/agentloop"
 	"github.com/OWNER/aos/internal/runtime/providers"
 	"github.com/OWNER/aos/internal/runtime/providers/fake"
+	"github.com/OWNER/aos/internal/runtime/sandbox"
+	"github.com/OWNER/aos/internal/runtime/toolexec/tools"
 	"github.com/OWNER/aos/internal/transport/realtime"
 )
 
@@ -403,6 +405,73 @@ func TestAnAgentCannotApproveItsOwnToolCall(t *testing.T) {
 	// And it is on the other surfaces, where a person is.
 	if _, _, ok := a.Registry.Lookup("approvals_decide"); !ok {
 		t.Fatal("nobody can answer an approval at all")
+	}
+}
+
+// The rest of the privilege boundary command.Command's Registry field
+// describes: "gateway, auth and tunnels stay out of the agent's reach".
+//
+// The gateway group was inside it. `gateway_stop` offered to a model as an
+// ordinary tool terminates the process the turn is running in — the daemon
+// signals the pid it recorded for itself — so the turn dies silently and the
+// window loses the daemon it is talking to.
+func TestTheAgentIsNotOfferedTheInstallationsOwnControls(t *testing.T) {
+	a, _ := conversing(t)
+	forbidden := []string{"gateway_", "auth_", "tunnel_", "update_"}
+	for _, d := range a.Registry.AgentTools() {
+		for _, prefix := range forbidden {
+			if strings.HasPrefix(d.Key(), prefix) {
+				t.Errorf("%s is in the agent's tool registry", d.Key())
+			}
+		}
+	}
+	// Still reachable by a person, on every other surface.
+	if _, _, ok := a.Registry.Lookup("gateway_status"); !ok {
+		t.Error("nobody can ask after the daemon at all")
+	}
+	// Registering and unregistering a workspace is the shape of the
+	// installation, not work inside one.
+	for _, key := range []string{"workspace_create", "workspace_delete"} {
+		for _, d := range a.Registry.AgentTools() {
+			if d.Key() == key {
+				t.Errorf("%s is in the agent's tool registry", key)
+			}
+		}
+		if _, _, ok := a.Registry.Lookup(key); !ok {
+			t.Errorf("%s is not reachable on any surface", key)
+		}
+	}
+}
+
+// toolCeiling is the smallest documented per-request function limit among the
+// providers this runtime speaks to: OpenAI's Chat Completions API accepts "up
+// to 128 functions" in one request, which the compat providers (openrouter,
+// crof, opencode) all go through. Anthropic's own limit is far higher.
+//
+// A turn offers the model every agent-registry command plus the native
+// filesystem tools, in one list, on every step. At 133 the list was already
+// over this line: against a model that enforces it, every turn would be
+// refused before a single tool could run — and the list costs several
+// thousand prompt tokens per step on every provider besides.
+const toolCeiling = 128
+
+// TestTheToolListFitsInOneRequest is a ceiling, not a target. When it fails,
+// the answer is not to delete a capability somebody uses: it is to publish
+// composite per-group tools to the agent the way internal/transport/mcpserver
+// already does for MCP clients — one `Tasks({action})` tool instead of seven
+// — which collapses 121 commands into 23 groups and leaves room to grow.
+func TestTheToolListFitsInOneRequest(t *testing.T) {
+	a, _ := conversing(t)
+
+	box, err := sandbox.New(sandbox.Options{WorkspacePath: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	offered := len(a.Registry.AgentTools()) + len(tools.FS(box))
+
+	if offered > toolCeiling {
+		t.Errorf("a turn offers the model %d tools, more than the %d one request may carry — "+
+			"publish composite per-group tools rather than dropping a capability", offered, toolCeiling)
 	}
 }
 

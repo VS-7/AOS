@@ -35,8 +35,18 @@ type GetInput struct {
 // CreateInput is the payload of `agents create`, derived from the entity with
 // the server-owned fields removed.
 type CreateInput struct {
-	ID           string    `json:"id" cli:"arg" jsonschema:"Unique agent identifier (slug). Lowercase, no spaces. Example: \"atlas\"." validate:"required,max=64"`
-	Name         string    `json:"name,omitempty" jsonschema:"Human-readable display name. Defaults to the slug."`
+	// ID is optional because a caller who has a name has enough. It was
+	// required, and the interface's own "New agent" form — ported from an
+	// original whose server minted the id — never collected one, so creating
+	// an agent from the application failed with "id is required", every time.
+	// Every other domain that owns a slug already derives it (workspace,
+	// task, goal, instruction, project); this one simply never did.
+	ID   string `json:"id,omitempty" cli:"arg" jsonschema:"Unique agent identifier (slug). Lowercase, no spaces. Defaults to a slug of name. Example: \"atlas\"." validate:"max=64"`
+	Name string `json:"name,omitempty" jsonschema:"Human-readable display name. Defaults to the slug."`
+	// Image is on the entity and was not on either input, so the avatar the
+	// settings form edits was accepted by the decoder and dropped: the field
+	// existed in the interface, in the record, and nowhere in between.
+	Image        string    `json:"image,omitempty" jsonschema:"Avatar URL or data URI."`
 	Description  string    `json:"description,omitempty" jsonschema:"Orchestrator-facing summary of when to delegate to this agent."`
 	Role         string    `json:"role,omitempty" jsonschema:"Functional role label shown in delegation prompts."`
 	Leader       string    `json:"leader,omitempty" jsonschema:"Slug of the leader agent in a hierarchical team."`
@@ -46,7 +56,7 @@ type CreateInput struct {
 	Channels     []Channel `json:"channels,omitempty" jsonschema:"Communication channel bindings for this agent."`
 	Orchestrator bool      `json:"orchestrator,omitempty" jsonschema:"Marks the workspace orchestrator fallback for non-direct chats."`
 	Reasoning_   string    `json:"reasoning,omitempty" jsonschema:"How hard this agent should think: none, low, medium or high. Defaults to the installation's setting."`
-	Sandbox      *Sandbox  `json:"sandbox,omitempty" jsonschema:"Filesystem and execution policy. Absent means read-only with no execution at all."`
+	Sandbox      *Sandbox  `json:"sandbox,omitempty" jsonschema:"Filesystem and execution policy. Omit for the working default: read, write, delete and execution by allowlist, without a shell."`
 	Content      string    `json:"content,omitempty" jsonschema:"Markdown system instructions for the agent runtime."`
 
 	command.Reasoning
@@ -57,6 +67,7 @@ type CreateInput struct {
 type UpdateInput struct {
 	ID           string  `json:"id" cli:"arg" jsonschema:"Agent slug to update." validate:"required"`
 	Name         *string `json:"name,omitempty" jsonschema:"New display name."`
+	Image        *string `json:"image,omitempty" jsonschema:"New avatar URL or data URI. Empty string clears it."`
 	Description  *string `json:"description,omitempty" jsonschema:"New orchestrator-facing summary."`
 	Role         *string `json:"role,omitempty" jsonschema:"New functional role label."`
 	Leader       *string `json:"leader,omitempty" jsonschema:"New leader slug."`

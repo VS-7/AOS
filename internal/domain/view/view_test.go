@@ -282,6 +282,31 @@ func TestAnUnknownComponentIsRefusedNamingIt(t *testing.T) {
 	}
 }
 
+// The example every surface publishes for views_create — the tool
+// description, `aos views create --help`, SKILL.md — is the first thing a
+// model copies. It used to be refused by this domain's own validator: Table
+// requires `columns`, and the example neither gave nor bound it, so a model
+// following the documentation got AOS_VIEW_PROP_REQUIRED on its first view.
+//
+// This validates the exact published value, so it cannot drift back out of
+// the contract it exists to demonstrate.
+func TestTheExampleViewsCreateTreeIsAccepted(t *testing.T) {
+	svc := newService(t, withCollection(contactsSchema()))
+
+	var tree view.Node
+	if err := json.Unmarshal([]byte(view.ExampleTree), &tree); err != nil {
+		t.Fatalf("the published example is not a tree at all: %v", err)
+	}
+
+	if _, err := svc.Create(ctx(), view.CreateInput{
+		ID: "contacts-table", Title: "Contacts",
+		Source: view.Source{Collection: "contacts"},
+		Tree:   tree,
+	}); err != nil {
+		t.Fatalf("the published example of views_create is refused: %v", err)
+	}
+}
+
 func TestAMissingRequiredPropIsRefusedNamingIt(t *testing.T) {
 	svc := newService(t, withCollection(contactsSchema()))
 	// Heading declares `text` as required in the catalog.
