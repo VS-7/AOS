@@ -494,9 +494,15 @@ func New(opts Options) (*App, error) {
 		IDs:    idgen,
 		Logger: logger,
 	})
+	// The documented AOS_APPROVAL_DEADLINE, actually read. It was declared in
+	// env.settings and named in docs/system/08-operacao.md, and nothing ever
+	// consulted it: every request waited the domain's two minutes, which an
+	// operator running headless could neither shorten nor lengthen.
+	approvalDeadline := resolver.Duration(env.KeyApprovalDeadline, env.DefaultApprovalDeadline)
 	broker := event.NewBroker(event.BrokerDeps{
 		Clock: clock, IDs: idgen,
 		Notifier: approvalNotifier{hub: events, scope: scope},
+		Deadline: approvalDeadline,
 	})
 	closers = append(closers, func() error { broker.Close(); return nil })
 
@@ -769,16 +775,20 @@ func New(opts Options) (*App, error) {
 		// The broker is the interactive channel. A run with nobody present
 		// swaps it for the headless approver, which denies at once and says
 		// that is why — see ADR-0007.
-		Approver:      broker,
-		Prompt:        assembler,
-		Spiller:       toolexec.NewSpiller(paths.Outputs(), logger),
-		Events:        publisher{hub: events, scope: scope},
-		Bots:          botRegistry,
-		Clock:         clock,
-		IDs:           idgen,
-		Log:           logger,
-		WorkspaceRoot: root,
-		WorkspaceID:   active,
+		Approver: broker,
+		// The loop asks with this deadline; the broker enforces it. Both read
+		// the same setting, so they cannot disagree about how long a person
+		// has to answer.
+		ApprovalDeadline: approvalDeadline,
+		Prompt:           assembler,
+		Spiller:          toolexec.NewSpiller(paths.Outputs(), logger),
+		Events:           publisher{hub: events, scope: scope},
+		Bots:             botRegistry,
+		Clock:            clock,
+		IDs:              idgen,
+		Log:              logger,
+		WorkspaceRoot:    root,
+		WorkspaceID:      active,
 		// The turn resolves its own workspace when the scope was not pinned,
 		// so identity, the assembled prompt and every event a tool causes
 		// name the workspace the person is actually looking at.

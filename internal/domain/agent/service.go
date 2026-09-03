@@ -73,6 +73,15 @@ func (s *Service) Me(ctx context.Context, _ MeInput) (*Agent, error) {
 	return found, nil
 }
 
+// sandboxFor honours what the caller declared, and falls back to the working
+// default. See DefaultSandbox for why the fallback is not the zero value.
+func sandboxFor(declared *Sandbox) *Sandbox {
+	if declared != nil {
+		return declared
+	}
+	return DefaultSandbox()
+}
+
 // Create writes a new agent.
 func (s *Service) Create(ctx context.Context, in CreateInput) (*Agent, error) {
 	id := normalizeID(in.ID)
@@ -103,7 +112,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Agent, error) {
 		Channels:     in.Channels,
 		Orchestrator: in.Orchestrator,
 		Reasoning:    in.Reasoning_,
-		Sandbox:      in.Sandbox,
+		Sandbox:      sandboxFor(in.Sandbox),
 		Content:      in.Content,
 		CreatedAt:    now,
 		UpdatedAt:    now,

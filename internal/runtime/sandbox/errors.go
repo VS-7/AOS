@@ -138,6 +138,24 @@ func errExecNotFound(name string) error {
 		})
 }
 
+// errExecNotACommandLine says what is actually wrong with `Bash {command:
+// "ls -la"}`: the program and its arguments are two fields, not one string.
+//
+// Reported as "not installed" — which is what a lookPath failure on the whole
+// line looks like — the model retried other spellings of a program that was
+// there all along.
+func errExecNotACommandLine(line string) error {
+	program, _, _ := strings.Cut(strings.TrimSpace(line), " ")
+	return apperr.New("SANDBOX_EXEC_NOT_A_PROGRAM").
+		Causer("sandbox.VerifyExec").
+		Msgf("%q is a command line, not a program: pass the program alone and its arguments separately", line).
+		Issue("command", line).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{
+			Label: "call it as command=" + program + " with the rest in args",
+		})
+}
+
 // errExecNotAllowed carries the exact line to add. The friction of an allowlist
 // is real, and an error that says only "denied" turns it into a wall; an error
 // that says what to write turns it into a decision somebody makes once.

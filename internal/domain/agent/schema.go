@@ -52,7 +52,7 @@ type CreateInput struct {
 	Channels     []Channel `json:"channels,omitempty" jsonschema:"Communication channel bindings for this agent."`
 	Orchestrator bool      `json:"orchestrator,omitempty" jsonschema:"Marks the workspace orchestrator fallback for non-direct chats."`
 	Reasoning_   string    `json:"reasoning,omitempty" jsonschema:"How hard this agent should think: none, low, medium or high. Defaults to the installation's setting."`
-	Sandbox      *Sandbox  `json:"sandbox,omitempty" jsonschema:"Filesystem and execution policy. Absent means read-only with no execution at all."`
+	Sandbox      *Sandbox  `json:"sandbox,omitempty" jsonschema:"Filesystem and execution policy. Omit for the working default: read, write, delete and execution by allowlist, without a shell."`
 	Content      string    `json:"content,omitempty" jsonschema:"Markdown system instructions for the agent runtime."`
 
 	command.Reasoning

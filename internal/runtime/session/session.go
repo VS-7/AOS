@@ -67,13 +67,18 @@ type Deps struct {
 	Registry *command.Registry
 	Bus      *event.Service
 	Approver event.Approver
-	Prompt   *prompt.Assembler
-	Spiller  *toolexec.Spiller
-	Events   Publisher
-	Bots     Bots
-	Clock    clockx.Clock
-	IDs      interface{ New() string }
-	Log      *slog.Logger
+
+	// ApprovalDeadline bounds how long a tool call waits for a person. Zero
+	// means the domain default; the composition root reads
+	// AOS_APPROVAL_DEADLINE and passes the same value here and to the broker.
+	ApprovalDeadline time.Duration
+	Prompt           *prompt.Assembler
+	Spiller          *toolexec.Spiller
+	Events           Publisher
+	Bots             Bots
+	Clock            clockx.Clock
+	IDs              interface{ New() string }
+	Log              *slog.Logger
 
 	// WorkspaceRoot is the directory an agent is confined to when its task
 	// does not put it in a worktree of its own.
@@ -317,10 +322,11 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 		Provider: provider,
 		Tools:    registry,
 		Hooks: &agentloop.EventHooks{
-			Bus:       r.deps.Bus,
-			Approver:  r.deps.Approver,
-			Risk:      agentloop.RiskFromRegistry(registry),
-			Directory: box.Root(),
+			Bus:              r.deps.Bus,
+			Approver:         r.deps.Approver,
+			Risk:             agentloop.RiskFromRegistry(registry),
+			ApprovalDeadline: r.deps.ApprovalDeadline,
+			Directory:        box.Root(),
 		},
 		Clock:   r.deps.Clock,
 		Limits:  r.deps.Limits,

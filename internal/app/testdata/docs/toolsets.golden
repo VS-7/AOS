@@ -61,15 +61,6 @@ the tool's own argument shape is not already known.
       "description": "Name of the tool, as published by the connected target."
     },
     "input": {
-      "type": [
-        "null",
-        "array"
-      ],
-      "items": {
-        "type": "integer",
-        "minimum": 0,
-        "maximum": 255
-      },
       "description": "Arguments for the tool. Opaque to this service — call toolsets_get with schema:true first."
     },
     "_reasoning": {

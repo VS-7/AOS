@@ -1,6 +1,7 @@
 package command
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -21,6 +22,18 @@ import (
 // registration" means in practice. And every other JSON-visible field is
 // checked against the schema, so the next field the library drops fails the
 // build instead of disappearing from the contract.
+// CompleteSchema is completeSchema, for the one caller outside this package
+// that has to describe an input the same way: the agent's native tools
+// (internal/runtime/toolexec/tools).
+//
+// They infer their schema the same way and were not repairing it, so the six
+// tools a model reaches for most — Read, Write, Edit, Glob, Grep, Bash —
+// published no `_reasoning` at all. The master prompt requires one on every
+// call; the schema said otherwise and, being `additionalProperties: false`,
+// made sending one a violation. A tool that is exempt from the contract every
+// other tool is held to is a hole in the contract, not an exemption.
+func CompleteSchema(t reflect.Type, s *jsonschema.Schema) error { return completeSchema(t, s) }
+
 func completeSchema(t reflect.Type, s *jsonschema.Schema) error {
 	if s.Properties == nil {
 		s.Properties = map[string]*jsonschema.Schema{}
@@ -50,7 +63,58 @@ func completeSchema(t reflect.Type, s *jsonschema.Schema) error {
 	}
 
 	publishEnums(t, s)
+	openRawMessages(t, s)
 	return nil
+}
+
+// rawMessageType is json.RawMessage, which is a []byte and infers as one.
+var rawMessageType = reflect.TypeOf(json.RawMessage(nil))
+
+// openRawMessages replaces the schema of every json.RawMessage field with one
+// that accepts anything.
+//
+// A RawMessage is "whatever JSON the caller sends, kept verbatim" — the
+// arguments of an external tool, a view's component tree, the payload a person
+// corrected before approving. The inference library sees the underlying
+// []byte and publishes an array of integers between 0 and 255, which is what
+// the model was told to send: `toolsets_call.input` was described as a byte
+// array, so no schema-following model could pass arguments to an external tool
+// at all, and a strict provider would refuse an object outright.
+//
+// The daemon accepted objects anyway, because RawMessage unmarshals anything —
+// which is exactly why nothing caught it: the contract was wrong only where a
+// model could read it.
+func openRawMessages(t reflect.Type, s *jsonschema.Schema) {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return
+	}
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if f.PkgPath != "" {
+			continue
+		}
+		if f.Anonymous && f.Tag.Get("json") == "" {
+			openRawMessages(f.Type, s)
+			continue
+		}
+		if f.Type != rawMessageType {
+			continue
+		}
+		name := jsonNameOf(f)
+		if name == "" {
+			continue
+		}
+		// Keep the description — it is the only guidance the model has about
+		// what shape belongs there — and drop the type constraint.
+		description := ""
+		if existing, ok := s.Properties[name]; ok && existing != nil {
+			description = existing.Description
+		}
+		s.Properties[name] = &jsonschema.Schema{Description: description}
+	}
 }
 
 // publishEnums copies every closed set the validator already enforces into the

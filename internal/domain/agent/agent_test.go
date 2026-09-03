@@ -3,6 +3,7 @@ package agent_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -100,6 +101,48 @@ func TestCreateRejectsANameThatSlugsToNothing(t *testing.T) {
 	svc, _ := newService(t)
 	if _, err := svc.Create(ctx(), agent.CreateInput{Name: "  ***  "}); err == nil {
 		t.Fatal("an agent with no usable slug has no identity")
+	}
+}
+
+// The orchestrator's instructions tell it to create focused specialists, and
+// the settings screen's New Agent form has no sandbox field. Every agent
+// either produced was read-only with no execution, so its first Write or Bash
+// was refused and the specialist was useless from the moment it existed.
+func TestACreatedAgentCanActInTheWorkspace(t *testing.T) {
+	svc, _ := newService(t)
+	got, err := svc.Create(ctx(), agent.CreateInput{ID: "helper"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Sandbox == nil {
+		t.Fatal("a created agent has no sandbox, so it can read and nothing else")
+	}
+	for _, want := range []string{"read", "write", "execute"} {
+		if !slices.Contains(got.Sandbox.Permissions, want) {
+			t.Errorf("permissions %v do not include %q", got.Sandbox.Permissions, want)
+		}
+	}
+	if got.Sandbox.Exec == nil || got.Sandbox.Exec.Policy != "allowlist" {
+		t.Errorf("exec policy = %+v, want an allowlist (ADR-0006)", got.Sandbox.Exec)
+	}
+	if got.Sandbox.Exec != nil && got.Sandbox.Exec.AllowShell {
+		t.Error("the default handed out a shell, which makes the allowlist a suggestion")
+	}
+}
+
+// A caller that says what the agent may do gets exactly that, and nothing is
+// added to it.
+func TestADeclaredSandboxIsNotWidened(t *testing.T) {
+	svc, _ := newService(t)
+	got, err := svc.Create(ctx(), agent.CreateInput{
+		ID:      "reader",
+		Sandbox: &agent.Sandbox{Permissions: []string{"read"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Sandbox.Permissions) != 1 || got.Sandbox.Permissions[0] != "read" {
+		t.Errorf("permissions = %v, want exactly what was declared", got.Sandbox.Permissions)
 	}
 }
 

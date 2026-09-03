@@ -108,7 +108,7 @@ of them, because none of them is guaranteed to have been needed.`,
 				},
 			},
 		},
-		Registry:    true,
+		Registry:    false,
 		Annotations: command.Annotations{Title: "Create a workspace"},
 		Handler:     svc.Create,
 	})
@@ -149,7 +149,13 @@ This removes the registry entry and the derived state kept under the
 installation directory. It does not touch your repository: the ` + "`" + collections.Root + "/`" + `
 directory in it holds agents, memories and instructions that you wrote, and
 unregistering is not a request to delete them.`,
-		Registry:    true,
+		// Not in the agent's registry, with create below it. Registering and
+		// unregistering a workspace is the shape of the installation, not
+		// work inside one — the same boundary command.Command's Registry
+		// field draws around gateway, auth and tunnels. Both remain on the
+		// CLI, over MCP and over HTTP, which is where a person (or a coding
+		// agent operating AOS from outside) does this.
+		Registry:    false,
 		Annotations: command.Annotations{Title: "Unregister a workspace", DestructiveHint: true},
 		Handler:     svc.Delete,
 	})

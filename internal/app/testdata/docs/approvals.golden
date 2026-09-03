@@ -44,15 +44,6 @@ the same call in every future context.
       "description": "Why. A refusal without one leaves the agent guessing what to try instead."
     },
     "updatedInput": {
-      "type": [
-        "null",
-        "array"
-      ],
-      "items": {
-        "type": "integer",
-        "minimum": 0,
-        "maximum": 255
-      },
       "description": "A corrected payload to run instead of the one proposed."
     },
     "remember": {

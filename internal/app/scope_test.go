@@ -193,6 +193,42 @@ func TestAProjectWriteReachesTheRegisteredWorkspaceChannel(t *testing.T) {
 	}
 }
 
+// AOS_APPROVAL_DEADLINE was declared in env.settings and documented in
+// docs/system/08-operacao.md, and nothing read it: every request waited the
+// domain's two minutes whatever an operator set.
+func TestTheApprovalDeadlineIsTheOneThatWasConfigured(t *testing.T) {
+	home := t.TempDir()
+	root := t.TempDir()
+
+	a, err := app.New(app.Options{
+		Env: env.New(env.Map(map[string]string{
+			env.KeyHome:             home,
+			env.KeyApprovalDeadline: "300ms",
+		})),
+		WorkspaceRoot: root,
+		Clock:         clockx.System{},
+		IDs:           &ids.Sequence{Prefix: "id"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = a.Close() })
+
+	started := time.Now()
+	res, err := a.Approvals.RequestApproval(context.Background(), event.ApprovalRequest{
+		ToolName: "instructions_create", Reason: "nobody is going to answer",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Approved {
+		t.Error("an unanswered request was approved")
+	}
+	if waited := time.Since(started); waited > 30*time.Second {
+		t.Errorf("waited %s for a 300ms deadline", waited)
+	}
+}
+
 func TestAPendingApprovalReachesTheRegisteredWorkspaceChannel(t *testing.T) {
 	a, id := unpinnedApp(t)
 	ctx := context.Background()

@@ -792,3 +792,38 @@ func TestAnExecutableInTheWorkspaceCannotImpersonateAnAllowedBinary(t *testing.T
 		}
 	}
 }
+
+// The most common mistake a model makes with Bash is a whole command line in
+// `command`. Reported as "not installed" — which is what looking up the whole
+// line looks like — it sent the model hunting for a program that was there,
+// and the call to action pointed at the allowlist.
+func TestACommandLineIsNotReportedAsAMissingProgram(t *testing.T) {
+	box, err := sandbox.New(sandbox.Options{
+		WorkspacePath: t.TempDir(),
+		Permissions:   sandbox.PermissionsFrom([]string{"read", "execute"}),
+		Exec:          sandbox.ExecPolicy{Policy: "allowlist", Allow: []string{"ls"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = box.VerifyExec("ls -la", nil)
+	if err == nil {
+		t.Fatal("a command line was accepted as a program name")
+	}
+	e, ok := apperr.As(err)
+	if !ok {
+		t.Fatalf("error = %v, want a classified one", err)
+	}
+	if e.Code != "AOS_SANDBOX_EXEC_NOT_A_PROGRAM" {
+		t.Errorf("code = %q, want AOS_SANDBOX_EXEC_NOT_A_PROGRAM", e.Code)
+	}
+	if len(e.Actions) == 0 {
+		t.Error("the model is not told how to call it instead")
+	}
+
+	// The correct shape still works.
+	if _, err := box.VerifyExec("ls", []string{"-la"}); err != nil {
+		t.Errorf("the two-field form was refused: %v", err)
+	}
+}

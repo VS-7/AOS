@@ -88,7 +88,7 @@ export interface CommandMap {
     "reasoning"?: string;
     /** Functional role label shown in delegation prompts. */
     "role"?: string;
-    /** Filesystem and execution policy. Absent means read-only with no execution at all. */
+    /** Filesystem and execution policy. Omit for the working default: read, write, delete and execution by allowlist, without a shell. */
     "sandbox"?: {
     /** Which programs this agent may run. */
     "exec"?: {

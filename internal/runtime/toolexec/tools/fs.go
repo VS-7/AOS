@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -36,6 +37,13 @@ func define[In any](name, description string, ann command.Annotations,
 		// A schema that cannot be inferred is a programming error in this
 		// package, discovered the first time the process starts.
 		panic(fmt.Sprintf("tools: %s has an input type that cannot be described: %v", name, err))
+	}
+	// The same repair every registry command gets. Without it the inference
+	// library's silent drop of an embedded struct left these six tools
+	// publishing no `_reasoning`, so the model was never asked for one — and
+	// `additionalProperties: false` made sending one anyway a violation.
+	if err := command.CompleteSchema(reflect.TypeFor[In](), schema); err != nil {
+		panic(fmt.Sprintf("tools: %s has an input schema that could not be completed: %v", name, err))
 	}
 	ann.Title = name
 	return toolexec.Func{
