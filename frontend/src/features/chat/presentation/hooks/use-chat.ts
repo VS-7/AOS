@@ -15,6 +15,15 @@ export interface UseChatResult {
   isLoading: boolean;
   isRefreshing: boolean;
   refresh: () => void;
+  /**
+   * Refetches and applies the server's transcript verbatim, dropping whatever
+   * is only local.
+   *
+   * `refresh` merges, which is right while a turn streams and wrong after
+   * something removed messages: clearing the context left every message on
+   * screen, because the merge is an upsert and has nothing that deletes.
+   */
+  replaceAndRefresh: () => void;
   /** Inserts (or upserts by id) a message straight into local state — the optimistic echo for a just-submitted send. */
   appendMessage: (message: ChatMessage) => void;
   /** Swaps a locally-echoed message for the server-persisted one once the send mutation resolves. */
@@ -243,6 +252,11 @@ export function useChat({ chatId, enabled = true }: UseChatParams): UseChatResul
     return [...ids];
   }, [chatQuery.data?.chat?.messages, messages]);
 
+  const replaceAndRefresh = React.useCallback(() => {
+    replaceMessagesRef.current = true;
+    chatQuery.refetch();
+  }, [chatQuery.refetch]);
+
   return {
     chat,
     messages,
@@ -250,6 +264,7 @@ export function useChat({ chatId, enabled = true }: UseChatParams): UseChatResul
     isLoading: chatQuery.isLoading,
     isRefreshing: chatQuery.isFetching,
     refresh: chatQuery.refetch,
+    replaceAndRefresh,
     appendMessage: applyMessageSnapshot,
     replaceMessage,
     removeMessage,

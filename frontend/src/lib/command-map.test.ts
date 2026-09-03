@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { COMMAND_MAP, DORMANT_DOMAINS, isDormant } from "./command-map";
+import { COMMAND_MAP, COMPOSER_CONTEXT_PREFIX, DORMANT_DOMAINS, isDormant } from "./command-map";
+import { COMPOSER_PROMPT_PART_PREFIX } from "@/features/chat/presentation/helpers/composer.helper";
 import { COMMAND_KEYS } from "./schema";
 
 describe("COMMAND_MAP", () => {
@@ -86,5 +87,45 @@ describe("COMMAND_MAP", () => {
     expect(isDormant("goal")).toBe(false);
     expect(isDormant("collection")).toBe(false);
     expect(isDormant("task")).toBe(false);
+  });
+});
+
+// The composer attaches workspace instructions to a message as text parts
+// prefixed "[system-reminder]:", and it attaches them *before* what the
+// person typed. Joining every text part into one `text` therefore produced a
+// user message beginning with the reminder — and the renderer hides a text
+// part that starts with that prefix, rendering nothing when none is left, so
+// every message the person sent vanished the moment the daemon confirmed it.
+describe("chat.send separates what was typed from what was attached", () => {
+  it("sends the typed text as text and the reminders as context", () => {
+    const entry = COMMAND_MAP["chat.send"] as { coerceIn: Record<string, (v: unknown) => unknown> };
+    const coerced = entry.coerceIn.message({
+      parts: [
+        { type: "text", text: `${COMPOSER_CONTEXT_PREFIX} Workspace instruction attached: Apply "x".` },
+        { type: "text", text: "what time is it?" },
+      ],
+    }) as { text: string; context: string[] };
+
+    expect(coerced.text).toBe("what time is it?");
+    expect(coerced.context).toEqual([
+      `${COMPOSER_CONTEXT_PREFIX} Workspace instruction attached: Apply "x".`,
+    ]);
+  });
+
+  it("sends no context when nothing was attached", () => {
+    const entry = COMMAND_MAP["chat.send"] as { coerceIn: Record<string, (v: unknown) => unknown> };
+    const coerced = entry.coerceIn.message({
+      parts: [{ type: "text", text: "hello" }],
+    }) as { text: string; context: string[] };
+
+    expect(coerced.text).toBe("hello");
+    expect(coerced.context).toEqual([]);
+  });
+
+  // The prefix has to be the same string in all three places: the composer
+  // that writes it, this map that routes on it, and the renderer that hides
+  // it. A drift would silently hide messages again.
+  it("agrees with the composer about the prefix", () => {
+    expect(COMPOSER_CONTEXT_PREFIX).toBe(COMPOSER_PROMPT_PART_PREFIX);
   });
 });

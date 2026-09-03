@@ -307,12 +307,23 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 	// persisted are the same message — see chat.ReplyInput.MessageID.
 	answerID := r.newID()
 
+	// Held as a concrete value, not just as the Emitter interface: what it
+	// accumulated is what gets persisted, so the stored answer and the last
+	// thing the screen showed describe the turn the same way.
+	live := r.emitter(workspaceID, conversation.ID, answerID, worker.ID)
+
+	transcribed := transcript(conversation)
+	// How much of the loop's working transcript was already there. What comes
+	// after it is what this turn produced, which is the only reasoning that
+	// belongs on this answer.
+	seeded := len(transcribed)
+
 	state := &agentloop.State{
 		SessionID:    conversation.ID,
 		AgentID:      worker.ID,
 		Workspace:    workspaceID,
 		Instructions: instructions,
-		Messages:     transcript(conversation),
+		Messages:     transcribed,
 		Tools:        registry.Specs(),
 		Model:        model.Model,
 		Reasoning:    model.Reasoning,
@@ -330,7 +341,7 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 		},
 		Clock:   r.deps.Clock,
 		Limits:  r.deps.Limits,
-		Emitter: r.emitter(workspaceID, conversation.ID, answerID, worker.ID),
+		Emitter: live,
 		Log:     r.log,
 	})
 
@@ -345,7 +356,13 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 	// agentloop for the interface it builds — the reverse import would cycle.
 	result.Usage.CostUSD = providers.CostUSD(model.Provider, model.Model, result.Usage)
 
-	if err = r.persist(ctx, in, worker.ID, answerID, started, result); err != nil {
+	// The tail of the answer. Delta publishes at most every snapshotInterval,
+	// so whatever the model produced in the last fraction of a second was
+	// accumulated and never sent — the screen kept a snapshot missing the
+	// final words until something forced a refetch.
+	live.flush(ctx)
+
+	if err = r.persist(ctx, in, worker.ID, answerID, started, result, live.reasoningBlocks(seeded, result)); err != nil {
 		return result, err
 	}
 	if r.deps.Events != nil {
@@ -446,7 +463,7 @@ func (r *Runner) toolsFor(box *sandbox.Sandbox) *toolexec.Registry {
 	return registry
 }
 
-func (r *Runner) emitter(workspaceID, chatID, messageID, agentID string) agentloop.Emitter {
+func (r *Runner) emitter(workspaceID, chatID, messageID, agentID string) *liveAnswer {
 	if r.deps.Events == nil {
 		return nil
 	}
@@ -589,6 +606,57 @@ func (l *liveAnswer) publish(ctx context.Context, message chat.Message) {
 	l.runner.deps.Events.ChatMessage(ctx, l.workspaceID, l.chatID, message)
 }
 
+// flush publishes what has arrived since the last snapshot, whatever the
+// throttle says.
+//
+// Delta only publishes every snapshotInterval, which is right while an answer
+// is being written and wrong at the end of it: the last fraction of a second
+// of text was accumulated and never sent, so the screen kept a snapshot
+// missing the final words of the answer until something else forced a
+// refetch. A nil receiver is the no-publisher build, where there is nothing
+// to flush.
+func (l *liveAnswer) flush(ctx context.Context) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	l.closeBlockLocked()
+	snapshot := l.snapshotLocked()
+	l.mu.Unlock()
+	l.publish(ctx, snapshot)
+}
+
+// reasoningBlocks is what the turn thought, in the order the snapshots showed it.
+//
+// Taken from the accumulator rather than re-derived, so the stored answer and
+// the last thing the screen showed carry the same blocks in the same order.
+// Without a publisher there is no accumulator, and the loop's own transcript
+// answers instead: everything after the messages the turn was seeded with.
+func (l *liveAnswer) reasoningBlocks(seeded int, result *agentloop.Result) []string {
+	if l != nil {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.closeBlockLocked()
+		return append([]string(nil), l.blocks...)
+	}
+	if result == nil || len(result.Messages) < seeded {
+		// A compaction shrank the transcript, so the index no longer names a
+		// boundary. Nothing is better than the wrong slice of somebody
+		// else's turn.
+		return nil
+	}
+	var out []string
+	for _, m := range result.Messages[seeded:] {
+		if m.Role != agentloop.RoleAssistant {
+			continue
+		}
+		if block := strings.TrimSpace(m.Reasoning); block != "" {
+			out = append(out, block)
+		}
+	}
+	return out
+}
+
 // persist writes the answer back into the conversation.
 //
 // Everything the turn did goes in: the text, the reasoning, and every tool call
@@ -599,10 +667,21 @@ func (l *liveAnswer) publish(ctx context.Context, message chat.Message) {
 //
 // Pure and separate from persist so the scoping rule below is testable
 // without standing up the conversation aggregate.
-func answerParts(result *agentloop.Result) []chat.Part {
+func answerParts(result *agentloop.Result, reasoning []string) []chat.Part {
 	parts := []chat.Part{}
 	if result.Text != "" {
 		parts = append(parts, chat.Part{Type: chat.PartText, Text: result.Text})
+	}
+
+	// The reasoning, in the same position the live snapshot puts it.
+	//
+	// It was streamed and then dropped: `liveAnswer` published a reasoning
+	// part per model call and this function persisted none, so the thinking
+	// steps a person had just watched disappeared the moment the answer was
+	// stored — and the stored message had fewer parts than the snapshot,
+	// which is what kept the interface's merge from ever replacing it.
+	for _, block := range reasoning {
+		parts = append(parts, chat.Part{Type: chat.PartReasoning, Text: block})
 	}
 
 	// Only the calls this turn actually made.
@@ -639,8 +718,8 @@ func answerParts(result *agentloop.Result) []chat.Part {
 	return parts
 }
 
-func (r *Runner) persist(ctx context.Context, in chat.Turn, agentID, answerID string, started time.Time, result *agentloop.Result) error {
-	parts := answerParts(result)
+func (r *Runner) persist(ctx context.Context, in chat.Turn, agentID, answerID string, started time.Time, result *agentloop.Result, reasoning []string) error {
+	parts := answerParts(result, reasoning)
 
 	_, err := r.deps.Chats.Reply(ctx, chat.ReplyInput{
 		Chat:      in.ChatID,

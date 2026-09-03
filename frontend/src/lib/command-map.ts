@@ -1,4 +1,5 @@
 import type { CommandKey } from "./schema";
+import { toUiChat, toUiMessage } from "./chat-message";
 import * as fileApi from "./file";
 import * as fileExplorer from "./file-explorer";
 import * as authApi from "./auth";
@@ -118,66 +119,26 @@ export type MapEntry = CommandKey | CommandDescriptor | HttpHandler | null;
 const s = (p: Record<string, unknown>, k: string): string => String(p[k] ?? "");
 
 /**
- * Lifts a stored message's flat fields into the `metadata` block the ported
- * chat code reads.
+ * The marker the composer puts on material it attached rather than the person
+ * typed (`COMPOSER_PROMPT_PART_PREFIX` in `composer.helper.ts`, and the same
+ * string the message renderer hides on).
  *
- * Go's `chat.Message` (`internal/domain/chat/entity.go`) carries `createdAt`
- * and `runs` at the top level and has no `metadata` at all; every consumer on
- * this side reads `message.metadata.createdAt`, `metadata.runs` and
- * `metadata.execution`. So every one of them read `undefined`, which is why
- * the thinking header showed "Worked for 0s" on turns that took minutes, and
- * why message timestamps never rendered: `getElapsedMs` finds no start, and
- * returns zero rather than guessing.
- *
- * `execution` is the newest attempt. Go records every attempt in `runs`, and
- * "is this still running" and "how long did it take" are questions about the
- * latest one.
+ * Declared here too rather than imported, so this map — which every feature
+ * loads — does not pull a presentation helper and its transitive imports in
+ * with it. The renderer and the composer already agree on the literal; a test
+ * pins all three together.
  */
-const withMessageMetadata = (chat: unknown): unknown => {
-  if (chat === null || typeof chat !== "object") return chat;
-  const record = chat as Record<string, unknown>;
-  const messages = record["messages"];
-  if (!Array.isArray(messages)) return chat;
+export const COMPOSER_CONTEXT_PREFIX = "[system-reminder]:";
 
-  return {
-    ...record,
-    messages: messages.map((raw) => {
-      if (raw === null || typeof raw !== "object") return raw;
-      const message = raw as Record<string, unknown>;
-      const runs = Array.isArray(message["runs"]) ? (message["runs"] as Record<string, unknown>[]) : [];
-      const latest = runs.length > 0 ? runs[runs.length - 1] : undefined;
-      const role = String(message["role"] ?? "");
-      const author = message["author"] as Record<string, unknown> | undefined;
-
-      return {
-        ...message,
-        metadata: {
-          ...((message["metadata"] as Record<string, unknown>) ?? {}),
-          type: role === "assistant" ? "agent" : role === "system" ? "system" : "user",
-          data: { id: String(author?.["id"] ?? "") },
-          createdAt: message["createdAt"],
-          // Go has no per-message updatedAt; the newest attempt's end is the
-          // closest true answer, and `getElapsedMs` falls back past it when
-          // there is none.
-          updatedAt: latest?.["completedAt"] ?? message["createdAt"],
-          runs,
-          execution: latest
-            ? {
-                agentId: latest["agentId"],
-                jobId: latest["jobId"],
-                // Go's Status has five values; this side's execution status
-                // has two. Anything not finished is still running as far as
-                // the header is concerned.
-                status: latest["completedAt"] ? "completed" : "running",
-                startedAt: latest["startedAt"],
-                completedAt: latest["completedAt"],
-              }
-            : undefined,
-        },
-      };
-    }),
-  };
-};
+/**
+ * A chat, with every message translated for the ported components.
+ *
+ * The translation itself lives in `lib/chat-message.ts`, because a message
+ * arrives through three doors — a chat read, the echo of a send, and the live
+ * snapshot on the realtime channel — and only the first went through this
+ * one. See that file for what it fixes and why.
+ */
+const withMessageMetadata = (chat: unknown): unknown => toUiChat(chat);
 
 /** One level in: `nested(p, "user", "name")` reads `p.user.name` as a string. */
 const nested = (p: Record<string, unknown>, group: string, k: string): string => {
@@ -378,17 +339,39 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // it further (e.g. rejecting the send, or showing the user their
   // attachment won't arrive) is a UI decision for whoever owns the
   // composer, not something this map can express.
+  //
+  // The reminder parts go to `context`, not into `text`. They used to be
+  // joined into it — and they come *first*, since the composer attaches
+  // instructions ahead of what was typed — so a workspace with a single
+  // workspace-wide instruction produced a user message whose text began
+  // "[system-reminder]: …". The renderer hides a text part that starts with
+  // that prefix and renders nothing when none is left, so every message the
+  // person sent appeared while it was an optimistic echo and vanished the
+  // moment the daemon confirmed it. The model also read the reminder as part
+  // of the user's own words.
   "chat.send": {
     key: "chats_send",
     coerceIn: {
       message: (value) => {
         const parts = (value as { parts?: Array<{ type: string; text?: string }> } | undefined)?.parts ?? [];
-        const text = parts
+        const texts = parts
           .filter((part) => part.type === "text" && typeof part.text === "string")
-          .map((part) => part.text)
-          .join("\n\n");
-        return { text };
+          .map((part) => part.text as string);
+        return {
+          text: texts.filter((text) => !text.startsWith(COMPOSER_CONTEXT_PREFIX)).join("\n\n"),
+          context: texts.filter((text) => text.startsWith(COMPOSER_CONTEXT_PREFIX)),
+        };
       },
+    },
+    // The echo the composer swaps in for its optimistic message. Without
+    // this it arrived raw, so the confirmed message lost the timestamp and
+    // the day divider its echo had, and got them back only on the next
+    // refetch.
+    mapOut: (out) => {
+      if (!out || typeof out !== "object") return out;
+      const answered = out as Record<string, unknown>;
+      if (!answered["message"]) return out;
+      return { ...answered, message: toUiMessage(answered["message"]) };
     },
   },
 

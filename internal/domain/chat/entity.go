@@ -145,6 +145,15 @@ type Message struct {
 	Author *Author `json:"author,omitempty" jsonschema:"Who wrote it."`
 	Parts  []Part  `json:"parts" jsonschema:"The content, in order."`
 
+	// ReplyTo names the message this one answers, which is where the
+	// execution attempt that produced it is recorded (see Runs below).
+	//
+	// Without it an answer had no way back to its own run: the interface reads
+	// "how long did this take" and "did it fail" off the answer, found nothing
+	// there, and showed "Worked for 0s" on turns that took minutes. The link
+	// existed only in the opposite direction, and only for the writer.
+	ReplyTo string `json:"replyTo,omitempty" jsonschema:"Message this one answers. The attempt that produced it is recorded there."`
+
 	Reactions []Reaction `json:"reactions,omitempty" jsonschema:"Reactions applied to this message."`
 
 	// Runs records every attempt to answer this message: status, token usage

@@ -35,6 +35,7 @@ export function useChatComposer({
   agents,
   chat,
   isDirectMessage = false,
+  onCleared,
   onConfirmed,
   onFailed,
   onSent,
@@ -125,6 +126,10 @@ export function useChatComposer({
     aos.client.chat.clear.useMutation({
       onSuccess: () => {
         toast.success(t("Chat context cleared."));
+        // The transcript is gone on the server; the live merge only adds, so
+        // it has to be told to take the server's version whole. Without this
+        // every cleared message stayed on screen.
+        onCleared?.();
       },
       onError: (error: any) => {
         toast.error(

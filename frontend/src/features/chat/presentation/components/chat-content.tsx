@@ -108,6 +108,7 @@ export function ChatContent({ chatId, userName, userId }: ChatContentProps) {
           agents={agents}
           chat={chat}
           isDirectMessage={isAgentDirectMessage}
+          onCleared={liveChat.replaceAndRefresh}
           onConfirmed={liveChat.replaceMessage}
           onFailed={liveChat.removeMessage}
           onSent={liveChat.appendMessage}

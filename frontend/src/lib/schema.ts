@@ -332,6 +332,8 @@ export interface CommandMap {
     "agent"?: string;
     /** Conversation to write to. */
     "chat": string;
+    /** Material attached to the message for the agent to read, kept apart from what the person typed. */
+    "context"?: unknown;
     /** What to say. Address a specific agent with @slug. */
     "text": string;
   }; output: unknown };

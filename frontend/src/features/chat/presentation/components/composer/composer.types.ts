@@ -39,6 +39,14 @@ export interface ChatComposerProps {
     message: import("@/features/chat/interfaces/chat.interfaces").ChatMessage,
   ) => void;
   onFailed?: (messageId?: string) => void;
+  /**
+   * Fires when the transcript was emptied (`chats_clear`).
+   *
+   * Clearing removes messages, and the live merge only ever adds — so
+   * without this the cleared messages stayed on screen until the tab was
+   * closed and reopened. `ChatContent` wires it to the replacing refresh.
+   */
+  onCleared?: () => void;
   userId?: string;
 }
 

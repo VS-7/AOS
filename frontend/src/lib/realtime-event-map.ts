@@ -1,3 +1,4 @@
+import { toLiveUiMessage } from "./chat-message";
 import type { RealtimeEvent } from "./realtime";
 
 /**
@@ -82,12 +83,25 @@ export const REALTIME_EVENT_MAP: Record<string, RealtimeMapEntry> = {
   // at the very end of a turn, so nothing at all appeared while the agent
   // worked — no text, and no sign of the tool calls that are usually the
   // slowest part of it.
+  //
+  // The snapshot goes through the same translator a stored message does
+  // (`lib/chat-message.ts`). It used to be passed through raw, so the answer
+  // being written had no metadata at all: it was attributed to the chat's
+  // title instead of the agent, carried no timestamp and no elapsed time, and
+  // showed each of its tool calls twice and never as running.
+  //
+  // `chat.done` asks for a verbatim replace. At the end of a turn the stored
+  // transcript is authoritative and the local one is not: a partial answer
+  // from a turn that failed mid-stream, or the tail of a snapshot the merge
+  // preferred because it had more parts, would otherwise stay on screen
+  // forever beside the failure banner. The user's own message is persisted
+  // before the turn is dispatched, so nothing of theirs is lost by replacing.
   "chat:refresh": {
     type: ["chat.message", "chat.done"],
     adapt: (event) =>
       event.type === "chat.message"
-        ? { chatId: event.data?.["chat"], message: event.data?.["message"] }
-        : { chatId: event.data?.["chat"] },
+        ? { chatId: event.data?.["chat"], message: toLiveUiMessage(event.data?.["message"]) }
+        : { chatId: event.data?.["chat"], replace: true },
   },
 
   // `layout/index.tsx`'s two `setProcessing(chatId, agentId, ...)` listeners,

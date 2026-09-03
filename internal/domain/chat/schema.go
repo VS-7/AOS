@@ -100,6 +100,19 @@ type SendInput struct {
 	// inside prose a person will read.
 	Agent string `json:"agent,omitempty" jsonschema:"Answer with this agent regardless of what the text mentions."`
 
+	// Context is what was attached to the message rather than typed into it:
+	// the workspace instructions the composer pulls in, the content of a file
+	// somebody referenced.
+	//
+	// It exists because there was nowhere else to put it. The interface
+	// prepended each of these to Text, so a message whose first part was an
+	// attached instruction had the whole of the user's own words swallowed by
+	// it — and the renderer, which hides a text part beginning with
+	// "[system-reminder]:", then hid the entire message the moment the daemon
+	// confirmed it. What a person wrote and what was attached for the model to
+	// read are two things, and they are stored as two things.
+	Context []string `json:"context,omitempty" jsonschema:"Material attached to the message for the agent to read, kept apart from what the person typed."`
+
 	command.Reasoning
 }
 

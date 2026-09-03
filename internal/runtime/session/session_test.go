@@ -252,7 +252,7 @@ func TestAnAnswerCarriesOnlyTheToolCallsOfItsOwnTurn(t *testing.T) {
 	}
 
 	var calls, results []string
-	for _, p := range answerParts(result) {
+	for _, p := range answerParts(result, nil) {
 		switch p.Type {
 		case chat.PartToolCall:
 			calls = append(calls, p.ToolCallID)
@@ -270,8 +270,38 @@ func TestAnAnswerCarriesOnlyTheToolCallsOfItsOwnTurn(t *testing.T) {
 }
 
 func TestAnAnswerWithNoToolsIsJustItsText(t *testing.T) {
-	parts := answerParts(&agentloop.Result{Text: "hello"})
+	parts := answerParts(&agentloop.Result{Text: "hello"}, nil)
 	if len(parts) != 1 || parts[0].Type != chat.PartText || parts[0].Text != "hello" {
 		t.Fatalf("parts = %#v, want one text part", parts)
+	}
+}
+
+// The reasoning was streamed and then dropped: liveAnswer published a part per
+// model call and persistence kept none, so the thinking steps a person had
+// just watched vanished when the answer was stored — and the stored message
+// had fewer parts than the last snapshot, which is what stopped the
+// interface's merge from ever replacing it.
+func TestAnAnswerCarriesTheReasoningItStreamed(t *testing.T) {
+	parts := answerParts(
+		&agentloop.Result{Text: "done"},
+		[]string{"first I looked", "then I decided"},
+	)
+
+	var text, reasoning []string
+	for _, p := range parts {
+		switch p.Type {
+		case chat.PartText:
+			text = append(text, p.Text)
+		case chat.PartReasoning:
+			reasoning = append(reasoning, p.Text)
+		}
+	}
+	if len(text) != 1 || text[0] != "done" {
+		t.Errorf("text = %v, want the answer", text)
+	}
+	// One part per block, in order — the same shape the snapshot published,
+	// so the stored message is not visibly rearranged when it lands.
+	if len(reasoning) != 2 || reasoning[0] != "first I looked" || reasoning[1] != "then I decided" {
+		t.Errorf("reasoning = %v, want one part per block in order", reasoning)
 	}
 }

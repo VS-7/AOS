@@ -295,10 +295,22 @@ func (s *Service) Send(ctx context.Context, in SendInput) (SendOutput, error) {
 	}
 
 	now := s.clock.Now()
+	// The person's own words first, then whatever was attached. The order is
+	// the point: a renderer that hides attached context still finds the
+	// message's own text, and a reader — human or model — sees what was asked
+	// before what was supplied.
+	parts := make([]Part, 0, 1+len(in.Context))
+	parts = append(parts, Part{Type: PartText, Text: in.Text})
+	for _, attached := range in.Context {
+		if strings.TrimSpace(attached) == "" {
+			continue
+		}
+		parts = append(parts, Part{Type: PartText, Text: attached})
+	}
 	msg := Message{
 		ID:        s.ids.New(),
 		Role:      RoleUser,
-		Parts:     []Part{{Type: PartText, Text: in.Text}},
+		Parts:     parts,
 		CreatedAt: now,
 	}
 	if actor, kind := identity.Actor(ctx); actor != "" {
@@ -480,6 +492,7 @@ func (s *Service) Reply(ctx context.Context, in ReplyInput) (ReplyOutput, error)
 			Role:      RoleAssistant,
 			Author:    &Author{Type: ActorAgent, ID: in.AgentID},
 			Parts:     in.Parts,
+			ReplyTo:   in.ReplyTo,
 			CreatedAt: now,
 		}
 		c.Messages = append(c.Messages, msg)
