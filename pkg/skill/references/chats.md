@@ -82,6 +82,21 @@ system. Read one with `chats get`.
 - the recent conversations
 - only direct messages
 
+### `chats_react`
+
+Toggle a reaction on a message.
+
+Leave a mark on one message, or take it back.
+
+Sending the same reaction twice removes it — which is what clicking the same
+emoji twice means, and what keeps one actor from stacking three identical
+marks on one message.
+
+Who is reacting comes from the identity of the call, never from the payload:
+a caller that could name the actor could react as somebody else.
+
+- agree with an answer
+
 ### `chats_send`
 
 Write to a conversation.
@@ -96,6 +111,22 @@ waiting through.
 
 - ask whoever is listening
 - ask a specific agent
+
+### `chats_stop`
+
+Stop the turn running on a conversation.
+
+Ask the agent working on this conversation to stop.
+
+The turn ends where it is: what it had already written is kept, and the
+attempt is recorded as interrupted rather than as an error, because somebody
+stopping an agent is not the agent failing.
+
+Answering `stopped: false` is not a refusal. A person presses this
+when they see an agent working, and by the time the call lands the turn may
+have finished on its own.
+
+- it is going the wrong way
 
 ### `chats_update`
 
