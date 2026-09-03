@@ -13,6 +13,13 @@ export interface CommandMap {
     /** Identifier of the entry. */
     "id": string;
   }; output: unknown };
+  /** What a routine can react to. */
+  "activity_events": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Only the events of this namespace. Empty means all of them. */
+    "namespace"?: string;
+  }; output: unknown };
   /** Read one entry in full. */
   "activity_get": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
@@ -593,6 +600,8 @@ export interface CommandMap {
   "goals_list": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
+    /** Maximum number to return. Omit for all of them. */
+    "limit"?: number;
     /** Filter goals by project id. */
     "project"?: string;
     /** Full-text search across a goal's id and title. */
@@ -984,6 +993,10 @@ export interface CommandMap {
     "_reasoning": string;
     /** Whose routines. Defaults to yours. */
     "agent"?: string;
+    /** Maximum number to return. Omit for all of them. */
+    "limit"?: number;
+    /** Substring match over name and identifier. */
+    "query"?: string;
     /** Only enabled or only disabled. */
     "status"?: string;
   }; output: unknown };
@@ -1683,6 +1696,7 @@ export type CommandOutput<K extends CommandKey> = CommandMap[K]["output"];
 /** Every command key, for a runtime check that the binary has what this build expects. */
 export const COMMAND_KEYS = [
   "activity_delete",
+  "activity_events",
   "activity_get",
   "activity_list",
   "activity_purge",

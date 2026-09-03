@@ -346,3 +346,25 @@ func (s *Service) viewer(ctx context.Context, explicit string) string {
 	}
 	return ActorSystem
 }
+
+// Events answers the catalogue of event kinds a routine can trigger on.
+//
+// It reads no storage: the catalogue is a declaration, and a workspace where
+// nothing has happened yet must still be able to say what could.
+func (s *Service) Events(_ context.Context, in EventsInput) (EventsOutput, error) {
+	if in.Namespace == "" {
+		return EventsOutput{Events: Kinds, Namespaces: Namespaces()}, nil
+	}
+
+	out := EventsOutput{Events: make([]EventKind, 0, 8)}
+	for _, kind := range Kinds {
+		if !strings.EqualFold(kind.Namespace, in.Namespace) {
+			continue
+		}
+		out.Events = append(out.Events, kind)
+	}
+	if len(out.Events) > 0 {
+		out.Namespaces = []string{out.Events[0].Namespace}
+	}
+	return out, nil
+}

@@ -38,6 +38,13 @@ type ListInput struct {
 	Agent  string `json:"agent,omitempty" cli:"flag" jsonschema:"Whose routines. Defaults to yours."`
 	Status Status `json:"status,omitempty" cli:"flag" jsonschema:"Only enabled or only disabled."`
 
+	// Query and Limit are what the routines page's own search box and its
+	// page cap send. Neither had a field here, so both were dropped: typing
+	// in the search box narrowed nothing server-side, and the cap was a
+	// number nobody read.
+	Query string `json:"query,omitempty" cli:"flag" jsonschema:"Substring match over name and identifier."`
+	Limit int    `json:"limit,omitempty" cli:"flag" jsonschema:"Maximum number to return. Omit for all of them."`
+
 	command.Reasoning
 }
 

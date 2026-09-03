@@ -75,11 +75,10 @@ export function useChatComposer({
     },
   });
 
-  const skillsQueryRequest = aos.client.skill.list.useQuery({
-    query: {
-      query: "",
-    },
-  });
+  // No `query`: `skills_list` takes none, and this always sent the empty
+  // string anyway — the command menu filters what it receives. A parameter
+  // the daemon drops is a parameter that reads like a filter and is not one.
+  const skillsQueryRequest = aos.client.skill.list.useQuery({});
 
   const instructionsQuery = aos.client.instruction.list.useQuery();
 

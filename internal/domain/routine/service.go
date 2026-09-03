@@ -83,9 +83,18 @@ func (s *Service) List(ctx context.Context, in ListInput) (ListOutput, error) {
 		return ListOutput{}, errReadFailed("List", err)
 	}
 
+	needle := strings.ToLower(strings.TrimSpace(in.Query))
 	views := make([]View, 0, len(found))
 	for i := range found {
 		if in.Status != "" && found[i].Status != in.Status {
+			continue
+		}
+		// Name and id, which is what the list shows. A routine's prompt is
+		// its body and is not loaded here (IncludeContent is false), so
+		// searching it would mean reading every file to answer a keystroke.
+		if needle != "" &&
+			!strings.Contains(strings.ToLower(found[i].Name), needle) &&
+			!strings.Contains(strings.ToLower(found[i].ID), needle) {
 			continue
 		}
 		views = append(views, s.view(&found[i]))
@@ -96,7 +105,13 @@ func (s *Service) List(ctx context.Context, in ListInput) (ListOutput, error) {
 		}
 		return views[i].Agent < views[j].Agent
 	})
-	return ListOutput{Routines: views, Total: len(views), Tick: s.tick.String()}, nil
+	// Total counts what matched, before the page was cut — the same contract
+	// task.ListOutput's own Total documents.
+	total := len(views)
+	if in.Limit > 0 && len(views) > in.Limit {
+		views = views[:in.Limit]
+	}
+	return ListOutput{Routines: views, Total: total, Tick: s.tick.String()}, nil
 }
 
 // Get reads one routine.

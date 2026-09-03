@@ -43,6 +43,12 @@ type Agents interface {
 type Chats interface {
 	Get(ctx context.Context, in chat.GetInput) (*chat.Chat, error)
 	Reply(ctx context.Context, in chat.ReplyInput) (chat.ReplyOutput, error)
+
+	// MarkRun records that this turn has begun, on the message that asked
+	// for it. Without it the record said nothing between "sent" and
+	// "answered", so a window opened mid-turn — or reloaded during one —
+	// showed an idle agent that was in fact working.
+	MarkRun(ctx context.Context, in chat.MarkRunInput) error
 }
 
 // Models resolves an agent to a provider, so the composition root owns the
@@ -191,6 +197,9 @@ func New(d Deps) *Runner {
 // not a person cancelling the agent.
 func (r *Runner) Dispatch(ctx context.Context, in chat.Turn) (string, error) {
 	jobID := r.newID()
+	// The turn carries its own job id, so the run recorded when it starts and
+	// the one completed when it ends are the same run.
+	in.JobID = jobID
 	// Detached from the caller, then made cancellable on its own terms: the
 	// request that asked for the turn must not end it, and a person watching
 	// it must be able to.
@@ -297,6 +306,15 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 	agentID := in.AgentID
 	if r.deps.Events != nil {
 		r.deps.Events.ChatStarted(ctx, workspaceID, conversation.ID, agentID)
+	}
+	// On the record as well as on the wire. The event reaches whoever is
+	// listening *now*; this is what a window opened a minute later reads.
+	if err := r.deps.Chats.MarkRun(ctx, chat.MarkRunInput{
+		Chat: in.ChatID, Message: in.MessageID, AgentID: agentID, JobID: in.JobID,
+	}); err != nil {
+		// Best-effort: the turn is the work, and losing the note that it
+		// started is not a reason to refuse to do it.
+		r.log.Warn("the start of a turn was not recorded", "chat", in.ChatID, "err", err)
 	}
 	defer func() {
 		if err == nil {

@@ -544,6 +544,11 @@ var scenarios = map[string]scenario{
 		Seed:    seedRoutine,
 	},
 
+	// The catalogue reads no storage — it is a declaration, so it answers the
+	// same thing on a workspace where nothing has ever happened. No seed.
+	"activity_events": {
+		Payload: activity.EventsInput{Reasoning: reason()},
+	},
 	"activity_list": {
 		Payload: activity.ListInput{Reasoning: reason()},
 		Seed:    seedTask,

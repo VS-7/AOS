@@ -20,7 +20,7 @@ func TestRegisterPublishesTheWholeGroup(t *testing.T) {
 	Register(reg, svc)
 
 	want := []string{
-		"activity_delete", "activity_get", "activity_list",
+		"activity_delete", "activity_events", "activity_get", "activity_list",
 		"activity_purge", "activity_read", "activity_read-all",
 	}
 	got := make([]string, 0, len(want))

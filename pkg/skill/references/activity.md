@@ -36,6 +36,23 @@ that edits history rather than appending to it. Prefer marking it read.
 
 - remove an entry published in error
 
+### `activity_events`
+
+What a routine can react to.
+
+The catalogue of event kinds this workspace publishes.
+
+A routine's activity trigger names a namespace and an event and fires when one
+arrives. This answers which pairs are real, and which payload keys each one
+carries — the fields a trigger filter can match on.
+
+The catalogue is a promise, not a history: it lists what *can* happen, on a
+workspace where none of it has happened yet. Use **list** to read what actually
+did.
+
+- everything a routine can watch for
+- just the task events
+
 ### `activity_get`
 
 Read one entry in full.

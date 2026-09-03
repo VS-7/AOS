@@ -203,3 +203,45 @@ describe("session.updateProfile", () => {
     expect(isDormant("session.updateProfile")).toBe(false);
   });
 });
+
+describe("activity.listEvents", () => {
+  const entry = COMMAND_MAP["activity.listEvents"];
+  const mapOut = typeof entry === "object" && entry !== null && "mapOut" in entry ? entry.mapOut : undefined;
+
+  // The routine editor's activity trigger — the one trigger type that reacts
+  // to the workspace — was unreachable because this call answered nothing.
+  it("is no longer dormant", () => {
+    expect(entry).not.toBeNull();
+    expect(typeof entry === "object" && entry !== null ? entry.key : entry).toBe("activity_events");
+  });
+
+  it("answers the bare array of definitions the picker reads", () => {
+    const definitions = mapOut?.({
+      events: [
+        {
+          namespace: "task",
+          event: "status_changed",
+          title: "Task moved",
+          description: "A task moved from one status to another.",
+          data: ["task", "name", "from", "to"],
+        },
+      ],
+      namespaces: ["task"],
+    }) as Array<Record<string, any>>;
+
+    expect(definitions).toHaveLength(1);
+    expect(definitions[0].namespace).toBe("task");
+    expect(definitions[0].event).toBe("status_changed");
+    // `ActivityEventHelper.getFilterableFields` reads nothing but the keys of
+    // `schema.properties`, and offers a single default field when there are
+    // none — which is what a filter written against the real payload needs.
+    expect(Object.keys(definitions[0].schema.properties)).toEqual(["task", "name", "from", "to"]);
+  });
+
+  it("survives an event that carries no payload keys", () => {
+    const definitions = mapOut?.({ events: [{ namespace: "routine", event: "fired" }] }) as Array<
+      Record<string, any>
+    >;
+    expect(definitions[0].schema.properties).toEqual({});
+  });
+});

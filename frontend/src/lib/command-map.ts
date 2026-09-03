@@ -3,6 +3,7 @@ import { toUiChat, toUiMessage } from "./chat-message";
 import * as fileApi from "./file";
 import * as fileExplorer from "./file-explorer";
 import * as authApi from "./auth";
+import { actionsOf, toSpec, type RenderedView } from "./view-spec";
 
 /**
  * One AOS frontend call, resolved.
@@ -738,8 +739,38 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "file.read": (p) => fileApi.read(s(p, "path")),
   "file.write": (p) => fileApi.write(s(p, "path"), s(p, "content")),
 
-  // ── dormant: command missing from a live domain ─────────────────────────
-  "activity.listEvents": null,
+  // The catalogue of what a routine can react to. Go's `activity_events`
+  // answers `{events, namespaces}` where each event carries `data` — the
+  // payload keys a trigger filter can match on — while this side reads a bare
+  // array of definitions whose filterable fields come from a JSON Schema's
+  // `properties`. The keys are the whole of what the picker uses
+  // (`ActivityEventHelper.getFilterableFields` reads nothing but
+  // `Object.keys`), so they are rendered as a properties object rather than
+  // as a schema promising types the publishers do not enforce.
+  //
+  // This was dormant, and it was the reason the routine editor could not
+  // offer an activity trigger at all: Go has matched them since the routine
+  // domain was written (`routine.Trigger.Matches`), the picker was fully
+  // built, and the catalogue it reads answered nothing — so the one trigger
+  // that reacts to the workspace was unreachable, and writing one meant
+  // guessing a namespace and an event.
+  "activity.listEvents": {
+    key: "activity_events",
+    mapOut: (raw) => {
+      const answer = raw as { events?: Array<Record<string, unknown>> } | undefined;
+      return (answer?.events ?? []).map((event) => ({
+        namespace: event["namespace"],
+        event: event["event"],
+        title: event["title"],
+        description: event["description"],
+        schema: {
+          properties: Object.fromEntries(
+            ((event["data"] as string[] | undefined) ?? []).map((key) => [key, {}]),
+          ),
+        },
+      }));
+    },
+  },
   // The approval channel (ADR-0007). Neither is in the agent's own registry —
   // an agent that could approve its own tool call would make the whole
   // mechanism decoration — so these are the interface's alone.
@@ -1040,7 +1071,26 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   },
   "view.getById": { key: "views_get", renameIn: { view: "id" }, wrapOut: "view" },
   "view.list": "views_list",
-  "view.render": { key: "views_render", renameIn: { view: "id" } },
+  // Go answers `{view, records, renderedAt}` — the composition and the data,
+  // separately, with every binding still unresolved — and the screen renders a
+  // flat `@json-render` spec. Nothing translated one into the other, so
+  // `ViewDataHelper.getSpec` read a `spec` field that never arrived and every
+  // view, always, rendered the renderer's "no renderable spec" panel. The
+  // translation is `view-spec.ts`; the actions come with it, because Go keeps
+  // them on the nodes that offer them and the page looks for them on the view.
+  "view.render": {
+    key: "views_render",
+    renameIn: { view: "id" },
+    mapOut: (raw) => {
+      const rendered = raw as RenderedView | undefined;
+      return {
+        view: { ...(rendered?.view ?? {}), actions: actionsOf(rendered?.view?.tree) },
+        spec: toSpec(rendered),
+        records: rendered?.records ?? [],
+        renderedAt: rendered?.renderedAt,
+      };
+    },
+  },
 
   // The seven Phase 8 domains declared alongside the ecosystem core — see
   // docs/08 - Entrega/Roteiro de Fases.md's "Fora do núcleo, declarado".

@@ -108,3 +108,16 @@ type PurgeOutput struct {
 	Rewritten []string  `json:"rewritten,omitempty" jsonschema:"Partitions rewritten because only part of them expired."`
 	Cutoff    time.Time `json:"cutoff" jsonschema:"Everything before this instant was removed."`
 }
+
+// EventsInput narrows the catalogue to one namespace.
+type EventsInput struct {
+	Namespace string `json:"namespace,omitempty" cli:"flag" jsonschema:"Only the events of this namespace. Empty means all of them."`
+
+	command.Reasoning
+}
+
+// EventsOutput is the catalogue of what a routine can react to.
+type EventsOutput struct {
+	Events     []EventKind `json:"events" jsonschema:"Every event kind, ordered by namespace and then by lifecycle."`
+	Namespaces []string    `json:"namespaces" jsonschema:"The namespaces present, in the same order."`
+}

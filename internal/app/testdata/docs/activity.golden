@@ -21,7 +21,7 @@ to — one record, so the two can never disagree about what happened.
 - Not as a place to write progress on a task — that is a task comment
 - Not as your own memory — this log is shared and expires
 
-Composite tool `Activity` with 6 actions: delete, get, list, purge, read, read-all.
+Composite tool `Activity` with 7 actions: delete, events, get, list, purge, read, read-all.
 
 Read state is per actor. Marking something read marks it read for you, not for
 everyone, and your inbox is independent of the person's who is watching.
@@ -60,6 +60,41 @@ that edits history rather than appending to it. Prefer marking it read.
   },
   "required": [
     "id",
+    "_reasoning"
+  ],
+  "additionalProperties": false
+}
+```
+
+### activity_events
+
+What a routine can react to.
+
+The catalogue of event kinds this workspace publishes.
+
+A routine's activity trigger names a namespace and an event and fires when one
+arrives. This answers which pairs are real, and which payload keys each one
+carries — the fields a trigger filter can match on.
+
+The catalogue is a promise, not a history: it lists what *can* happen, on a
+workspace where none of it has happened yet. Use **list** to read what actually
+did.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "namespace": {
+      "type": "string",
+      "description": "Only the events of this namespace. Empty means all of them."
+    },
+    "_reasoning": {
+      "type": "string",
+      "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",
+      "minLength": 1
+    }
+  },
+  "required": [
     "_reasoning"
   ],
   "additionalProperties": false
