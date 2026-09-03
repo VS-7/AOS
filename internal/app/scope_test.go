@@ -87,10 +87,19 @@ func (s *collectingSink) await(t *testing.T, eventType string) map[string]any {
 // handler does — Hub.Subscribe runs the delivery loop itself and returns only
 // when the subscription ends, so it belongs on a goroutine of its own.
 //
-// It returns once the subscriber is actually registered, so a publish made by
-// the caller's next line cannot be missed.
+// It returns once *this* subscriber is actually registered, so a publish made
+// by the caller's next line cannot be missed.
+//
+// The wait is on the count having grown past what it was, not on it being
+// non-zero, because the count is not always zero to begin with: the subtests
+// below share one app and one channel, and a cancelled subscription from the
+// previous one may still be unwinding. Waiting for "somebody is subscribed"
+// would be satisfied by that departing sink and return before this one had
+// joined — which is the shape of flake that reached CI from the identical
+// helper in internal/transport/realtime.
 func listen(t *testing.T, a *app.App, channel string) *collectingSink {
 	t.Helper()
+	before := a.Events.Subscribers(channel)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
@@ -98,7 +107,7 @@ func listen(t *testing.T, a *app.App, channel string) *collectingSink {
 	go a.Events.Subscribe(ctx, channel, sink)
 
 	deadline := time.Now().Add(5 * time.Second)
-	for a.Events.Subscribers(channel) == 0 {
+	for a.Events.Subscribers(channel) <= before {
 		if time.Now().After(deadline) {
 			t.Fatalf("the sink never joined %q", channel)
 		}
