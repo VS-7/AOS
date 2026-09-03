@@ -126,6 +126,18 @@ describe("the catalogues", () => {
       expect(placeholders(String(value)), `placeholders drifted for ${key}`).toEqual(placeholders(key));
     }
   });
+
+  // `interpolate()` substitutes `{{name}}` and nothing else. A key written
+  // with single braces therefore cannot be filled by `t(key, vars)` — it can
+  // only be patched by hand with `.replace("{name}", …)` at the call site,
+  // which is what a dozen of them were doing, and which the drift test above
+  // cannot see: it compares `{{…}}` placeholders, so a Portuguese value that
+  // lost a `{name}` looked identical to one that never had it.
+  it("declares its placeholders in the form t() can actually fill", () => {
+    const singleBraced = (s: string) => (s.match(/(?<!\{)\{\w+\}(?!\})/g) ?? []);
+    const offenders = Object.keys(en).filter((key) => singleBraced(key).length > 0);
+    expect(offenders, "keys with single-brace placeholders t() will not substitute").toEqual([]);
+  });
 });
 
 describe("locale resolution", () => {

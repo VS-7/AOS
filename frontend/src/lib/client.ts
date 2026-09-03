@@ -213,6 +213,23 @@ export const system = {
   },
 
   /**
+   * Stops the daemon and starts it again.
+   *
+   * Not a command, and deliberately: inside the daemon `gateway_restart`
+   * refuses, because Stop would signal its own pid — which is exactly what
+   * used to happen, leaving the window with a terminated daemon, an
+   * unclassified 500 from the connection dropping, and no way back short of
+   * relaunching the application. Supervision belongs to whatever launched
+   * the daemon, and in the desktop that is the window's own process.
+   *
+   * A browser tab has no supervisor and the bridge is absent; the caller
+   * shows the terminal instruction instead.
+   */
+  async restartDaemon(): Promise<void> {
+    await Call.ByName(`${WAILSVC_PKG}.SystemService.RestartDaemon`);
+  },
+
+  /**
    * The directory the window was launched in, or "" when it was launched
    * nowhere in particular (from the dock, from Spotlight) and in a browser.
    *

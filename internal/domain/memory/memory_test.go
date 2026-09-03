@@ -101,6 +101,25 @@ func TestAMemoryNeedsAnOwner(t *testing.T) {
 	}
 }
 
+// The application's own "Record a memory" is a person writing on an agent's
+// behalf. Store was the only one of the four memory commands with no `agent`
+// field, so it could resolve an owner from the ambient identity alone — and
+// the desktop window is a user identity. Every write from the agent's
+// Memories tab came back AOS_MEMORY_AGENT_REQUIRED, telling the person to
+// pass `--agent` on a command line they were not using.
+func TestAMemoryCanNameItsAgent(t *testing.T) {
+	svc, _ := newService(t)
+	out, err := svc.Store(humanCtx(), memory.StoreInput{
+		Agent: "luara", Title: "x", Description: "y", Category: memory.CatFact,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Memory.Agent != "luara" {
+		t.Errorf("agent = %q, want the one that was named", out.Memory.Agent)
+	}
+}
+
 func TestStoreValidatesCategoryAndConfidence(t *testing.T) {
 	svc, _ := newService(t)
 

@@ -51,20 +51,6 @@ export const DEFAULT_SETTINGS_SECTION: SettingsSectionId = "user.general";
 
 export const SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
   {
-    id: "user.updates",
-    get title() { return t("Updates"); },
-    get description() { return t("Check the release channel and install a new version."); },
-    group: "user",
-    icon: DownloadCircle01Icon,
-  },
-  {
-    id: "workspace.jobs",
-    get title() { return t("Jobs"); },
-    get description() { return t("The execution queue behind every turn, routine and background task."); },
-    group: "workspace",
-    icon: Queue01Icon,
-  },
-  {
     id: "user.general",
     get title() { return t("General"); },
     get description() { return t("Configure execution behavior and desktop notifications."); },
@@ -112,6 +98,13 @@ export const SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     get description() { return t("Expose your instance to the internet via secure tunnel."); },
     group: "user",
     icon: CloudIcon,
+  },
+  {
+    id: "user.updates",
+    get title() { return t("Updates"); },
+    get description() { return t("Check the release channel and install a new version."); },
+    group: "user",
+    icon: DownloadCircle01Icon,
   },
   {
     id: "workspace.profile",
@@ -168,6 +161,13 @@ export const SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     get description() { return t("Manage sandbox lifecycle and worktree initialization."); },
     group: "workspace",
     icon: Folder01Icon,
+  },
+  {
+    id: "workspace.jobs",
+    get title() { return t("Jobs"); },
+    get description() { return t("The execution queue behind every turn, routine and background task."); },
+    group: "workspace",
+    icon: Queue01Icon,
   },
 ];
 

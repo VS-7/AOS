@@ -194,6 +194,10 @@ func main() {
 	// default folder for the first workspace. Registering it outright is what
 	// this process used to do, before the person had named anything.
 	systemSvc.SetLaunchDirectory(root)
+	// What actually restarts the daemon. Inside the daemon `gateway_restart`
+	// refuses — it would signal its own pid — so the button in Settings ›
+	// Daemon has to reach the process that launched it, which is this one.
+	systemSvc.SetSupervisor(daemonSupervisor{supervisor})
 
 	// adopt is the one place the resolved workspace is applied, so the two
 	// callers below — the daemon supervisor's first attempt and the one after
@@ -319,6 +323,15 @@ func main() {
 		log.Error("the window closed with an error", "err", err)
 		exitCode = 1
 	}
+}
+
+// daemonSupervisor adapts the gateway service to the narrow slice the window's
+// bridge needs: bring the daemon back.
+type daemonSupervisor struct{ svc *gateway.Service }
+
+func (d daemonSupervisor) Restart(ctx context.Context) error {
+	_, err := d.svc.Restart(ctx, gateway.RestartInput{})
+	return err
 }
 
 // ensureDaemon starts the daemon if nothing is already answering, then tries

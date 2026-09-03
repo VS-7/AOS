@@ -806,6 +806,8 @@ export interface CommandMap {
   "memories_store": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
+    /** Whose memory this is. Defaults to your own. */
+    "agent"?: string;
     /** One of: decision, intent, commitment, relationship, event, observation, error, learning, fact, reference, instruction, preference, context. */
     "category": "decision" | "intent" | "commitment" | "relationship" | "event" | "observation" | "error" | "learning" | "fact" | "reference" | "instruction" | "preference" | "context";
     /** From 0 to 1. Defaults to 1. Be honest — an inflated number is how future-you gets misled. */

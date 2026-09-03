@@ -483,6 +483,9 @@ func New(opts Options) (*App, error) {
 		Log:     logger,
 		Host:    resolver.String(env.KeyServerHost, env.DefaultServerHost),
 		Port:    resolver.Int(env.KeyServerPort, build.Port),
+		// This copy lives inside the daemon: it answers `gateway status` over
+		// HTTP rather than supervising anything. See Deps.Inside.
+		Inside: true,
 	})
 
 	// The hook bus and the approval channel. The log is append-only and lives

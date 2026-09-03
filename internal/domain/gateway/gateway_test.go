@@ -712,3 +712,58 @@ func TestRegisterPublishesTheGroupAsLocal(t *testing.T) {
 		}
 	}
 }
+
+// A daemon answering `gateway status` is running, whatever the supervisor's
+// record says. The record is written only by whatever spawned the daemon, so
+// one started by a systemd unit, by `task dev`, or by hand leaves it absent —
+// and this method used to answer "stopped" to the very client it was talking
+// to, which the window drew as a red badge over a healthy daemon.
+func TestTheDaemonDoesNotReportItselfStopped(t *testing.T) {
+	svc := gateway.NewService(gateway.Deps{
+		Processes: newProcs(), Health: &fakeHealth{},
+		Store: &fakeStore{}, Locker: &realLock{},
+		Resolver: fakeResolver{}, Clock: &steppingClock{at: refTime},
+		Sleeper: &steppingClock{at: refTime},
+		Host:    "127.0.0.1", Port: 5326,
+		Inside: true,
+	})
+
+	state, err := svc.Status(ctx(), gateway.StatusInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != gateway.Running || !state.Healthy {
+		t.Fatalf("status = %q healthy = %v, want a running, healthy daemon", state.Status, state.Healthy)
+	}
+	if state.Meta == nil || state.Meta.PID == 0 {
+		t.Error("the daemon does not say which process it is")
+	}
+}
+
+// Restarting through this path had the daemon signal its own pid: it
+// terminated itself mid-request, the caller got an unclassified 500 as the
+// connection died, and nothing brought it back.
+func TestTheDaemonRefusesToRestartItself(t *testing.T) {
+	svc := gateway.NewService(gateway.Deps{
+		Processes: newProcs(), Health: &fakeHealth{},
+		Store: &fakeStore{}, Locker: &realLock{},
+		Resolver: fakeResolver{}, Clock: &steppingClock{at: refTime},
+		Sleeper: &steppingClock{at: refTime},
+		Inside:  true,
+	})
+
+	_, err := svc.Restart(ctx(), gateway.RestartInput{})
+	if err == nil {
+		t.Fatal("the daemon agreed to restart itself")
+	}
+	e, ok := apperr.As(err)
+	if !ok {
+		t.Fatalf("error = %v, want a classified one", err)
+	}
+	if e.Code != "AOS_GATEWAY_SELF_RESTART" {
+		t.Errorf("code = %q, want AOS_GATEWAY_SELF_RESTART", e.Code)
+	}
+	if len(e.Actions) == 0 {
+		t.Error("the caller is not told who can restart it")
+	}
+}
