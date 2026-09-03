@@ -138,7 +138,7 @@ var Catalog = []Entry{
 	{Code: "AOS_DESKTOP_NO_DAEMON", Package: "internal/transport/wailsvc", File: "internal/transport/wailsvc/domain.go", Line: 136, Status: 503, Causer: "wailsvc.DomainService", CTA: true},
 	{Code: "AOS_DESKTOP_NO_SUPERVISOR", Package: "internal/transport/wailsvc", File: "internal/transport/wailsvc/system.go", Line: 532, Status: 409, Causer: "wailsvc.SystemService.RestartDaemon", CTA: true},
 	{Code: "AOS_DESKTOP_NO_WORKSPACE_NAMED", Package: "internal/transport/wailsvc", File: "internal/transport/wailsvc/domain.go", Line: 96, Status: 400, Causer: "wailsvc.DomainService.SetWorkspace", CTA: true},
-	{Code: "AOS_DESKTOP_NO_WORKSPACE_YET", Package: "cmd/aos-desktop", File: "cmd/aos-desktop/main.go", Line: 462, Status: 404, Causer: "main.openWorkspace", CTA: true},
+	{Code: "AOS_DESKTOP_NO_WORKSPACE_YET", Package: "cmd/aos-desktop", File: "cmd/aos-desktop/main.go", Line: 485, Status: 404, Causer: "main.openWorkspace", CTA: true},
 	{Code: "AOS_DESKTOP_PATH_NOT_BRIDGED", Package: "internal/transport/wailsvc", File: "internal/transport/wailsvc/domain.go", Line: 234, Status: 400, Causer: "wailsvc.DomainService.Fetch", CTA: true, Issues: []string{"path"}},
 	{Code: "AOS_FILE_ALREADY_EXISTS", Package: "internal/domain/file", File: "internal/domain/file/errors.go", Line: 80, Status: 409, Causer: "file.Service.Move", CTA: true, Issues: []string{"path"}},
 	{Code: "AOS_FILE_GIT_FAILED", Package: "internal/domain/file", File: "internal/domain/file/errors.go", Line: 97, Status: 500, Causer: "<dynamic>", CTA: false, Issues: []string{"operation", "path"}},
