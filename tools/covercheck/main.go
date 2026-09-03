@@ -72,11 +72,35 @@ func main() {
 	}
 	var failures []result
 	var checked int
+	var broke []string
 
 	sc := bufio.NewScanner(os.Stdin)
 	for sc.Scan() {
 		line := sc.Text()
+		// This command owns the stdout of the pipeline that runs the tests,
+		// so anything it drops is lost. It used to drop every line without
+		// "coverage:" — so a package whose tests failed vanished, covercheck
+		// printed "all at or above their floor", and the step exited 1 on
+		// `pipefail` with nothing in the log saying what broke. Reading a
+		// failure out of that meant re-running the whole suite by hand.
+		//
+		// So only the two shapes that say "this package is fine" are
+		// consumed; everything else is passed through to stderr, which this
+		// command does not own and the pipe does not swallow. Being noisy
+		// about a line nobody anticipated is the right failure here — the
+		// alternative is the silence that hid the last one.
 		if !strings.Contains(line, "coverage:") {
+			if uneventful(line) {
+				continue
+			}
+			fmt.Fprintln(os.Stderr, line)
+			// Only the package name goes into the summary, and only from the
+			// two lines that carry one — the per-test failures, panics and
+			// compiler messages around them are its detail, not more
+			// packages.
+			if pkg, ok := failedPackage(line); ok {
+				broke = append(broke, pkg)
+			}
 			continue
 		}
 		pkg, pct, ok := parse(line)
@@ -95,6 +119,16 @@ func main() {
 	}
 	if err := sc.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, "covercheck:", err)
+		os.Exit(1)
+	}
+
+	// Coverage is beside the point when a test failed: the floors are about
+	// how much of a package is exercised, and a package whose tests do not
+	// pass has not been exercised at all.
+	if len(broke) > 0 {
+		fmt.Fprintf(os.Stderr,
+			"covercheck: the tests failed in %s; coverage was not judged\n",
+			strings.Join(broke, ", "))
 		os.Exit(1)
 	}
 
@@ -157,4 +191,31 @@ func floorFor(pkg string) (float64, bool) {
 		}
 	}
 	return best, found
+}
+
+// uneventful reports whether a line says nothing went wrong: a package that
+// passed without coverage, or one with no tests at all. `go test` writes both
+// on the same stream as everything else.
+func uneventful(line string) bool {
+	return line == "" ||
+		strings.HasPrefix(line, "ok  \t") ||
+		strings.HasPrefix(line, "?   \t")
+}
+
+// failedPackage returns the import path from the per-package verdict line,
+// and whether the line was one.
+//
+// Only "FAIL". The "# github.com/..." header that `go test` prints above a
+// compiler error looks like a failure and is not one on its own — the
+// toolchain prints it above *any* output about a package, including the
+// linker warnings every cgo build emits on macOS, and a package that really
+// does not build says so plainly on the line after: "FAIL\tpkg [build
+// failed]". Treating the header as the marker made a clean run on a Mac
+// report cmd/aos-desktop as broken.
+func failedPackage(line string) (string, bool) {
+	fields := strings.Fields(line)
+	if len(fields) < 2 || fields[0] != "FAIL" {
+		return "", false
+	}
+	return fields[1], true
 }
