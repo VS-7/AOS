@@ -116,6 +116,44 @@ describe("keeping the window's identity across a hard navigation", () => {
     const wails = await loadAt("?welcome=true");
     expect(wails.desktopURL("/")).toBe("/");
   });
+
+  /**
+   * The same defect, reached by the other door. `window.location.reload()`
+   * re-runs the bundle at whatever the URL is *now*, and the router rewrote
+   * it on the first navigation — so a plain reload dropped the daemon
+   * address just as `replace("/")` did. Four places called it, including
+   * the error screen's own Reload button: the surface meant for recovery was
+   * the one that made the state unrecoverable.
+   */
+  it("reloading in place keeps the window's own parameters", async () => {
+    const wails = await loadAt(DESKTOP);
+    const real = window.location;
+    const replace = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        // `desktopURL` resolves against href, so the stub carries one.
+        href: "http://localhost/tasks",
+        pathname: "/tasks",
+        search: "",
+        hash: "",
+        replace,
+      },
+    });
+    try {
+      wails.reloadHere();
+    } finally {
+      // Restored, or every case after this one loads at a location that
+      // cannot navigate.
+      Object.defineProperty(window, "location", { configurable: true, value: real });
+    }
+
+    expect(replace).toHaveBeenCalledTimes(1);
+    const next = String(replace.mock.calls[0][0]);
+    expect(next.startsWith("/tasks?")).toBe(true);
+    expect(next).toContain("daemon=http%3A%2F%2F127.0.0.1%3A5326");
+    expect(next).toContain("platform=darwin");
+  });
 });
 
 describe("opening a link outside the application", () => {

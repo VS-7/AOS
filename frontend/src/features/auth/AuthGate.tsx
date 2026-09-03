@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { status } from "@/lib/auth";
+import { UNAUTHENTICATED_EVENT } from "@/lib/client";
 import { t } from "@/lib/i18n";
 import { LoginPage } from "./LoginPage";
 import { OnboardingForm } from "./OnboardingForm";
@@ -68,7 +69,13 @@ export function AuthGate({ children }: { children: ReactNode }): JSX.Element {
 
   useEffect(() => {
     recheck();
+    // The daemon says the credential is no good — expired, or revoked from
+    // another window. Asking again is what puts the person on the Login
+    // screen instead of leaving them on an application that answers every
+    // action with a toast and offers no way back.
+    window.addEventListener(UNAUTHENTICATED_EVENT, recheck);
     return () => {
+      window.removeEventListener(UNAUTHENTICATED_EVENT, recheck);
       if (timer.current !== null) clearTimeout(timer.current);
     };
   }, [recheck]);

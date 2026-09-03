@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { openExternal } from "@/lib/wails";
+import { openExternal, reloadHere } from "@/lib/wails";
 import { t } from "@/lib/i18n";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -98,7 +98,7 @@ export class ErrorBoundary extends Component<
 
   reset(): void {
     if (typeof window !== "undefined") {
-      window.location.reload();
+      reloadHere();
     } else {
       this.setState({ hasError: false, error: null, errorInfo: null, copied: false });
     }
@@ -161,7 +161,7 @@ function ErrorFallback({ error, section, copied, onReset, onCopy }: ErrorFallbac
   const errorMessage = error?.message ? truncate(error.message, 100) : "An unexpected error occurred.";
 
   function handleReload() {
-    window.location.reload();
+    reloadHere();
   }
 
   function handleOpenBrowser() {

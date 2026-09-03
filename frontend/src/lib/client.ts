@@ -90,9 +90,34 @@ interface Envelope<T> {
  * surface is outside the command registry (see File (Go)'s "não tem grupo de
  * comando") but still answers in the same envelope shape.
  */
+/**
+ * The event the page fires when the daemon says the credential is no good.
+ *
+ * A session lasts thirty days, and it can also be revoked — a logout from
+ * another window, a daemon whose accounts were reset. There was no path back
+ * from either: `AuthGate` asks once, at mount, so the application stayed on
+ * its screens and answered every action with "this request carries no valid
+ * credential" as a toast. The only ways out were a reload (browser) or a
+ * restart (desktop).
+ *
+ * The transports fire this; AuthGate listens and re-asks, which sends the
+ * person to the Login screen exactly once and by the front door.
+ */
+export const UNAUTHENTICATED_EVENT = "aos:unauthenticated";
+
+function announceIfUnauthenticated(error: { code?: string; status?: number }): void {
+  const unauthenticated =
+    error.status === 401 ||
+    error.code === "AOS_HTTP_UNAUTHENTICATED" ||
+    error.code === "HTTP_UNAUTHENTICATED";
+  if (!unauthenticated || typeof window === "undefined") return;
+  window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
+}
+
 export function unwrap<T>(raw: unknown): T {
   const envelope = raw as Envelope<T>;
   if (envelope && typeof envelope === "object" && "error" in envelope && envelope.error) {
+    announceIfUnauthenticated(envelope.error);
     throw new DomainError(envelope.error);
   }
   if (envelope && typeof envelope === "object" && "data" in envelope) {
