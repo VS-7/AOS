@@ -1424,7 +1424,7 @@ export interface CommandMap {
     /** Identifier of the toolset. */
     "id": string;
   }; output: unknown };
-  /** Read one toolset's configuration, for editing. */
+  /** Read one toolset's configuration, and what it still needs. */
   "toolsets_get-config": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;

@@ -999,6 +999,13 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // value}`, merged over the renamed `id`.
   "toolset.delete": { key: "toolsets_delete", renameIn: { toolset: "id" } },
   "toolset.getById": { key: "toolsets_get", renameIn: { toolset: "id" }, wrapOut: "toolset" },
+  // `toolsets_get-config` used to be an alias of `toolsets_get` and answered a
+  // bare toolset, so `requirements` was always undefined — and the sheet
+  // decides whether to offer its Configuration tab from that array's length,
+  // which meant a toolset needing three credentials looked exactly like one
+  // needing none and the tab never appeared for anything. Go now answers
+  // `{toolset, connectionType, requirements}` — the field names this side
+  // already read — with each variable marked set or missing and no values.
   "toolset.getConfig": { key: "toolsets_get-config", renameIn: { toolset: "id" } },
   "toolset.updateConfig": {
     key: "toolsets_update-config",
