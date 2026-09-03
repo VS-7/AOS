@@ -235,12 +235,30 @@ func seedChat(t *testing.T, a *app.App) {
 	}
 }
 
+// seededMessage is the message seedChatWithMessage leaves to react to.
+//
+// Named explicitly in the seed rather than taken from the id sequence: this
+// one has to survive a seed that writes one more record, and a reaction needs
+// a message it can address by name on all five surfaces.
+const seededMessage = "seeded-message"
+
 // seedChatWithMessage leaves a conversation with something in it to react to.
+//
+// Written through Reply rather than Send, and that is the point: Send
+// *dispatches a turn*. This installation has no model provider, so the turn
+// fails and records the failure on the message it was answering — after the
+// send returns, on the runtime's own goroutine. Whether that run had landed
+// by the time the reaction read the conversation was a race, and the five
+// surfaces disagreed about it. Reply with no ReplyTo writes the message and
+// starts nothing.
 func seedChatWithMessage(t *testing.T, a *app.App) {
 	t.Helper()
 	seedChat(t, a)
-	if _, err := a.Chats.Send(parityCtx(), chat.SendInput{
-		Chat: seededRecord, Text: "the first thing said", Reasoning: reason(),
+	if _, err := a.Chats.Reply(parityCtx(), chat.ReplyInput{
+		Chat:      seededRecord,
+		AgentID:   "atlas",
+		MessageID: seededMessage,
+		Parts:     []chat.Part{{Type: chat.PartText, Text: "the first thing said"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -387,7 +405,7 @@ var scenarios = map[string]scenario{
 		Seed:    seedChat,
 	},
 	"chats_react": {
-		Payload: chat.ReactInput{Chat: seededRecord, Message: "m-3", Value: "👍", Reasoning: reason()},
+		Payload: chat.ReactInput{Chat: seededRecord, Message: seededMessage, Value: "👍", Reasoning: reason()},
 		Seed:    seedChatWithMessage,
 	},
 	// The two read-only halves of supervision are safe to run five times over:
