@@ -64,10 +64,17 @@ func (s *Service) requestApprovalIfAgent(ctx context.Context, op, id, reason str
 	if s.approver == nil {
 		return errNotApproved(op, id, "no approval channel is available in this run mode")
 	}
+	// The ambient identity travels with the request. Without it the broker
+	// published the pending approval on the empty workspace channel and named
+	// no agent, so the dialog never opened and, if it had, could not say who
+	// was asking — the request then waited out its deadline and was denied.
+	who := identity.From(ctx)
 	res, err := s.approver.RequestApproval(ctx, event.ApprovalRequest{
-		ToolName: "instructions_" + strings.ToLower(op),
-		Risk:     event.RiskMedium,
-		Reason:   reason,
+		Workspace: who.WorkspaceID,
+		AgentID:   who.AgentID,
+		ToolName:  "instructions_" + strings.ToLower(op),
+		Risk:      event.RiskMedium,
+		Reason:    reason,
 	})
 	if err != nil {
 		return errNotApproved(op, id, "the approval channel failed: "+err.Error())

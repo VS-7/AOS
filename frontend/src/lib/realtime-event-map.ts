@@ -115,19 +115,20 @@ export const REALTIME_EVENT_MAP: Record<string, RealtimeMapEntry> = {
 
   // `changes-content.tsx`, `files/content/index.tsx`, `files-explorer-
   // group.tsx` — all read `payload.context` (which explorer pane) and
-  // `payload.changes` (an array of `{path, ...}`). The daemon's closest
-  // concept is `collection.changed` (`internal/transport/realtime/hub.go`'s
-  // `EventCollectionChanged`, "the watcher saw a file change") — but it is
-  // reserved, not live: `collections.Publisher` (`internal/core/
-  // collections/model.go`) is only implemented by whatever gets wired
-  // through `fscollections.WithPublisher`/`WithWatchPublisher`
-  // (`internal/adapters/fscollections/{repo,watch}.go`), and nothing under
-  // `internal/app` or `cmd` calls either one — verified by grep, not
-  // assumed. The translation below is the correct *name* for when that
-  // wiring lands; today it is subscribed to a channel the backend never
-  // publishes on, same as `task.changed`. Flagged in the final-fix report
-  // as a backend gap, not a frontend one — wiring the watcher's bus to the
-  // hub is Go-side work this branch's scope doesn't reach.
+  // `payload.changes` (an array of `{path, ...}`).
+  //
+  // The daemon publishes `collection.changed` on every repository write
+  // (`internal/app`'s `collectionPublisher`, wired for every repo in
+  // `newRepoSet`) and on what the watcher sees on disk. An earlier version
+  // of this comment said the event was "reserved, not live" and that
+  // nothing published it; that was true when it was written and is not now,
+  // and believing it is what kept the two readers below from being fixed.
+  //
+  // The payload's field names are `collection`/`key`/`op`/`path`
+  // (`internal/core/collections.Changed`'s json tags). They were Go's own
+  // capitalised names until those tags were added, so `data?.path` read
+  // undefined and this adapter always produced an empty `changes` array —
+  // an open file never refetched when it changed underneath.
   "files:changed": {
     type: "collection.changed",
     adapt: (event) => {
@@ -136,6 +137,26 @@ export const REALTIME_EVENT_MAP: Record<string, RealtimeMapEntry> = {
         context: undefined,
         changes: data?.path ? [{ path: data.path, op: data.op }] : [],
       };
+    },
+  },
+
+  // A record was written anywhere in the workspace — a project or goal an
+  // agent created, an agent added from another window, a memory the
+  // subconscious formed. The name is AOS's own rather than the original's,
+  // because the original had no such event: it published a per-domain
+  // `activity` and nothing else, so a change made outside the current
+  // window reached the screen only if some *other* signal happened to force
+  // a refetch.
+  //
+  // `lib/realtime.ts` already invalidates the react-query key for it. This
+  // entry is what the workspace shell needs on top: the sidebar, the agent
+  // pickers and the project/goal selectors read preloaded *stores*, which no
+  // cache invalidation can reach.
+  "records:changed": {
+    type: "collection.changed",
+    adapt: (event) => {
+      const data = event.data as { collection?: string; op?: string; path?: string } | undefined;
+      return { collection: data?.collection ?? "", op: data?.op ?? "", path: data?.path ?? "" };
     },
   },
 

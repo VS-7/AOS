@@ -7,6 +7,7 @@ import (
 
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/identity"
+	"github.com/OWNER/aos/internal/core/slug"
 )
 
 // Service is the agent aggregate. It governs one aggregate and nothing else:
@@ -75,6 +76,12 @@ func (s *Service) Me(ctx context.Context, _ MeInput) (*Agent, error) {
 // Create writes a new agent.
 func (s *Service) Create(ctx context.Context, in CreateInput) (*Agent, error) {
 	id := normalizeID(in.ID)
+	if id == "" {
+		// A name is enough. slug.Generate is the same rule every other
+		// slug-owning domain here uses, and the one the original app applied
+		// server-side — "Luara" becomes "luara", accents and all.
+		id = normalizeID(slug.Generate(in.Name))
+	}
 	if id == "" {
 		return nil, errInvalidID(in.ID)
 	}

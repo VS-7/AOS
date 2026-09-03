@@ -40,10 +40,60 @@ describe("dispatch, via deliver (B1(c): query keys migrated to the facade's shap
     expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["task"] });
   });
 
-  it("approval.request invalidates ['approvals'], matching ApprovalModal's own key", () => {
+  // `["approval"]`, not `["approvals"]`. The plural was the key of a
+  // hand-built modal that no longer exists; the facade keys by feature name,
+  // and the feature is `approval` (`approval.list` in command-map.ts). So a
+  // live request invalidated nothing the dialog reads.
+  it("approval.request invalidates the facade's ['approval'] feature key", () => {
     const qc = fakeQueryClient();
     deliver(qc as any, { type: "approval.request", data: {} });
-    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["approvals"] });
+    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["approval"] });
+  });
+});
+
+// Every repository write publishes `collection.changed` — a project or goal an
+// agent created, an agent added from another window, a memory the subconscious
+// formed. `dispatch` used to drop it on `default: break`, which is why a record
+// created outside the current screen never appeared until a reload.
+describe("collection.changed", () => {
+  it("invalidates the facade feature the collection belongs to", () => {
+    const qc = fakeQueryClient();
+    deliver(qc as any, {
+      type: "collection.changed",
+      workspace: "w-1",
+      data: { collection: "projects", key: { id: "p-1" }, op: "create", path: ".aos/projects/p-1/PROJECT.md" },
+    });
+    // Singular: the daemon names the directory, the interface names the feature.
+    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["project"] });
+  });
+
+  it("maps every collection the daemon writes to a feature the interface reads", () => {
+    for (const [collection, feature] of [
+      ["agents", "agent"],
+      ["chats", "chat"],
+      ["goals", "goal"],
+      ["memories", "memory"],
+      ["tasks", "task"],
+      ["todos", "todo"],
+      ["templates", "template"],
+      ["views", "view"],
+    ] as const) {
+      const qc = fakeQueryClient();
+      deliver(qc as any, { type: "collection.changed", data: { collection, op: "update" } });
+      expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: [feature] });
+    }
+  });
+
+  it("sends a dynamic collection's writes to the collection feature rather than dropping them", () => {
+    const qc = fakeQueryClient();
+    deliver(qc as any, { type: "collection.changed", data: { collection: "contacts", op: "create" } });
+    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["collection"] });
+  });
+
+  it("ignores a frame that names no collection instead of invalidating everything", () => {
+    const qc = fakeQueryClient();
+    deliver(qc as any, { type: "collection.changed", data: {} });
+    expect(qc.invalidateQueries).not.toHaveBeenCalled();
   });
 });
 

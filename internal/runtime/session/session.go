@@ -80,8 +80,18 @@ type Deps struct {
 	WorkspaceRoot string
 
 	// WorkspaceID names the workspace in the assembled document and in the
-	// events published for it.
+	// events published for it, when this runner was built for a pinned one.
 	WorkspaceID string
+
+	// Scope answers the workspace id when WorkspaceID is empty — the normal
+	// case for a desktop or CLI installation, where the daemon is told a
+	// *path* and the workspace is registered after it is already up.
+	//
+	// It is a function rather than a string for that reason: anything read at
+	// construction would be the empty id, and everything this turn publishes
+	// would go out on a channel nobody subscribes to. See internal/app's
+	// eventScope, which is what fills this in.
+	Scope func(context.Context) string
 
 	// TmpDir is the spillover directory, readable by the sandbox and never
 	// writable.
@@ -179,11 +189,28 @@ func (r *Runner) Dispatch(ctx context.Context, in chat.Turn) (string, error) {
 // It is exported and synchronous because that is what makes the delivery
 // provable: a test can run a turn and assert on what came out of it, rather
 // than on a goroutine it has to wait for.
+// workspaceID is the workspace this turn belongs to.
+//
+// A pinned Deps.WorkspaceID wins; otherwise the scope resolver answers. It is
+// asked once per turn rather than per event because a turn cannot change
+// workspace halfway through, and every event of the turn has to name the same
+// one or the interface sees half of it.
+func (r *Runner) workspaceID(ctx context.Context) string {
+	if r.deps.WorkspaceID != "" {
+		return r.deps.WorkspaceID
+	}
+	if r.deps.Scope != nil {
+		return r.deps.Scope(ctx)
+	}
+	return ""
+}
+
 func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Result, err error) {
 	// The turn began here, not just before the model call: prompt assembly
 	// and sandbox setup are part of how long somebody waited, and a turn that
 	// fails before ever reaching the provider has to have a start time too.
 	started := r.deps.Clock.Now()
+	workspaceID := r.workspaceID(ctx)
 
 	conversation, err := r.deps.Chats.Get(ctx, chat.GetInput{Chat: in.ChatID})
 	if err != nil {
@@ -206,7 +233,7 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 	// was a line in the daemon's log.
 	agentID := in.AgentID
 	if r.deps.Events != nil {
-		r.deps.Events.ChatStarted(ctx, r.deps.WorkspaceID, conversation.ID, agentID)
+		r.deps.Events.ChatStarted(ctx, workspaceID, conversation.ID, agentID)
 	}
 	defer func() {
 		if err == nil {
@@ -218,7 +245,7 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 		// for an answer that is never coming. `chat.done` means the turn
 		// ended; it does not promise the turn succeeded.
 		if r.deps.Events != nil {
-			r.deps.Events.ChatDone(ctx, r.deps.WorkspaceID, conversation.ID, agentID, chat.TokenUsage{})
+			r.deps.Events.ChatDone(ctx, workspaceID, conversation.ID, agentID, chat.TokenUsage{})
 		}
 	}()
 
@@ -237,7 +264,7 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 	// It is what makes a memory the agent stores belong to the agent, and what
 	// puts its name on every record the turn writes.
 	ctx = identity.With(ctx, identity.Identity{
-		WorkspaceID: r.deps.WorkspaceID,
+		WorkspaceID: workspaceID,
 		AgentID:     worker.ID,
 		RequestID:   identity.From(ctx).RequestID,
 	})
@@ -262,7 +289,7 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 			ID: worker.ID, Name: worker.DisplayName(), Role: worker.Role,
 			Instructions: worker.Content, Orchestrator: worker.Orchestrator,
 		},
-		Workspace:         r.deps.WorkspaceID,
+		Workspace:         workspaceID,
 		SessionStartedAt:  conversation.CreatedAt,
 		LastUserMessageAt: lastUserAt(conversation),
 	})
@@ -278,7 +305,7 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 	state := &agentloop.State{
 		SessionID:    conversation.ID,
 		AgentID:      worker.ID,
-		Workspace:    r.deps.WorkspaceID,
+		Workspace:    workspaceID,
 		Instructions: instructions,
 		Messages:     transcript(conversation),
 		Tools:        registry.Specs(),
@@ -297,7 +324,7 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 		},
 		Clock:   r.deps.Clock,
 		Limits:  r.deps.Limits,
-		Emitter: r.emitter(conversation.ID, answerID, worker.ID),
+		Emitter: r.emitter(workspaceID, conversation.ID, answerID, worker.ID),
 		Log:     r.log,
 	})
 
@@ -316,10 +343,10 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 		return result, err
 	}
 	if r.deps.Events != nil {
-		r.deps.Events.ChatDone(ctx, r.deps.WorkspaceID, conversation.ID, worker.ID, usageOf(result.Usage))
+		r.deps.Events.ChatDone(ctx, workspaceID, conversation.ID, worker.ID, usageOf(result.Usage))
 	}
 	r.deliverToChannel(ctx, conversation, worker.ID, result)
-	r.observe(ctx, worker, conversation.ID, state)
+	r.observe(ctx, worker, conversation.ID, workspaceID, state)
 	return result, nil
 }
 
@@ -354,7 +381,7 @@ func (r *Runner) deliverToChannel(ctx context.Context, conversation *chat.Chat, 
 // on a detached context with its own timeout, so a slow or failing observer
 // never delays the answer somebody is reading. Losing an observation is a
 // warning; losing the answer would not be.
-func (r *Runner) observe(ctx context.Context, worker *agent.Agent, sessionID string, state *agentloop.State) {
+func (r *Runner) observe(ctx context.Context, worker *agent.Agent, sessionID, workspaceID string, state *agentloop.State) {
 	if r.observer == nil {
 		return
 	}
@@ -362,7 +389,7 @@ func (r *Runner) observe(ctx context.Context, worker *agent.Agent, sessionID str
 		AgentID:   worker.ID,
 		AgentName: worker.DisplayName(),
 		SessionID: sessionID,
-		Workspace: r.deps.WorkspaceID,
+		Workspace: workspaceID,
 		Messages:  state.Messages,
 	})
 }
@@ -413,12 +440,12 @@ func (r *Runner) toolsFor(box *sandbox.Sandbox) *toolexec.Registry {
 	return registry
 }
 
-func (r *Runner) emitter(chatID, messageID, agentID string) agentloop.Emitter {
+func (r *Runner) emitter(workspaceID, chatID, messageID, agentID string) agentloop.Emitter {
 	if r.deps.Events == nil {
 		return nil
 	}
 	return &liveAnswer{
-		runner: r, chatID: chatID, messageID: messageID, agentID: agentID,
+		runner: r, workspaceID: workspaceID, chatID: chatID, messageID: messageID, agentID: agentID,
 		startedAt: r.deps.Clock.Now(),
 	}
 }
@@ -438,11 +465,12 @@ const snapshotInterval = 120 * time.Millisecond
 // MessageID) so that the in-progress message and the finished one are the
 // same message, not two.
 type liveAnswer struct {
-	runner    *Runner
-	chatID    string
-	messageID string
-	agentID   string
-	startedAt time.Time
+	runner      *Runner
+	workspaceID string
+	chatID      string
+	messageID   string
+	agentID     string
+	startedAt   time.Time
 
 	mu       sync.Mutex
 	text     strings.Builder
@@ -479,7 +507,7 @@ func (l *liveAnswer) closeBlockLocked() {
 func (l *liveAnswer) Delta(ctx context.Context, c agentloop.Chunk) {
 	// The text-only event stays: it is what a caller that only wants the
 	// answer streaming (and not the whole message) still listens to.
-	l.runner.deps.Events.ChatDelta(ctx, l.runner.deps.WorkspaceID, l.chatID, c.Text, c.Reasoning)
+	l.runner.deps.Events.ChatDelta(ctx, l.workspaceID, l.chatID, c.Text, c.Reasoning)
 
 	l.mu.Lock()
 	l.text.WriteString(c.Text)
@@ -552,7 +580,7 @@ func (l *liveAnswer) publish(ctx context.Context, message chat.Message) {
 	if len(message.Parts) == 0 {
 		return
 	}
-	l.runner.deps.Events.ChatMessage(ctx, l.runner.deps.WorkspaceID, l.chatID, message)
+	l.runner.deps.Events.ChatMessage(ctx, l.workspaceID, l.chatID, message)
 }
 
 // persist writes the answer back into the conversation.

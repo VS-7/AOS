@@ -353,6 +353,12 @@ func New(opts Options) (*App, error) {
 		active = resolver.String(env.KeyWorkspaceID, "")
 	}
 
+	// The channel every event of this scope goes out on. Empty `active` is
+	// the normal case for a desktop or CLI installation, not an error, so the
+	// id is resolved from the registry later rather than captured here — see
+	// eventScope for what publishing to the empty channel cost.
+	scope := newEventScope(active)
+
 	// One hub for the installation. A workspace built for another one
 	// publishes into the primary's, because that is where the WebSocket
 	// server's subscribers are — a hub of its own would emit to nobody, and
@@ -366,7 +372,7 @@ func New(opts Options) (*App, error) {
 	// ecosystem natives (collections, views, toolsets, skills) publish a
 	// Changed event on every write, and NewRepoSet needs the hub to build
 	// the publisher that carries it — see WithPublisher below.
-	repos, err := newRepoSet(root, lock, cache, collectionPublisher{hub: events, workspace: active})
+	repos, err := newRepoSet(root, lock, cache, collectionPublisher{hub: events, scope: scope})
 	if err != nil {
 		return nil, err
 	}
@@ -424,6 +430,13 @@ func New(opts Options) (*App, error) {
 		Active:        active,
 		WorkingDir:    root,
 	})
+
+	// Now that the registry is readable, the scope declared above can answer.
+	// Everything that publishes an event — chat, activity, collections,
+	// approvals — and the turn itself go through this one resolver, so there
+	// is no second place left where an unpinned scope can silently become the
+	// empty channel.
+	scope.resolveWith(workspaceForEvents(workspaceSvc, root, logger))
 
 	// The UI file explorer and editor. It has no command group and no MCP
 	// tools — see File (Go)'s "não tem grupo de comando" — so it is wired
@@ -483,7 +496,7 @@ func New(opts Options) (*App, error) {
 	})
 	broker := event.NewBroker(event.BrokerDeps{
 		Clock: clock, IDs: idgen,
-		Notifier: approvalNotifier{hub: events, workspace: active},
+		Notifier: approvalNotifier{hub: events, scope: scope},
 	})
 	closers = append(closers, func() error { broker.Close(); return nil })
 
@@ -496,7 +509,7 @@ func New(opts Options) (*App, error) {
 		Read:   activitylog.NewReadStore(root),
 		Clock:  clock,
 		IDs:    idgen,
-		Sinks:  []activity.Sink{realtimeSink{hub: events, workspace: active}},
+		Sinks:  []activity.Sink{realtimeSink{hub: events, scope: scope}},
 		Logger: logger,
 	})
 
@@ -552,7 +565,7 @@ func New(opts Options) (*App, error) {
 		RecordRepos: fscollections.NewRecordRepos(root,
 			fscollections.WithRecordLock(lock),
 			fscollections.WithRecordIndex(cache),
-			fscollections.WithRecordPublisher(collectionPublisher{hub: events, workspace: active}),
+			fscollections.WithRecordPublisher(collectionPublisher{hub: events, scope: scope}),
 		),
 		IDs: idgen,
 	})
@@ -700,7 +713,7 @@ func New(opts Options) (*App, error) {
 	// The watcher: the schema.json case, for everything that reaches disk a
 	// way other than the domain's own Create — see watch.go's own comment on
 	// why Create itself needs none of this.
-	watchPub := collectionPublisher{hub: events, workspace: active}
+	watchPub := collectionPublisher{hub: events, scope: scope}
 	watcher := fscollections.NewWatcher(root,
 		fscollections.WithWatchPublisher(watchPub),
 		fscollections.OnSchema(onSchemaChanged(collectionSvc, collReg, watchPub, logger)),
@@ -759,14 +772,18 @@ func New(opts Options) (*App, error) {
 		Approver:      broker,
 		Prompt:        assembler,
 		Spiller:       toolexec.NewSpiller(paths.Outputs(), logger),
-		Events:        publisher{hub: events, channel: workspaceForEvents(workspaceSvc, root, logger)},
+		Events:        publisher{hub: events, scope: scope},
 		Bots:          botRegistry,
 		Clock:         clock,
 		IDs:           idgen,
 		Log:           logger,
 		WorkspaceRoot: root,
 		WorkspaceID:   active,
-		TmpDir:        paths.Outputs(),
+		// The turn resolves its own workspace when the scope was not pinned,
+		// so identity, the assembled prompt and every event a tool causes
+		// name the workspace the person is actually looking at.
+		Scope:  scope.ID,
+		TmpDir: paths.Outputs(),
 	})
 	dispatch.to = runtime
 
@@ -1059,6 +1076,15 @@ func workspaceForEvents(svc *workspace.Service, root string, log *slog.Logger) f
 	}
 }
 
+// newRepoSet builds every repository this workspace writes through.
+//
+// All of them publish, and that uniformity is the point. `collection.changed`
+// used to be wired for the eight "ecosystem" natives only, on the reasoning
+// that nothing subscribed to the rest — but the interface's cache is keyed by
+// domain, so what it actually meant was that an agent, a chat, a memory or a
+// task created outside the current window produced no signal at all and the
+// screen showing it stayed wrong until somebody navigated. A repo that writes
+// and says nothing is the shape of that bug; there is now no such repo.
 func newRepoSet(root string, lock *collections.PathLock, index *fscollections.Index, pub collections.Publisher) (repoSet, error) {
 	agentModel, err := collections.ModelOf[agent.Agent]("agents")
 	if err != nil {
@@ -1132,34 +1158,42 @@ func newRepoSet(root string, lock *collections.PathLock, index *fscollections.In
 		agents: fscollections.New(root, agentModel,
 			fscollections.WithLock[agent.Agent](lock),
 			fscollections.WithIndex[agent.Agent](index),
+			fscollections.WithPublisher[agent.Agent](pub),
 		),
 		memories: fscollections.New(root, memoryModel,
 			fscollections.WithLock[memory.Memory](lock),
 			fscollections.WithIndex[memory.Memory](index),
+			fscollections.WithPublisher[memory.Memory](pub),
 		),
 		chats: fscollections.New(root, chatModel,
 			fscollections.WithLock[chat.Chat](lock),
 			fscollections.WithIndex[chat.Chat](index),
+			fscollections.WithPublisher[chat.Chat](pub),
 		),
 		tasks: fscollections.New(root, taskModel,
 			fscollections.WithLock[task.Task](lock),
 			fscollections.WithIndex[task.Task](index),
+			fscollections.WithPublisher[task.Task](pub),
 		),
 		todos: fscollections.New(root, todoModel,
 			fscollections.WithLock[todo.Todo](lock),
 			fscollections.WithIndex[todo.Todo](index),
+			fscollections.WithPublisher[todo.Todo](pub),
 		),
 		comments: fscollections.New(root, commentModel,
 			fscollections.WithLock[comment.Comment](lock),
 			fscollections.WithIndex[comment.Comment](index),
+			fscollections.WithPublisher[comment.Comment](pub),
 		),
 		routines: fscollections.New(root, routineModel,
 			fscollections.WithLock[routine.Routine](lock),
 			fscollections.WithIndex[routine.Routine](index),
+			fscollections.WithPublisher[routine.Routine](pub),
 		),
 		runs: fscollections.New(root, runModel,
 			fscollections.WithLock[routine.Run](lock),
 			fscollections.WithIndex[routine.Run](index),
+			fscollections.WithPublisher[routine.Run](pub),
 		),
 		collections: fscollections.New(root, collectionModel,
 			fscollections.WithLock[collection.Collection](lock),
@@ -1191,12 +1225,10 @@ func newRepoSet(root string, lock *collections.PathLock, index *fscollections.In
 			fscollections.WithIndex[goal.Goal](index),
 			fscollections.WithPublisher[goal.Goal](pub),
 		),
-		// Instructions has no WithPublisher: nothing subscribes to instruction
-		// changes over the realtime hub yet, matching agents/tasks/etc., not
-		// the ecosystem four.
 		instructions: fscollections.New(root, instructionModel,
 			fscollections.WithLock[instruction.Instruction](lock),
 			fscollections.WithIndex[instruction.Instruction](index),
+			fscollections.WithPublisher[instruction.Instruction](pub),
 		),
 		projects: fscollections.New(root, projectModel,
 			fscollections.WithLock[project.Project](lock),

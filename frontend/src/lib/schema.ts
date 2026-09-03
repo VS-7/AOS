@@ -72,8 +72,8 @@ export interface CommandMap {
     "content"?: string;
     /** Orchestrator-facing summary of when to delegate to this agent. */
     "description"?: string;
-    /** Unique agent identifier (slug). Lowercase, no spaces. Example: "atlas". */
-    "id": string;
+    /** Unique agent identifier (slug). Lowercase, no spaces. Defaults to a slug of name. Example: "atlas". */
+    "id"?: string;
     /** Slug of the leader agent in a hierarchical team. */
     "leader"?: string;
     /** LLM model id for this agent. Example: "gpt-4o". */

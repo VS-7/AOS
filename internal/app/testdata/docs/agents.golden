@@ -41,7 +41,7 @@ agent rather than two.
   "properties": {
     "id": {
       "type": "string",
-      "description": "Unique agent identifier (slug). Lowercase, no spaces. Example: \"atlas\"."
+      "description": "Unique agent identifier (slug). Lowercase, no spaces. Defaults to a slug of name. Example: \"atlas\"."
     },
     "name": {
       "type": "string",
@@ -172,7 +172,6 @@ agent rather than two.
     }
   },
   "required": [
-    "id",
     "_reasoning"
   ],
   "additionalProperties": false

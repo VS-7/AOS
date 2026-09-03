@@ -418,7 +418,7 @@ var Catalog = []Entry{
 	{Code: "AOS_UPDATE_ROLLED_BACK", Package: "internal/domain/update", File: "internal/domain/update/errors.go", Line: 78, Status: 500, Causer: "update.Service.Apply", CTA: true},
 	{Code: "AOS_UPDATE_SIGNATURE_INVALID", Package: "internal/domain/update", File: "internal/domain/update/errors.go", Line: 41, Status: 502, Causer: "update.Service.Download", CTA: true},
 	{Code: "AOS_UPDATE_SOURCE_UNAVAILABLE", Package: "internal/domain/update", File: "internal/domain/update/errors.go", Line: 6, Status: 503, Causer: "update.Service.Check", CTA: true},
-	{Code: "AOS_VIEW_ACTION_COMMAND_NOT_FOUND", Package: "internal/app", File: "internal/app/ecosystem.go", Line: 114, Status: 404, Causer: "app.registryCommands.Invoke", CTA: true, Issues: []string{"command"}},
+	{Code: "AOS_VIEW_ACTION_COMMAND_NOT_FOUND", Package: "internal/app", File: "internal/app/ecosystem.go", Line: 116, Status: 404, Causer: "app.registryCommands.Invoke", CTA: true, Issues: []string{"command"}},
 	{Code: "AOS_VIEW_ACTION_COMMAND_UNKNOWN", Package: "internal/domain/view", File: "internal/domain/view/errors.go", Line: 91, Status: 400, Causer: "view.Validate", CTA: true, Issues: []string{"at", "command"}},
 	{Code: "AOS_VIEW_ACTION_INPUT_INVALID", Package: "internal/domain/view", File: "internal/domain/view/errors.go", Line: 149, Status: 400, Causer: "view.Service.ExecuteAction", CTA: true, Issues: []string{"id", "label"}},
 	{Code: "AOS_VIEW_ACTION_NOT_DECLARED", Package: "internal/domain/view", File: "internal/domain/view/errors.go", Line: 122, Status: 400, Causer: "view.Service.ExecuteAction", CTA: true, Issues: []string{"id", "label"}},

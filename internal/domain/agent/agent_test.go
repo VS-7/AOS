@@ -78,6 +78,31 @@ func TestCreateRejectsAnEmptySlugWithACallToAction(t *testing.T) {
 	}
 }
 
+// The interface's "New agent" form asks for a name, not a slug — it was
+// ported from an app whose server minted the id. Requiring one here is what
+// made every create from the application fail with "id is required".
+func TestCreateDerivesTheSlugFromTheName(t *testing.T) {
+	svc, _ := newService(t)
+	got, err := svc.Create(ctx(), agent.CreateInput{Name: "Luara Ávila"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != "luara-avila" {
+		t.Errorf("id = %q, want the slug of the name", got.ID)
+	}
+	if got.Name != "Luara Ávila" {
+		t.Errorf("name = %q, want the name as it was written", got.Name)
+	}
+}
+
+// A name that slugs to nothing is still nothing to name a file after.
+func TestCreateRejectsANameThatSlugsToNothing(t *testing.T) {
+	svc, _ := newService(t)
+	if _, err := svc.Create(ctx(), agent.CreateInput{Name: "  ***  "}); err == nil {
+		t.Fatal("an agent with no usable slug has no identity")
+	}
+}
+
 func TestCreateRefusesADuplicate(t *testing.T) {
 	svc, _ := newService(t)
 	if _, err := svc.Create(ctx(), agent.CreateInput{ID: "atlas"}); err != nil {

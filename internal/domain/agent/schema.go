@@ -35,7 +35,13 @@ type GetInput struct {
 // CreateInput is the payload of `agents create`, derived from the entity with
 // the server-owned fields removed.
 type CreateInput struct {
-	ID           string    `json:"id" cli:"arg" jsonschema:"Unique agent identifier (slug). Lowercase, no spaces. Example: \"atlas\"." validate:"required,max=64"`
+	// ID is optional because a caller who has a name has enough. It was
+	// required, and the interface's own "New agent" form — ported from an
+	// original whose server minted the id — never collected one, so creating
+	// an agent from the application failed with "id is required", every time.
+	// Every other domain that owns a slug already derives it (workspace,
+	// task, goal, instruction, project); this one simply never did.
+	ID           string    `json:"id,omitempty" cli:"arg" jsonschema:"Unique agent identifier (slug). Lowercase, no spaces. Defaults to a slug of name. Example: \"atlas\"." validate:"max=64"`
 	Name         string    `json:"name,omitempty" jsonschema:"Human-readable display name. Defaults to the slug."`
 	Description  string    `json:"description,omitempty" jsonschema:"Orchestrator-facing summary of when to delegate to this agent."`
 	Role         string    `json:"role,omitempty" jsonschema:"Functional role label shown in delegation prompts."`
