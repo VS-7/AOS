@@ -1,5 +1,6 @@
 import { Call } from "@wailsio/runtime";
 import { DomainError, bridgeFetch, unwrap } from "./client";
+import { isDesktopWindow } from "./wails";
 import { desktopRetryDelays, markDesktopConfirmed, sleep } from "./desktop-transport";
 import { daemonURL } from "./daemon-origin";
 
@@ -43,6 +44,17 @@ function isRetryable(err: unknown): boolean {
 // wait than either alone: AuthGate's status() check and, moments later,
 // RootLayout's own data queries would otherwise each pay the full price.
 async function desktopCall<T>(method: string, ...args: unknown[]): Promise<T> {
+  // Same reasoning as client.ts's invoke: a browser tab has no bridge to
+  // warm up, and `isDesktopWindow` says so synchronously. Probing anyway is
+  // what made a fresh server installation wait out two full retry budgets —
+  // this call and the workspace query behind it — before its first screen.
+  if (!isDesktopWindow) {
+    throw new DomainError({
+      code: "TRANSPORT_NO_BRIDGE",
+      message: "this page is a browser tab and has no desktop bridge",
+      status: 0,
+    });
+  }
   const delays = desktopRetryDelays();
   for (let attempt = 0; ; attempt++) {
     try {

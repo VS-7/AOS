@@ -215,13 +215,18 @@ func serveMCP(ctx context.Context, resolver *env.Resolver, paths corecfg.Paths, 
 			token = strings.TrimSpace(string(raw))
 		}
 	}
+	// Where this client stands, so the daemon routes to the workspace the
+	// directory belongs to rather than to its own primary one — the same
+	// header every CLI call already sends.
+	workingDir, _ := os.Getwd()
 	return mcpproxy.Serve(ctx, mcpproxy.Options{
-		Endpoint:  fmt.Sprintf("http://%s:%d/mcp", host, port),
-		Token:     token,
-		Workspace: resolver.String(env.KeyWorkspaceID, ""),
-		Agent:     resolver.String(env.KeyAgentID, ""),
-		Name:      build.Name,
-		Version:   build.Current().Version,
+		Endpoint:   fmt.Sprintf("http://%s:%d/mcp", host, port),
+		Token:      token,
+		Workspace:  resolver.String(env.KeyWorkspaceID, ""),
+		Agent:      resolver.String(env.KeyAgentID, ""),
+		WorkingDir: workingDir,
+		Name:       build.Name,
+		Version:    build.Current().Version,
 	})
 }
 

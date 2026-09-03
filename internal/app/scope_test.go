@@ -3,12 +3,14 @@ package app_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/OWNER/aos/internal/app"
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/env"
+	"github.com/OWNER/aos/internal/core/identity"
 	"github.com/OWNER/aos/internal/core/ids"
 	"github.com/OWNER/aos/internal/domain/activity"
 	"github.com/OWNER/aos/internal/domain/event"
@@ -278,5 +280,44 @@ func TestAPendingApprovalReachesTheRegisteredWorkspaceChannel(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("the approval request never returned")
+	}
+}
+
+// A call made from inside a registered repository addresses *that* workspace.
+//
+// The routing only ever read the workspace id from the header, so a terminal
+// (or a coding agent over MCP) standing in repository B silently addressed
+// the daemon's primary workspace: `aos tasks list` there listed repository
+// A's tasks and said nothing was missing. The audit that fixed which
+// directory `workspace_introspect` registers left this half undone —
+// X-Working-Dir arrived, and only that one command read it.
+func TestACallIsRoutedToTheWorkspaceItsDirectoryBelongsTo(t *testing.T) {
+	a, primary := unpinnedApp(t)
+	ctx := context.Background()
+
+	second := t.TempDir()
+	registered, err := a.Workspaces.Introspect(ctx, workspace.IntrospectInput{Path: second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registered.Workspace.ID == primary {
+		t.Fatal("the second directory registered as the first workspace")
+	}
+
+	// A task written from inside the second directory, naming no workspace.
+	from := identity.With(ctx, identity.Identity{WorkingDir: second})
+	invokeIn(from, t, a, "tasks_create", `{"name":"only in the second","_reasoning":"probe"}`)
+
+	// It is there.
+	raw := invokeIn(from, t, a, "tasks_list", `{"_reasoning":"probe"}`)
+	if !strings.Contains(string(raw), "only in the second") {
+		t.Errorf("the task is not in the workspace it was created from: %s", raw)
+	}
+
+	// And not in the primary one, which is what used to receive it.
+	fromPrimary := identity.With(ctx, identity.Identity{WorkspaceID: primary})
+	raw = invokeIn(fromPrimary, t, a, "tasks_list", `{"_reasoning":"probe"}`)
+	if strings.Contains(string(raw), "only in the second") {
+		t.Errorf("the task landed in the primary workspace: %s", raw)
 	}
 }

@@ -500,3 +500,43 @@ func (c *Client) Fetch(ctx context.Context, method, path, contentType string, bo
 // credential every other call does. It stays inside this process — nothing
 // exposes it to the page.
 func (c *Client) Token() string { return c.currentToken() }
+
+// Stream performs a GET against the daemon and hands back the live response,
+// credentials attached.
+//
+// Fetch reads the whole body into memory, which is right for a JSON envelope
+// and wrong for the one surface that answers bytes: `/api/file/content`, the
+// URL the Files panel's image, PDF and video viewers put in a `src`. A video
+// is not a string, and a player asking for a byte range needs the range to
+// reach the daemon and the daemon's own 206 to come back — which is why the
+// caller's headers are forwarded and the response is returned unread.
+//
+// The caller closes the body.
+func (c *Client) Stream(ctx context.Context, path string, header http.Header) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
+	if err != nil {
+		return nil, errUnreachable(c.base, err)
+	}
+	// Range and the conditional headers, so seeking and caching work through
+	// the proxy exactly as they would against the daemon.
+	for _, name := range []string{"range", "if-range", "if-modified-since", "if-none-match", "accept"} {
+		if v := header.Get(name); v != "" {
+			req.Header.Set(name, v)
+		}
+	}
+	if token := c.currentToken(); token != "" {
+		req.Header.Set("authorization", "Bearer "+token)
+	}
+	if workspace := c.currentWorkspace(); workspace != "" {
+		req.Header.Set("x-workspace-id", workspace)
+	}
+	if agent := c.currentAgent(); agent != "" {
+		req.Header.Set("x-agent-id", agent)
+	}
+
+	res, err := c.http.Do(req)
+	if err != nil {
+		return nil, errUnreachable(c.base, err)
+	}
+	return res, nil
+}

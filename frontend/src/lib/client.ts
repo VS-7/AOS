@@ -1,5 +1,6 @@
 import { Call } from "@wailsio/runtime";
 import { daemonURL } from "./daemon-origin";
+import { isDesktopWindow } from "./wails";
 import type { CommandInput, CommandKey, CommandOutput } from "./schema";
 import { desktopRetryDelays, isDesktopConfirmed, markDesktopConfirmed, sleep } from "./desktop-transport";
 
@@ -430,6 +431,15 @@ function workspaceHeader(): Record<string, string> {
  */
 export const client: Client = {
   async invoke(key, input) {
+    // A browser tab does not probe the bridge. `isDesktopWindow` is a
+    // synchronous fact — the window states it in the URL it opens
+    // (`?daemon=`) — and trying anyway cost a rejected `POST /wails/runtime`
+    // per call, logged by the daemon at WARN, plus the full cold-start retry
+    // budget on the first few: roughly seven seconds before a server
+    // installation drew its first screen.
+    if (!isDesktopWindow) {
+      return http.invoke(key, input);
+    }
     try {
       return await desktop.invoke(key, input);
     } catch {

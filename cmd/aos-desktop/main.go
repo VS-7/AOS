@@ -265,6 +265,10 @@ func main() {
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
+			// The one daemon path the window has to serve itself: an <img>
+			// cannot carry a bearer, and the bridge answers strings. See
+			// bridgeContent.
+			Middleware: bridgeContent(daemon, log),
 		},
 		LogLevel: slog.LevelWarn,
 	})
