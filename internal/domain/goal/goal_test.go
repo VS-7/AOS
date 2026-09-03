@@ -404,3 +404,97 @@ func TestUpdateChangesEveryOptionalField(t *testing.T) {
 		t.Fatalf("DueAt = %v, want %v", updated.DueAt, newDue)
 	}
 }
+
+// The interface has edited a goal's priority since the port — a column on the
+// list, a dropdown on the row, a field on the form — and Go had no such
+// field, so every save answered 200 with the value dropped and the screen
+// toasted "Priority updated to High" over a record that had not changed.
+func TestPriorityIsStoredAndPatched(t *testing.T) {
+	repo := newFakeRepository()
+	svc := newService(repo, &fakeTasks{})
+
+	created, err := svc.Create(ctx(), goal.CreateInput{Title: "Ship it", Priority: goal.High})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Priority != goal.High {
+		t.Errorf("priority = %q, want the one that was sent", created.Priority)
+	}
+
+	urgent := goal.Urgent
+	updated, err := svc.Update(ctx(), goal.UpdateInput{ID: created.ID, Priority: &urgent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Priority != goal.Urgent {
+		t.Errorf("priority = %q, want it patched", updated.Priority)
+	}
+
+	// An omitted field is left alone, like every other one here.
+	same, err := svc.Update(ctx(), goal.UpdateInput{ID: created.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if same.Priority != goal.Urgent {
+		t.Errorf("priority = %q, want it untouched", same.Priority)
+	}
+}
+
+// A goal nobody prioritised is not urgent, and not blank either: the list
+// groups on this value, so an empty one would sort into a bucket that does
+// not exist.
+func TestPriorityDefaultsToNoPriority(t *testing.T) {
+	repo := newFakeRepository()
+	svc := newService(repo, &fakeTasks{})
+
+	created, err := svc.Create(ctx(), goal.CreateInput{Title: "Someday"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Priority != goal.NoPriority {
+		t.Errorf("priority = %q, want no_priority", created.Priority)
+	}
+}
+
+// A closed set, refused with the values named — the same shape the status
+// check has, and for the same reason: "invalid" alone tells a caller nothing
+// it can act on.
+func TestAnUnknownPriorityIsRefusedNamingTheValues(t *testing.T) {
+	repo := newFakeRepository()
+	svc := newService(repo, &fakeTasks{})
+
+	_, err := svc.Create(ctx(), goal.CreateInput{Title: "Ship it", Priority: goal.Priority("vibes")})
+	if err == nil {
+		t.Fatal("a priority outside the union was accepted")
+	}
+	if code := codeOf(t, err); code != "AOS_GOAL_PRIORITY_INVALID" {
+		t.Errorf("code = %q, want AOS_GOAL_PRIORITY_INVALID", code)
+	}
+
+	created, err := svc.Create(ctx(), goal.CreateInput{Title: "Ship it"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bogus := goal.Priority("later")
+	if _, err := svc.Update(ctx(), goal.UpdateInput{ID: created.ID, Priority: &bogus}); err == nil {
+		t.Fatal("an update to a priority outside the union was accepted")
+	}
+}
+
+// The union is published to every schema, so a model and a form offer the
+// same five values the validator accepts.
+func TestPriorityPublishesItsValues(t *testing.T) {
+	got := goal.NoPriority.EnumValues()
+	want := []string{"no_priority", "urgent", "high", "medium", "low"}
+	if len(got) != len(want) {
+		t.Fatalf("values = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("values = %v, want %v", got, want)
+		}
+	}
+	if goal.Priority("vibes").Valid() {
+		t.Error("an unknown priority reports itself valid")
+	}
+}
