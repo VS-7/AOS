@@ -155,6 +155,20 @@ var excluded = map[string]string{
 		"DaemonSupervisor.",
 }
 
+// seededRecord is the id of the record a seed that starts with an agent
+// leaves behind.
+//
+// Every installation in this harness shares one `ids.Sequence`, so an id is
+// simply the count of records written before it — which makes the payloads
+// deterministic and makes them move whenever a seed writes one more thing.
+// Creating an agent now also writes an activity (agentActivity, so the inbox
+// and routine triggers see it), which is the write that moved these from
+// "m-1" to "m-2".
+//
+// Named rather than repeated as a literal so the next one is a single edit
+// and reads as what it is: the second record, not a magic string.
+const seededRecord = "m-2"
+
 // scenario describes one command well enough to run it on every surface.
 type scenario struct {
 	// Payload is the input, identical on all four surfaces.
@@ -217,6 +231,35 @@ func seedChat(t *testing.T, a *app.App) {
 	t.Helper()
 	seedAgent(t, a)
 	if _, err := a.Chats.Create(parityCtx(), chat.CreateInput{Title: "Planning"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// seededMessage is the message seedChatWithMessage leaves to react to.
+//
+// Named explicitly in the seed rather than taken from the id sequence: this
+// one has to survive a seed that writes one more record, and a reaction needs
+// a message it can address by name on all five surfaces.
+const seededMessage = "seeded-message"
+
+// seedChatWithMessage leaves a conversation with something in it to react to.
+//
+// Written through Reply rather than Send, and that is the point: Send
+// *dispatches a turn*. This installation has no model provider, so the turn
+// fails and records the failure on the message it was answering — after the
+// send returns, on the runtime's own goroutine. Whether that run had landed
+// by the time the reaction read the conversation was a race, and the five
+// surfaces disagreed about it. Reply with no ReplyTo writes the message and
+// starts nothing.
+func seedChatWithMessage(t *testing.T, a *app.App) {
+	t.Helper()
+	seedChat(t, a)
+	if _, err := a.Chats.Reply(parityCtx(), chat.ReplyInput{
+		Chat:      seededRecord,
+		AgentID:   "atlas",
+		MessageID: seededMessage,
+		Parts:     []chat.Part{{Type: chat.PartText, Text: "the first thing said"}},
+	}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -330,7 +373,7 @@ var scenarios = map[string]scenario{
 		Seed:    seedChat,
 	},
 	"chats_get": {
-		Payload: chat.GetInput{Chat: "m-1", Reasoning: reason()},
+		Payload: chat.GetInput{Chat: seededRecord, Reasoning: reason()},
 		Seed:    seedChat,
 	},
 	"chats_create": {
@@ -338,20 +381,32 @@ var scenarios = map[string]scenario{
 		Seed:    seedAgent,
 	},
 	"chats_send": {
-		Payload: chat.SendInput{Chat: "m-1", Text: "@atlas what changed?", Reasoning: reason()},
+		Payload: chat.SendInput{Chat: seededRecord, Text: "@atlas what changed?", Reasoning: reason()},
 		Seed:    seedChat,
 	},
 	"chats_update": {
-		Payload: chat.UpdateInput{Chat: "m-1", Title: "Renamed", Reasoning: reason()},
+		Payload: chat.UpdateInput{Chat: seededRecord, Title: "Renamed", Reasoning: reason()},
 		Seed:    seedChat,
 	},
 	"chats_clear": {
-		Payload: chat.ClearInput{Chat: "m-1", Reasoning: reason()},
+		Payload: chat.ClearInput{Chat: seededRecord, Reasoning: reason()},
 		Seed:    seedChat,
 	},
 	"chats_delete": {
-		Payload: chat.DeleteInput{Chat: "m-1", Reasoning: reason()},
+		Payload: chat.DeleteInput{Chat: seededRecord, Reasoning: reason()},
 		Seed:    seedChat,
+	},
+	// Nothing is running in this harness, so every surface gets the same
+	// "there was nothing to stop" — which is the answer worth pinning: it is
+	// the one a person gets when they press the button a moment late, and it
+	// must not read as a failure on any surface.
+	"chats_stop": {
+		Payload: chat.StopInput{Chat: seededRecord, Reasoning: reason()},
+		Seed:    seedChat,
+	},
+	"chats_react": {
+		Payload: chat.ReactInput{Chat: seededRecord, Message: seededMessage, Value: "👍", Reasoning: reason()},
+		Seed:    seedChatWithMessage,
 	},
 	// The two read-only halves of supervision are safe to run five times over:
 	// neither spawns anything. The two that do are in `excluded`.
@@ -464,7 +519,7 @@ var scenarios = map[string]scenario{
 		Seed:    seedRoutine,
 	},
 	"routines_get": {
-		Payload: routine.GetInput{ID: "m-1", Reasoning: reason()},
+		Payload: routine.GetInput{ID: seededRecord, Reasoning: reason()},
 		Seed:    seedRoutine,
 	},
 	"routines_create": {
@@ -477,15 +532,15 @@ var scenarios = map[string]scenario{
 		Seed: seedAgent,
 	},
 	"routines_update": {
-		Payload: routine.UpdateInput{ID: "m-1", Name: ptr("Renamed"), Reasoning: reason()},
+		Payload: routine.UpdateInput{ID: seededRecord, Name: ptr("Renamed"), Reasoning: reason()},
 		Seed:    seedRoutine,
 	},
 	"routines_runs": {
-		Payload: routine.RunsInput{ID: "m-1", Reasoning: reason()},
+		Payload: routine.RunsInput{ID: seededRecord, Reasoning: reason()},
 		Seed:    seedRoutine,
 	},
 	"routines_delete": {
-		Payload: routine.DeleteInput{ID: "m-1", Reasoning: reason()},
+		Payload: routine.DeleteInput{ID: seededRecord, Reasoning: reason()},
 		Seed:    seedRoutine,
 	},
 

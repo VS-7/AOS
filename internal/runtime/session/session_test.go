@@ -305,3 +305,77 @@ func TestAnAnswerCarriesTheReasoningItStreamed(t *testing.T) {
 		t.Errorf("reasoning = %v, want one part per block in order", reasoning)
 	}
 }
+
+// recordingChats captures what a turn wrote back, which is the only place a
+// stopped turn leaves a trace.
+type recordingChats struct {
+	chat    *chat.Chat
+	replies []chat.ReplyInput
+}
+
+func (r *recordingChats) Get(context.Context, chat.GetInput) (*chat.Chat, error) {
+	return r.chat, nil
+}
+
+func (r *recordingChats) Reply(_ context.Context, in chat.ReplyInput) (chat.ReplyOutput, error) {
+	r.replies = append(r.replies, in)
+	return chat.ReplyOutput{}, nil
+}
+
+// A turn somebody stopped is not a turn that failed, and the conversation
+// should not read like an error. `StatusInterrupted` has existed on `Run`
+// since this aggregate was written and nothing ever assigned it, because
+// nothing could stop a turn at all.
+func TestAStoppedTurnIsRecordedAsInterruptedRatherThanFailed(t *testing.T) {
+	chats := &recordingChats{chat: &chat.Chat{ID: "c-1"}}
+	runner := New(Deps{Chats: chats, Log: slog.New(slog.DiscardHandler)})
+
+	runner.recordFailure(context.Background(), chat.Turn{ChatID: "c-1", MessageID: "m-1"},
+		"atlas", at, context.Canceled)
+
+	if len(chats.replies) != 1 {
+		t.Fatalf("replies = %d, want the stop recorded once", len(chats.replies))
+	}
+	got := chats.replies[0]
+	if !got.Interrupted {
+		t.Error("a stopped turn was not recorded as interrupted")
+	}
+	if got.Failure == nil || got.Failure.Code != "AOS_CHAT_TURN_STOPPED" {
+		t.Errorf("failure = %+v, want the stop's own code", got.Failure)
+	}
+	if len(got.Parts) != 0 {
+		t.Errorf("parts = %+v, want none: a stopped turn wrote no answer", got.Parts)
+	}
+}
+
+// Stopping is per conversation, because that is the unit a person is looking
+// at when they press the button.
+func TestStopEndsTheTurnItWasAskedAbout(t *testing.T) {
+	runner := New(Deps{Log: slog.New(slog.DiscardHandler)})
+
+	ended := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	runner.track("c-1", cancel)
+	go func() {
+		<-ctx.Done()
+		close(ended)
+	}()
+
+	stopped, err := runner.Stop(context.Background(), "c-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !stopped {
+		t.Fatal("the turn was not reported stopped")
+	}
+	select {
+	case <-ended:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the turn's context was never cancelled")
+	}
+
+	// And a conversation with nothing running answers so, rather than failing.
+	if stopped, err := runner.Stop(context.Background(), "c-2"); err != nil || stopped {
+		t.Errorf("stopped = %v, err = %v, want false and no error", stopped, err)
+	}
+}

@@ -20,7 +20,9 @@ import (
 	"github.com/OWNER/aos/internal/domain/agent"
 	"github.com/OWNER/aos/internal/domain/chat"
 	"github.com/OWNER/aos/internal/domain/config"
+	"github.com/OWNER/aos/internal/domain/goal"
 	"github.com/OWNER/aos/internal/domain/job"
+	"github.com/OWNER/aos/internal/domain/project"
 	"github.com/OWNER/aos/internal/domain/routine"
 	"github.com/OWNER/aos/internal/domain/task"
 	"github.com/OWNER/aos/internal/domain/todo"
@@ -265,6 +267,92 @@ func titleFor(event string, t *task.Task) string {
 		return t.Name + " was branched"
 	default:
 		return t.Name + " " + event
+	}
+}
+
+// recordActivity is what every one of the small notifiers below does: publish,
+// and warn rather than fail when the log is down.
+//
+// The activity log is a consequence of a mutation, not a condition of it —
+// losing an entry is worth a line, refusing the write is not.
+func recordActivity(ctx context.Context, activities *activity.Service, log *slog.Logger, in activity.PublishInput) {
+	if activities == nil {
+		return
+	}
+	if _, err := activities.Publish(ctx, in); err != nil {
+		log.Warn("a change was not published to the activity log",
+			"namespace", in.Namespace, "event", in.Event, "err", err)
+	}
+}
+
+// projectActivity, goalActivity and agentActivity are what the interface's
+// inbox and the routine triggers read.
+//
+// None of the three published anything. `collection.changed` tells a cache
+// what to refetch and nothing more: it carries no title, so the inbox cannot
+// show it, and routines only ever react to activities
+// (routineTriggers.OnActivity). The original app emitted created / updated /
+// deleted for all three, which is what these restore.
+//
+// The namespace is the singular feature name on purpose: `lib/realtime.ts`
+// invalidates the react-query key `[namespace]`, and those keys are named
+// after the interface's features — `project`, not `projects`.
+type projectActivity struct {
+	activities *activity.Service
+	log        *slog.Logger
+}
+
+func (n projectActivity) ProjectChanged(ctx context.Context, event string, p *project.Project) {
+	recordActivity(ctx, n.activities, n.log, activity.PublishInput{
+		Namespace: "project", Event: event,
+		Title: titleForRecord(event, "project", p.Name, p.ID),
+		Icon:  "FolderKanban",
+		Data:  map[string]any{"project": p.ID, "name": p.Name, "status": string(p.Status)},
+	})
+}
+
+type goalActivity struct {
+	activities *activity.Service
+	log        *slog.Logger
+}
+
+func (n goalActivity) GoalChanged(ctx context.Context, event string, g *goal.Goal) {
+	recordActivity(ctx, n.activities, n.log, activity.PublishInput{
+		Namespace: "goal", Event: event,
+		Title: titleForRecord(event, "goal", g.Title, g.ID),
+		Icon:  "Target",
+		Data:  map[string]any{"goal": g.ID, "title": g.Title, "status": string(g.Status)},
+	})
+}
+
+type agentActivity struct {
+	activities *activity.Service
+	log        *slog.Logger
+}
+
+func (n agentActivity) AgentChanged(ctx context.Context, event string, a *agent.Agent) {
+	recordActivity(ctx, n.activities, n.log, activity.PublishInput{
+		Namespace: "agent", Event: event,
+		Title: titleForRecord(event, "agent", a.DisplayName(), a.ID),
+		Icon:  "Bot",
+		Data:  map[string]any{"agent": a.ID, "name": a.DisplayName()},
+	})
+}
+
+// titleForRecord is the line the inbox shows. A deleted record has only its
+// id left to name it, which is why the id is the fallback rather than an
+// empty string.
+func titleForRecord(event, kind, name, id string) string {
+	if strings.TrimSpace(name) == "" {
+		name = id
+	}
+	switch event {
+	case "created":
+		return "New " + kind + ": " + name
+	case "deleted":
+		return "Deleted " + kind + ": " + name
+	default:
+		return name + " " + event
 	}
 }
 

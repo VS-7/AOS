@@ -794,8 +794,20 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // Mapping this onto `chats_create` would put a second, competing
   // implementation behind a name nothing calls.
   "chat.findOrCreateDm": null,
-  "chat.stop": null,
-  "chat.toggleReaction": null,
+  // Both were dormant because Go had no such command. It has both now, so
+  // the Stop button ends the turn instead of answering "no active run was
+  // found to stop" while the agent kept working, and a reaction is stored on
+  // the message the interface has always drawn one on.
+  "chat.stop": "chats_stop",
+  // `actor` is dropped: who is reacting comes from the identity of the call.
+  // A caller that could name the actor could react as somebody else.
+  "chat.toggleReaction": {
+    key: "chats_react",
+    renameIn: { messageId: "message" },
+    coerceIn: { actor: () => ({}) },
+    mapOut: withMessageMetadata,
+    wrapOut: "chat",
+  },
 
   // Not dormant: `POST /api/auth/profile` has existed since the identity
   // surface was built (`internal/transport/authapi`), and `lib/auth.ts`

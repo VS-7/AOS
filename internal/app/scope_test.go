@@ -13,7 +13,9 @@ import (
 	"github.com/OWNER/aos/internal/core/identity"
 	"github.com/OWNER/aos/internal/core/ids"
 	"github.com/OWNER/aos/internal/domain/activity"
+	"github.com/OWNER/aos/internal/domain/agent"
 	"github.com/OWNER/aos/internal/domain/event"
+	"github.com/OWNER/aos/internal/domain/goal"
 	"github.com/OWNER/aos/internal/domain/project"
 	"github.com/OWNER/aos/internal/domain/task"
 	"github.com/OWNER/aos/internal/domain/workspace"
@@ -165,6 +167,59 @@ func TestATaskChangeReachesTheRegisteredWorkspaceChannel(t *testing.T) {
 	}
 
 	sink.await(t, realtime.EventActivity)
+}
+
+// The inbox reads activities, and routine triggers only ever react to them —
+// `collection.changed` tells a cache what to refetch and carries no title, so
+// it can show nothing and trigger nothing. Project, goal and agent published
+// none, although the original app emitted created/updated/deleted for all
+// three.
+func TestCreatingAProjectGoalOrAgentIsAnActivity(t *testing.T) {
+	a, id := unpinnedApp(t)
+	ctx := context.Background()
+
+	for _, probe := range []struct {
+		what      string
+		namespace string
+		create    func() error
+	}{
+		{"project", "project", func() error {
+			_, err := a.Projects.Create(ctx, project.CreateInput{Name: "Probe project"})
+			return err
+		}},
+		{"goal", "goal", func() error {
+			_, err := a.Goals.Create(ctx, goal.CreateInput{Title: "Probe goal"})
+			return err
+		}},
+		{"agent", "agent", func() error {
+			_, err := a.Agents.Create(ctx, agent.CreateInput{Name: "Probe agent"})
+			return err
+		}},
+	} {
+		t.Run(probe.what, func(t *testing.T) {
+			sink := listen(t, a, realtime.ChannelFor(id))
+			if err := probe.create(); err != nil {
+				t.Fatal(err)
+			}
+
+			frame := sink.await(t, realtime.EventActivity)
+			data, ok := frame["data"].(map[string]any)
+			if !ok {
+				t.Fatalf("the activity carries no object payload: %v", frame["data"])
+			}
+			// The namespace is the interface's own feature name, because
+			// `lib/realtime.ts` invalidates the query key `[namespace]`.
+			if data["namespace"] != probe.namespace {
+				t.Errorf("namespace = %v, want %q", data["namespace"], probe.namespace)
+			}
+			if data["event"] != "created" {
+				t.Errorf("event = %v, want \"created\"", data["event"])
+			}
+			if title, _ := data["title"].(string); title == "" {
+				t.Error("the activity has no title, so the inbox has nothing to show")
+			}
+		})
+	}
 }
 
 func TestAProjectWriteReachesTheRegisteredWorkspaceChannel(t *testing.T) {

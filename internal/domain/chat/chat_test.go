@@ -551,7 +551,7 @@ func TestRegisterPublishesTheGroup(t *testing.T) {
 	reg := command.NewRegistry()
 	chat.Register(reg, h.svc)
 
-	want := []string{"chats_clear", "chats_create", "chats_delete", "chats_get", "chats_list", "chats_send", "chats_update"}
+	want := []string{"chats_clear", "chats_create", "chats_delete", "chats_get", "chats_list", "chats_react", "chats_send", "chats_stop", "chats_update"}
 	got := make([]string, 0, len(want))
 	for _, d := range reg.Sorted() {
 		got = append(got, d.Key())
@@ -884,5 +884,158 @@ func TestClearingAnEmptyConversationIsNotAnError(t *testing.T) {
 	}
 	if out.Removed != 0 {
 		t.Fatalf("removed = %d", out.Removed)
+	}
+}
+
+// codeOf is the apperr code of err, failing the test when there is none —
+// every refusal in this package carries one.
+func codeOf(t *testing.T, err error) string {
+	t.Helper()
+	var app *apperr.Error
+	if !errors.As(err, &app) {
+		t.Fatalf("err is %T, not *apperr.Error: %v", err, err)
+	}
+	return app.Code
+}
+
+// fakeCanceller stands in for the agent runtime's own cancel registry.
+type fakeCanceller struct {
+	asked   []string
+	running bool
+	err     error
+}
+
+func (c *fakeCanceller) Stop(_ context.Context, chatID string) (bool, error) {
+	c.asked = append(c.asked, chatID)
+	if c.err != nil {
+		return false, c.err
+	}
+	return c.running, nil
+}
+
+// The composer has always drawn a Stop button, and it called a command that
+// did not exist: the facade answered its dormant envelope as a *success*, the
+// screen said "No active run was found to stop", and the agent kept working.
+// There was no way to end a turn at all.
+func TestStopEndsTheTurnRunningOnAConversation(t *testing.T) {
+	canceller := &fakeCanceller{running: true}
+	h := newHarness(t, func(d *chat.Deps) { d.Canceller = canceller })
+	created := h.create(t, chat.CreateInput{Title: "Going the wrong way"})
+
+	out, err := h.svc.Stop(userCtx(), chat.StopInput{Chat: created.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Stopped {
+		t.Error("the running turn was not stopped")
+	}
+	if len(canceller.asked) != 1 || canceller.asked[0] != created.ID {
+		t.Errorf("the runtime was asked about %v, want the conversation", canceller.asked)
+	}
+}
+
+// Pressing the button a moment late is not an error — the turn finished on
+// its own, which is the outcome the person wanted.
+func TestStoppingAConversationWithNothingRunningIsNotAnError(t *testing.T) {
+	h := newHarness(t, func(d *chat.Deps) { d.Canceller = &fakeCanceller{running: false} })
+	created := h.create(t, chat.CreateInput{})
+
+	out, err := h.svc.Stop(userCtx(), chat.StopInput{Chat: created.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Stopped {
+		t.Error("a conversation with no turn reported one stopped")
+	}
+}
+
+// A build with no runtime is the one case worth refusing: the button can
+// never work here, and reporting "nothing was running" forever would hide
+// that.
+func TestStoppingWithoutARuntimeSaysSo(t *testing.T) {
+	h := newHarness(t)
+	created := h.create(t, chat.CreateInput{})
+
+	_, err := h.svc.Stop(userCtx(), chat.StopInput{Chat: created.ID})
+	if err == nil {
+		t.Fatal("a daemon with no runtime claimed it could stop a turn")
+	}
+	if code := codeOf(t, err); code != "AOS_CHAT_NO_RUNTIME" {
+		t.Errorf("code = %q, want AOS_CHAT_NO_RUNTIME", code)
+	}
+}
+
+func TestStoppingAConversationThatDoesNotExist(t *testing.T) {
+	h := newHarness(t, func(d *chat.Deps) { d.Canceller = &fakeCanceller{} })
+	if _, err := h.svc.Stop(userCtx(), chat.StopInput{Chat: "nope"}); err == nil {
+		t.Fatal("a conversation that does not exist was stopped")
+	}
+}
+
+// `Message.Reactions` has been persisted since this aggregate was written and
+// no command ever touched it, so the emoji picker the message list draws had
+// nothing behind it.
+func TestReactingTogglesTheMarkOffAndOn(t *testing.T) {
+	h := newHarness(t)
+	created := h.create(t, chat.CreateInput{})
+	sent, err := h.svc.Send(userCtx(), chat.SendInput{Chat: created.ID, Text: "hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	after, err := h.svc.React(userCtx(), chat.ReactInput{
+		Chat: created.ID, Message: sent.Message.ID, Value: "👍",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reactions := after.Messages[len(after.Messages)-1].Reactions
+	if len(reactions) != 1 || reactions[0].Value != "👍" || reactions[0].Actor != "vitor" {
+		t.Fatalf("reactions = %+v, want one from the caller", reactions)
+	}
+
+	// The same one again takes it back, which is what clicking twice means.
+	after, err = h.svc.React(userCtx(), chat.ReactInput{
+		Chat: created.ID, Message: sent.Message.ID, Value: "👍",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := after.Messages[len(after.Messages)-1].Reactions; len(got) != 0 {
+		t.Errorf("reactions = %+v, want none left", got)
+	}
+}
+
+func TestReactingToAMessageThatIsNotThere(t *testing.T) {
+	h := newHarness(t)
+	created := h.create(t, chat.CreateInput{})
+
+	_, err := h.svc.React(userCtx(), chat.ReactInput{Chat: created.ID, Message: "m-404", Value: "👍"})
+	if err == nil {
+		t.Fatal("a reaction landed on a message that does not exist")
+	}
+	if code := codeOf(t, err); code != "AOS_CHAT_MESSAGE_NOT_FOUND" {
+		t.Errorf("code = %q, want AOS_CHAT_MESSAGE_NOT_FOUND", code)
+	}
+}
+
+// A reaction is somebody's mark. Without an identity there is nothing to
+// attribute it to, and nobody could ever take it back.
+func TestReactingWithoutAnIdentityIsRefused(t *testing.T) {
+	h := newHarness(t)
+	created := h.create(t, chat.CreateInput{})
+	sent, err := h.svc.Send(userCtx(), chat.SendInput{Chat: created.ID, Text: "hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = h.svc.React(context.Background(), chat.ReactInput{
+		Chat: created.ID, Message: sent.Message.ID, Value: "👍",
+	})
+	if err == nil {
+		t.Fatal("an anonymous reaction was stored")
+	}
+	if code := codeOf(t, err); code != "AOS_CHAT_ACTOR_REQUIRED" {
+		t.Errorf("code = %q, want AOS_CHAT_ACTOR_REQUIRED", code)
 	}
 }

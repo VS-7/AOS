@@ -153,6 +153,9 @@ func main() {
 	// call it is started — the `go ensureDaemon` below and AuthService's
 	// afterAuth both happen after.
 	var emitRealtime func(event any)
+	// The daemon's health, for the interface to draw. Assigned with
+	// emitRealtime, below, once the window exists.
+	var emitDaemon func(event any)
 	// The relay follows the workspace. It used to be started once and never
 	// again (sync.Once), so switching workspace in the interface left the
 	// window listening to the events of the one it opened with: the board
@@ -281,6 +284,7 @@ func main() {
 	window := desktop.Window.NewWithOptions(windowOptions(address))
 	platform.window = window
 	emitRealtime = func(event any) { window.EmitEvent(RealtimeEventName, event) }
+	emitDaemon = func(event any) { window.EmitEvent(DaemonEventName, event) }
 
 	// Files dragged onto the window.
 	//
@@ -320,6 +324,14 @@ func main() {
 	// The daemon is asked to be running, not started blindly. Two things
 	// supervising one process is how you end up with two of it.
 	go ensureDaemon(supervisor, daemon, root, adopt, log)
+	// And then kept running. Supervision used to stop after that one call, so
+	// a daemon that crashed left the window answering every action with a
+	// failure and no way back short of relaunching — see watchDaemon.
+	go watchDaemon(realtimeCtx, supervisor, daemon, adopt, root, func(event any) {
+		if emitDaemon != nil {
+			emitDaemon(event)
+		}
+	}, log)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)

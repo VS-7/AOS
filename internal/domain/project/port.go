@@ -26,6 +26,17 @@ type Unlinker interface {
 	UnlinkProject(ctx context.Context, projectID string) error
 }
 
+// Notifier publishes what happened to a project.
+//
+// Best-effort and unable to fail the mutation, the same contract task's own
+// Notifier has. It exists because nothing published anything: a project
+// created by an agent, by the CLI or by another window produced no activity,
+// so the inbox never mentioned it and no routine could trigger on it — the
+// original app emitted created/updated/deleted for exactly this.
+type Notifier interface {
+	ProjectChanged(ctx context.Context, event string, p *Project)
+}
+
 // Clock is the only source of time in this package.
 type Clock interface{ Now() time.Time }
 

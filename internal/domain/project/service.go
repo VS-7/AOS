@@ -14,6 +14,7 @@ import (
 type Service struct {
 	repo      Repository
 	unlinkers []Unlinker
+	notifier  Notifier
 	clock     Clock
 	stat      PathStat
 }
@@ -26,6 +27,10 @@ type Deps struct {
 	// Delete removes. Task's adapter is wired today; Goal's is meant to join
 	// it once that domain exists — see this package's own INTEGRATION.md.
 	Unlinkers []Unlinker
+
+	// Notifier records what happened, for the inbox and for routine
+	// triggers. Nil publishes nothing, which is what a CLI process wants.
+	Notifier Notifier
 
 	Clock Clock
 
@@ -40,7 +45,7 @@ func NewService(d Deps) *Service {
 	if stat == nil {
 		stat = osStat{}
 	}
-	return &Service{repo: d.Repo, unlinkers: d.Unlinkers, clock: d.Clock, stat: stat}
+	return &Service{repo: d.Repo, unlinkers: d.Unlinkers, notifier: d.Notifier, clock: d.Clock, stat: stat}
 }
 
 // Query filters List.
@@ -147,7 +152,16 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Project, error) 
 	if err := s.repo.Create(ctx, &p); err != nil {
 		return nil, errWriteFailed("Create", err)
 	}
+	s.notify(ctx, "created", &p)
 	return &p, nil
+}
+
+// notify is best-effort: an activity log that is down must not stop work.
+func (s *Service) notify(ctx context.Context, event string, p *Project) {
+	if s.notifier == nil || p == nil {
+		return
+	}
+	s.notifier.ProjectChanged(ctx, event, p)
 }
 
 // UpdateInput changes a project. A nil pointer leaves that field unchanged;
@@ -210,6 +224,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Project, error) 
 	if err := s.repo.Update(ctx, &toWrite, collections.Version{}); err != nil {
 		return nil, errWriteFailed("Update", err)
 	}
+	s.notify(ctx, "updated", current)
 	return current, nil
 }
 
@@ -240,6 +255,7 @@ func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, err
 	if err := s.repo.Delete(ctx, collections.Key{"id": id}); err != nil {
 		return DeleteOutput{}, errWriteFailed("Delete", err)
 	}
+	s.notify(ctx, "deleted", &Project{ID: id})
 	return DeleteOutput{ID: id}, nil
 }
 

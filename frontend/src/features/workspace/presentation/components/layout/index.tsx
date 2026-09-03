@@ -21,6 +21,46 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useCoalescedInvalidate } from "@/hooks/use-coalesced-invalidate";
 import { WorkspaceNavControlsShell } from "../sidebar/components/workspace-nav-controls-shell";
 
+/**
+ * Refreshes the preloaded store a change belongs to, if there is one.
+ *
+ * Two signals arrive for the same write — the daemon's `collection.changed`
+ * (named in the plural, after the directory) and its `activity` (named in the
+ * singular, after the interface's own feature) — and both have to reach the
+ * same store. Everything else is read through react-query or a route loader,
+ * which the coalesced invalidate already covers.
+ */
+function refreshStoreFor(name: string | undefined): void {
+  switch (name) {
+    case "projects":
+    case "project":
+      void aos.stores.projects.actions.refresh();
+      break;
+    case "goals":
+    case "goal":
+      void aos.stores.goals.actions.refresh();
+      break;
+    case "agents":
+    case "agent":
+      void aos.stores.agent.actions.refresh();
+      break;
+    case "artifacts":
+    case "artifact":
+      void aos.stores.artifact.actions.refresh();
+      break;
+    case "views":
+    case "view":
+      void aos.stores.view.actions.refresh();
+      break;
+    case "collections":
+    case "collection":
+      void aos.stores.collections.actions.refresh();
+      break;
+    default:
+      break;
+  }
+}
+
 export function WorkspaceLayout() {
   const sidebar = stores.viewport.useState(
     (state) => state.layout.sidebar.visible,
@@ -85,6 +125,12 @@ export function WorkspaceLayout() {
       invalidate();
 
       aos.stores.activity.actions.refresh();
+      // The stores behind the sidebar are preloaded once and never again, so
+      // a record created anywhere else — an agent's tool, the CLI, another
+      // window — needs the same nudge `records:changed` gives them. Both
+      // signals arrive for the same write; the stores' refresh is idempotent
+      // and the coalescing above absorbs the duplicate.
+      refreshStoreFor((event as { namespace?: string } | undefined)?.namespace);
     },
     [invalidate],
   );
@@ -103,31 +149,7 @@ export function WorkspaceLayout() {
     "records:changed",
     (payload: { collection?: string }) => {
       invalidate();
-
-      switch (payload.collection) {
-        case "projects":
-          void aos.stores.projects.actions.refresh();
-          break;
-        case "goals":
-          void aos.stores.goals.actions.refresh();
-          break;
-        case "agents":
-          void aos.stores.agent.actions.refresh();
-          break;
-        case "artifacts":
-          void aos.stores.artifact.actions.refresh();
-          break;
-        case "views":
-          void aos.stores.view.actions.refresh();
-          break;
-        case "collections":
-          void aos.stores.collections.actions.refresh();
-          break;
-        default:
-          // Every other collection is read through react-query or a route
-          // loader, both of which the two calls above already cover.
-          break;
-      }
+      refreshStoreFor(payload.collection);
     },
     [invalidate],
   );

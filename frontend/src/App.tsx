@@ -9,6 +9,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthGate } from "@/features/auth/AuthGate";
 import { WorkspaceGate } from "@/features/workspace/WorkspaceGate";
 import { useRealtime } from "@/lib/realtime";
+import { t } from "@/lib/i18n";
 import { router } from "@/app/router";
 import { I18nProvider, useTranslation } from "@/lib/i18n";
 
@@ -55,9 +56,34 @@ const queryClient = new QueryClient({
  * written, a task moving, a file changing — silently did nothing, and the only
  * way to see that anything had happened was to reload the page.
  */
-function RealtimeConnection(): null {
-  useRealtime(useQueryClient());
-  return null;
+function RealtimeConnection(): JSX.Element | null {
+  const state = useRealtime(useQueryClient());
+  // "reconnecting" here means the daemon stopped answering, not that a socket
+  // is retrying: the desktop process reports its health (see lib/realtime.ts).
+  // Saying so beats what the application did before — going on rendering its
+  // screens while every action failed with an untranslated "Load failed", and
+  // no way back short of relaunching.
+  if (state !== "reconnecting") return null;
+  return <DaemonUnreachableBanner />;
+}
+
+/**
+ * A line across the top, not a blocking overlay.
+ *
+ * What is already on screen was read from a daemon that was answering, so it
+ * is still worth looking at; what is not worth doing is a write that will
+ * fail. The banner says which of the two the window is in and gets out of the
+ * way when the daemon comes back.
+ */
+function DaemonUnreachableBanner(): JSX.Element {
+  return (
+    <div
+      role="status"
+      className="fixed inset-x-0 top-0 z-50 bg-destructive px-4 py-1.5 text-center text-xs font-medium text-destructive-foreground"
+    >
+      {t("The daemon is not answering. Reconnecting…")}
+    </div>
+  );
 }
 
 /**

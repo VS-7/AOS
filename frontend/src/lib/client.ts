@@ -105,6 +105,26 @@ interface Envelope<T> {
  */
 export const UNAUTHENTICATED_EVENT = "aos:unauthenticated";
 
+/**
+ * The code every transport uses for "the daemon did not answer at all".
+ *
+ * Distinct from a refusal: the daemon answering 403 is a working system
+ * saying no, and a connection that never completed is the system being
+ * absent. The layout draws them differently, which it could not do while one
+ * of them arrived as a bare TypeError.
+ */
+export const DAEMON_UNREACHABLE_CODE = "AOS_DAEMON_UNREACHABLE";
+
+/** The event the page fires when the daemon stops answering, and when it comes back. */
+export const DAEMON_EVENT = "aos:daemon";
+
+/** Whether an error is the daemon being absent rather than refusing. */
+export function isDaemonUnreachable(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: string }).code;
+  return code === DAEMON_UNREACHABLE_CODE || code === "TRANSPORT_UNREACHABLE";
+}
+
 function announceIfUnauthenticated(error: { code?: string; status?: number }): void {
   const unauthenticated =
     error.status === 401 ||
@@ -356,14 +376,29 @@ export async function bridgeFetch(
  */
 const http: Client = {
   async invoke(key, input) {
-    const response = await fetch(daemonURL(`/api/${key.replaceAll("_", "/")}`), {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...workspaceHeader(),
-      },
-      body: JSON.stringify(input ?? {}),
-    });
+    let response: Response;
+    try {
+      response = await fetch(daemonURL(`/api/${key.replaceAll("_", "/")}`), {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...workspaceHeader(),
+        },
+        body: JSON.stringify(input ?? {}),
+      });
+    } catch {
+      // A daemon that is not answering is not a programming error, and it
+      // used to reach the screen as one: `fetch` rejects a refused connection
+      // with a bare TypeError, which is what every action showed — "Load
+      // failed" — after the daemon crashed or was stopped from a terminal.
+      // Classified, it reads as what it is, and the layout can say the
+      // window is waiting for the daemon rather than that something broke.
+      throw new DomainError({
+        code: DAEMON_UNREACHABLE_CODE,
+        message: "the daemon is not answering",
+        status: 503,
+      });
+    }
 
     let payload: unknown;
     try {

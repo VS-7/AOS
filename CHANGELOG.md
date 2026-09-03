@@ -8,6 +8,30 @@ em que o release foi cortado.
 
 ## [Unreleased]
 
+## [v0.15.1-fase9] — 2026-09-03
+
+A rodada que fez o aplicativo funcionar de fato. Onze correções, cada uma com
+teste que falha no código anterior, e uma verificação ponta a ponta contra um
+daemon limpo.
+
+### Adicionado
+
+- **Parar um turno.** `chats_stop` cancela o turno que está rodando numa
+  conversa. O botão Parar do compositor chamava um comando que não existia: o
+  facade respondia o envelope dormente como *sucesso*, a tela dizia "nenhuma
+  execução ativa foi encontrada" e o agente seguia trabalhando. Um turno
+  parado é gravado como `interrupted`, não como erro — o `StatusInterrupted`
+  existia desde o começo e nada nunca o atribuía, porque nada podia parar um
+  turno.
+- **Reagir a uma mensagem.** `chats_react` alterna uma reação.
+  `Message.Reactions` era persistido desde o início e nenhum comando o
+  tocava, então o seletor de emoji da lista de mensagens não tinha nada
+  atrás. Quem reage vem da identidade da chamada, nunca do payload.
+- **Uma tela de "daemon caiu".** A supervisão era um passo único de boot: um
+  daemon que morria deixava o aplicativo desenhando suas telas enquanto toda
+  ação falhava com "Load failed" sem tradução. A janela agora observa o
+  daemon, avisa a interface, traz ele de volta e readota o workspace.
+
 ### Corrigido
 
 **A janela estava inscrita num canal em que o daemon nunca publicou.** O
@@ -56,6 +80,22 @@ dentro de um repositório endereçava outro workspace.
 **A janela pedia senha a cada abertura**, recarregar a transformava numa aba de
 navegador quebrada, e uma sessão expirada não tinha caminho de volta ao login.
 
+**Criar projeto, meta ou agente era invisível para a caixa de entrada.** As
+escritas passaram a invalidar os caches certos, mas ainda não *diziam o que
+aconteceu*: `collection.changed` não carrega título, então a caixa de entrada
+não tem o que mostrar e as rotinas só reagem a activities. Os três publicam
+agora, sob o nome singular em que a interface indexa suas queries.
+
+**O editor de template nunca salvava nada.** A área de texto dizia "JSON
+schema" e mandava um campo `schema` que `templates_create`/`templates_update`
+não têm, então o decodificador o descartava toda vez. O que o Go guarda é
+`variables` — a lista que o corpo Liquid lê por nome — e é isso que o editor
+edita.
+
+**A janela pedia senha a cada abertura**, recarregar a transformava numa aba
+de navegador quebrada, e uma sessão expirada não tinha caminho de volta ao
+login.
+
 ### Mudado
 - `agents_create` deriva o slug do nome; `agents_create`/`update` aceitam
   `image`; `goal` tem `priority`; `tasks_list` filtra por `query` e `priority`;
@@ -65,6 +105,9 @@ navegador quebrada, e uma sessão expirada não tinha caminho de volta ao login.
   supervisor, e `gateway_restart` recusa de dentro do daemon em vez de mandar
   um sinal para o próprio processo.
 - `AOS_APPROVAL_DEADLINE` passa a ser lido.
+- Uma chamada que não nomeia workspace é roteada para aquele a que o
+  diretório do chamador pertence — o terminal e o `aos --mcp` dentro de um
+  repositório param de endereçar outro.
 
 ## [v0.15.0-fase9] — 2026-08-30
 

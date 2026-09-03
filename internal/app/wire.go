@@ -396,7 +396,11 @@ func New(opts Options) (*App, error) {
 	}
 
 	configSvc := config.NewService(fsconfig.FromPaths(paths))
-	agentSvc := agent.NewService(repos.agents, clock)
+	// The notifier is late-bound for the same reason the dispatcher is: the
+	// agent service is built before the activity log exists, and one of the
+	// two has to be handed to the other after both do.
+	agentNotify := &lateAgentNotifier{}
+	agentSvc := agent.NewService(repos.agents, clock, agent.WithNotifier(agentNotify))
 	memorySvc := memory.NewService(memory.Deps{
 		Repo:  repos.memories,
 		Clock: clock,
@@ -414,6 +418,7 @@ func New(opts Options) (*App, error) {
 		Repo:       repos.chats,
 		Directory:  newDirectory(agentSvc),
 		Dispatcher: dispatch,
+		Canceller:  dispatch,
 		Clock:      clock,
 		IDs:        idgen,
 		Log:        logger,
@@ -665,8 +670,13 @@ func New(opts Options) (*App, error) {
 		Files:      osfile.New(),
 		Clock:      clock,
 	})
+	// The activity log exists by now, so the agent service's notifier can be
+	// filled in — and goal and project take theirs directly.
+	agentNotify.to = agentActivity{activities: activitySvc, log: logger}
 	goalSvc := goal.NewService(goal.Deps{
-		Repo: repos.goals, Tasks: goalTasksAdapter{tasks: taskSvc}, Clock: clock,
+		Repo: repos.goals, Tasks: goalTasksAdapter{tasks: taskSvc},
+		Notifier: goalActivity{activities: activitySvc, log: logger},
+		Clock:    clock,
 	})
 	projectSvc := project.NewService(project.Deps{
 		Repo: repos.projects,
@@ -674,7 +684,8 @@ func New(opts Options) (*App, error) {
 			taskProjectUnlinker{tasks: taskSvc},
 			goalProjectUnlinker{goals: goalSvc},
 		},
-		Clock: clock,
+		Notifier: projectActivity{activities: activitySvc, log: logger},
+		Clock:    clock,
 	})
 	// Read once, at boot: marketplace does not hold a live config.Service
 	// itself, matching every other domain's narrowed dependencies. A config
@@ -1004,13 +1015,42 @@ func (w workspaceRoot) Root(ctx context.Context) (string, error) {
 // It is a pointer set once at boot and never again, which is why it needs no
 // lock: every read happens on a request, and the write happens before the
 // first one can arrive.
-type lateDispatcher struct{ to chat.Dispatcher }
+type lateDispatcher struct{ to lateRuntime }
+
+// lateRuntime is the pair of things the conversation aggregate asks of the
+// agent runtime: start a turn, and stop one. session.Runner satisfies both.
+type lateRuntime interface {
+	Dispatch(ctx context.Context, in chat.Turn) (string, error)
+	Stop(ctx context.Context, chatID string) (bool, error)
+}
 
 func (d *lateDispatcher) Dispatch(ctx context.Context, in chat.Turn) (string, error) {
 	if d.to == nil {
 		return "", nil
 	}
 	return d.to.Dispatch(ctx, in)
+}
+
+// Stop reports "nothing running" for a build with no runtime rather than
+// failing. The chat service refuses that case itself, with an error that says
+// the installation has no runtime — which is the honest answer and not this
+// adapter's to give.
+func (d *lateDispatcher) Stop(ctx context.Context, chatID string) (bool, error) {
+	if d.to == nil {
+		return false, nil
+	}
+	return d.to.Stop(ctx, chatID)
+}
+
+// lateAgentNotifier is the agent notifier, filled in once the activity log
+// exists. See lateDispatcher for the same shape and the same reason.
+type lateAgentNotifier struct{ to agent.Notifier }
+
+func (l *lateAgentNotifier) AgentChanged(ctx context.Context, event string, a *agent.Agent) {
+	if l.to == nil {
+		return
+	}
+	l.to.AgentChanged(ctx, event, a)
 }
 
 // repoSet holds the repositories bound to one workspace root.

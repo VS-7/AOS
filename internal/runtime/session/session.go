@@ -148,6 +148,20 @@ type Runner struct {
 	deps     Deps
 	log      *slog.Logger
 	observer Observer
+
+	// running is how a turn is stopped: the cancel function of every turn in
+	// flight, by conversation.
+	//
+	// Dispatch detaches the context on purpose — a person closing a tab is
+	// not a person cancelling the agent — which left nothing at all able to
+	// end a turn. The Stop button in the composer called a dormant command
+	// and answered "no active run was found" while the agent kept working,
+	// and the only way out of a turn gone wrong was to wait for the model.
+	//
+	// One entry per conversation, because that is the unit a person stops:
+	// they are looking at a conversation, not at a job id.
+	runningMu sync.Mutex
+	running   map[string]context.CancelFunc
 }
 
 // SetObserver attaches the background observer after both exist.
@@ -177,9 +191,14 @@ func New(d Deps) *Runner {
 // not a person cancelling the agent.
 func (r *Runner) Dispatch(ctx context.Context, in chat.Turn) (string, error) {
 	jobID := r.newID()
-	detached := context.WithoutCancel(ctx)
+	// Detached from the caller, then made cancellable on its own terms: the
+	// request that asked for the turn must not end it, and a person watching
+	// it must be able to.
+	detached, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	r.track(in.ChatID, cancel)
 
 	_ = safe.Go(detached, "turn "+jobID, func(c context.Context) error {
+		defer r.untrack(in.ChatID)
 		if _, err := r.Run(c, in); err != nil {
 			r.log.Error("the turn failed",
 				"chat", in.ChatID, "agent", in.AgentID, "job", jobID, "err", err)
@@ -187,6 +206,45 @@ func (r *Runner) Dispatch(ctx context.Context, in chat.Turn) (string, error) {
 		return nil
 	})
 	return jobID, nil
+}
+
+// track remembers how to stop the turn now running on a conversation.
+//
+// A second turn on the same conversation replaces the first entry rather than
+// queueing beside it: what a person means by "stop this chat" is the turn
+// they can see, and the one they can see is the newest.
+func (r *Runner) track(chatID string, cancel context.CancelFunc) {
+	r.runningMu.Lock()
+	defer r.runningMu.Unlock()
+	if r.running == nil {
+		r.running = map[string]context.CancelFunc{}
+	}
+	if previous, ok := r.running[chatID]; ok {
+		previous()
+	}
+	r.running[chatID] = cancel
+}
+
+func (r *Runner) untrack(chatID string) {
+	r.runningMu.Lock()
+	defer r.runningMu.Unlock()
+	delete(r.running, chatID)
+}
+
+// Stop ends the turn running on a conversation, if there is one.
+//
+// It answers whether there was, rather than refusing: "stop" on a
+// conversation that has already finished is not an error, it is a person
+// pressing the button a moment late.
+func (r *Runner) Stop(_ context.Context, chatID string) (bool, error) {
+	r.runningMu.Lock()
+	cancel, ok := r.running[chatID]
+	r.runningMu.Unlock()
+	if !ok {
+		return false, nil
+	}
+	cancel()
+	return true, nil
 }
 
 // Run executes one turn and persists the answer.
@@ -737,6 +795,22 @@ func (r *Runner) persist(ctx context.Context, in chat.Turn, agentID, answerID st
 // a turn that did not answer is visible in the conversation rather than only in
 // a log the person cannot see.
 func (r *Runner) recordFailure(ctx context.Context, in chat.Turn, agentID string, started time.Time, cause error) {
+	// A turn somebody stopped is not a turn that failed, and the conversation
+	// should not read like an error. The context this turn was given is the
+	// only thing that can be cancelled from outside (see Runner.running), so
+	// its cancellation is what a stop looks like from here.
+	if errors.Is(cause, context.Canceled) {
+		if _, err := r.deps.Chats.Reply(ctx, chat.ReplyInput{
+			Chat: in.ChatID, ReplyTo: in.MessageID, AgentID: agentID,
+			StartedAt:   started,
+			Interrupted: true,
+			Failure:     &chat.RunError{Code: "AOS_CHAT_TURN_STOPPED", Message: "the turn was stopped"},
+		}); err != nil {
+			r.log.Error("a stopped turn could not be recorded", "chat", in.ChatID, "err", err)
+		}
+		return
+	}
+
 	code, message := "AOS_AGENT_TURN_FAILED", cause.Error()
 	var app *apperr.Error
 	if errors.As(cause, &app) {

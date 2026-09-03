@@ -328,6 +328,17 @@ export interface CommandMap {
     /** Only conversations attached to this task. */
     "task"?: string;
   }; output: unknown };
+  /** Toggle a reaction on a message. */
+  "chats_react": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Conversation the message belongs to. */
+    "chat": string;
+    /** Message to react to. */
+    "message": string;
+    /** The reaction, usually an emoji. Sending the same one again removes it. */
+    "value": string;
+  }; output: unknown };
   /** Write to a conversation. */
   "chats_send": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
@@ -340,6 +351,13 @@ export interface CommandMap {
     "context"?: unknown;
     /** What to say. Address a specific agent with @slug. */
     "text": string;
+  }; output: unknown };
+  /** Stop the turn running on a conversation. */
+  "chats_stop": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Conversation whose running turn should stop. */
+    "chat": string;
   }; output: unknown };
   /** Rename a conversation, or change who can read it. */
   "chats_update": { input: {
@@ -1689,7 +1707,9 @@ export const COMMAND_KEYS = [
   "chats_delete",
   "chats_get",
   "chats_list",
+  "chats_react",
   "chats_send",
+  "chats_stop",
   "chats_update",
   "collections_create",
   "collections_delete",
