@@ -65,8 +65,20 @@ func (r *recorder) count() int {
 }
 
 // subscribe attaches a recorder and returns it with a cancel function.
+// subscribe joins a channel on a goroutine — Subscribe runs the delivery loop
+// and returns only when the subscription ends — and does not come back until
+// *this* subscription is registered.
+//
+// The wait is on the count having grown past what it was, not on it being
+// non-zero. A test that joins three sinks in a row would otherwise have the
+// second and third calls satisfied instantly by the first one's registration,
+// and go on to assert a count that was still climbing. That is exactly how
+// TestClosingTheHubReleasesEverySubscriber failed on CI and never here: it
+// reported "subscribers = 3" from a second read, having taken the failure
+// branch on a first read that saw fewer.
 func subscribe(t *testing.T, h *realtime.Hub, channel string, sink realtime.Sink) context.CancelFunc {
 	t.Helper()
+	before := h.Subscribers(channel)
 	ctx, cancel := context.WithCancel(context.Background())
 	joined := make(chan struct{})
 	go func() {
@@ -74,7 +86,7 @@ func subscribe(t *testing.T, h *realtime.Hub, channel string, sink realtime.Sink
 		h.Subscribe(ctx, channel, sink)
 	}()
 	<-joined
-	waitFor(t, func() bool { return h.Subscribers(channel) > 0 })
+	waitFor(t, func() bool { return h.Subscribers(channel) > before })
 	return cancel
 }
 
