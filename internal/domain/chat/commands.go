@@ -172,7 +172,11 @@ have finished on its own.`,
 		Examples: []command.Example{
 			{Description: "it is going the wrong way", Input: StopInput{Chat: "c-1"}},
 		},
-		Registry:    true,
+		// Not in the agent's registry. Stopping is a person's act: an agent
+		// holding this could cancel another agent's turn, or its own
+		// mid-flight, and neither is work. It stays on the CLI, over MCP and
+		// over HTTP, which is where the interface's Stop button calls it.
+		Registry:    false,
 		Annotations: command.Annotations{Title: "Stop a turn", IdempotentHint: true},
 		Handler:     svc.Stop,
 	})
@@ -192,7 +196,9 @@ a caller that could name the actor could react as somebody else.`,
 		Examples: []command.Example{
 			{Description: "agree with an answer", Input: ReactInput{Chat: "c-1", Message: "m-2", Value: "👍"}},
 		},
-		Registry:    true,
+		// Not in the agent's registry either, for the same kind of reason: a
+		// reaction is a person's mark on something they read.
+		Registry:    false,
 		Annotations: command.Annotations{Title: "React to a message", IdempotentHint: true},
 		Handler:     svc.React,
 	})
