@@ -68,6 +68,7 @@ func (s *Service) List(ctx context.Context, in ListInput) (ListOutput, error) {
 	}
 
 	needle := strings.ToLower(strings.TrimSpace(in.Query))
+	active := map[string][]string{}
 	matched := make([]Chat, 0, len(found))
 	for _, c := range found {
 		if in.Kind != "" && c.Kind != in.Kind {
@@ -81,6 +82,11 @@ func (s *Service) List(ctx context.Context, in ListInput) (ListOutput, error) {
 		}
 		if needle != "" && !matchesQuery(c, needle) {
 			continue
+		}
+		// Read before the transcript is dropped: this is the only place that
+		// still has the runs to read it from.
+		if working := workingAgents(c); len(working) > 0 {
+			active[c.ID] = working
 		}
 		c.Messages = nil
 		matched = append(matched, c)
@@ -101,7 +107,7 @@ func (s *Service) List(ctx context.Context, in ListInput) (ListOutput, error) {
 	if limit < len(matched) {
 		matched = matched[:limit]
 	}
-	return ListOutput{Chats: matched, Total: total}, nil
+	return ListOutput{Chats: matched, Total: total, Active: active}, nil
 }
 
 func matchesQuery(c Chat, needle string) bool {
@@ -111,6 +117,70 @@ func matchesQuery(c Chat, needle string) bool {
 		}
 	}
 	return false
+}
+
+// workingAgents is who has a turn in flight in this conversation.
+//
+// A run is recorded on the message that asked, and it is marked running when
+// the turn begins and completed when it ends — so "in flight" is exactly a
+// run with no completion, which is what this reads.
+func workingAgents(c Chat) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, m := range c.Messages {
+		for _, r := range m.Runs {
+			if r.CompletedAt != nil || r.AgentID == "" {
+				continue
+			}
+			if r.Status != StatusPending && r.Status != StatusRunning {
+				continue
+			}
+			if seen[r.AgentID] {
+				continue
+			}
+			seen[r.AgentID] = true
+			out = append(out, r.AgentID)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// MarkRun records that a turn has begun.
+//
+// It writes the run the moment the agent picks the work up, so the record
+// says "working" for as long as it is — the interface used to learn that only
+// from a realtime event, which a window opened mid-turn never received.
+//
+// Reply completes this same run rather than appending a second one; see its
+// own comment.
+func (s *Service) MarkRun(ctx context.Context, in MarkRunInput) error {
+	c, err := s.Get(ctx, GetInput{Chat: in.Chat})
+	if err != nil {
+		return err
+	}
+	for i := range c.Messages {
+		if c.Messages[i].ID != in.Message {
+			continue
+		}
+		// Already marked: a retry of the same job must not stack runs.
+		for _, r := range c.Messages[i].Runs {
+			if r.JobID != "" && r.JobID == in.JobID {
+				return nil
+			}
+		}
+		c.Messages[i].Runs = append(c.Messages[i].Runs, Run{
+			AgentID:   in.AgentID,
+			JobID:     in.JobID,
+			Status:    StatusRunning,
+			StartedAt: s.clock.Now(),
+		})
+		if err := s.repo.Update(ctx, c, collections.Version{}); err != nil {
+			return errWriteFailed("MarkRun", err)
+		}
+		return nil
+	}
+	return nil
 }
 
 // Get reads one conversation with its whole transcript.
@@ -519,6 +589,19 @@ type ReplyOutput struct {
 	Run     Run      `json:"run"`
 }
 
+// indexOfRunningRun finds the unfinished attempt this agent left behind, or
+// -1. The newest wins, because a conversation can carry the record of an
+// older turn that was interrupted before this one started.
+func indexOfRunningRun(runs []Run, agentID string) int {
+	for i := len(runs) - 1; i >= 0; i-- {
+		if runs[i].CompletedAt == nil && runs[i].AgentID == agentID &&
+			(runs[i].Status == StatusRunning || runs[i].Status == StatusPending) {
+			return i
+		}
+	}
+	return -1
+}
+
 // Post writes a message into a conversation without dispatching a turn for it.
 //
 // Like Reply, it is deliberately not a command. Send is the surface a person or
@@ -597,11 +680,25 @@ func (s *Service) Reply(ctx context.Context, in ReplyInput) (ReplyOutput, error)
 
 	// The attempt is recorded on the message that triggered it, which is the
 	// granularity at which somebody asks why a particular answer was expensive.
+	//
+	// MarkRun already wrote this attempt as running when the turn began, so
+	// what happens here is a *completion*: appending would leave the
+	// conversation holding one run that never finishes beside one that did,
+	// and the interface reading the first would say the agent is still
+	// working forever.
 	for i := range c.Messages {
-		if c.Messages[i].ID == in.ReplyTo {
-			c.Messages[i].Runs = append(c.Messages[i].Runs, run)
-			break
+		if c.Messages[i].ID != in.ReplyTo {
+			continue
 		}
+		if at := indexOfRunningRun(c.Messages[i].Runs, in.AgentID); at >= 0 {
+			started := c.Messages[i].Runs[at].StartedAt
+			job := c.Messages[i].Runs[at].JobID
+			run.StartedAt, run.JobID = started, job
+			c.Messages[i].Runs[at] = run
+		} else {
+			c.Messages[i].Runs = append(c.Messages[i].Runs, run)
+		}
+		break
 	}
 
 	c.UpdatedAt = now

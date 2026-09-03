@@ -87,24 +87,49 @@ func (s *collectingSink) await(t *testing.T, eventType string) map[string]any {
 // handler does — Hub.Subscribe runs the delivery loop itself and returns only
 // when the subscription ends, so it belongs on a goroutine of its own.
 //
-// It returns once the subscriber is actually registered, so a publish made by
-// the caller's next line cannot be missed.
+// It returns once *this* subscriber is actually registered, so a publish made
+// by the caller's next line cannot be missed.
+//
+// Both waits are needed, and each covers a case the other does not. The
+// subtests below share one app and one channel, and each cancels its
+// subscription on cleanup — so when the next one starts, the previous sink
+// may still be unwinding. Waiting only for "somebody is subscribed" would be
+// satisfied by that departing sink and return before this one had joined.
+// Waiting only for the count to grow past what it was fails the other way:
+// the count goes 1 → 0 → 1 as one leaves and one arrives, so it never
+// exceeds the 1 that was read at the start, and the wait times out.
+//
+// So: wait for the channel to be empty, then join it, then wait for the
+// arrival that can only be this one. Every caller here has a single listener
+// at a time, which is what makes the first wait terminate.
 func listen(t *testing.T, a *app.App, channel string) *collectingSink {
 	t.Helper()
+	await(t, "the channel never emptied", func() bool {
+		return a.Events.Subscribers(channel) == 0
+	})
+
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
 	sink := newCollectingSink()
 	go a.Events.Subscribe(ctx, channel, sink)
 
+	await(t, "the sink never joined "+channel, func() bool {
+		return a.Events.Subscribers(channel) > 0
+	})
+	return sink
+}
+
+// await polls until cond holds, or fails the test saying what never happened.
+func await(t *testing.T, what string, cond func() bool) {
+	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
-	for a.Events.Subscribers(channel) == 0 {
+	for !cond() {
 		if time.Now().After(deadline) {
-			t.Fatalf("the sink never joined %q", channel)
+			t.Fatal(what)
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	return sink
 }
 
 // unpinnedApp builds the App a desktop or CLI daemon builds: a workspace root

@@ -603,7 +603,10 @@ func TestATurnThatFailsIsVisibleInTheConversation(t *testing.T) {
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		asked := messageByID(t, a, sent.Message.ID)
-		if len(asked.Runs) > 0 {
+		// The attempt is on the record from the moment the turn starts, so
+		// what is being waited for is its *end* — and the end of a turn that
+		// failed has to say so on the same run that said it was working.
+		if len(asked.Runs) > 0 && asked.Runs[0].CompletedAt != nil {
 			if asked.Runs[0].Status != chat.StatusError {
 				t.Fatalf("run = %+v", asked.Runs[0])
 			}
@@ -624,6 +627,13 @@ func TestATurnThatFailsIsVisibleInTheConversation(t *testing.T) {
 // of some assistant message: in a conversation with more than one turn, the
 // previous answer is already there and would satisfy the weaker check
 // immediately.
+//
+// The attempt has to be a *finished* one. The mere existence of a run stopped
+// meaning "the turn ended" when the runtime started recording the attempt at
+// the moment it begins rather than when it ends — which is the whole point of
+// that change, since a window opened mid-turn has to be able to read that an
+// agent is working. Waiting on the weaker signal here read the transcript
+// while the answer was still being written.
 func waitForAnswer(t *testing.T, a *app.App, askedID string) chat.Message {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second)
@@ -634,8 +644,12 @@ func waitForAnswer(t *testing.T, a *app.App, askedID string) chat.Message {
 		}
 		var finished bool
 		for _, m := range c.Messages {
-			if m.ID == askedID && len(m.Runs) > 0 {
-				finished = true
+			if m.ID == askedID {
+				for _, run := range m.Runs {
+					if run.CompletedAt != nil {
+						finished = true
+					}
+				}
 			}
 		}
 		if finished {

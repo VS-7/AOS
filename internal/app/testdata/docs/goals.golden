@@ -192,6 +192,10 @@ Every goal matching the given status, project or text filter.
       "type": "string",
       "description": "Full-text search across a goal's id and title."
     },
+    "limit": {
+      "type": "integer",
+      "description": "Maximum number to return. Omit for all of them."
+    },
     "_reasoning": {
       "type": "string",
       "description": "MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty.",

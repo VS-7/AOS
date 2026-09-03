@@ -14,15 +14,17 @@ import { api } from "@/lib/aos-facade";
  * later". Reads straight off `agents_list` (`command-map.ts`'s
  * `agent.list`) now.
  *
- * `occupancy` (chatId -> agentIds currently answering it) has no Go
- * source: `agents_list`'s `Agent` (`internal/domain/agent/entity.go`) has
- * no `processing` field the way the original combined directory
- * endpoint did, and the realtime signals that used to keep it fresh
- * (`chat:start-processing`/`chat:end-processing`) have no daemon
- * counterpart either — both are explicit `null`s in
- * `lib/realtime-event-map.ts`, with their own comment on why. Occupancy
- * starts, and stays, empty rather than showing stale or fabricated data;
- * `setProcessing` is kept as a real action for the day either gap closes.
+ * `occupancy` (chatId -> agentIds currently answering it) is seeded from
+ * `chats_list`'s own `active` and kept fresh by
+ * `chat:start-processing`/`chat:end-processing`.
+ *
+ * The seed is the half that was missing. Occupancy used to start empty on
+ * every load and be filled only by realtime, so reloading the window during
+ * a turn showed an idle agent, and a window opened while a turn was already
+ * running never showed it at all — the events it needed had been delivered
+ * before it existed. The daemon now records a run the moment a turn begins
+ * (chat.Service.MarkRun) and completes that same run when it ends, so "who
+ * is working" is a fact on the record rather than only an event in flight.
  */
 export const AgentStore = AosStore.create("agents")
   .withState({
@@ -37,8 +39,8 @@ export const AgentStore = AosStore.create("agents")
     strategy: "memory-partition",
   })
   .withPreload(async () => {
-    const items = await fetchAgents();
-    return { items, occupancy: {} };
+    const [items, occupancy] = await Promise.all([fetchAgents(), fetchOccupancy()]);
+    return { items, occupancy };
   })
   .addAction(
     "setProcessing",
@@ -61,15 +63,37 @@ export const AgentStore = AosStore.create("agents")
   )
   .addAction("refresh", (ctx) => async () => {
     const items = await fetchAgents();
-    // Occupancy isn't part of what `refresh` re-fetches — it has no server
-    // source (see the store's own doc comment) — so a manual refresh
-    // (e.g. after creating an agent) doesn't clobber whatever realtime has
-    // accumulated into it.
+    // Occupancy is deliberately not re-read here. A refresh runs on any
+    // record change — an agent created, a project renamed — and the server's
+    // answer is a snapshot taken before whatever realtime has delivered
+    // since, so re-reading it would overwrite live state with a staler
+    // version of itself. The seed happens once, at preload; events keep it
+    // current after that.
     const next = { items, occupancy: ctx.state.get().occupancy };
     ctx.state.set(next);
     return next;
   })
   .build();
+
+/**
+ * Who is working right now, by conversation.
+ *
+ * `chats_list` answers this beside the roster (`ListOutput.Active`), computed
+ * from the runs on each transcript before the messages are stripped — a run
+ * with no completion is a turn in flight. Asking the list rather than every
+ * conversation is the point: one call answers it for all of them.
+ *
+ * A failure here is not worth a broken store: the indicator degrades to what
+ * realtime delivers, which is what it was before this existed.
+ */
+async function fetchOccupancy(): Promise<Record<string, string[]>> {
+  const response = await api.chat!.list!.query<{ active?: Record<string, string[]> }>();
+  if (response.error) {
+    console.error("[AgentStore] chat.list failed while seeding occupancy", response.error);
+    return {};
+  }
+  return response.data?.active ?? {};
+}
 
 async function fetchAgents(): Promise<Agent[]> {
   const response = await api.agent!.list!.query<{ agents?: Array<Record<string, unknown>> }>();

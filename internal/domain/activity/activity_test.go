@@ -492,3 +492,86 @@ func TestConcurrentPublishesAllLand(t *testing.T) {
 		t.Fatalf("the sink saw %d of 100", sink.len())
 	}
 }
+
+// The catalogue is what the routine editor's trigger picker reads. It has to
+// answer on a workspace where nothing has happened yet — that is the whole
+// difference between it and the log.
+func TestTheCatalogueAnswersWithoutAnythingHavingHappened(t *testing.T) {
+	svc, _, _, _ := newService(t)
+
+	all, err := svc.Events(context.Background(), EventsInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all.Events) != len(Kinds) {
+		t.Fatalf("events = %d, want every declared kind", len(all.Events))
+	}
+	if len(all.Namespaces) == 0 {
+		t.Fatal("no namespaces, so the picker has nothing to group by")
+	}
+
+	for _, kind := range all.Events {
+		if kind.Namespace == "" || kind.Event == "" {
+			t.Errorf("%+v: a coordinate with a blank half matches nothing", kind)
+		}
+		if kind.Title == "" {
+			t.Errorf("%s.%s has no title, so the picker would offer a blank row",
+				kind.Namespace, kind.Event)
+		}
+	}
+}
+
+func TestTheCatalogueNarrowsToOneNamespace(t *testing.T) {
+	svc, _, _, _ := newService(t)
+
+	only, err := svc.Events(context.Background(), EventsInput{Namespace: "task"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(only.Events) == 0 {
+		t.Fatal("no task events")
+	}
+	for _, kind := range only.Events {
+		if kind.Namespace != "task" {
+			t.Errorf("%s.%s is not a task event", kind.Namespace, kind.Event)
+		}
+	}
+	if len(only.Namespaces) != 1 || only.Namespaces[0] != "task" {
+		t.Errorf("namespaces = %v, want just the one asked for", only.Namespaces)
+	}
+
+	// A namespace nobody publishes is an empty answer, not an error: the
+	// picker asking about one is not a mistake worth failing a call over.
+	none, err := svc.Events(context.Background(), EventsInput{Namespace: "nothing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(none.Events) != 0 || len(none.Namespaces) != 0 {
+		t.Errorf("events = %+v, want nothing", none)
+	}
+}
+
+// Two kinds with the same coordinate would render as two rows a person cannot
+// tell apart, and `Declared` would answer for whichever came first.
+func TestNoTwoEventKindsShareACoordinate(t *testing.T) {
+	seen := make(map[string]bool, len(Kinds))
+	for _, kind := range Kinds {
+		key := kind.Namespace + "." + kind.Event
+		if seen[key] {
+			t.Errorf("%s is declared twice", key)
+		}
+		seen[key] = true
+	}
+}
+
+func TestDeclaredRecognisesOnlyWhatIsInTheCatalogue(t *testing.T) {
+	if !Declared("task", "status_changed") {
+		t.Error("a declared coordinate is not recognised")
+	}
+	if Declared("task", "exploded") {
+		t.Error("an undeclared coordinate is recognised")
+	}
+	if Declared("", "") {
+		t.Error("the empty coordinate is recognised")
+	}
+}

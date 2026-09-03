@@ -130,9 +130,9 @@ export const RoutineUpsertPage = aos
   .withLoader(async ({ client, request, response }) => {
     const isCreate = request.params.id === "new";
 
-    const eventsResult = await client.activity.listEvents.query({
-      query: { routine: true },
-    });
+    // No filter: the catalogue *is* the set of events a routine can react to,
+    // so `routine: true` named a distinction Go does not make.
+    const eventsResult = await client.activity.listEvents.query({});
     const activityEvents = eventsResult.data ?? [];
 
     if (isCreate) {

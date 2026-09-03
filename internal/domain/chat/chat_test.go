@@ -1039,3 +1039,90 @@ func TestReactingWithoutAnIdentityIsRefused(t *testing.T) {
 		t.Errorf("code = %q, want AOS_CHAT_ACTOR_REQUIRED", code)
 	}
 }
+
+// The record said nothing between "sent" and "answered": the run was written
+// only when the turn ended, so the interface could learn an agent was working
+// from a realtime event and from nowhere else. A window reloaded during a
+// turn showed an idle agent; one opened during a turn never showed it at all.
+func TestATurnIsOnTheRecordWhileItRuns(t *testing.T) {
+	h := newHarness(t)
+	created := h.create(t, chat.CreateInput{})
+	sent, err := h.svc.Send(userCtx(), chat.SendInput{Chat: created.ID, Text: "what changed?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.svc.MarkRun(userCtx(), chat.MarkRunInput{
+		Chat: created.ID, Message: sent.Message.ID, AgentID: "atlas", JobID: "job-1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The listing says who is working, which is what seeds the indicator.
+	listed, err := h.svc.List(userCtx(), chat.ListInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := listed.Active[created.ID]; len(got) != 1 || got[0] != "atlas" {
+		t.Fatalf("active = %v, want the agent that picked the turn up", listed.Active)
+	}
+
+	// And the turn ending completes *that* run rather than adding a second:
+	// a conversation holding one run that never finishes beside one that did
+	// reads as an agent still working, forever.
+	if _, err := h.svc.Reply(userCtx(), chat.ReplyInput{
+		Chat: created.ID, ReplyTo: sent.Message.ID, AgentID: "atlas",
+		Parts: []chat.Part{{Type: chat.PartText, Text: "nothing"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	after, err := h.svc.Get(userCtx(), chat.GetInput{Chat: created.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runs := after.Messages[0].Runs
+	if len(runs) != 1 {
+		t.Fatalf("runs = %d, want the one that started to be the one that finished", len(runs))
+	}
+	if runs[0].Status != chat.StatusCompleted || runs[0].CompletedAt == nil {
+		t.Errorf("run = %+v, want it completed", runs[0])
+	}
+	if runs[0].JobID != "job-1" {
+		t.Errorf("jobId = %q, want the one the turn was dispatched under", runs[0].JobID)
+	}
+
+	listed, err = h.svc.List(userCtx(), chat.ListInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := listed.Active[created.ID]; len(got) != 0 {
+		t.Errorf("active = %v, want nobody working after the turn ended", got)
+	}
+}
+
+// A retry of the same job must not stack runs on the message.
+func TestMarkingTheSameTurnTwiceRecordsItOnce(t *testing.T) {
+	h := newHarness(t)
+	created := h.create(t, chat.CreateInput{})
+	sent, err := h.svc.Send(userCtx(), chat.SendInput{Chat: created.ID, Text: "hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for range 2 {
+		if err := h.svc.MarkRun(userCtx(), chat.MarkRunInput{
+			Chat: created.ID, Message: sent.Message.ID, AgentID: "atlas", JobID: "job-1",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	after, err := h.svc.Get(userCtx(), chat.GetInput{Chat: created.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(after.Messages[0].Runs); got != 1 {
+		t.Errorf("runs = %d, want one", got)
+	}
+}

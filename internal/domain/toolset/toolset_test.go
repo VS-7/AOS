@@ -802,3 +802,89 @@ func newService(t *testing.T, opts ...serviceOption) *toolset.Service {
 		Clock:      &fixedClock{at: time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)},
 	})
 }
+
+// The configuration screen decides whether to offer a Configuration tab from
+// the length of `requirements`, and nothing answered that field — so a toolset
+// needing three credentials looked exactly like one needing none, and the tab
+// never appeared for any toolset at all.
+func TestGetConfigNamesTheVariablesAToolsetStillNeeds(t *testing.T) {
+	svc := newService(t, withToolset(toolset.Toolset{
+		ID: "gh", Type: toolset.MCPStdio, Status: toolset.StatusEnabled,
+		Command: "${env.GH_MCP_BINARY}",
+		Args:    []string{"--token", "${env.GITHUB_TOKEN}"},
+		Env:     map[string]string{"GITHUB_TOKEN": "", "LOG_LEVEL": "debug"},
+	}))
+
+	config, err := svc.GetConfig(ctx(), toolset.GetInput{ID: "gh"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if config.ConnectionType != toolset.MCPStdio {
+		t.Errorf("connectionType = %q, want the toolset's own type", config.ConnectionType)
+	}
+
+	got := make(map[string]bool, len(config.Requirements))
+	for _, req := range config.Requirements {
+		if req.LookupKey == "" {
+			t.Error("a requirement with no name cannot be filled in")
+		}
+		got[req.LookupKey] = req.IsSet
+	}
+
+	// Referenced in Command, referenced in Args, and declared blank in Env.
+	for _, name := range []string{"GH_MCP_BINARY", "GITHUB_TOKEN"} {
+		if _, ok := got[name]; !ok {
+			t.Errorf("%s is needed and was not reported", name)
+		}
+	}
+	if got["GITHUB_TOKEN"] {
+		t.Error("GITHUB_TOKEN is blank everywhere and is reported as set")
+	}
+	// A key that already has a value is configuration, not something to fill in.
+	if set, ok := got["LOG_LEVEL"]; ok && !set {
+		t.Error("LOG_LEVEL has a value and is reported as missing")
+	}
+}
+
+func TestGetConfigReportsAVariableThisInstallationHas(t *testing.T) {
+	svc := newService(t,
+		withEnv(envOf(map[string]string{"API_KEY": "secret"})),
+		withToolset(toolset.Toolset{
+			ID: "api", Type: toolset.MCPHTTP, Status: toolset.StatusEnabled,
+			BaseURL: "https://example.test",
+			Headers: map[string]string{"Authorization": "Bearer ${env.API_KEY}"},
+		}))
+
+	config, err := svc.GetConfig(ctx(), toolset.GetInput{ID: "api"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Requirements) != 1 || config.Requirements[0].LookupKey != "API_KEY" {
+		t.Fatalf("requirements = %+v, want the header's variable", config.Requirements)
+	}
+	if !config.Requirements[0].IsSet {
+		t.Error("API_KEY resolves in this installation and is reported as missing")
+	}
+}
+
+// The order has to hold across reads: a form whose fields reorder on every
+// refresh is unusable.
+func TestReferencedIsStableAcrossReads(t *testing.T) {
+	ts := toolset.Toolset{
+		Command: "${env.A}",
+		Args:    []string{"${env.B}", "${env.A}"},
+		Headers: map[string]string{"z": "${env.Z}", "a": "${env.C}"},
+		Env:     map[string]string{"n": "${env.N}", "m": "${env.M}"},
+	}
+	first := toolset.Referenced(ts)
+	for range 5 {
+		if got := toolset.Referenced(ts); strings.Join(got, ",") != strings.Join(first, ",") {
+			t.Fatalf("order changed: %v then %v", first, got)
+		}
+	}
+	// Named once, however many times it is mentioned.
+	if len(first) != 6 {
+		t.Errorf("referenced = %v, want each variable once", first)
+	}
+}

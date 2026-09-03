@@ -24,12 +24,10 @@ export const ViewPage = aos
   .withLoader(async ({ client, request, response }) => {
     const { id: viewId } = request.params;
 
-    // Task 10: the `view` domain is dormant — no Go backend to call yet.
-    // Short-circuits before any client call so the dormant command's empty
-    // envelope never reaches the `!view` check below, which would
-    // otherwise call `response.notFound()` and preempt `DormantGate` (the
-    // very first check in `withComponent` below, before any hook runs)
-    // with the 404 page instead.
+    // The domain is live — `views_*` is a real Go group — and this stays as
+    // the same short-circuit every other page has, so that if it is ever
+    // declared dormant the empty envelope does not reach the `!view` check
+    // below and preempt `DormantGate` with a 404.
     if (isDormant("view")) {
       return { view: null, viewId, renderResult: null };
     }
@@ -49,8 +47,10 @@ export const ViewPage = aos
       query: {},
     });
 
-    const renderResponse = (renderResult.data?.result ??
-      null) as ViewRenderResult | null;
+    // `.result` was a wrapper Go never sent, so this was `null` on every
+    // view. The facade now answers `{view, spec, records, renderedAt}` — see
+    // `view.render` in `command-map.ts`.
+    const renderResponse = (renderResult.data ?? null) as ViewRenderResult | null;
 
     return {
       view,
@@ -78,7 +78,14 @@ export const ViewPage = aos
       setSpec(ViewDataHelper.getSpec(renderResult));
     }, [renderResult]);
 
-    const viewDef = view as ViewDefinition;
+    // The actions live on the tree's nodes in Go; the facade lifts them onto
+    // the view, which is where `getAllActionIds` looks for them.
+    const viewDef = {
+      ...(view as ViewDefinition),
+      actions:
+        (renderResult?.view as ViewDefinition | undefined)?.actions ??
+        (view as ViewDefinition).actions,
+    } as ViewDefinition;
 
     const handlers = React.useMemo<Record<string, ViewActionHandler>>(() => {
       const actionIds = ViewDataHelper.getAllActionIds(viewDef);

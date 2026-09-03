@@ -42,6 +42,12 @@ type Query struct {
 	Status  []Status `json:"status,omitempty" jsonschema:"Filter by one or more statuses."`
 	Project string   `json:"project,omitempty" jsonschema:"Filter goals by project id."`
 	Text    string   `json:"query,omitempty" jsonschema:"Full-text search across a goal's id and title."`
+
+	// Limit caps the page. The project's Goals tab has always sent one and
+	// there was no field to receive it, so the cap was dropped and every goal
+	// of the workspace came back — silently, since a list that is too long is
+	// not a list that looks wrong.
+	Limit int `json:"limit,omitempty" jsonschema:"Maximum number to return. Omit for all of them."`
 }
 
 // ListInput carries Query plus the reason every command needs.
@@ -64,6 +70,9 @@ func (s *Service) List(ctx context.Context, in ListInput) ([]Goal, error) {
 			continue
 		}
 		out = append(out, g)
+	}
+	if in.Limit > 0 && len(out) > in.Limit {
+		out = out[:in.Limit]
 	}
 	return out, nil
 }

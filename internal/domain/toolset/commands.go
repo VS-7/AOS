@@ -19,7 +19,7 @@ its own process.
 ## Commands
 - **list** — every configured toolset
 - **get** — one toolset's full configuration
-- **get-config** — the same read, for a caller only editing its configuration
+- **get-config** — the same read, plus which of its variables are still missing
 - **call** — run one of its tools
 - **update-config** — reconfigure it
 - **delete** — remove it
@@ -79,19 +79,24 @@ func Register(reg *command.Registry, svc *Service) {
 		Handler:     svc.Get,
 	})
 
-	command.MustRegister(reg, command.Command[GetInput, *Toolset]{
+	command.MustRegister(reg, command.Command[GetInput, ConfigOutput]{
 		Group:   "toolsets",
 		Name:    "get-config",
-		Summary: "Read one toolset's configuration, for editing.",
-		Doc: `The same read as toolsets_get — a toolset's configuration is not split
-into a separate document — named for a caller opening it specifically to
-change its settings.`,
+		Summary: "Read one toolset's configuration, and what it still needs.",
+		Doc: `The same toolset toolsets_get answers with — a configuration is not split
+into a separate document — plus the variables it needs before it can connect,
+each marked set or missing.
+
+The values are never returned: these are the credentials the toolset connects
+with, and knowing which are still missing is what somebody configuring it
+needs. Until this answered them, the only way to find out was to connect and
+read the error, one variable at a time.`,
 		Examples: []command.Example{
 			{Description: "read before reconfiguring", Input: GetInput{ID: "gh"}},
 		},
 		Registry:    true,
 		Annotations: command.Annotations{Title: "Read a toolset's configuration", ReadOnlyHint: true, IdempotentHint: true},
-		Handler:     svc.Get,
+		Handler:     svc.GetConfig,
 	})
 
 	command.MustRegister(reg, command.Command[CallInput, CallOutput]{

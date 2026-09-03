@@ -311,6 +311,7 @@ func TestAnAnswerCarriesTheReasoningItStreamed(t *testing.T) {
 type recordingChats struct {
 	chat    *chat.Chat
 	replies []chat.ReplyInput
+	marked  []chat.MarkRunInput
 }
 
 func (r *recordingChats) Get(context.Context, chat.GetInput) (*chat.Chat, error) {
@@ -320,6 +321,11 @@ func (r *recordingChats) Get(context.Context, chat.GetInput) (*chat.Chat, error)
 func (r *recordingChats) Reply(_ context.Context, in chat.ReplyInput) (chat.ReplyOutput, error) {
 	r.replies = append(r.replies, in)
 	return chat.ReplyOutput{}, nil
+}
+
+func (r *recordingChats) MarkRun(_ context.Context, in chat.MarkRunInput) error {
+	r.marked = append(r.marked, in)
+	return nil
 }
 
 // A turn somebody stopped is not a turn that failed, and the conversation

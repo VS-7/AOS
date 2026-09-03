@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -75,6 +76,85 @@ type GetInput struct {
 	ID string `json:"id" jsonschema:"Identifier of the toolset." validate:"required,notblank"`
 
 	command.Reasoning
+}
+
+// Requirement is one variable a toolset needs before it can connect, and
+// whether this installation has it.
+type Requirement struct {
+	// LookupKey is the variable's name, which is what a person setting the
+	// toolset up types beside a value. Named for the field the screen reads.
+	LookupKey string `json:"lookupKey" jsonschema:"Name of the environment variable this toolset needs."`
+
+	// IsSet says whether it resolves to something. It never carries the value
+	// itself: these are the credentials the toolset connects with, and a
+	// screen that only has to say "configured" does not need them.
+	IsSet bool `json:"isSet" jsonschema:"Whether this installation resolves the variable to a non-empty value."`
+}
+
+// ConfigOutput is one toolset's configuration, with what it still needs.
+type ConfigOutput struct {
+	Toolset *Toolset `json:"toolset" jsonschema:"The toolset, as toolsets_get answers it."`
+
+	// ConnectionType is Type under the name the interface reads it by.
+	ConnectionType Type `json:"connectionType" jsonschema:"How this toolset connects. The same value as toolset.type."`
+
+	// Requirements is every ${env.VAR} the configuration mentions, plus every
+	// key of Env, each marked set or missing.
+	Requirements []Requirement `json:"requirements" jsonschema:"Variables this toolset needs, and whether this installation has them."`
+}
+
+// GetConfig reads one toolset's configuration together with the variables it
+// needs — which is the difference between it and Get, and the reason it is a
+// command of its own rather than an alias.
+//
+// The configuration screen could not appear at all without this: it decides
+// whether to offer a Configuration tab from the length of `requirements`, and
+// nothing answered that field, so a toolset needing three credentials looked
+// exactly like one needing none. The variables themselves were only ever read
+// by Interpolate, at connect time, one at a time, failing on the first one
+// missing — so setting a toolset up meant connecting, reading the error,
+// setting one variable, and connecting again.
+func (s *Service) GetConfig(ctx context.Context, in GetInput) (ConfigOutput, error) {
+	ts, err := s.get(ctx, strings.TrimSpace(in.ID))
+	if err != nil {
+		return ConfigOutput{}, err
+	}
+
+	names := Referenced(*ts)
+	// A key of Env with no value is a variable somebody declared and has not
+	// filled in — the exact state the screen exists to show.
+	for _, key := range sortedKeys(ts.Env) {
+		if ts.Env[key] != "" {
+			continue
+		}
+		if !slices.Contains(names, key) {
+			names = append(names, key)
+		}
+	}
+
+	requirements := make([]Requirement, 0, len(names))
+	for _, name := range names {
+		requirements = append(requirements, Requirement{
+			LookupKey: name,
+			IsSet:     s.isSet(*ts, name),
+		})
+	}
+
+	return ConfigOutput{Toolset: ts, ConnectionType: ts.Type, Requirements: requirements}, nil
+}
+
+// isSet reports whether a variable resolves to something, looking where the
+// two kinds of variable actually live: one the screen wrote is a key of the
+// toolset's own Env, one the configuration references is read from the
+// installation's environment.
+func (s *Service) isSet(ts Toolset, name string) bool {
+	if value, ok := ts.Env[name]; ok && value != "" {
+		return true
+	}
+	if s.env == nil {
+		return false
+	}
+	return s.env.String(name, "") != ""
 }
 
 // Get reads one toolset's configuration.

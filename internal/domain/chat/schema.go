@@ -21,6 +21,18 @@ type ListInput struct {
 type ListOutput struct {
 	Chats []Chat `json:"chats" jsonschema:"The conversations found, most recently updated first, without their messages."`
 	Total int    `json:"total" jsonschema:"How many matched."`
+
+	// Active is who is working, by conversation.
+	//
+	// It travels beside the roster rather than on the record because it is
+	// not part of one: a Chat is stored as JSON, so a field on it would be
+	// persisted, and this is a fact about right now.
+	//
+	// It exists because the interface's "Atlas is working…" was realtime and
+	// nothing else — the indicator was seeded empty on every load, so
+	// reloading the window during a turn made the agent look idle, and a
+	// window opened while a turn was already running never showed it at all.
+	Active map[string][]string `json:"active,omitempty" jsonschema:"Agents with a turn in flight, by conversation id."`
 }
 
 // GetInput reads one conversation in full.
@@ -156,4 +168,17 @@ type ReactInput struct {
 	Value   string `json:"value" jsonschema:"The reaction, usually an emoji. Sending the same one again removes it." validate:"required,notblank"`
 
 	command.Reasoning
+}
+
+// MarkRunInput records that a turn has begun on the message that asked for it.
+//
+// The run itself is written when the turn *ends* (Reply), which left nothing
+// on the record between "sent" and "answered": the interface could only know
+// an agent was working from a realtime event it might have missed, or been
+// opened after.
+type MarkRunInput struct {
+	Chat    string
+	Message string
+	AgentID string
+	JobID   string
 }

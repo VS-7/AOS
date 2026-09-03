@@ -44,6 +44,11 @@ type Turn struct {
 	AgentID   string
 	Task      string
 	Routine   string
+
+	// JobID names this attempt, so the run the runtime records at the start
+	// and the one it completes at the end are the same run. Empty for a
+	// caller that runs the turn itself rather than queueing it.
+	JobID string
 }
 
 // Canceller ends a turn that is already running.
