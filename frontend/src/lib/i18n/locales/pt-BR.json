@@ -402,6 +402,7 @@
   "Failed to delete routine": "Falha ao excluir a rotina",
   "Failed to delete task": "Falha ao excluir a tarefa",
   "Failed to finish task": "Falha ao concluir a tarefa",
+  "Failed to mark activities as read": "Falha ao marcar as atividades como lidas",
   "Failed to open workspace in Finder": "Falha ao abrir o workspace no Finder",
   "Failed to save model preference.": "Falha ao salvar a preferência de modelo.",
   "Failed to start routine": "Falha ao iniciar a rotina",
