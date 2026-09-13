@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useRouter } from "@tanstack/react-router";
 import * as z from "zod";
 
@@ -18,6 +19,7 @@ import {
   FormField,
   FormItem,
   FormLabel,
+  FormMessage,
 } from "@/components/ui/form";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { Input } from "@/components/ui/input";
@@ -28,15 +30,24 @@ import { api } from "@/lib/aos-facade";
 import { t, LOCALES, LOCALE_NAMES, normalizeLocale, setLocale } from "@/lib/i18n";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const profileFormSchema = z.object({
-  name: z.string().min(2),
-  email: z.string().email(),
-  image: z.string().optional().or(z.literal("")),
-  timezone: z.string(),
-  language: z.string(),
-  city: z.string().optional(),
-  country: z.string().optional(),
-});
+/**
+ * Built when the section renders rather than when the module loads: the
+ * name rule's message goes through `t()`, which answers in the locale in
+ * force at the moment it runs.
+ */
+function buildProfileFormSchema() {
+  return z.object({
+    // Trimmed before the length check: "   " passed `min(2)` and went to the
+    // daemon, which refuses a name that is only spaces.
+    name: z.string().trim().min(2, t("Name must be at least 2 characters.")),
+    email: z.string().email(),
+    image: z.string().optional().or(z.literal("")),
+    timezone: z.string(),
+    language: z.string(),
+    city: z.string().optional(),
+    country: z.string().optional(),
+  });
+}
 
 const passwordFormSchema = z
   .object({
@@ -89,6 +100,8 @@ export function UserProfileSection() {
   const context = aos.useContext();
   const authUser = aos.stores.auth.useState((state) => state.user);
   const config = context.config;
+
+  const profileFormSchema = useMemo(buildProfileFormSchema, []);
 
   const profileForm = aos.useForm({
     schema: profileFormSchema,
@@ -251,6 +264,7 @@ export function UserProfileSection() {
                       <FormDescription>
                         {t("How your name is shown in the app.")}
                       </FormDescription>
+                      <FormMessage />
                     </div>
                     <FormControl>
                       <Input

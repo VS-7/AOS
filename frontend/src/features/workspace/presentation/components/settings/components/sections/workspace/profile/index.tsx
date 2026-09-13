@@ -36,6 +36,7 @@ import { AppError } from "@/core/errors/aos.error";
 import { toast } from "sonner";
 import { ColorPickerPopover } from "@/components/ui/color-picker";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
 
 /**
  * Workspace branding (name, logo, color) and danger-zone delete.
@@ -96,9 +97,16 @@ export function WorkspaceProfileSection() {
 
     setDeleting(true);
     try {
-      await aos.stores.workspace.actions.deleteWorkspace(
+      // The store answers a refusal as `{error}` rather than throwing, so
+      // awaiting it inside this try was not enough: a refused delete was
+      // announced as done and navigated away from a workspace still there.
+      const { error } = await aos.stores.workspace.actions.deleteWorkspace(
         currentWorkspace.id,
       );
+      if (error) {
+        toast.error(t("Failed to delete workspace"), { description: errorMessage(error) });
+        return;
+      }
       toast.success(t("Workspace deleted successfully"));
       navigate({ to: "/" });
     } catch (error) {
