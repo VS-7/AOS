@@ -292,7 +292,17 @@ func (s *Service) FireWebhook(ctx context.Context, in WebhookInput) (*Run, error
 // It never returns an error to its caller. It is wired as a sink of the
 // activity aggregate, and a routine that fails must not roll back the task
 // whose status changed.
+//
+// An activity published while routines are firing — by a run, or by a firing
+// announcing itself — fires no routine already in that chain, and nothing at
+// all once the chain is MaxChain long. See MaxChain for the loop this closes.
 func (s *Service) OnActivity(ctx context.Context, namespace, event string, data map[string]any) {
+	chain := chainOf(ctx)
+	if len(chain) >= MaxChain {
+		s.log.Warn("an activity published by a chain of routine firings fired no further routine",
+			"namespace", namespace, "event", event, "chain", chain, "limit", MaxChain)
+		return
+	}
 	found, err := s.repo.List(ctx, collections.Query{IncludeContent: true})
 	if err != nil {
 		s.log.Error("could not read the routines to react to an activity",
@@ -301,8 +311,15 @@ func (s *Service) OnActivity(ctx context.Context, namespace, event string, data 
 	}
 	for i := range found {
 		r := &found[i]
-		if r.Status != Enabled {
+		if r.Status != Enabled || inChain(chain, r) {
 			continue
+		}
+		// Each firing is a whole turn. A caller that went away while an
+		// earlier one ran is not a reason to start the next.
+		if ctx.Err() != nil {
+			s.log.Warn("stopped reacting to an activity: the caller is gone",
+				"namespace", namespace, "event", event, "err", ctx.Err())
+			return
 		}
 		for _, t := range r.Triggers {
 			if !t.Matches(namespace, event, data) {
@@ -368,6 +385,10 @@ func (s *Service) ProcessScheduled(ctx context.Context, now time.Time) (Schedule
 // fire is the single place a run is recorded, so no trigger can fire without
 // leaving one.
 func (s *Service) fire(ctx context.Context, r *Routine, trigger TriggerType, payload map[string]any, force bool) (*Run, error) {
+	// Everything below — the run, and the routine.fired it publishes — happens
+	// on behalf of this firing, and OnActivity must be able to tell.
+	ctx = withFiring(ctx, r)
+
 	if r.Status != Enabled && !force {
 		run := s.newRun(r, trigger, payload)
 		run.Status = RunSkipped
