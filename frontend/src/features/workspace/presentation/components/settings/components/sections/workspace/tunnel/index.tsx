@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { openExternal } from "@/lib/wails";
 
 import { aos } from "@/app/aos";
-import { api } from "@/lib/aos-facade";
+import { api, errorMessage } from "@/lib/aos-facade";
 import { SettingsSectionShell } from "../../../section-shell";
 import {
   FormSection,
@@ -61,8 +61,14 @@ export function WorkspaceTunnelSection() {
     onSubmit: async (values) => {
       const previousEnabled = context.config?.tunnel?.enabled ?? false;
 
+      // `mutateOrThrow` throughout: this is written as try/catch, and `mutate`
+      // resolves a refusal as a value. With `mutate` the catch — and the
+      // rollback in it — never ran: a start the daemon refused
+      // (AOS_TUNNEL_INSECURE_EXPOSURE) was announced as "Tunnel started!",
+      // and `tunnel.enabled` stayed saved as true over a tunnel that was not
+      // running.
       try {
-        await api.config.update.mutate({
+        await api.config.update.mutateOrThrow({
           body: {
             tunnel: {
               enabled: values.enabled,
@@ -71,31 +77,34 @@ export function WorkspaceTunnelSection() {
         });
 
         if (values.enabled) {
-          const result = await api.tunnel.start.mutate();
-          const publicUrl = result.data?.url ?? tunnelPublicUrl;
-          toast.success(`Tunnel started! URL: ${publicUrl}`);
+          const started = await api.tunnel.start.mutateOrThrow<{ url?: string }>();
+          toast.success(
+            t("Tunnel started! URL: {{url}}", { url: started?.url ?? tunnelPublicUrl }),
+          );
         } else {
-          await api.tunnel.stop.mutate();
+          await api.tunnel.stop.mutateOrThrow();
           toast.success(t("Tunnel stopped."));
         }
 
         await tunnelStatusQuery.refetch();
         router.invalidate();
       } catch (error) {
-        try {
-          await api.config.update.mutate({
-            body: {
-              tunnel: {
-                enabled: previousEnabled,
-              },
+        // Best effort: the refusal is what the person needs to read, and a
+        // rollback that also fails must not replace it.
+        await api.config.update.mutate({
+          body: {
+            tunnel: {
+              enabled: previousEnabled,
             },
-          });
-        } catch {
-          // Ignore rollback failures so the original error can surface.
-        }
+          },
+        });
 
         activationForm.reset({ enabled: previousEnabled });
-        toast.error(error instanceof Error ? error.message : "Failed to update tunnel settings");
+        toast.error(
+          values.enabled ? t("The tunnel could not be started") : t("The tunnel could not be stopped"),
+          { description: errorMessage(error) },
+        );
+        await tunnelStatusQuery.refetch();
         throw error;
       }
     },
@@ -112,8 +121,10 @@ export function WorkspaceTunnelSection() {
       const hostname = values.hostname?.trim() ?? "";
       const token = values.token?.trim() ?? "";
 
+      // The same try/catch shape as the switch above, with the same trap:
+      // `mutate` never throws, so a refused save or start reported success.
       try {
-        await api.config.update.mutate({
+        await api.config.update.mutateOrThrow({
           body: {
             tunnel: {
               hostname,
@@ -123,9 +134,12 @@ export function WorkspaceTunnelSection() {
         });
 
         if (enabled && hostname && token) {
-          const result = await api.tunnel.start.mutate();
-          const publicUrl = result.data?.url ?? tunnelPublicUrl;
-          toast.success(`Tunnel settings saved and started! URL: ${publicUrl}`);
+          const started = await api.tunnel.start.mutateOrThrow<{ url?: string }>();
+          toast.success(
+            t("Tunnel settings saved and started! URL: {{url}}", {
+              url: started?.url ?? tunnelPublicUrl,
+            }),
+          );
         } else {
           toast.success(t("Tunnel settings saved."));
         }
@@ -133,7 +147,8 @@ export function WorkspaceTunnelSection() {
         await tunnelStatusQuery.refetch();
         router.invalidate();
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Failed to save tunnel credentials");
+        toast.error(t("Failed to save tunnel credentials"), { description: errorMessage(error) });
+        await tunnelStatusQuery.refetch();
         throw error;
       }
     },
@@ -144,7 +159,19 @@ export function WorkspaceTunnelSection() {
   const tunnelToken = credentialsForm.watch("token") ?? "";
   const tunnelPublicUrl = TunnelUrlHelper.buildPublicUrl(tunnelHostname);
   const isTunnelConfigured = !!tunnelHostname.trim() && !!tunnelToken.trim();
-  const isTunnelOnline = tunnelStatus?.online ?? false;
+  // Go's `tunnel.State` is `{status, url, pid, startedAt, error}`: there is
+  // no `online` field, so reading one kept "Online" from ever appearing.
+  const tunnelState = (tunnelStatus as { status?: string } | undefined)?.status;
+  const isTunnelOnline = tunnelState === "running";
+  const isTunnelStarting = tunnelState === "starting";
+  const tunnelError =
+    tunnelState === "failed" ? (tunnelStatus as { error?: string } | undefined)?.error : undefined;
+  // The daemon refuses to publish an API that asks for no credential
+  // (AOS_TUNNEL_INSECURE_EXPOSURE). The redacted configuration still says
+  // whether a token is set — an unset secret stays empty — so the switch can
+  // say so before it is flipped, rather than after a refusal.
+  const security = context.config?.security as { enabled?: boolean; apiToken?: string } | undefined;
+  const lacksAuthentication = !security?.enabled || !security?.apiToken;
   const isBusy = activationForm.isLoading || credentialsForm.isLoading || tunnelStatusQuery.isFetching;
 
   const handleCopyUrl = async () => {
@@ -186,14 +213,18 @@ export function WorkspaceTunnelSection() {
                       ? "Applying tunnel settings..."
                       : isTunnelOnline
                         ? "Your instance is accessible from the internet."
-                        : isTunnelEnabled && isTunnelConfigured
-                          ? "Tunnel is enabled and waiting to connect."
-                          : isTunnelEnabled
-                            ? "Tunnel is enabled, but hostname or token is missing."
-                            : "Tunnel is disabled. Your instance is only accessible locally."}
+                        : tunnelError
+                          ? tunnelError
+                          : isTunnelStarting
+                            ? "Tunnel is enabled and waiting to connect."
+                            : isTunnelEnabled && isTunnelConfigured
+                              ? t("Tunnel is enabled but not running.")
+                              : isTunnelEnabled
+                                ? "Tunnel is enabled, but hostname or token is missing."
+                                : "Tunnel is disabled. Your instance is only accessible locally."}
                   </FormDescription>
                 </div>
-                {isBusy ? (
+                {isBusy || isTunnelStarting ? (
                   <Badge variant="outline" className="gap-1">
                     <Loader2 className="size-3 animate-spin text-blue-600" />
                     {t("Connecting")}
@@ -203,10 +234,10 @@ export function WorkspaceTunnelSection() {
                     <CircleCheck className="size-3 text-emerald-400" />
                     {t("Online")}
                   </Badge>
-                ) : isTunnelEnabled ? (
+                ) : tunnelError ? (
                   <Badge variant="outline" className="gap-1">
-                    <CircleDot className="size-3 text-blue-600" />
-                    {t("Connecting")}
+                    <CircleDot className="size-3 text-destructive" />
+                    {t("Failed")}
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="gap-1">
@@ -226,12 +257,19 @@ export function WorkspaceTunnelSection() {
                       <FormDescription>
                         {t("Start cloudflared automatically with the saved hostname and token.")}
                       </FormDescription>
+                      {lacksAuthentication && !field.value ? (
+                        <FormDescription className="text-destructive">
+                          {t("The daemon will not expose an API that asks for no credential. Turn authentication on and set an API token first (security.enabled and security.apiToken).")}
+                        </FormDescription>
+                      ) : null}
                     </div>
                     <FormControl>
                       <Switch
                         checked={field.value}
                         onCheckedChange={field.onChange}
-                        disabled={isBusy}
+                        // Turning it off stays possible; turning it on without
+                        // a credential can only be refused.
+                        disabled={isBusy || (lacksAuthentication && !field.value)}
                       />
                     </FormControl>
                   </FormItem>
