@@ -900,6 +900,10 @@ func New(opts Options) (*App, error) {
 		Stager:     installer,
 		Installer:  installer,
 		Store:      updateinstall.NewStore(filepath.Join(paths.UpdateDir(), "state.json")),
+		// One lock file for the installation: every workspace App builds its
+		// own update service over the same directory, and a terminal's
+		// `aosd update apply` is a process of its own.
+		Lock: updateinstall.NewLock(filepath.Join(paths.UpdateDir(), "update.lock")),
 		Supervisor: updateSupervisor{
 			inside:  gatewaySvc,
 			outside: gateway.NewService(outsideDeps),

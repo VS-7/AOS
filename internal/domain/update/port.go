@@ -106,6 +106,11 @@ type Installer interface {
 	Rollback(ctx context.Context, binary string) error
 	// Commit drops the copy SwapIn kept, once the new binary is proven.
 	Commit(ctx context.Context, binary string) error
+	// Tidy removes every copy a SwapIn kept that a Commit could not remove —
+	// on Windows, the file of a program still running, like the process
+	// that ran the install. Apply calls it only when no install is under
+	// way, so no copy it removes is one a rollback still needs.
+	Tidy(ctx context.Context) error
 	// Reinstall says why the binaries here cannot be replaced one at a time,
 	// or nothing when they can. A macOS application bundle cannot — its
 	// signature seals every file in it, so replacing one breaks the seal of
@@ -115,9 +120,30 @@ type Installer interface {
 }
 
 // Store keeps the Record between calls, and between daemon restarts.
+//
+// Every process that updates this installation shares one record: the daemon
+// and each workspace's service inside it, and `aosd update apply` in a
+// terminal. So there is no Save. A Check that read the record, asked the
+// network and then wrote it back used to overwrite a Download that had
+// staged a release in between, and Apply then found nothing staged.
 type Store interface {
 	Load(ctx context.Context) (Record, error)
-	Save(ctx context.Context, record Record) error
+	// Update reads the record, lets change modify it, and writes it back,
+	// with no other Update — in this process or another — in between. A
+	// change that returns an error writes nothing.
+	Update(ctx context.Context, change func(*Record) error) error
+}
+
+// Lock keeps one Download or Apply at a time on an installation, across
+// every process that can run one. Two at once swapped over each other's
+// backups, and a download beside an install discarded the files it was
+// putting in place.
+type Lock interface {
+	// TryLock takes the lock without waiting; ok is false when another
+	// call holds it. unlock releases it, and so does the end of the process
+	// holding it, so an install that was killed does not leave the
+	// installation locked.
+	TryLock(ctx context.Context) (unlock func(), ok bool, err error)
 }
 
 // DaemonSupervisor is the narrow slice of the gateway this domain needs:

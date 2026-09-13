@@ -220,6 +220,36 @@ func errAuthorizationFailed(causer string, cause error) error {
 		CTA(apperr.CallToAction{Label: "retry; nothing was downloaded or installed"})
 }
 
+// errInProgress: another Download or Apply holds the installation's lock —
+// in this daemon, or in a terminal running `aosd update apply`.
+func errInProgress(causer string) error {
+	return apperr.New("UPDATE_IN_PROGRESS").
+		Causer(causer).
+		Msgf("another download or install of an update is running on this installation").
+		Status(apperr.StatusConflict).
+		CTA(apperr.CallToAction{Label: "wait for it to finish, then check for updates again"})
+}
+
+func errLockFailed(causer string, cause error) error {
+	return apperr.New("UPDATE_LOCK_FAILED").
+		Causer(causer).
+		Msgf("could not tell whether another update is running on this installation: %v", cause).
+		Status(apperr.StatusInternalServerError).
+		Wrap(cause).
+		CTA(apperr.CallToAction{Label: "nothing was downloaded or installed; check the permissions of the state directory, then retry"})
+}
+
+// errRecordFailed: Apply could not write down that it is installing, and
+// does not start a swap it could not say it had started.
+func errRecordFailed(cause error) error {
+	return apperr.New("UPDATE_RECORD_FAILED").
+		Causer("update.Service.Apply").
+		Msgf("could not record the install before starting it, so nothing was replaced: %v", cause).
+		Status(apperr.StatusInternalServerError).
+		Wrap(cause).
+		CTA(apperr.CallToAction{Label: "check the free space and permissions of the state directory, then retry"})
+}
+
 func errNothingStaged(version string) error {
 	return apperr.New("UPDATE_NOTHING_STAGED").
 		Causer("update.Service.Apply").

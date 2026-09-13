@@ -41,6 +41,7 @@ type service struct {
 	stager     Stager
 	installer  Installer
 	store      Store
+	lock       Lock
 	supervisor DaemonSupervisor
 	operators  Operators
 	activeWork ActiveWork
@@ -75,10 +76,13 @@ type service struct {
 
 // Deps is what the service is built from.
 type Deps struct {
-	Source     ReleaseSource
-	Stager     Stager
-	Installer  Installer
-	Store      Store // nil keeps the record in memory, for this process only
+	Source    ReleaseSource
+	Stager    Stager
+	Installer Installer
+	Store     Store // nil keeps the record in memory, for this process only
+	// Lock is one Download or Apply at a time on the installation. Nil
+	// keeps this service's own calls apart, and no one else's.
+	Lock       Lock
 	Supervisor DaemonSupervisor
 	// Operators is who may Download and Apply. Nil lets nobody: an update
 	// service wired without an answer to that question refuses rather than
@@ -121,7 +125,7 @@ func NewService(d Deps) Service {
 		panic("update.NewService: PublicKey is required — an update service cannot verify releases without one")
 	}
 	s := &service{
-		source: d.Source, stager: d.Stager, installer: d.Installer, store: d.Store,
+		source: d.Source, stager: d.Stager, installer: d.Installer, store: d.Store, lock: d.Lock,
 		supervisor: d.Supervisor, operators: d.Operators,
 		activeWork: d.ActiveWork, clock: d.Clock, sleeper: d.Sleeper, log: d.Log,
 		publicKey: d.PublicKey, platform: d.Platform, version: d.Version, customFeed: d.CustomFeed,
@@ -133,6 +137,9 @@ func NewService(d Deps) Service {
 	}
 	if s.store == nil {
 		s.store = &memoryStore{}
+	}
+	if s.lock == nil {
+		s.lock = &memoryLock{}
 	}
 	if s.platform == "" {
 		s.platform = runtime.GOOS + "/" + runtime.GOARCH
@@ -164,6 +171,7 @@ func (s *service) Check(ctx context.Context, in CheckInput) (CheckOutput, error)
 	channel := s.channelOf(in)
 	now := s.clock.Now()
 	out := CheckOutput{Current: s.version, Channel: channel, CheckedAt: now}
+	s.tidyIfIdle(ctx)
 
 	if !s.source.Configured() {
 		out.State = StateNotConfigured
@@ -252,14 +260,47 @@ func webPage(raw string) string {
 // remember records a check's outcome. A record that cannot be written costs
 // the "Last checked" line, not the check the caller asked for.
 func (s *service) remember(ctx context.Context, check LastCheck) {
-	record, err := s.store.Load(ctx)
+	err := s.store.Update(ctx, func(record *Record) error {
+		record.LastCheck = &check
+		return nil
+	})
 	if err != nil {
-		s.log.Warn("could not read the update record; the check is not remembered", "err", err)
+		s.log.Warn("could not remember the update check", "err", err)
+	}
+}
+
+// exclusive takes the installation's update lock for one Download or Apply.
+func (s *service) exclusive(ctx context.Context, causer string) (func(), error) {
+	unlock, ok, err := s.lock.TryLock(ctx)
+	switch {
+	case err != nil:
+		return nil, errLockFailed(causer, err)
+	case !ok:
+		return nil, errInProgress(causer)
+	}
+	return unlock, nil
+}
+
+// tidyIfIdle removes the backups a finished install could not, when no
+// install is under way and none stopped partway. Housekeeping: it never
+// fails the call it rides on.
+func (s *service) tidyIfIdle(ctx context.Context) {
+	unlock, ok, err := s.lock.TryLock(ctx)
+	if err != nil || !ok {
 		return
 	}
-	record.LastCheck = &check
-	if err := s.store.Save(ctx, record); err != nil {
-		s.log.Warn("could not remember the update check", "err", err)
+	defer unlock()
+	s.tidyLocked(ctx)
+}
+
+// tidyLocked is tidyIfIdle for a caller already holding the lock.
+func (s *service) tidyLocked(ctx context.Context) {
+	record, err := s.store.Load(ctx)
+	if err != nil || record.Installing != "" {
+		return
+	}
+	if err := s.installer.Tidy(ctx); err != nil {
+		s.log.Warn("could not remove the backups an earlier update left", "err", err)
 	}
 }
 
@@ -376,6 +417,11 @@ func (s *service) Download(ctx context.Context, in DownloadInput) (DownloadOutpu
 	if err := s.authorize(ctx, "update.Service.Download"); err != nil {
 		return DownloadOutput{}, err
 	}
+	unlock, err := s.exclusive(ctx, "update.Service.Download")
+	if err != nil {
+		return DownloadOutput{}, err
+	}
+	defer unlock()
 	release := in.Release
 	if release == nil {
 		return DownloadOutput{}, errNothingStaged("")
@@ -424,11 +470,10 @@ func (s *service) Download(ctx context.Context, in DownloadInput) (DownloadOutpu
 		}
 	}
 
-	record, err := s.store.Load(ctx)
-	if err == nil {
+	err = s.store.Update(ctx, func(record *Record) error {
 		record.Staged = staged
-		err = s.store.Save(ctx, record)
-	}
+		return nil
+	})
 	if err != nil {
 		_ = s.stager.Discard(ctx)
 		return DownloadOutput{}, errStageFailed(err)
@@ -544,15 +589,26 @@ func (s *service) discard(ctx context.Context) error {
 	if err := s.stager.Discard(ctx); err != nil {
 		return err
 	}
-	record, err := s.store.Load(ctx)
-	if err != nil {
-		return err
-	}
-	if record.Staged == nil {
+	return s.store.Update(ctx, func(record *Record) error {
+		record.Staged = nil
 		return nil
+	})
+}
+
+// installing records that an install is under way, or that it has ended.
+func (s *service) installing(ctx context.Context, version string) error {
+	return s.store.Update(ctx, func(record *Record) error {
+		record.Installing = version
+		return nil
+	})
+}
+
+// installed clears the record of an install that has ended with the files in
+// a known state: the new binaries proven, or the previous ones restored.
+func (s *service) installed(ctx context.Context) {
+	if err := s.installing(ctx, ""); err != nil {
+		s.log.Warn("the update has ended, but the record still says it is installing", "err", err)
 	}
-	record.Staged = nil
-	return s.store.Save(ctx, record)
 }
 
 // Apply swaps in the staged release at a point where nothing is lost:
@@ -570,6 +626,11 @@ func (s *service) Apply(ctx context.Context, in ApplyInput) (ApplyOutput, error)
 	if err := s.authorize(ctx, "update.Service.Apply"); err != nil {
 		return ApplyOutput{}, err
 	}
+	unlock, err := s.exclusive(ctx, "update.Service.Apply")
+	if err != nil {
+		return ApplyOutput{}, err
+	}
+	defer unlock()
 	record, err := s.store.Load(ctx)
 	if err != nil {
 		return ApplyOutput{}, errStateUnreadable("update.Service.Apply", err)
@@ -609,12 +670,20 @@ func (s *service) Apply(ctx context.Context, in ApplyInput) (ApplyOutput, error)
 	}
 	sort.Strings(binaries)
 
+	// A backup left by an earlier install that did finish would otherwise
+	// be taken for this one's by the rename that makes it.
+	s.tidyLocked(ctx)
+	if err := s.installing(ctx, staged.Version); err != nil {
+		return ApplyOutput{}, errRecordFailed(err)
+	}
+
 	swapped := make([]string, 0, len(binaries))
 	for _, binary := range binaries {
 		if err := s.installer.SwapIn(ctx, binary, digests[binary]); err != nil {
 			if rerr := s.rollbackAll(ctx, swapped); rerr != nil {
 				return ApplyOutput{}, errRollbackFailed(err, rerr)
 			}
+			s.installed(ctx)
 			if errors.Is(err, ErrStagedChanged) {
 				if derr := s.discard(ctx); derr != nil {
 					s.log.Error("could not discard a staged release that changed after it was verified", "err", derr)
@@ -635,9 +704,10 @@ func (s *service) Apply(ctx context.Context, in ApplyInput) (ApplyOutput, error)
 
 	for _, binary := range swapped {
 		if err := s.installer.Commit(ctx, binary); err != nil {
-			s.log.Warn("the update is in place, but the previous binary it replaced could not be removed", "binary", binary, "err", err)
+			s.log.Warn("the update is in place, but the previous binary it replaced could not be removed yet; the next check removes it", "binary", binary, "err", err)
 		}
 	}
+	s.installed(ctx)
 	if err := s.discard(ctx); err != nil {
 		s.log.Warn("the update is in place, but its staged copy could not be removed", "err", err)
 	}
@@ -709,6 +779,7 @@ func (s *service) rollbackAndRestart(ctx context.Context, binaries []string, cau
 	if err := s.rollbackAll(ctx, binaries); err != nil {
 		return ApplyOutput{}, errRollbackFailed(cause, err)
 	}
+	s.installed(ctx)
 	if err := s.supervisor.Restart(ctx); err != nil {
 		return ApplyOutput{RolledBack: true}, errRestartAfterRollback(cause, err)
 	}
@@ -835,9 +906,24 @@ func (m *memoryStore) Load(context.Context) (Record, error) {
 	return m.record, nil
 }
 
-func (m *memoryStore) Save(_ context.Context, record Record) error {
+func (m *memoryStore) Update(_ context.Context, change func(*Record) error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	record := m.record
+	if err := change(&record); err != nil {
+		return err
+	}
 	m.record = record
 	return nil
+}
+
+// memoryLock is the Lock a service gets when it is built without one: it
+// keeps this service's own calls apart.
+type memoryLock struct{ mu sync.Mutex }
+
+func (m *memoryLock) TryLock(context.Context) (func(), bool, error) {
+	if !m.mu.TryLock() {
+		return nil, false, nil
+	}
+	return m.mu.Unlock, true, nil
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -85,6 +86,10 @@ type fakeMachine struct {
 	targetErr error
 	commits   []string
 	discarded int
+	// commitErr keeps the backup a Commit was asked to remove, the way a
+	// running program's file refuses to be removed on Windows.
+	commitErr error
+	tidied    int
 }
 
 func newFakeMachine(installed ...string) *fakeMachine {
@@ -162,9 +167,26 @@ func (m *fakeMachine) Rollback(_ context.Context, binary string) error {
 func (m *fakeMachine) Commit(_ context.Context, binary string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	delete(m.prev, binary)
 	m.commits = append(m.commits, binary)
+	if m.commitErr != nil {
+		return m.commitErr
+	}
+	delete(m.prev, binary)
 	return nil
+}
+
+func (m *fakeMachine) Tidy(context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.prev = map[string]string{}
+	m.tidied++
+	return nil
+}
+
+func (m *fakeMachine) backups() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.prev)
 }
 
 func (m *fakeMachine) Reinstall(context.Context) update.ReinstallReason { return m.reinstall }
@@ -183,6 +205,8 @@ type fakeSupervisor struct {
 	// the one onto the new binaries — and healthy after any other.
 	newVersionSick bool
 	restarts       int
+	// onRestart runs on every restart, while the swap is in place.
+	onRestart func()
 }
 
 func (f *fakeSupervisor) CanRestart(context.Context) bool { return !f.cannot }
@@ -191,6 +215,9 @@ func (f *fakeSupervisor) Restart(context.Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.restarts++
+	if f.onRestart != nil {
+		f.onRestart()
+	}
 	if len(f.restartErrs) >= f.restarts {
 		return f.restartErrs[f.restarts-1]
 	}
@@ -239,12 +266,28 @@ type fakeOperators struct {
 
 func (f fakeOperators) MayInstall(context.Context) (bool, error) { return !f.deny, f.err }
 
+// fakeLock is a Lock another install already holds, or one that cannot be
+// taken at all.
+type fakeLock struct {
+	busy bool
+	err  error
+}
+
+func (f fakeLock) TryLock(context.Context) (func(), bool, error) {
+	if f.err != nil {
+		return nil, false, f.err
+	}
+	return func() {}, !f.busy, nil
+}
+
 type failingStore struct{}
 
 func (failingStore) Load(context.Context) (update.Record, error) {
 	return update.Record{}, errors.New("disk on fire")
 }
-func (failingStore) Save(context.Context, update.Record) error { return errors.New("disk on fire") }
+func (failingStore) Update(context.Context, func(*update.Record) error) error {
+	return errors.New("disk on fire")
+}
 
 // harness bundles a service with fakes cheap to assert on, mirroring
 // internal/domain/gateway's own test-file shape.
@@ -256,6 +299,7 @@ type harness struct {
 	activeWork *fakeActiveWork
 	operators  fakeOperators
 	store      update.Store
+	lock       update.Lock
 	clock      *steppingClock
 	version    string
 	platform   string
@@ -279,6 +323,7 @@ func withCustomFeed() option               { return func(h *harness) { h.customF
 func withFlavour(f string) option          { return func(h *harness) { h.flavour = f } }
 func withStore(store update.Store) option  { return func(h *harness) { h.store = store } }
 func withOperators(o fakeOperators) option { return func(h *harness) { h.operators = o } }
+func withLock(l update.Lock) option        { return func(h *harness) { h.lock = l } }
 
 // sameMachineAs builds the service over another harness's machine, feed,
 // daemon and key: a second binary on the same installation.
@@ -310,7 +355,7 @@ func newHarness(t *testing.T, opts ...option) *harness {
 		o(h)
 	}
 	h.svc = update.NewService(update.Deps{
-		Source: h.source, Stager: h.machine, Installer: h.machine, Store: h.store,
+		Source: h.source, Stager: h.machine, Installer: h.machine, Store: h.store, Lock: h.lock,
 		Supervisor: h.supervisor, Operators: h.operators, ActiveWork: h.activeWork,
 		Clock: h.clock, Sleeper: h.clock,
 		PublicKey: h.pub, Platform: h.platform, Version: h.version, CustomFeed: h.customFeed,
@@ -782,6 +827,197 @@ func TestTheTerminalInstallSaysToReopenTheWindowWhenThereIsOne(t *testing.T) {
 		if said != c.reopen {
 			t.Errorf("installed %v: calls to action %+v, want reopen %v", c.installed, e.Actions, c.reopen)
 		}
+	}
+}
+
+// A check writes the record back after asking the network. A download that
+// finished in between used to be overwritten with the record the check read
+// before it: the staged release vanished from the record, and Apply answered
+// UPDATE_NOTHING_STAGED over verified files still sitting in the stage.
+func TestACheckDoesNotLoseWhatADownloadStagedMeanwhile(t *testing.T) {
+	store := &racingStore{}
+	h := newHarness(t, withStore(store))
+	release := h.signedRelease(t, "v0.10.0", "aos", "aosd")
+
+	downloaded := make(chan error, 1)
+	store.overtake = func() {
+		go func() {
+			_, err := h.svc.Download(context.Background(), update.DownloadInput{Release: release})
+			downloaded <- err
+		}()
+		// Long enough for a download that is not kept waiting to finish.
+		select {
+		case err := <-downloaded:
+			downloaded <- err
+		case <-time.After(300 * time.Millisecond):
+		}
+	}
+
+	if _, err := h.svc.Check(context.Background(), update.CheckInput{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-downloaded; err != nil {
+		t.Fatal(err)
+	}
+
+	st, err := h.svc.Status(context.Background(), update.StatusInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Staged == nil || st.Staged.Version != "v0.10.0" {
+		t.Fatalf("the download's staged release was lost, status = %+v", st)
+	}
+	if st.CheckedAt == nil {
+		t.Fatalf("the check was lost, status = %+v", st)
+	}
+	if _, err := h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"}); err != nil {
+		t.Fatalf("what was staged should install, got %v", err)
+	}
+}
+
+// Two installs at once swap over each other: the second one's SwapIn keeps
+// the first one's new binary as its "previous" one, and a rollback restores
+// that. A download beside an install discards the files it is swapping in.
+// One at a time, across every process that can run one.
+func TestOneDownloadOrApplyAtATime(t *testing.T) {
+	h := newHarness(t)
+	release := h.signedRelease(t, "v0.10.0", "aos", "aosd")
+	h.download(t, release)
+
+	busy := newHarness(t, sameMachineAs(h), withLock(fakeLock{busy: true}))
+	_, err := busy.svc.Download(context.Background(), update.DownloadInput{Release: release})
+	wantCode(t, err, "UPDATE_IN_PROGRESS")
+	_, err = busy.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+	wantCode(t, err, "UPDATE_IN_PROGRESS")
+	if h.machine.liveAt("aosd") != "old aosd" || h.supervisor.restarts != 0 || h.machine.discarded != 1 {
+		t.Fatal("a refused call must not touch the installation")
+	}
+
+	broken := newHarness(t, sameMachineAs(h), withLock(fakeLock{err: errors.New("read-only state directory")}))
+	_, err = broken.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+	wantCode(t, err, "UPDATE_LOCK_FAILED")
+
+	// Without a Lock wired, one service still keeps its own calls apart.
+	var second error
+	var asked atomic.Bool
+	h.activeWork.during = func() {
+		if asked.CompareAndSwap(false, true) {
+			_, second = h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+		}
+	}
+	if _, err := h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"}); err != nil {
+		t.Fatal(err)
+	}
+	wantCode(t, second, "UPDATE_IN_PROGRESS")
+	h.activeWork.during = nil
+	_, err = h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+	wantCode(t, err, "UPDATE_NOTHING_STAGED")
+}
+
+// On Windows a program's own file can be renamed while it runs and not
+// removed. `aosd.exe update apply` runs from the aosd.exe it renames to
+// aosd.exe.prev, so its Commit cannot remove that backup, and 50 MB stayed
+// beside the new daemon with only a log line to say so. The next check — by
+// then that process has ended — removes what a finished install left.
+func TestABackupAFinishedInstallCouldNotRemoveIsTidiedByTheNextCheck(t *testing.T) {
+	store := &sharedStore{}
+	h := newHarness(t, withStore(store))
+	release := h.signedRelease(t, "v0.10.0", "aos", "aosd")
+	h.download(t, release)
+	h.machine.commitErr = errors.New("the process cannot access the file because it is being used by another process")
+
+	if _, err := h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"}); err != nil {
+		t.Fatal(err)
+	}
+	if h.machine.backups() == 0 {
+		t.Fatal("the fake should have kept the backups its commit could not remove")
+	}
+
+	updated := newHarness(t, withStore(store), sameMachineAs(h), running("v0.10.0"))
+	before := h.machine.tidied
+	if _, err := updated.svc.Check(context.Background(), update.CheckInput{}); err != nil {
+		t.Fatal(err)
+	}
+	if h.machine.backups() != 0 || h.machine.tidied != before+1 {
+		t.Fatalf("the next check should remove the leftover backups, %d left", h.machine.backups())
+	}
+}
+
+// A backup is the only copy of the previous binary while an install is
+// under way, and after one that stopped partway — its process killed between
+// the swap and the end. Tidying leaves both alone.
+func TestTidyingLeavesTheBackupsOfAnInstallThatHasNotFinished(t *testing.T) {
+	store := &sharedStore{}
+	h := newHarness(t, withStore(store))
+	h.source.release = &update.Release{Version: "v0.10.0"}
+
+	// What an Apply killed between its swap and its end leaves: the record
+	// still says it is installing, and the backup is the previous binary.
+	store.record.Installing = "v0.10.0"
+	h.machine.prev["aosd"] = "old aosd"
+
+	if _, err := h.svc.Check(context.Background(), update.CheckInput{}); err != nil {
+		t.Fatal(err)
+	}
+	if h.machine.tidied != 0 || h.machine.backups() != 1 {
+		t.Fatal("the backup of an install that did not finish must be kept")
+	}
+
+	// Under way in another process: the lock is held.
+	store.record.Installing = ""
+	other := newHarness(t, withStore(store), sameMachineAs(h), withLock(fakeLock{busy: true}))
+	if _, err := other.svc.Check(context.Background(), update.CheckInput{}); err != nil {
+		t.Fatal(err)
+	}
+	if h.machine.tidied != 0 {
+		t.Fatal("a check must not tidy while an install holds the lock")
+	}
+}
+
+// The record says an install is under way from before its first swap until
+// it ends, whichever way it ends — except when restoring the previous
+// binaries failed, where the backups are what is left to recover by hand.
+func TestApplyRecordsThatItIsInstallingUntilItEnds(t *testing.T) {
+	cases := []struct {
+		name     string
+		sabotage func(h *harness)
+		code     string
+		after    string
+	}{
+		{"installed", func(*harness) {}, "", ""},
+		{"rolled back", func(h *harness) { h.supervisor.newVersionSick = true }, "UPDATE_ROLLED_BACK", ""},
+		{"rollback failed", func(h *harness) {
+			h.supervisor.newVersionSick = true
+			h.machine.failUndo = "aosd"
+		}, "UPDATE_ROLLBACK_FAILED", "v0.10.0"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			store := &sharedStore{}
+			h := newHarness(t, withStore(store))
+			h.download(t, h.signedRelease(t, "v0.10.0", "aos", "aosd"))
+			c.sabotage(h)
+			var during string
+			h.supervisor.onRestart = func() {
+				if during == "" {
+					during = store.record.Installing
+				}
+			}
+
+			_, err := h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+			if c.code == "" && err != nil {
+				t.Fatal(err)
+			}
+			if c.code != "" {
+				wantCode(t, err, c.code)
+			}
+			if during != "v0.10.0" {
+				t.Fatalf("while swapped in, the record said %q", during)
+			}
+			if store.record.Installing != c.after {
+				t.Fatalf("afterwards the record says %q, want %q", store.record.Installing, c.after)
+			}
+		})
 	}
 }
 
@@ -1397,6 +1633,17 @@ func (s *sharedStore) Save(_ context.Context, r update.Record) error {
 	return nil
 }
 
+func (s *sharedStore) Update(_ context.Context, change func(*update.Record) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r := s.record
+	if err := change(&r); err != nil {
+		return err
+	}
+	s.record = r
+	return nil
+}
+
 func sha256Line(data []byte, filename string) string {
 	return sha256Hex(data) + "  " + filename + "\n"
 }
@@ -1404,4 +1651,36 @@ func sha256Line(data []byte, filename string) string {
 func sha256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+// racingStore is a sharedStore whose first Update is overtaken:
+// between reading the record and writing it back, overtake runs — another
+// call on the same installation, from another workspace's service or a
+// terminal. A store that keeps read-modify-writes apart makes overtake wait
+// until the first one is written.
+type racingStore struct {
+	sharedStore
+	writers  sync.Mutex
+	raced    atomic.Bool
+	overtake func()
+}
+
+// race runs overtake on the first read only. Not a sync.Once: Once holds
+// every other caller until the first returns, which would keep the overtaking
+// call out of the store exactly as a correct store would.
+func (s *racingStore) race() {
+	if s.overtake != nil && s.raced.CompareAndSwap(false, true) {
+		s.overtake()
+	}
+}
+
+func (s *racingStore) Update(ctx context.Context, change func(*update.Record) error) error {
+	s.writers.Lock()
+	defer s.writers.Unlock()
+	r, _ := s.sharedStore.Load(ctx)
+	s.race()
+	if err := change(&r); err != nil {
+		return err
+	}
+	return s.sharedStore.Save(ctx, r)
 }

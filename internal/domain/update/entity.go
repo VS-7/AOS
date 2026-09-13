@@ -204,6 +204,11 @@ type Status struct {
 type Record struct {
 	LastCheck *LastCheck     `json:"lastCheck,omitempty"`
 	Staged    *StagedRelease `json:"staged,omitempty"`
+	// Installing is the version an Apply is swapping in, from before its
+	// first swap until it ends. Still set afterwards, it is an Apply that
+	// was killed partway, or one whose rollback failed: the backups it kept
+	// are then the previous binaries, and nothing tidies them away.
+	Installing string `json:"installing,omitempty"`
 }
 
 // LastCheck is the outcome of the most recent successful Check.

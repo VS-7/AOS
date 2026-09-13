@@ -5,10 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -346,8 +351,11 @@ func TestStoreKeepsTheRecord(t *testing.T) {
 		LastCheck: &update.LastCheck{At: at, Channel: update.ChannelStable, State: update.StateAvailable, Latest: "v0.16.0"},
 		Staged:    &update.StagedRelease{Version: "v0.16.0", Files: map[string]string{"aosd": "aosd_v0.16.0_linux_amd64"}},
 	}
-	if err := s.Save(ctx, want); err != nil {
+	if err := s.Update(ctx, func(r *update.Record) error { *r = want; return nil }); err != nil {
 		t.Fatal(err)
+	}
+	if err := s.Update(ctx, func(r *update.Record) error { r.LastCheck = nil; return errors.New("changed my mind") }); err == nil {
+		t.Fatal("a change that fails should fail the update")
 	}
 	got, err := s.Load(ctx)
 	if err != nil {
@@ -371,5 +379,135 @@ func TestStoreKeepsTheRecord(t *testing.T) {
 	}
 	if _, err := s.Load(ctx); err == nil {
 		t.Fatal("a corrupt record should be reported, not read as empty")
+	}
+}
+
+// Every workspace's update service in the daemon, and `aosd update apply` in a
+// terminal, keep one record. Reading it, changing it and writing it back from
+// two of them at once used to keep only one of the two changes.
+func TestStoreUpdatesFromSeveralWritersLoseNothing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "update", "state.json")
+	ctx := context.Background()
+	const writers, each = 4, 25
+
+	var wg sync.WaitGroup
+	errs := make(chan error, writers*each)
+	for w := 0; w < writers; w++ {
+		// A Store of its own each, as separate services and processes have.
+		s := updateinstall.NewStore(path)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for n := 0; n < each; n++ {
+				errs <- s.Update(ctx, func(r *update.Record) error {
+					count := 0
+					if r.LastCheck != nil {
+						count, _ = strconv.Atoi(r.LastCheck.Latest)
+					}
+					r.LastCheck = &update.LastCheck{Latest: strconv.Itoa(count + 1)}
+					return nil
+				})
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := updateinstall.NewStore(path).Load(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LastCheck == nil || got.LastCheck.Latest != strconv.Itoa(writers*each) {
+		t.Fatalf("%d updates, and the record counted %+v", writers*each, got.LastCheck)
+	}
+}
+
+// The helper process for TestTheLockIsOneHolderAndOutlivesNoProcess: it takes
+// the lock, says so, and holds it until it is killed.
+func TestHelperHoldsTheUpdateLock(t *testing.T) {
+	path := os.Getenv("AOS_TEST_HOLD_UPDATE_LOCK")
+	if path == "" {
+		t.Skip("run by TestTheLockIsOneHolderAndOutlivesNoProcess")
+	}
+	_, ok, err := updateinstall.NewLock(path).TryLock(context.Background())
+	if err != nil || !ok {
+		t.Fatalf("the helper could not take the lock: %v", err)
+	}
+	_, _ = os.Stdout.WriteString("held\n")
+	time.Sleep(time.Minute)
+}
+
+// One Download or Apply at a time, across processes — and a process that is
+// killed holding the lock does not leave the installation locked for good.
+func TestTheLockIsOneHolderAndOutlivesNoProcess(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "update", "update.lock")
+	ctx := context.Background()
+
+	unlock, ok, err := updateinstall.NewLock(path).TryLock(ctx)
+	if err != nil || !ok {
+		t.Fatalf("the first holder should get the lock: %v", err)
+	}
+	if _, ok, err := updateinstall.NewLock(path).TryLock(ctx); err != nil || ok {
+		t.Fatalf("a second holder got the lock (ok=%v, err=%v)", ok, err)
+	}
+	unlock()
+	again, ok, err := updateinstall.NewLock(path).TryLock(ctx)
+	if err != nil || !ok {
+		t.Fatalf("a released lock should be free: %v", err)
+	}
+	again()
+
+	helper := exec.Command(os.Args[0], "-test.run=^TestHelperHoldsTheUpdateLock$")
+	helper.Env = append(os.Environ(), "AOS_TEST_HOLD_UPDATE_LOCK="+path)
+	out, err := helper.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := helper.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = helper.Process.Kill(); _ = helper.Wait() })
+	line := make([]byte, 5)
+	if _, err := io.ReadFull(out, line); err != nil || string(line) != "held\n" {
+		t.Fatalf("the helper did not take the lock: %q, %v", line, err)
+	}
+	if _, ok, _ := updateinstall.NewLock(path).TryLock(ctx); ok {
+		t.Fatal("another process holds the lock, and it was taken anyway")
+	}
+	_ = helper.Process.Kill()
+	_ = helper.Wait()
+	freed, ok, err := updateinstall.NewLock(path).TryLock(ctx)
+	if err != nil || !ok {
+		t.Fatalf("a killed holder should leave the lock free: %v", err)
+	}
+	freed()
+}
+
+// Tidy removes what an install leaves only when it could not finish its own
+// clean-up — a backup Commit could not remove, a copy a crash left before its
+// rename — for the binaries an update manages, and nothing else.
+func TestTidyRemovesOnlyWhatAnInstallLeft(t *testing.T) {
+	bin := t.TempDir()
+	for _, name := range []string{exe("aosd"), exe("aosd") + ".prev", exe("aos") + ".new", "notes.prev", "aosd-other.prev"} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte(name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := updateinstall.New(t.TempDir(), bin).Tidy(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var left []string
+	entries, _ := os.ReadDir(bin)
+	for _, e := range entries {
+		left = append(left, e.Name())
+	}
+	want := []string{"aosd-other.prev", exe("aosd"), "notes.prev"}
+	sort.Strings(want)
+	if strings.Join(left, ",") != strings.Join(want, ",") {
+		t.Fatalf("left %v, want %v", left, want)
 	}
 }

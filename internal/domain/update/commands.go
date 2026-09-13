@@ -153,8 +153,10 @@ whole downloads nothing (UPDATE_REINSTALL_REQUIRED).`,
 		Group:   "update",
 		Name:    "apply",
 		Summary: "Install a staged, verified release and restart the daemon.",
-		Doc: `Refuses before touching anything when the release is not staged under
-that version (UPDATE_NOTHING_STAGED), when this process cannot restart the
+		Doc: `Refuses before touching anything when another download or install is
+running on this installation, in this daemon or in a terminal
+(UPDATE_IN_PROGRESS), when the release is not staged under that version
+(UPDATE_NOTHING_STAGED), when this process cannot restart the
 daemon (UPDATE_RESTART_UNAVAILABLE — the daemon does not restart itself),
 or when the installation is reinstalled whole — a bundle, a directory this
 account cannot write, a server daemon (UPDATE_REINSTALL_REQUIRED).

@@ -1,7 +1,8 @@
-// Package updateinstall implements update.Stager, update.Installer and
-// update.Store over the local filesystem: writing staged binaries, swapping
-// them into place with a backup that makes Rollback exact, and keeping the
-// record of what was checked and staged.
+// Package updateinstall implements update.Stager, update.Installer,
+// update.Store and update.Lock over the local filesystem: writing staged
+// binaries, swapping them into place with a backup that makes Rollback exact,
+// keeping the record of what was checked and staged, and one update at a
+// time across the processes that share it.
 package updateinstall
 
 import (
@@ -17,6 +18,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
+
+	"github.com/gofrs/flock"
 
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/atomicfs"
@@ -25,8 +29,12 @@ import (
 
 // backupSuffix marks the binary SwapIn displaced, so Rollback knows exactly
 // what to restore without any state kept in memory between the two calls —
-// update.Service itself may retry Apply from a fresh process.
-const backupSuffix = ".prev"
+// update.Service itself may retry Apply from a fresh process. incomingSuffix
+// is the copy SwapIn writes beside the target before renaming it over.
+const (
+	backupSuffix   = ".prev"
+	incomingSuffix = ".new"
+)
 
 // Installer is update.Stager and update.Installer over one machine's own
 // filesystem.
@@ -152,7 +160,7 @@ func (i *Installer) SwapIn(ctx context.Context, binary, digest string) error {
 		return errSwapFailed(target, errors.New("it is not installed here, and an update does not add binaries"))
 	}
 
-	incoming := target + ".new"
+	incoming := target + incomingSuffix
 	got, err := copyFile(staged, incoming)
 	if err != nil {
 		_ = os.Remove(incoming)
@@ -203,6 +211,33 @@ func (i *Installer) Commit(_ context.Context, binary string) error {
 	}
 	if err := os.Remove(target + backupSuffix); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return errSwapFailed(target, err)
+	}
+	return nil
+}
+
+// Tidy removes the backups a Commit could not remove and the copies a SwapIn
+// that was killed before its rename left, for the binaries an update manages.
+//
+// On Windows a running program's file can be renamed but not removed, and
+// `aosd.exe update apply` runs from the very aosd.exe its SwapIn renames to
+// aosd.exe.prev — so its own Commit cannot remove that backup, nor the
+// window's while the window is open. Once those processes have ended, this
+// can. update.Service calls it only when no install is under way.
+func (i *Installer) Tidy(context.Context) error {
+	var failed []error
+	for _, binary := range update.Binaries() {
+		target, err := i.live(binary)
+		if err != nil {
+			continue
+		}
+		for _, leftover := range []string{target + backupSuffix, target + incomingSuffix} {
+			if err := os.Remove(leftover); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				failed = append(failed, err)
+			}
+		}
+	}
+	if err := errors.Join(failed...); err != nil {
+		return errSwapFailed(i.BinDir, err)
 	}
 	return nil
 }
@@ -329,6 +364,11 @@ type Store struct {
 	Path string
 }
 
+// recordLockWait bounds how long Update waits for another writer. A writer
+// holds the record for one read and one write, so anything near this is a
+// process that is stuck, not busy.
+const recordLockWait = 10 * time.Second
+
 // NewStore builds a Store over path.
 func NewStore(path string) *Store { return &Store{Path: path} }
 
@@ -350,9 +390,40 @@ func (s *Store) Load(context.Context) (update.Record, error) {
 	return record, nil
 }
 
-// Save writes the record atomically, readable by this account only: it
+// Update reads the record, applies change and writes it back while holding a
+// lock file beside it, so no other Update — another workspace's service in
+// the daemon, or a terminal — reads or writes in between. The lock is an
+// operating-system file lock: every open of it contends, in this process or
+// another, and a process that dies holding it releases it.
+func (s *Store) Update(ctx context.Context, change func(*update.Record) error) error {
+	if err := os.MkdirAll(filepath.Dir(s.Path), 0o700); err != nil {
+		return errRecordFailed(s.Path, err)
+	}
+	lock := flock.New(s.Path + ".lock")
+	wait, cancel := context.WithTimeout(ctx, recordLockWait)
+	defer cancel()
+	locked, err := lock.TryLockContext(wait, 10*time.Millisecond)
+	if err == nil && !locked {
+		err = errors.New("another process kept it locked")
+	}
+	if err != nil {
+		return errRecordFailed(s.Path, err)
+	}
+	defer func() { _ = lock.Unlock() }()
+
+	record, err := s.Load(ctx)
+	if err != nil {
+		return err
+	}
+	if err := change(&record); err != nil {
+		return err
+	}
+	return s.save(record)
+}
+
+// save writes the record atomically, readable by this account only: it
 // names the files an update would put in place.
-func (s *Store) Save(_ context.Context, record update.Record) error {
+func (s *Store) save(record update.Record) error {
 	raw, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {
 		return errRecordFailed(s.Path, err)
@@ -361,6 +432,34 @@ func (s *Store) Save(_ context.Context, record update.Record) error {
 		return errRecordFailed(s.Path, err)
 	}
 	return nil
+}
+
+// Lock is update.Lock over one lock file.
+type Lock struct {
+	Path string
+}
+
+// NewLock builds a Lock over path.
+func NewLock(path string) *Lock { return &Lock{Path: path} }
+
+var _ update.Lock = (*Lock)(nil)
+
+// TryLock takes the file lock without waiting. The lock belongs to the open
+// file, so it is released by unlock or by the process ending — an install
+// that was killed does not keep the installation locked.
+func (l *Lock) TryLock(context.Context) (func(), bool, error) {
+	if err := os.MkdirAll(filepath.Dir(l.Path), 0o700); err != nil {
+		return nil, false, errRecordFailed(l.Path, err)
+	}
+	lock := flock.New(l.Path)
+	ok, err := lock.TryLock()
+	if err != nil {
+		return nil, false, errRecordFailed(l.Path, err)
+	}
+	if !ok {
+		return nil, false, nil
+	}
+	return func() { _ = lock.Unlock() }, true, nil
 }
 
 func errStageFailed(name string, cause error) error {
