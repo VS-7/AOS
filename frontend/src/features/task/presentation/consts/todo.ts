@@ -15,3 +15,18 @@ export const TODO_STATUS_CONFIG: Record<Todo["status"], { label: string; icon: a
   finished: { get label() { return t("Finished"); }, icon: Check, color: "text-success" },
   skipped: { get label() { return t("Skipped"); }, icon: SkipForward, color: "text-muted-foreground" },
 };
+
+/**
+ * Where a step can move from each status: internal/domain/todo/entity.go's
+ * `transitions`, which refuses anything else. A test reads that file and
+ * fails when the two disagree.
+ */
+export const TODO_TRANSITIONS: Record<Todo["status"], Todo["status"][]> = {
+  pending: ["in_progress", "blocked", "finished", "skipped"],
+  in_progress: ["blocked", "finished", "pending", "skipped"],
+  blocked: ["in_progress", "pending", "skipped"],
+  finished: ["pending", "in_progress"],
+  skipped: ["pending"],
+};
+
+export const TODO_STATUS_ORDER: Todo["status"][] = ["pending", "in_progress", "blocked", "finished", "skipped"];
