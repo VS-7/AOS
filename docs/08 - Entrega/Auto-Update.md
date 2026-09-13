@@ -44,9 +44,26 @@ assinatura existe.
 Duas coisas do desenho não valem como escritas acima. O daemon não reinicia a
 si mesmo (`AOS_GATEWAY_SELF_RESTART`), então `Apply` recusa dentro dele antes
 de tocar em qualquer arquivo e a troca roda de um terminal, onde o gateway de
-fora reinicia e desfaz. E o `.app` do macOS não é atualizado binário a
-binário — trocar um arquivo quebra o selo do bundle —; ele é reinstalado
-inteiro.
+fora reinicia e desfaz; onde a instalação tem a janela, o comando vem com o
+aviso de fechar e abrir o AOS depois, porque a janela aberta continua na
+versão anterior. E três instalações não são atualizadas binário a binário,
+mas reinstaladas inteiras (`UPDATE_REINSTALL_REQUIRED`, com o motivo): o
+`.app` do macOS (trocar um arquivo quebra o selo do bundle); uma pasta que a
+conta não pode alterar (AppImage, Program Files, `/usr`); e o daemon de
+servidor, compilado com `-tags webui` (`build.Flavour`), porque o feed publica
+o `aosd` sem a interface web e trocá-lo deixaria o servidor só com a API —
+esse é reinstalado com `AOS_SERVER=1 install.sh`.
+
+Por baixo, um update por vez: `Download` e `Apply` tomam uma trava de arquivo
+(`update.lock`) que vale entre processos — o daemon e o `aosd update apply`
+no terminal — e o registro (`state.json`) só é alterado sob outra trava, para
+um `Check` não apagar o que um `Download` acabou de deixar staged. O `Check`
+seguinte remove os `.prev` que um install terminado não conseguiu apagar (no
+Windows, o próprio `aosd.exe` que rodou a troca), nunca os de um install que
+parou no meio. O download não tem prazo total, só de progresso: desiste
+quando os bytes param de chegar, e não quando quem pediu parou de esperar.
+`Download` e `Apply` recusam agentes e clientes MCP
+(`UPDATE_NOT_FOR_AGENTS`); `Check` e `Status` respondem a eles.
 
 ## Objetivo
 

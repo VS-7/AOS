@@ -147,11 +147,14 @@ checksum e assinatura, aplicar com rollback) mas o feed está desligado
 (`AOS_UPDATE_BASE_URL` vazio) enquanto os releases não forem assinados — e
 Configurações › Atualizações diz isso, em vez de "você está na versão mais
 recente". Atualizar hoje é rodar o instalador de novo. Mesmo com o feed
-ligado, o `.app` do macOS se atualiza reinstalando (trocar um binário dentro
-do bundle quebra o selo da assinatura), e nas outras instalações a troca roda
+ligado, se atualizam reinstalando o `.app` do macOS (trocar um binário dentro
+do bundle quebra o selo da assinatura), uma instalação numa pasta que a conta
+não pode alterar (AppImage, Program Files) e o servidor (`AOS_SERVER=1`: o
+`aosd` do feed não traz a interface web). Nas outras instalações a troca roda
 de um terminal — `aosd update apply --version <v>` (no Windows, escrito para o
 PowerShell) —, porque o daemon não reinicia a si mesmo. A janela que estava
-aberta continua na versão anterior até ser reaberta.
+aberta continua na versão anterior até ser reaberta, e o painel diz isso
+embaixo do comando.
 
 **Plataformas.** A janela: macOS Apple Silicon, Windows e Linux x86-64. O
 servidor e o terminal também em `arm64` no Linux.

@@ -130,7 +130,10 @@ uma questão de código:
   aviso, e os binários não carregam feed; com um secret que não é o par da
   chave commitada, o `publish` falha. As instalações deste beta carregam a
   chave de desenvolvimento: quando ela rotacionar, será preciso reinstalar
-  uma vez.
+  uma vez. O tarball de servidor também leva o feed, só para avisar: o feed
+  publica o `aosd` do job `cli`, sem a interface, e um daemon `-tags webui`
+  (`build.FlavourServer`) se recusa a trocar por ele e manda reinstalar com
+  `AOS_SERVER=1`.
 
 Ambos dependem de credenciais que só o dono do projeto pode obter, e o nome
 definitivo do produto ([ADR-0000](../01%20-%20Decisões/ADR-0000%20Nome%20provisório%20do%20projeto.md))
