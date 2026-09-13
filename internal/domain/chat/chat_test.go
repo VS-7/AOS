@@ -116,6 +116,38 @@ func TestTheCreatorIsAParticipant(t *testing.T) {
 	}
 }
 
+// TestAParticipantNamedTwiceIsInTheConversationOnce: the interface once opened
+// a "DM" with the signed-in person by naming them as the peer and adding them
+// again as themselves, and the stored conversation listed the same user twice
+// — which every reader then counted as two people.
+func TestAParticipantNamedTwiceIsInTheConversationOnce(t *testing.T) {
+	h := newHarness(t)
+	got := h.create(t, chat.CreateInput{
+		Title: "Twice", Kind: chat.KindDM, Visibility: chat.VisibilityPrivate,
+		Participants: []chat.Participant{
+			{Type: chat.ActorUser, ID: "ana"},
+			{Type: chat.ActorUser, ID: " ana "},
+			{Type: chat.ActorAgent, ID: "Luara"},
+			{Type: chat.ActorAgent, ID: "luara"},
+			{Type: chat.ActorUser, ID: "vitor"},
+		},
+	})
+
+	seen := map[string]int{}
+	for _, p := range got.Participants {
+		seen[string(p.Type)+":"+p.ID]++
+	}
+	want := map[string]int{"user:ana": 1, "agent:luara": 1, "user:vitor": 1}
+	if len(seen) != len(want) {
+		t.Fatalf("participants = %+v", got.Participants)
+	}
+	for key, n := range want {
+		if seen[key] != n {
+			t.Errorf("%s appears %d times in %+v", key, seen[key], got.Participants)
+		}
+	}
+}
+
 func TestAnAgentCreatorJoinsAsAnAgent(t *testing.T) {
 	h := newHarness(t)
 	agentCtx := identity.With(context.Background(), identity.Identity{AgentID: "atlas"})

@@ -204,6 +204,26 @@ export function findUserDmChatId(
 }
 
 /**
+ * The people the Team tab offers a conversation with: everyone in the
+ * workspace directory but the person looking at it.
+ *
+ * The directory lists every account, the viewer included — the task assignee
+ * pickers read the same list and need to offer "me". Offering the viewer a DM
+ * with themselves opened a conversation nobody could delete, whose messages
+ * the orchestrator answered.
+ *
+ * @param users - Workspace directory users.
+ * @param selfUserId - The signed-in user, when known.
+ * @returns The users other than the viewer.
+ */
+export function teamPeople<T extends { id: string }>(
+  users: T[],
+  selfUserId: string | undefined,
+): T[] {
+  return selfUserId ? users.filter((user) => user.id !== selfUserId) : users;
+}
+
+/**
  * Finds or creates a private user↔user DM, then opens it as a viewport tab.
  *
  * Same fix as `openAgentDmTab` just above, for the same reason: there is no
@@ -243,7 +263,9 @@ export async function openUserDmTab(params: {
   const participants: Array<{ type: "user"; id: string }> = [
     { type: "user", id: params.userId },
   ];
-  if (selfUserId) {
+  // Not twice: a peer who is the signed-in person is already named above, and
+  // naming them again stored the same user as both participants.
+  if (selfUserId && selfUserId !== params.userId) {
     participants.push({ type: "user", id: selfUserId });
   }
   const createResponse = await aos.client.chat.create.mutate({

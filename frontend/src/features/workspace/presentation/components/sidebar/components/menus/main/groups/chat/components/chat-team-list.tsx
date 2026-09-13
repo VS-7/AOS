@@ -35,6 +35,7 @@ import {
   openAgentDmTab,
   openChatTab,
   openUserDmTab,
+  teamPeople,
 } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
 import { ChatActivityStamp } from "./chat-activity-stamp";
 import { t } from "@/lib/i18n";
@@ -264,7 +265,8 @@ function UserRow({
 /**
  * Team tab — peer agents + people as DM starters.
  *
- * Peers come from `stores.workspace.directory` (viewer-relative: self excluded).
+ * Peers come from `stores.workspace.directory`, less the viewer (see
+ * `teamPeople`: the directory itself lists everyone).
  * Live processing merges occupancy + chat list on top of the directory seed.
  */
 export function ChatTeamList({ agents, currentChatId }: ChatTeamListProps) {
@@ -284,7 +286,10 @@ export function ChatTeamList({ agents, currentChatId }: ChatTeamListProps) {
     }
   }, [directory.agents.length, directory.users.length]);
 
-  const peerUsers = directory.users;
+  const peerUsers = React.useMemo(
+    () => teamPeople(directory.users, selfUserId),
+    [directory.users, selfUserId],
+  );
   const teamAgents = React.useMemo(() => {
     if (agents.length > 0) {
       return agents;

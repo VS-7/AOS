@@ -39,9 +39,9 @@ export function ChatContent({ chatId, userName, userId }: ChatContentProps) {
       directoryUsers.map((user) => [user.id, user] as const),
     );
 
-    // Directory is viewer-relative (self excluded). Re-inject the session
-    // profile so own messages resolve name/image without falling back to
-    // installation `config.user`.
+    // The session profile wins over the directory's copy of the viewer, so
+    // their own messages carry the name they signed in with rather than
+    // falling back to the installation's `config.user`.
     if (authUser?.id) {
       map.set(authUser.id, {
         id: authUser.id,
