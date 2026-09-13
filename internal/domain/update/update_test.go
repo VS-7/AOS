@@ -1722,10 +1722,10 @@ func (s *racingStore) race() {
 func (s *racingStore) Update(ctx context.Context, change func(*update.Record) error) error {
 	s.writers.Lock()
 	defer s.writers.Unlock()
-	r, _ := s.sharedStore.Load(ctx)
+	r, _ := s.Load(ctx)
 	s.race()
 	if err := change(&r); err != nil {
 		return err
 	}
-	return s.sharedStore.Save(ctx, r)
+	return s.Save(ctx, r)
 }

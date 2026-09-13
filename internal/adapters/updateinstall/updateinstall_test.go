@@ -461,7 +461,7 @@ func TestTheLockIsOneHolderAndOutlivesNoProcess(t *testing.T) {
 	}
 	again()
 
-	helper := exec.Command(os.Args[0], "-test.run=^TestHelperHoldsTheUpdateLock$")
+	helper := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestHelperHoldsTheUpdateLock$")
 	helper.Env = append(os.Environ(), "AOS_TEST_HOLD_UPDATE_LOCK="+path)
 	out, err := helper.StdoutPipe()
 	if err != nil {
