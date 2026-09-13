@@ -86,7 +86,7 @@ workspace → padrão).
 | `AOS_APPROVAL_DEADLINE` | `120s` | Quanto um pedido de aprovação espera |
 | `AOS_SHUTDOWN_TIMEOUT` | `15s` | Espera pelas requisições em voo |
 | `AOS_FSYNC` | ligado | `off` desliga o fsync (só para testes) |
-| `AOS_UPDATE_BASE_URL` | vazio | Feed de releases; vazio desliga a verificação |
+| `AOS_UPDATE_BASE_URL` | vazio (o feed do repositório nos releases assinados) | Feed de releases; vazio desliga a verificação |
 | `AOS_DAEMON_PATH` | ao lado do cliente | Caminho explícito do `aosd` |
 | `AOS_NO_COLOR` | — | Desliga cor na saída do terminal |
 
@@ -144,7 +144,13 @@ o SmartScreen avisa toda vez. Baixe só do repositório oficial e
 
 **Sem atualização automática.** O núcleo existe (verificar, baixar, conferir
 checksum e assinatura, aplicar com rollback) mas o feed está desligado
-(`AOS_UPDATE_BASE_URL` vazio). Atualizar hoje é rodar o instalador de novo.
+(`AOS_UPDATE_BASE_URL` vazio) enquanto os releases não forem assinados — e
+Configurações › Atualizações diz isso, em vez de "você está na versão mais
+recente". Atualizar hoje é rodar o instalador de novo. Mesmo com o feed
+ligado, o `.app` do macOS se atualiza reinstalando (trocar um binário dentro
+do bundle quebra o selo da assinatura), e nas outras instalações a troca roda
+de um terminal — `aosd update apply --version <v>` —, porque o daemon não
+reinicia a si mesmo.
 
 **Plataformas.** A janela: macOS Apple Silicon, Windows e Linux x86-64. O
 servidor e o terminal também em `arm64` no Linux.

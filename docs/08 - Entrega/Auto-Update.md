@@ -29,9 +29,19 @@ feature própria, de escopo comparável, não construída nesta rodada. A chave
 de assinatura em uso é uma chave de desenvolvimento gerada por
 `tools/genreleasekey`; a privada não foi commitada e precisa ser trocada por
 uma chave real antes de qualquer release de verdade. Nenhum canal de release
-existe ainda (`internal/adapters/releasesource` funciona com um `BaseURL`
-vazio = "sem release", o estado honesto de uma instalação sem
-infraestrutura de distribuição configurada).
+existe ainda: com `BaseURL` vazio, `update check` responde `not-configured` —
+não "atualizado", que era o que respondia, e que a janela mostrava como "você
+está na versão mais recente". O `release.yml` publica o feed
+(`checksums.txt.sig` e `stable.json`, via `tools/releasefeed`) e grava o
+endereço nos binários (`build.UpdateBaseURL`) só quando o secret de
+assinatura existe.
+
+Duas coisas do desenho não valem como escritas acima. O daemon não reinicia a
+si mesmo (`AOS_GATEWAY_SELF_RESTART`), então `Apply` recusa dentro dele antes
+de tocar em qualquer arquivo e a troca roda de um terminal, onde o gateway de
+fora reinicia e desfaz. E o `.app` do macOS não é atualizado binário a
+binário — trocar um arquivo quebra o selo do bundle —; ele é reinstalado
+inteiro.
 
 ## Objetivo
 

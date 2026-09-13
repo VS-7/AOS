@@ -46,7 +46,7 @@ flowchart TB
     T --> MAC["<b>desktop-macos</b><br/>.app assinado ad-hoc, com o daemon dentro"]
     T --> WIN["<b>desktop-windows</b><br/>instalador NSIS + zip"]
     T --> LNX["<b>desktop-linux</b><br/>tarball + AppImage"]
-    CLI & SRV & MAC & WIN & LNX --> PUB["<b>publish</b><br/>checksums.txt de tudo<br/>gh release create --verify-tag"]
+    CLI & SRV & MAC & WIN & LNX --> PUB["<b>publish</b><br/>checksums.txt de tudo<br/>feed de atualização, se houver a chave<br/>gh release create --verify-tag"]
 ```
 
 ### Os gates do artefato
@@ -77,7 +77,9 @@ compilações da mesma tag gravam a mesma data e batem no hash.
 | `AOS-server-<v>-linux-{amd64,arm64}.tar.gz` | VPS — o daemon com a interface dentro |
 | `aos_<v>_{darwin,linux,windows}_{amd64,arm64}` | O terminal, por alvo |
 | `aosd_<v>_{darwin,linux,windows}_{amd64,arm64}` | O daemon, por alvo |
+| `aos-desktop_<v>_{linux_amd64,windows_amd64.exe}` | A janela crua, para o atualizador trocá-la junto com o daemon |
 | `checksums.txt` | `sha256sum -c --ignore-missing checksums.txt` |
+| `checksums.txt.sig`, `stable.json` | O feed de atualização — só quando o release é assinado |
 
 Os binários soltos são publicados crus, sem arquivo compactado, de propósito:
 o atualizador escreve os bytes de um asset direto como executável e não tem
@@ -119,9 +121,16 @@ uma questão de código:
   o Gatekeeper) e o instalador contorna a quarentena via `curl`.
 - **Windows** — certificado de code-signing. Sem ele, o SmartScreen avisa.
 - **Auto-update** — o núcleo existe e verifica assinatura Ed25519 e checksum,
-  mas o feed está desligado (`AOS_UPDATE_BASE_URL` vazio) e as instalações
-  deste beta carregam uma chave de desenvolvimento: quando ela rotacionar,
-  será preciso reinstalar uma vez.
+  e o `publish` já sabe publicar o feed (`tools/releasefeed`: assina o
+  `checksums.txt`, escreve o `stable.json` e instala o resultado com o próprio
+  `update.Service` antes de publicar). Falta a chave. Para ligar:
+  `go run ./tools/genreleasekey`, commitar a metade pública em
+  `internal/app/release-pubkey.pub` e guardar a privada no secret
+  `AOS_RELEASE_SIGNING_KEY`. Sem o secret o release sai como sempre, com um
+  aviso, e os binários não carregam feed; com um secret que não é o par da
+  chave commitada, o `publish` falha. As instalações deste beta carregam a
+  chave de desenvolvimento: quando ela rotacionar, será preciso reinstalar
+  uma vez.
 
 Ambos dependem de credenciais que só o dono do projeto pode obter, e o nome
 definitivo do produto ([ADR-0000](../01%20-%20Decisões/ADR-0000%20Nome%20provisório%20do%20projeto.md))
