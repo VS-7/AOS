@@ -173,15 +173,23 @@ interface CurrentWorkspaceState {
 async function resolveWorkspaces(
   preferredId: string | undefined,
 ): Promise<{ current: CurrentWorkspaceState; options: CurrentWorkspaceState[] } | null> {
-  // With nothing remembered, the workspace the request already addresses: in
-  // the desktop window, the one the window adopted for the directory it was
-  // launched in. The list is sorted by id, so its first entry was simply the
-  // alphabetically first workspace — a fresh window opened "Harness Two"
-  // instead of the one it was started in. Asked only when there is no
-  // remembered choice, and a refusal (a browser tab with no active workspace)
-  // just leaves the first entry as the answer.
+  const listed = (await client.invoke("workspace_list", {
+    _reasoning: "resolving which workspace this window addresses, before any workspace-scoped call",
+  })) as { workspaces?: CurrentWorkspaceState[] } | undefined;
+
+  const workspaces = listed?.workspaces ?? [];
+  if (workspaces.length === 0) return null;
+
+  // With nothing remembered and more than one to choose from, the workspace
+  // the request already addresses: in the desktop window, the one the window
+  // adopted for the directory it was launched in. The list is sorted by id, so
+  // its first entry was simply the alphabetically first workspace — a fresh
+  // window opened "Harness Two" instead of the one it was started in. With a
+  // single workspace there is nothing to ask, which also keeps a first run
+  // (nothing adopted yet) from collecting a refusal; a refusal otherwise just
+  // leaves the first entry as the answer.
   let adoptedId: string | undefined;
-  if (!preferredId) {
+  if (!preferredId && workspaces.length > 1) {
     try {
       const adopted = (await client.invoke("workspace_get", {
         _reasoning: "finding the workspace this window was opened for, before choosing one to address",
@@ -191,13 +199,6 @@ async function resolveWorkspaces(
       adoptedId = undefined;
     }
   }
-
-  const listed = (await client.invoke("workspace_list", {
-    _reasoning: "resolving which workspace this window addresses, before any workspace-scoped call",
-  })) as { workspaces?: CurrentWorkspaceState[] } | undefined;
-
-  const workspaces = listed?.workspaces ?? [];
-  if (workspaces.length === 0) return null;
 
   const current =
     workspaces.find((workspace) => workspace.id === (preferredId || undefined)) ??
