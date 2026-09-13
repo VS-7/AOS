@@ -116,10 +116,10 @@ export function BrowserRenderer({
           onError={handleError}
           // No popups, no top-level navigation out from inside the frame. A
           // general external site that needs more than this to function will
-          // not fully work in-frame — see this file's own top comment. In the
-          // desktop window the window's own content (an artifact) is also
-          // denied its origin, which would reach the Wails bridge — see
-          // frameSandbox, which also says why a browser tab is not yet.
+          // not fully work in-frame — see this file's own top comment. The
+          // page's own content (an artifact) is also denied its origin, which
+          // would reach the Wails bridge in the window and /api with the
+          // session in a browser tab — see frameSandbox.
           sandbox={frameSandbox(src)}
         />
       ) : null}

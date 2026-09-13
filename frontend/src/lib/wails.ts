@@ -217,28 +217,26 @@ export function reloadHere(): void {
 /**
  * The `sandbox` a browser tab's `<iframe>` gets for `url`.
  *
- * Inside the desktop window, content from the window's own origin — an
- * artifact above all, which `cmd/aos-desktop` serves with the window's
- * credential — is framed without `allow-same-origin`. An artifact is HTML a
- * model generated; with its real origin, a script in it could reach
+ * Content from this page's own origin is framed without `allow-same-origin`,
+ * in the desktop window and in a browser tab alike. An artifact is HTML a model
+ * generated. In the window, its real origin would let a script reach
  * `window.parent` and the Wails bridge, which is every command the person can
- * run. An external site keeps its own origin, which it needs to work at all
- * and which gives it nothing of this window's.
+ * run; in a browser tab that origin is the API's, where a same-origin page
+ * calls `/api` with the session cookie and reads the interface's storage.
+ * An external site keeps its own origin, which it needs to work at all and
+ * which gives it nothing of this page's.
  *
- * A browser tab is left as it was, and not because it is safe. There the
- * daemon serves the artifact from the API's own origin, and a same-origin page
- * can call `/api` with the session cookie — as reachable as the bridge is in
- * the window. It is latent today: the daemon refuses a private or workspace
- * artifact to a frame (it reads no cookie on /v), and a by_password one gets
- * no password on its own files, so no artifact script runs with a session
- * behind it. Making the frame opaque here alone would break the artifacts a
- * browser tab can show — the daemon's same-origin resource policy then cancels
- * their own files — so it belongs with the decision on how a browser tab opens
- * an artifact at all, which the window answers with `frameAddress`.
+ * The frame is not the only guard, nor the one that matters most: the daemon
+ * sandboxes every artifact answer itself (internal/transport/artifactapi's
+ * `sandbox`), which also covers a share link opened with no frame at all. That
+ * is what let a browser tab's frame go opaque too — before it, an opaque frame
+ * had its own files cancelled by the daemon's same-origin resource policy. A
+ * password-read artifact's files now answer its opaque page; one read any other
+ * way does not, and in the window that is what `frameAddress` is for.
  */
 export function frameSandbox(url: string): string {
   const permissive = "allow-scripts allow-same-origin allow-forms";
-  if (!isDesktopWindow || typeof window === "undefined") return permissive;
+  if (typeof window === "undefined") return permissive;
   let target: URL;
   try {
     target = new URL(url, window.location.href);
