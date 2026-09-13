@@ -21,8 +21,16 @@ reinicia o daemon, e desfaz tudo — reiniciando de novo na versão anterior —
 se a nova não ficar saudável a tempo. `internal/core/relsig` é uma
 implementação Ed25519 própria (não bit-a-bit compatível com o `minisign`
 real — ver o comentário do próprio pacote) em vez de uma reimplementação
-adivinhada do formato do minisign. `internal/core/build.Compatible` cobre a
-verificação de versão única entre os três binários.
+adivinhada do formato do minisign. A versão única entre os três binários é
+guardada em três pontos: `Download` só aceita um release que traga um asset
+para cada binário instalado na plataforma (`UPDATE_NO_ASSET_FOR_PLATFORM`,
+em vez de atualizar o `aos` e deixar o `aosd` para trás); `Apply` confere de
+novo que o que está staged ainda cobre o que está instalado
+(`UPDATE_STAGED_INCOMPLETE`); e a janela compara a própria versão com a do
+daemon a cada verificação de saúde (`cmd/aos-desktop`, sobre
+`build.Compatible`) e, enquanto forem releases diferentes, mostra uma faixa
+com a saída de cada caso — fechar e abrir o AOS quando a janela é a antiga,
+reiniciar o daemon quando é ele.
 
 **Não entregue:** coordenação com `~/.mcp.json` (`aos self mcp doctor`) —
 feature própria, de escopo comparável, não construída nesta rodada. A chave

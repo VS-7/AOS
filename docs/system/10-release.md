@@ -77,7 +77,7 @@ compilações da mesma tag gravam a mesma data e batem no hash.
 | `AOS-server-<v>-linux-{amd64,arm64}.tar.gz` | VPS — o daemon com a interface dentro |
 | `aos_<v>_{darwin,linux,windows}_{amd64,arm64}` | O terminal, por alvo |
 | `aosd_<v>_{darwin,linux,windows}_{amd64,arm64}` | O daemon, por alvo |
-| `aos-desktop_<v>_{linux_amd64,windows_amd64.exe}` | A janela crua, para o atualizador trocá-la junto com o daemon |
+| `aos-desktop_<v>_{linux_amd64,windows_amd64.exe}` | A janela crua, para o atualizador trocá-la junto com o daemon — sem ela, uma instalação que tem a janela recusa o release inteiro |
 | `checksums.txt` | `sha256sum -c --ignore-missing checksums.txt` |
 | `checksums.txt.sig`, `stable.json` | O feed de atualização — só quando o release é assinado |
 
