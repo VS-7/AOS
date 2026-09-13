@@ -1138,7 +1138,26 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // (workspace home, goal's own (main) page, and the Goals tab inside a
   // project's detail page) all read response.data?.goals and got an empty
   // list regardless of what actually existed.
-  "goal.list": { key: "goals_list", wrapOut: "goals", mapOut: withDeadline },
+  // `coerceIn`: goals_list's Query takes `status` as []Status and `limit` as
+  // int. The Goals page kept its status filter in the URL as one
+  // comma-joined string and the project's Goals tab sent limit "50", and Go
+  // refused both as undecodable — a status filter emptied the list and the
+  // Goals tab never listed the project's goals. `project` is one id in Go.
+  "goal.list": {
+    key: "goals_list",
+    coerceIn: {
+      status: (value) => {
+        const list = (Array.isArray(value) ? value : String(value ?? "").split(","))
+          .map((item) => String(item).trim())
+          .filter(Boolean);
+        return list.length > 0 ? list : undefined;
+      },
+      limit: (value) => (typeof value === "string" && value.trim() !== "" ? Number(value) : value),
+      project: (value) => (Array.isArray(value) ? value[0] : value),
+    },
+    wrapOut: "goals",
+    mapOut: withDeadline,
+  },
   "goal.getById": { key: "goals_get", renameIn: { goal: "id" }, wrapOut: "goal", mapOut: withDeadline },
   // goals_create answers bare too; the live caller (goal/($id)/index.tsx)
   // reads result.data?.goal?.id to navigate to the new goal after creating

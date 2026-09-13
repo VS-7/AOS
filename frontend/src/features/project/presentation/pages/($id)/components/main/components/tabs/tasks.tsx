@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TabsSubtle, TabsSubtleItem } from "@/components/ui/tabs-subtle";
@@ -12,16 +12,12 @@ import { aos } from "@/app/aos";
 import { Plus } from "lucide-react";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading.hook";
 import type { Project } from "@/features/project/interfaces/project.interfaces";
-import { t } from "@/lib/i18n";
+import { useStatusTabs } from "@/features/goal/presentation/helpers/status-tabs";
+import { useTranslation } from "@/lib/i18n";
 
 interface ProjectTasksTabProps {
   project: Project;
 }
-
-const TASK_TABS = TASK_STATUS_ORDER.map((status) => ({
-  status,
-  ...TASK_STATUS_CONFIG[status],
-}));
 
 function TasksListSkeleton() {
   return (
@@ -69,16 +65,20 @@ function TasksSection({ title, subtitle, action, children }: SectionProps) {
 }
 
 export function ProjectTasksTab({ project }: ProjectTasksTabProps) {
-  const [selectedStatus, setSelectedStatus] =
-    useState<Task["status"]>("todo");
+  // Subscribing re-renders the tab labels when the language changes; they
+  // used to be spread out of TASK_STATUS_CONFIG once, at module load.
+  const { t } = useTranslation();
 
   const taskQuery = aos.client.task.list.useQuery({
-    query: { project: [project.id], limit: "200" },
+    query: { project: project.id, limit: 200 },
     staleTime: 5 * 60 * 1000,
   });
 
-  const tasks: Task[] = taskQuery.data?.tasks ?? [];
+  const tasks: Task[] = useMemo(() => taskQuery.data?.tasks ?? [], [taskQuery.data]);
   const isLoading = useDelayedLoading(taskQuery.isLoading);
+  // Opens on the first status with tasks: it opened on "Todo" and said "No
+  // tasks in this status." while the project's one task sat behind "Stopped".
+  const { selected: selectedStatus, select, counts } = useStatusTabs(TASK_STATUS_ORDER, tasks);
 
   const filteredTasks = useMemo(
     () => tasks.filter((t) => t.status === selectedStatus),
@@ -91,6 +91,7 @@ export function ProjectTasksTab({ project }: ProjectTasksTabProps) {
         title={t("Tasks")}
         action={
           <Button
+            type="button"
             size="sm"
             variant="outline"
             onClick={() => (aos.triggers as { dispatch: (id: string, input?: unknown) => Promise<unknown> }).dispatch("tasks.new")}
@@ -103,14 +104,15 @@ export function ProjectTasksTab({ project }: ProjectTasksTabProps) {
         <TabsSubtle
           activeLabel
           selectedIndex={TASK_STATUS_ORDER.indexOf(selectedStatus)}
-          onSelect={(index) => setSelectedStatus(TASK_STATUS_ORDER[index])}
+          onSelect={(index) => select(TASK_STATUS_ORDER[index])}
         >
-          {TASK_TABS.map((tab, index) => (
+          {TASK_STATUS_ORDER.map((status, index) => (
             <TabsSubtleItem
-              key={tab.status}
+              key={status}
               index={index}
-              label={tab.label}
-              icon={tab.icon}
+              label={TASK_STATUS_CONFIG[status].label}
+              icon={TASK_STATUS_CONFIG[status].icon}
+              count={counts[status] || undefined}
             />
           ))}
         </TabsSubtle>
