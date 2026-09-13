@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { aos } from '@/app/aos';
 import { hexToOklch } from '@/lib/utils';
 import { platform } from '@/lib/wails';
@@ -32,6 +32,28 @@ function resolveWindowsMode(windows: ThemeSettings['windows'] | undefined): 'sol
   if (!isNative()) return 'solid';
   if (platform() === 'linux') return 'solid';
   return windows ?? 'blur';
+}
+
+const DARK_QUERY = '(prefers-color-scheme: dark)';
+
+/**
+ * Whether the operating system is in dark mode, kept current.
+ *
+ * Read once, the "system" mode stayed whatever the system was when the theme
+ * was chosen: switching macOS to dark left the interface and the native window
+ * light until the next reload.
+ */
+function useSystemPrefersDark(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      if (typeof window === 'undefined' || !window.matchMedia) return () => {};
+      const query = window.matchMedia(DARK_QUERY);
+      query.addEventListener('change', onChange);
+      return () => query.removeEventListener('change', onChange);
+    },
+    () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia(DARK_QUERY).matches,
+    () => false,
+  );
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -81,13 +103,14 @@ function mixOklch(
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const state = aos.stores.theme.useState();
+  const systemPrefersDark = useSystemPrefersDark();
 
   const activeMode = useMemo(() => {
     if (state.mode === 'system') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      return systemPrefersDark ? 'dark' : 'light';
     }
     return state.mode;
-  }, [state.mode]);
+  }, [state.mode, systemPrefersDark]);
 
   const settings: ThemeSettings | undefined = state.theme.settings[activeMode];
 
@@ -101,13 +124,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.dataset.windows = windowsMode;
 
     if (window.aos?.theme?.setAppearance) {
+      // The appearance the page just painted, not the store's mode: "system"
+      // is not a colour, and the native background behind the page has to
+      // match what is actually on screen. lib/native.ts maps anything else.
       window.aos.theme.setAppearance({
-        mode: state.mode,
+        mode: activeMode,
         windows: windowsMode,
         surface: settings?.surface,
       });
     }
-  }, [activeMode, state.mode, settings?.windows, settings?.surface]);
+  }, [activeMode, settings?.windows, settings?.surface]);
 
   /** Pre-compute every CSS custom property derived from the active theme. */
   const themeVars = useMemo(() => {

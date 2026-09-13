@@ -30,6 +30,19 @@ const WAILSVC_PKG = "github.com/OWNER/aos/internal/transport/wailsvc";
 export { isDesktopWindow };
 
 /**
+ * The theme store's mode, in the words SystemService.SetAppearance accepts.
+ *
+ * The store says light, dark or system; the Go side says light, dark or auto
+ * (internal/transport/wailsvc/system.go). "system" went across as it was and
+ * was refused on every page load — AOS_SYSTEM_UNKNOWN_APPEARANCE, twice,
+ * swallowed by the fire-and-forget below — so the native window never
+ * followed the theme. Anything that is not a definite light or dark is auto.
+ */
+export function nativeAppearance(mode: string): "light" | "dark" | "auto" {
+  return mode === "light" || mode === "dark" ? mode : "auto";
+}
+
+/**
  * Installs `window.aos`, and the two document-wide corrections the port needs.
  *
  * Idempotent, and a no-op outside the desktop window: in a browser tab
@@ -70,7 +83,7 @@ export function installNativeBridge(): void {
         // Fire-and-forget: the CSS has already been applied by the caller, and
         // the native material catching up a frame later is invisible. A
         // rejection here is a window that has gone away.
-        void system.setAppearance(mode, windows).catch(() => {});
+        void system.setAppearance(nativeAppearance(mode), windows).catch(() => {});
       },
     },
     window: {
