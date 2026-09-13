@@ -192,6 +192,12 @@ export class ChatKindHelper {
     kind: ChatKind,
     agentIds: ReadonlySet<string>,
   ): Chat[] {
+    // Callers hand this a store's list straight from render. A list that was
+    // never read must count as empty here, because a throw from inside a
+    // render is not something a sidebar badge can recover from.
+    if (!Array.isArray(chats)) {
+      return [];
+    }
     return chats.filter(
       (chat) => ChatKindHelper.classify(chat, agentIds) === kind,
     );

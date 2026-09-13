@@ -25,6 +25,8 @@ import {
 import { ChatActivityStamp } from "./chat-activity-stamp";
 import { ChatRowKindIcon } from "./chat-row-kind-icon";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
+import { toast } from "sonner";
 
 interface ChatSearchProps {
   open: boolean;
@@ -78,15 +80,23 @@ export function ChatSearch({
 
   const selectHit = React.useCallback(
     async (hit: ChatSearchHit) => {
-      if (
-        hit.kind === "dm" &&
-        agents.some((agent) => agent.id === hit.chatId)
-      ) {
-        await openAgentDmTab({ agentId: hit.chatId, title: hit.title });
-      } else {
-        openChatTab({ chatId: hit.chatId, title: hit.title });
+      try {
+        if (
+          hit.kind === "dm" &&
+          agents.some((agent) => agent.id === hit.chatId)
+        ) {
+          await openAgentDmTab({ agentId: hit.chatId, title: hit.title });
+        } else {
+          openChatTab({ chatId: hit.chatId, title: hit.title });
+        }
+        onOpenChange(false);
+      } catch (error) {
+        // `openAgentDmTab` refuses rather than guess when it cannot read the
+        // DMs that exist (a guess opened a second DM with the same agent).
+        // Uncaught here, that refusal was an unhandled rejection: the finder
+        // stayed open, nothing opened, and nothing said why.
+        toast.error(errorMessage(error) ?? t("Unable to open agent DM."));
       }
-      onOpenChange(false);
     },
     [agents, onOpenChange],
   );
@@ -118,7 +128,7 @@ export function ChatSearch({
       event.preventDefault();
       const hit = hits[activeIndex];
       if (hit) {
-        selectHit(hit);
+        void selectHit(hit);
       }
     }
   };
@@ -201,7 +211,7 @@ export function ChatSearch({
                           currentChatId === hit.chatId || index === activeIndex
                         }
                         className="group/chat-row"
-                        onClick={() => selectHit(hit)}
+                        onClick={() => void selectHit(hit)}
                         onMouseEnter={() => setActiveIndex(index)}
                       >
                         <ChatSearchHitIcon chatId={hit.chatId} kind={hit.kind} />

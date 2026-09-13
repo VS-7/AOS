@@ -1133,6 +1133,8 @@
   "Unable to create channel.": "Unable to create channel.",
   "Unable to load changes": "Unable to load changes",
   "Unable to load files": "Unable to load files",
+  "Unable to open agent DM.": "Unable to open agent DM.",
+  "Unable to open user DM.": "Unable to open user DM.",
   "Unable to record audio right now.": "Unable to record audio right now.",
   "Unable to save: draft content is missing.": "Unable to save: draft content is missing.",
   "Unable to save: missing file path.": "Unable to save: missing file path.",

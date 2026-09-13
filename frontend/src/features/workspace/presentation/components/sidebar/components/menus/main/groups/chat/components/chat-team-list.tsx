@@ -38,6 +38,7 @@ import {
 } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
 import { ChatActivityStamp } from "./chat-activity-stamp";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
 
 interface ChatTeamListProps {
   agents: Agent[];
@@ -405,9 +406,7 @@ export function ChatTeamList({ agents, currentChatId }: ChatTeamListProps) {
                         title: agent.name || agent.id,
                       }).catch((error) => {
                         toast.error(
-                          error instanceof Error
-                            ? error.message
-                            : "Unable to open agent DM.",
+                          errorMessage(error) ?? t("Unable to open agent DM."),
                         );
                       });
                     }}
@@ -453,9 +452,7 @@ export function ChatTeamList({ agents, currentChatId }: ChatTeamListProps) {
                         title: name,
                       }).catch((error) => {
                         toast.error(
-                          error instanceof Error
-                            ? error.message
-                            : "Unable to open user DM.",
+                          errorMessage(error) ?? t("Unable to open user DM."),
                         );
                       });
                     }}

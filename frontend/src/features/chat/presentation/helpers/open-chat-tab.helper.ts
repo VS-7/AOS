@@ -1,4 +1,5 @@
 import { aos } from "@/app/aos";
+import { t } from "@/lib/i18n";
 import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
 import type { ViewportTabState } from "@/features/workspace/presentation/stores/viewport.store";
 
@@ -160,7 +161,7 @@ export async function openAgentDmTab(params: {
   // and a fixed "Unable to open …" told the person nothing about why.
   if (createResponse.error) throw createResponse.error;
   if (!chat?.id) {
-    throw new Error("Unable to open agent DM.");
+    throw new Error(t("Unable to open agent DM."));
   }
   return openChatTab({
     chatId: chat.id,
@@ -259,7 +260,7 @@ export async function openUserDmTab(params: {
   // and a fixed "Unable to open …" told the person nothing about why.
   if (createResponse.error) throw createResponse.error;
   if (!chat?.id) {
-    throw new Error("Unable to open user DM.");
+    throw new Error(t("Unable to open user DM."));
   }
   return openChatTab({
     chatId: chat.id,

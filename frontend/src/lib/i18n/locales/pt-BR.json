@@ -1133,6 +1133,8 @@
   "Unable to create channel.": "Não foi possível criar o canal.",
   "Unable to load changes": "Não foi possível carregar as alterações",
   "Unable to load files": "Não foi possível carregar os arquivos",
+  "Unable to open agent DM.": "Não foi possível abrir a conversa com o agente.",
+  "Unable to open user DM.": "Não foi possível abrir a conversa com a pessoa.",
   "Unable to record audio right now.": "Não é possível gravar áudio agora.",
   "Unable to save: draft content is missing.": "Não foi possível salvar: falta o conteúdo do rascunho.",
   "Unable to save: missing file path.": "Não foi possível salvar: falta o caminho do arquivo.",
