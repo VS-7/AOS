@@ -475,6 +475,8 @@ export interface CommandMap {
     "_reasoning": string;
     /** Id of the record's collection. */
     "collection": string;
+    /** The new Markdown body, for a collection of format md. Omit to keep the stored body; an empty string empties it. */
+    "content"?: unknown;
     /** The record's new fields, replacing the old ones wholesale. */
     "data": Record<string, unknown>;
     /** Identifier of the record to rewrite. */

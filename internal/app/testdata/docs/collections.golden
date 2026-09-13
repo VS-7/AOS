@@ -454,6 +454,9 @@ Replace a record's fields and revalidate them. A refusal leaves the
 stored record untouched — nothing between reading it and validating the new
 data can have written anything.
 
+The Markdown body of an md record is kept as it is unless content is given;
+give content to replace it, an empty string to empty it.
+
 ```json
 {
   "type": "object",
@@ -470,6 +473,13 @@ data can have written anything.
       "type": "object",
       "description": "The record's new fields, replacing the old ones wholesale.",
       "additionalProperties": true
+    },
+    "content": {
+      "type": [
+        "null",
+        "string"
+      ],
+      "description": "The new Markdown body, for a collection of format md. Omit to keep the stored body; an empty string empties it."
     },
     "_reasoning": {
       "type": "string",

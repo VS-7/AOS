@@ -98,14 +98,15 @@ type RecordsCreateInput struct {
 	command.Reasoning
 }
 
-// RecordsUpdateInput revalidates and rewrites a row. Content is not one of
-// its fields for the reason RecordService.Update's own doc gives: it is not
-// a field, and Update has no way to change it — the stored body carries
-// over untouched.
+// RecordsUpdateInput revalidates and rewrites a row. Content is a pointer
+// because leaving it out and emptying it are different requests: an agent
+// changing a note's stage never read its body and must not erase it, and a
+// person who cleared the body in the editor meant exactly that.
 type RecordsUpdateInput struct {
 	Collection string         `json:"collection" jsonschema:"Id of the record's collection." validate:"required,notblank"`
 	ID         string         `json:"id" jsonschema:"Identifier of the record to rewrite." validate:"required,notblank"`
 	Data       map[string]any `json:"data" jsonschema:"The record's new fields, replacing the old ones wholesale."`
+	Content    *string        `json:"content,omitempty" jsonschema:"The new Markdown body, for a collection of format md. Omit to keep the stored body; an empty string empties it."`
 
 	command.Reasoning
 }
@@ -276,6 +277,9 @@ schema and, for a field declared unique, against what is already stored.`,
 	})
 
 	recordsUpdateHandler := func(ctx context.Context, in RecordsUpdateInput) (*Record, error) {
+		if in.Content != nil {
+			return svc.Records().UpdateWithContent(ctx, in.Collection, in.ID, in.Data, *in.Content)
+		}
 		return svc.Records().Update(ctx, in.Collection, in.ID, in.Data)
 	}
 	command.MustRegister(reg, command.Command[RecordsUpdateInput, *Record]{
@@ -284,7 +288,10 @@ schema and, for a field declared unique, against what is already stored.`,
 		Summary: "Revalidate and rewrite a row.",
 		Doc: `Replace a record's fields and revalidate them. A refusal leaves the
 stored record untouched — nothing between reading it and validating the new
-data can have written anything.`,
+data can have written anything.
+
+The Markdown body of an md record is kept as it is unless content is given;
+give content to replace it, an empty string to empty it.`,
 		Examples: []command.Example{
 			{Description: "move a contact to a new stage", Input: RecordsUpdateInput{
 				Collection: "contacts", ID: "c-1", Data: map[string]any{"name": "Ada Lovelace", "stage": "qualified"},

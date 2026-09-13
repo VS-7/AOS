@@ -759,6 +759,48 @@ func TestARecordsBodyIsNotAField(t *testing.T) {
 	}
 }
 
+// The record editor saves a note's body with its fields, and records-update
+// had no way to carry it: the edit answered 200 and the body on disk stayed
+// what it was. UpdateWithContent replaces both; Update still leaves the body
+// alone, which is what a caller that never read it needs.
+func TestUpdatingARecordCanReplaceItsBody(t *testing.T) {
+	svc := newRecordService(t, crm())
+	rec, err := svc.CreateWithContent(ctx(), "contacts", map[string]any{"name": "Ada"}, "old body")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := svc.UpdateWithContent(ctx(), "contacts", rec.ID, map[string]any{"name": "Ada L."}, "new body")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Content != "new body" || updated.Data["name"] != "Ada L." {
+		t.Fatalf("updated = %+v", updated)
+	}
+	again, err := svc.Get(ctx(), "contacts", rec.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Content != "new body" {
+		t.Fatalf("stored content = %q, want the new body", again.Content)
+	}
+
+	if _, err := svc.Update(ctx(), "contacts", rec.ID, map[string]any{"name": "Ada"}); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := svc.Get(ctx(), "contacts", rec.ID); again.Content != "new body" {
+		t.Fatalf("Update without a body changed it: %q", again.Content)
+	}
+
+	// A refused update leaves the body untouched too.
+	if _, err := svc.UpdateWithContent(ctx(), "contacts", rec.ID, map[string]any{}, "lost"); err == nil {
+		t.Fatal("a record missing its required field was stored")
+	}
+	if again, _ := svc.Get(ctx(), "contacts", rec.ID); again.Content != "new body" {
+		t.Fatalf("a refused update changed the body: %q", again.Content)
+	}
+}
+
 // TestListingRecordsReturnsWhatWasCreated, ordered and filtered as asked —
 // RecordQuery is only worth having if it actually reaches the engine's Query.
 func TestListingRecordsReturnsWhatWasCreated(t *testing.T) {

@@ -71,7 +71,11 @@ type RecordService interface {
 	Create(ctx context.Context, collectionID string, data map[string]any) (*Record, error)
 	CreateWithContent(ctx context.Context, collectionID string, data map[string]any, content string) (*Record, error)
 
+	// Update rewrites a record's fields and keeps its body; UpdateWithContent
+	// replaces both. The split mirrors Create's: a caller that never read the
+	// body must not be able to erase it by leaving it out.
 	Update(ctx context.Context, collectionID, id string, data map[string]any) (*Record, error)
+	UpdateWithContent(ctx context.Context, collectionID, id string, data map[string]any, content string) (*Record, error)
 	Delete(ctx context.Context, collectionID, id string) error
 }
 
@@ -213,6 +217,17 @@ func (s *recordService) CreateWithContent(ctx context.Context, collectionID stri
 // is the last statement in the method, so nothing between fetching the current
 // record and validating the new data can have written anything.
 func (s *recordService) Update(ctx context.Context, collectionID, id string, data map[string]any) (*Record, error) {
+	return s.update(ctx, collectionID, id, data, nil)
+}
+
+// UpdateWithContent is Update that also replaces the Markdown body — what the
+// record editor saves when a note's text changed along with its fields.
+func (s *recordService) UpdateWithContent(ctx context.Context, collectionID, id string, data map[string]any, content string) (*Record, error) {
+	return s.update(ctx, collectionID, id, data, &content)
+}
+
+// update is both: content nil keeps the stored body, anything else replaces it.
+func (s *recordService) update(ctx context.Context, collectionID, id string, data map[string]any, content *string) (*Record, error) {
 	c, err := s.declaration(ctx, collectionID)
 	if err != nil {
 		return nil, err
@@ -243,10 +258,13 @@ func (s *recordService) Update(ctx context.Context, collectionID, id string, dat
 		return nil, err
 	}
 
-	// Content is not one of Update's parameters — it is not a field, and this
-	// call has no way to change it — so the stored body carries over
-	// untouched.
-	rec := &collections.Record{Key: current.Key, Fields: normalised, Content: current.Content}
+	// The body is not a field, so hooks and Validate never see it: it carries
+	// over untouched unless this call was given one.
+	body := current.Content
+	if content != nil {
+		body = *content
+	}
+	rec := &collections.Record{Key: current.Key, Fields: normalised, Content: body}
 	if err := repo.Update(ctx, rec, collections.Version{}); err != nil {
 		return nil, err
 	}
