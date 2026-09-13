@@ -52,8 +52,9 @@ function statusLabel(status: string): string {
  * The queue of deferred work, and whether it is healthy.
  *
  * It is not where turns run. Chat turns, routine runs and task runs start
- * directly (`internal/runtime/session`'s Dispatch, the routine executor), and
- * nothing in this build enqueues them — so this page used to say "every turn,
+ * directly (`internal/runtime/session`'s Dispatch, the routine executor — a
+ * scheduled routine is fired by the worker's tick, not queued), and nothing in
+ * this build enqueues them — so this page used to say "every turn,
  * routine and background task runs through this queue" above a list that
  * stayed empty however many turns ran, with a Recover button that could never
  * be pressed and a Purge that always removed nothing. It says what the queue
@@ -138,7 +139,7 @@ export function WorkspaceJobsSection(): React.JSX.Element {
         <FormSectionHeader>
           <FormSectionTitle>{t("Jobs")}</FormSectionTitle>
           <FormSectionDescription>
-            {t("Work deferred to run later waits here. Chat turns, routine runs and task runs start directly, so they do not appear in this queue.")}
+            {t("Work deferred to run later waits here until the daemon's worker runs it. Chat turns, routine runs and task runs start directly, so they do not appear in this queue.")}
           </FormSectionDescription>
         </FormSectionHeader>
 

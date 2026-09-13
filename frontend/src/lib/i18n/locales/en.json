@@ -1192,6 +1192,7 @@
   "Why it is asking": "Why it is asking",
   "will lose access to this workspace.": "will lose access to this workspace.",
   "Word Wrap": "Word Wrap",
+  "Work deferred to run later waits here until the daemon's worker runs it. Chat turns, routine runs and task runs start directly, so they do not appear in this queue.": "Work deferred to run later waits here until the daemon's worker runs it. Chat turns, routine runs and task runs start directly, so they do not appear in this queue.",
   "Work deferred to run later waits here. Chat turns, routine runs and task runs start directly, so they do not appear in this queue.": "Work deferred to run later waits here. Chat turns, routine runs and task runs start directly, so they do not appear in this queue.",
   "Work in flight finishes first. The window reconnects on its own once the daemon is back.": "Work in flight finishes first. The window reconnects on its own once the daemon is back.",
   "Workflow": "Workflow",

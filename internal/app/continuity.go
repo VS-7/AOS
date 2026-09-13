@@ -8,8 +8,10 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"runtime"
 	"strings"
 	"time"
@@ -542,15 +544,21 @@ func (m subconsciousModels) Subconscious(ctx context.Context, agentID string) (a
 	return provider, ref, nil
 }
 
-// turnHandler runs a queued conversation turn.
-type turnHandler struct{ runtime *session.Runner }
+// turnHandler runs a queued conversation turn, in the workspace the job names.
+type turnHandler struct {
+	runtimeFor func(ctx context.Context, workspaceID string) (*session.Runner, error)
+}
 
 func (h turnHandler) Handle(ctx context.Context, j job.Job) (json.RawMessage, error) {
 	var turn chat.Turn
 	if err := json.Unmarshal(j.Payload, &turn); err != nil {
 		return nil, err
 	}
-	result, err := h.runtime.Run(ctx, turn)
+	runner, err := h.runtimeFor(ctx, j.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	result, err := runner.Run(ctx, turn)
 	if err != nil {
 		return nil, err
 	}
@@ -559,30 +567,117 @@ func (h turnHandler) Handle(ctx context.Context, j job.Job) (json.RawMessage, er
 	})
 }
 
-// routineTick evaluates the cron triggers once per window.
-func routineTick(routines *routine.Service, workspaceID string) func(context.Context, time.Time) error {
+// runtimeFor is the runtime of the workspace a queued job names.
+//
+// A job that names no workspace is the primary's. One that names a workspace
+// this installation cannot open fails rather than running in the primary —
+// commands fall back to it (scopeFor), but a turn run against another
+// workspace's conversations would read a chat that is not there, or worse,
+// one of the same id that belongs to somebody else.
+func (a *App) runtimeFor(ctx context.Context, workspaceID string) (*session.Runner, error) {
+	if workspaceID == "" || a.scopes == nil {
+		return a.Runtime, nil
+	}
+	target, err := a.scopes.forID(ctx, a.Workspaces, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return target.Runtime, nil
+}
+
+// servedScope is one workspace the periodic work runs in: its services, and
+// the id they act as.
+type servedScope struct {
+	app *App
+	id  string
+}
+
+// servedScopes lists the workspaces this daemon's periodic work runs in: the
+// directory it opened, and every registered workspace whose directory is
+// there, each once.
+//
+// The list is taken afresh on every tick. A workspace registered or adopted
+// while the daemon runs — the desktop registers the person's own after the
+// daemon is up — is served from the next tick on, and one archived or deleted
+// stops being served, without anything having to tell the worker.
+//
+// A registered workspace whose directory is gone is skipped rather than
+// opened: building its services would scaffold state for a directory nobody
+// has, every tick, to find no routines in it.
+func (a *App) servedScopes(ctx context.Context) ([]servedScope, error) {
+	out := []servedScope{{app: a, id: a.workspaceID}}
+	if a.scopes == nil {
+		return out, nil
+	}
+	listed, err := a.Workspaces.List(ctx, workspace.ListInput{})
+	if err != nil {
+		return out, err
+	}
+	var errs []error
+	seen := map[*App]bool{a: true}
+	for _, w := range listed.Workspaces {
+		if info, statErr := os.Stat(w.Path); statErr != nil || !info.IsDir() {
+			continue
+		}
+		target, openErr := a.scopes.forID(ctx, a.Workspaces, w.ID)
+		if openErr != nil {
+			errs = append(errs, fmt.Errorf("workspace %q: %w", w.ID, openErr))
+			continue
+		}
+		if target == a && out[0].id == "" {
+			// The primary is a registered workspace nothing pinned: the
+			// registry is what names it.
+			out[0].id = w.ID
+		}
+		if seen[target] {
+			continue
+		}
+		seen[target] = true
+		out = append(out, servedScope{app: target, id: w.ID})
+	}
+	return out, errors.Join(errs...)
+}
+
+// scopeTick is periodic work done once in each served workspace.
+type scopeTick func(ctx context.Context, scope *App, workspaceID string, now time.Time) error
+
+// everyScope runs a tick in every workspace this daemon serves. One workspace
+// failing is reported with its id and does not keep the tick from the others.
+func (a *App) everyScope(tick scopeTick) func(context.Context, time.Time) error {
 	return func(ctx context.Context, now time.Time) error {
-		// The tick acts as the system, not as any agent: a routine that fires
-		// on a schedule was not asked for by whoever last used the terminal.
-		ctx = identity.With(ctx, identity.Identity{WorkspaceID: workspaceID})
-		out, err := routines.ProcessScheduled(ctx, now)
-		if err != nil {
-			return err
+		served, err := a.servedScopes(ctx)
+		errs := []error{err}
+		for _, scope := range served {
+			if tickErr := tick(ctx, scope.app, scope.id, now); tickErr != nil {
+				errs = append(errs, fmt.Errorf("workspace %q: %w", scope.id, tickErr))
+			}
 		}
-		if len(out.Fired) > 0 || len(out.Broken) > 0 {
-			slog.Default().Info("the scheduler evaluated the routines",
-				"fired", len(out.Fired), "failed", len(out.Failed), "broken", len(out.Broken))
-		}
-		return nil
+		return errors.Join(errs...)
 	}
 }
 
-// activityRetention purges the activity log on the tick.
-func activityRetention(activities *activity.Service) func(context.Context, time.Time) error {
-	return func(ctx context.Context, _ time.Time) error {
-		_, err := activities.Purge(ctx, activity.PurgeInput{})
+// routineTick evaluates one workspace's cron triggers once per window.
+func routineTick(ctx context.Context, scope *App, workspaceID string, now time.Time) error {
+	// The tick acts as the system, not as any agent: a routine that fires
+	// on a schedule was not asked for by whoever last used the terminal.
+	ctx = identity.With(ctx, identity.Identity{WorkspaceID: workspaceID})
+	out, err := scope.Routines.ProcessScheduled(ctx, now)
+	if err != nil {
 		return err
 	}
+	if len(out.Fired) > 0 || len(out.Broken) > 0 {
+		slog.Default().Info("the scheduler evaluated the routines",
+			"workspace", workspaceID,
+			"fired", len(out.Fired), "failed", len(out.Failed), "broken", len(out.Broken))
+	}
+	return nil
+}
+
+// activityRetention purges one workspace's activity log on the tick.
+func activityRetention(ctx context.Context, scope *App, workspaceID string, _ time.Time) error {
+	ctx = identity.With(ctx, identity.Identity{WorkspaceID: workspaceID})
+	_, err := scope.Activities.Purge(ctx, activity.PurgeInput{})
+	return err
 }
 
 // jobRetention drops finished jobs on the tick.

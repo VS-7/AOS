@@ -1192,6 +1192,7 @@
   "Why it is asking": "Por que está perguntando",
   "will lose access to this workspace.": "vai perder o acesso a este workspace.",
   "Word Wrap": "Quebra de linha",
+  "Work deferred to run later waits here until the daemon's worker runs it. Chat turns, routine runs and task runs start directly, so they do not appear in this queue.": "O trabalho adiado para rodar depois espera aqui até o worker do daemon executá-lo. Turnos de chat, execuções de rotinas e de tarefas começam diretamente, então não aparecem nesta fila.",
   "Work deferred to run later waits here. Chat turns, routine runs and task runs start directly, so they do not appear in this queue.": "O trabalho adiado para rodar depois espera aqui. Turnos de chat, execuções de rotinas e de tarefas começam diretamente, então não aparecem nesta fila.",
   "Work in flight finishes first. The window reconnects on its own once the daemon is back.": "O trabalho em andamento termina primeiro. A janela se reconecta sozinha quando o daemon voltar.",
   "Workflow": "Fluxo de trabalho",

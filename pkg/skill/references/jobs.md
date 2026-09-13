@@ -4,6 +4,12 @@ The queue of deferred work, and whether it is healthy.
 
 What the daemon has deferred to run later, and whether that work is healthy.
 
+While it serves, the daemon drains this queue and makes a periodic pass on the
+scheduler's tick (fifteen minutes unless the installation sets another): it
+hands back work whose worker stopped reporting, fires the scheduled routines of
+every workspace it serves, and removes finished jobs older than a week. A
+process that only runs one command does none of that.
+
 Only work handed to the queue is here. Conversation turns, routine runs and task
 runs start directly and never become jobs, so an empty queue is the ordinary
 state: to learn whether one of those happened, read its conversation (a failed

@@ -36,6 +36,9 @@ describe("WorkspaceJobsSection", () => {
     render(<WorkspaceJobsSection />);
     expect(screen.queryByText(/every turn/i)).toBeNull();
     expect(screen.getByText(/start directly/i)).toBeTruthy();
+    // The daemon's worker drains the queue while it serves; it used to be
+    // built and never started.
+    expect(screen.getByText(/worker runs it/i)).toBeTruthy();
   });
 
   it("offers no action there is nothing to act on", () => {
