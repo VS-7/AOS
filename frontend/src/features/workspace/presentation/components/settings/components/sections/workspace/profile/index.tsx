@@ -189,9 +189,14 @@ export function WorkspaceProfileSection() {
                     </FormDescription>
                   </div>
                   <FormControl>
+                    {/* Stored as hex, which is all the daemon accepts: the
+                        format dropdown changes only how the channels are
+                        shown. It used to rewrite the accent as rgb()/hsl()/
+                        oklch(), and the autosave was refused. */}
                     <ColorPickerPopover
                       onTriggerRemove={() => field.onChange(null)}
                       value={field.value}
+                      valueFormat="hex"
                       onValueChange={(v) => field.onChange(v)}
                     />
                   </FormControl>

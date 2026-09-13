@@ -380,10 +380,14 @@ export function UserAppearanceSection() {
                         description={item.description}
                       />
                       <FormControl>
+                        {/* A theme's palette is hex (theme render parses
+                            nothing else), whichever format the channels
+                            are shown in. */}
                         <ColorPickerPopover
                           triggerClassName={cn(SETTINGS_CONTROL_WIDTH)}
                           onTriggerRemove={() => field.onChange(null)}
                           value={field.value}
+                          valueFormat="hex"
                           onValueChange={(v) => field.onChange(v)}
                         />
                       </FormControl>

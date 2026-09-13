@@ -141,10 +141,13 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
               <FormItem className="grid gap-2">
                 <Label htmlFor="color">{t("Brand Color")}</Label>
                 <div className="flex gap-2">
+                  {/* Hex, as the workspace stores it, whichever format
+                      the channels are shown in. */}
                   <ColorPickerPopover
                     triggerShowRemove
                     onTriggerRemove={() => field.onChange(null)}
                     value={field.value}
+                    valueFormat="hex"
                     onValueChange={(v) => field.onChange(v)}
                   />
                 </div>
