@@ -451,7 +451,7 @@ func (s *Service) fire(ctx context.Context, r *Routine, trigger TriggerType, pay
 	err := safe.Do(runCtx, "routine.execute", func(ctx context.Context) error {
 		var execErr error
 		outcome, execErr = s.executor.Execute(ctx, Execution{
-			Agent: r.Agent, Routine: r.ID, RunID: run.ID,
+			Agent: r.Agent, Routine: r.ID, Name: r.Name, RunID: run.ID,
 			Trigger: trigger, Payload: payload,
 			Prompt: r.Content, Scope: r.Scope,
 		})

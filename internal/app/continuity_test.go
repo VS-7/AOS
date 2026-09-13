@@ -11,6 +11,7 @@ import (
 
 	"github.com/OWNER/aos/internal/app"
 	"github.com/OWNER/aos/internal/domain/activity"
+	"github.com/OWNER/aos/internal/domain/chat"
 	"github.com/OWNER/aos/internal/domain/comment"
 	"github.com/OWNER/aos/internal/domain/job"
 	"github.com/OWNER/aos/internal/domain/memory"
@@ -162,6 +163,17 @@ func TestTheDeliveryOfPhaseSix(t *testing.T) {
 	}
 	if run.Trigger != routine.Activity || run.ChatID == "" {
 		t.Fatalf("the run does not point at what caused it or where it happened: %+v", run)
+	}
+	// The transcript is a run's, named for the routine, so the chat sidebar
+	// files it under Runs rather than as an untitled channel.
+	transcript, err := a.Chats.Get(ctx, chat.GetInput{Chat: run.ChatID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if transcript.Kind != chat.KindRun || transcript.Routine != made.Routine.ID ||
+		!strings.Contains(transcript.Title, "Work the assigned bug") {
+		t.Fatalf("the run's conversation is kind %q, routine %q, titled %q",
+			transcript.Kind, transcript.Routine, transcript.Title)
 	}
 
 	// 2. The task reached in_review, through the guard rather than around it.

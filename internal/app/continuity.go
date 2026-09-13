@@ -424,9 +424,18 @@ func (e routineExecutor) Execute(ctx context.Context, req routine.Execution) (ro
 		return routine.Outcome{}, fmt.Errorf("this installation has no runtime to execute a routine")
 	}
 
+	// A run's transcript, not a channel: the sidebar files a conversation by
+	// its kind, and an untyped one with an agent in it read as a DM titled
+	// with the routine's UUID, while the Runs tab stayed empty.
+	title := req.Name
+	if strings.TrimSpace(title) == "" {
+		title = req.Routine
+	}
 	created, err := e.chats.Create(ctx, chat.CreateInput{
-		Title: "Routine: " + req.Routine,
-		Agent: req.Agent,
+		Title:   "Routine: " + title,
+		Kind:    chat.KindRun,
+		Routine: req.Routine,
+		Agent:   req.Agent,
 	})
 	if err != nil {
 		return routine.Outcome{}, err
