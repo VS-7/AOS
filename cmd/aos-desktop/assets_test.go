@@ -65,25 +65,30 @@ func TestAnArtifactIsServedThroughTheWindowWithItsCredential(t *testing.T) {
 	}
 }
 
-// An artifact is generated HTML, and inside this origin a script in it could
-// POST to /wails/runtime — the bridge, which carries the window's credential.
-// The frame is sandboxed without allow-same-origin, which makes its fetches
-// cross-origin; a request that cannot carry the runtime's own header (a
-// no-cors "simple" POST) is refused here too.
-func TestTheBridgeRefusesACallTheRuntimeDidNotMake(t *testing.T) {
+// Wails' HTTP transport also runs a call sent as a GET, with object, method
+// and args in the query string (a fallback for WebKitGTK, which can deliver a
+// POST body that way). So `<img src="/wails/runtime?object=0&method=0&args=…">`
+// in an artifact — no script, no custom header, no preflight, and allowed by
+// the artifact's own img-src 'self' — ran DomainService.Invoke with the
+// window's credential. The runtime sends its header with every call, whatever
+// the method, so its absence is refused whatever the method.
+func TestTheBridgeRefusesACallWithoutTheRuntimesHeaderWhateverTheMethod(t *testing.T) {
 	daemon := daemonclient.New(daemonclient.Options{BaseURL: "http://127.0.0.1:1"})
+	call := "/wails/runtime?object=0&method=0&args=" +
+		`%7B%22call-id%22%3A%22x%22%2C%22methodName%22%3A%22wailsvc.DomainService.Invoke%22%7D`
 
-	forged := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/wails/runtime", strings.NewReader(`{"object":0}`))
-	forged.Header.Set("Content-Type", "text/plain")
-	rec, reached := serveThrough(t, daemon, forged)
-	if reached || rec.Code != http.StatusForbidden {
-		t.Errorf("a runtime call without the runtime's header got through (status %d)", rec.Code)
+	for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodOptions} {
+		forged := httptest.NewRequestWithContext(t.Context(), method, call, nil)
+		rec, reached := serveThrough(t, daemon, forged)
+		if reached || rec.Code != http.StatusForbidden {
+			t.Errorf("%s %s without the runtime's header got through (status %d)", method, call, rec.Code)
+		}
 	}
 
-	genuine := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/wails/runtime", strings.NewReader(`{"object":0}`))
+	genuine := httptest.NewRequestWithContext(t.Context(), http.MethodGet, call, nil)
 	genuine.Header.Set("x-wails-client-id", "abc")
 	if _, reached := serveThrough(t, daemon, genuine); !reached {
-		t.Error("the runtime's own call was refused")
+		t.Error("a call carrying the runtime's header was refused")
 	}
 }
 

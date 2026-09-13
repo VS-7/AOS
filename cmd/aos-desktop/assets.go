@@ -69,18 +69,26 @@ func forwarded(path string) bool {
 	return strings.HasPrefix(path, contentRoute) || strings.HasPrefix(path, artifactsRoute)
 }
 
-// refusedRuntimeCall is a POST to the bridge without the header every call
-// @wailsio/runtime makes carries.
+// refusedRuntimeCall is a request to the bridge, of any method, without the
+// header every call @wailsio/runtime makes carries.
 //
-// An artifact is HTML a model generated, and it is now served from this
-// window's own origin. Its frame is sandboxed without allow-same-origin, so a
-// script in it cannot reach the page or make a same-origin request — but a
-// no-cors "simple" POST needs no permission to be sent, and Wails processes
-// its body without looking at the content type: DomainService.Invoke, with the
-// window's credential. A simple request cannot set a custom header, and the
-// runtime always sets this one, so its absence is the tell.
+// An artifact is HTML a model generated, and it is served from this window's
+// own origin. Its document is sandboxed without allow-same-origin, so a script
+// in it cannot reach the page or make a same-origin request — but plenty
+// reaches the bridge without permission. A no-cors "simple" POST is sent
+// anyway, and Wails processes its body without looking at the content type.
+// A GET is enough, too: Wails' HTTP transport reads object, method and args
+// from the query string when there is no body (its WebKitGTK fallback), so an
+// `<img>`, a `<form method=get>` or a navigation runs DomainService.Invoke with
+// the window's credential, without a line of script. Guarding POST alone left
+// exactly that open.
+//
+// None of those can set a custom header: a no-cors request drops it, and a
+// cross-origin request that asks for one is preflighted first — and the
+// preflight, which carries no such header either, is refused here. The runtime
+// sets this one on every call, chunked or not, so its absence is the tell.
 func refusedRuntimeCall(r *http.Request) bool {
-	return r.URL.Path == runtimeRoute && r.Method == http.MethodPost &&
+	return r.URL.Path == runtimeRoute &&
 		strings.TrimSpace(r.Header.Get("x-wails-client-id")) == ""
 }
 
