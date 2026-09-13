@@ -132,7 +132,14 @@ export async function explorer(
   options: { includeContexts?: boolean } = {},
 ): Promise<{ snapshot: FileExplorerSnapshot }> {
   const [walked, changed, tasks] = await Promise.all([
-    tree("", true).catch(() => ({ path: "", nodes: [] as FileNode[] })),
+    // Not caught. A tree that cannot be read is a failure the panel has to
+    // show ("Unable to load files", with the reason), not an empty workspace:
+    // swallowing it is what made a daemon outage read as "No files
+    // available", and left that empty answer cached after the daemon came
+    // back, since a query that succeeded has nothing to retry.
+    tree("", true),
+    // The change list is optional — a directory that is not a git repository
+    // has none — so its failure still degrades to an empty one.
     changes().catch(() => ({
       snapshot: {
         paths: [],

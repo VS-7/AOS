@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { JSX } from "react";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
@@ -7,6 +8,7 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthGate } from "@/features/auth/AuthGate";
+import { AUTHENTICATED_EVENT } from "@/lib/auth";
 import { WorkspaceGate } from "@/features/workspace/WorkspaceGate";
 import { useRealtime } from "@/lib/realtime";
 import { t } from "@/lib/i18n";
@@ -68,18 +70,25 @@ function RealtimeConnection(): JSX.Element | null {
 }
 
 /**
- * A line across the top, not a blocking overlay.
+ * A notice, not a blocking overlay.
  *
  * What is already on screen was read from a daemon that was answering, so it
  * is still worth looking at; what is not worth doing is a write that will
  * fail. The banner says which of the two the window is in and gets out of the
  * way when the daemon comes back.
+ *
+ * At the bottom, and letting clicks through. It was a bar across the top 28px
+ * of the window, which is the tab strip, the toolbar and — on macOS — the
+ * strip the traffic lights sit in: the "AOS" tab was cut in half and the
+ * toolbar icons were under it for as long as the outage lasted. The layout
+ * cannot make room for it in flow (the sidebar is fixed to the full height),
+ * so it floats where nothing structural lives.
  */
 function DaemonUnreachableBanner(): JSX.Element {
   return (
     <div
       role="status"
-      className="fixed inset-x-0 top-0 z-50 bg-destructive px-4 py-1.5 text-center text-xs font-medium text-destructive-foreground"
+      className="pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-full bg-destructive px-4 py-1.5 text-center text-xs font-medium text-destructive-foreground shadow-md"
     >
       {t("The daemon is not answering. Reconnecting…")}
     </div>
@@ -102,7 +111,30 @@ function Localized({ children }: { children: JSX.Element }): JSX.Element {
   return <div key={locale} className="contents">{children}</div>;
 }
 
+/**
+ * Re-runs the router's loaders when somebody signs in again through AuthGate.
+ *
+ * The router is one object for the life of the page, and it went on holding
+ * whatever it matched while signed out — the account menu navigates to /login
+ * on the way out, and that route's middleware let it through because nobody
+ * was signed in. Mounted again under the gate, it showed its own login page a
+ * second time rather than asking the middleware, which by then says / .
+ *
+ * After the auth store has heard the same event (app/stores.ts registers its
+ * listener at import, before this one), so the middleware reads the new state.
+ */
+function useRouterFollowsSignIn(): void {
+  useEffect(() => {
+    const onAuthenticated = () => {
+      queueMicrotask(() => void router.invalidate());
+    };
+    window.addEventListener(AUTHENTICATED_EVENT, onAuthenticated);
+    return () => window.removeEventListener(AUTHENTICATED_EVENT, onAuthenticated);
+  }, []);
+}
+
 export function App(): JSX.Element {
+  useRouterFollowsSignIn();
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>

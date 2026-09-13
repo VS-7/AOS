@@ -31,6 +31,9 @@ type fakeProcs struct {
 	killErr          error
 	terminated       []int
 	killed           []int
+
+	// onStart runs with the lock held, right after a spawn.
+	onStart func(pid int)
 }
 
 func newProcs() *fakeProcs { return &fakeProcs{alive: map[int]bool{}, nextPID: 1000} }
@@ -44,6 +47,9 @@ func (p *fakeProcs) Start(context.Context, gateway.Command) (int, error) {
 	p.nextPID++
 	p.alive[p.nextPID] = true
 	p.started = append(p.started, gateway.Command{})
+	if p.onStart != nil {
+		p.onStart(p.nextPID)
+	}
 	return p.nextPID, nil
 }
 
@@ -74,6 +80,12 @@ func (p *fakeProcs) Kill(pid int) error {
 	return nil
 }
 
+func (p *fakeProcs) anyAlive() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.alive) > 0
+}
+
 func (p *fakeProcs) die(pid int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -87,17 +99,25 @@ func (p *fakeProcs) count() int {
 }
 
 // fakeHealth answers the probe according to what the test set.
+//
+// Something has to be running to answer: a daemon this supervisor spawned and
+// that is still alive, or a foreign one — started some other way, with no
+// record — which is what `foreign` models. A probe that answered with nothing
+// running is how the supervisor used to mistake somebody else's daemon for
+// the one it had just spawned.
 type fakeHealth struct {
 	mu      sync.Mutex
 	healthy bool
+	foreign bool
 	probes  int
+	procs   *fakeProcs
 }
 
 func (h *fakeHealth) Probe(context.Context, string, int) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.probes++
-	if h.healthy {
+	if h.foreign || (h.healthy && (h.procs == nil || h.procs.anyAlive())) {
 		return nil
 	}
 	return errors.New("connection refused")
@@ -210,6 +230,7 @@ func newHarness(t *testing.T, tweak ...func(*gateway.Deps)) *harness {
 		lock:   &realLock{},
 		clock:  &steppingClock{at: refTime},
 	}
+	h.health.procs = h.procs
 	deps := gateway.Deps{
 		Processes: h.procs, Health: h.health, Store: h.store, Locker: h.lock,
 		Resolver: fakeResolver{cmd: gateway.Command{Path: "/usr/local/bin/aosd"}},
@@ -353,6 +374,52 @@ func TestStartClearsAStaleRecord(t *testing.T) {
 	}
 	if h.procs.count() != 2 {
 		t.Fatalf("%d processes started", h.procs.count())
+	}
+}
+
+// A daemon already answering on the port with no record — `aosd serve` in a
+// terminal, `task dev`, a lost gateway.json — used to get a second one spawned
+// beside it. The second died on "cannot listen", but the foreign daemon had
+// already answered the health probe, so Start reported success and recorded
+// the dead pid: Settings › Daemon › Restart then stopped nothing.
+func TestADaemonAlreadyServingIsNotStartedTwice(t *testing.T) {
+	h := newHarness(t)
+	h.health.foreign = true
+
+	_, err := h.svc.Start(ctx(), gateway.StartInput{})
+	e, ok := apperr.As(err)
+	if !ok || e.Code != "AOS_GATEWAY_NOT_OURS" {
+		t.Fatalf("err = %v, want AOS_GATEWAY_NOT_OURS", err)
+	}
+	if len(e.Actions) == 0 {
+		t.Error("the caller should be told what to do about the daemon that is serving")
+	}
+	if h.procs.count() != 0 {
+		t.Errorf("%d daemons were spawned beside the one already serving", h.procs.count())
+	}
+	if h.store.meta != nil {
+		t.Errorf("a record was written for a daemon this supervisor does not own: %+v", h.store.meta)
+	}
+}
+
+// The same collision, arriving in between: the port was free when Start
+// looked, somebody else's daemon bound it first, and the child died trying.
+// The probe answering is not proof that the child is what answered.
+func TestAChildThatDiedIsNotRecordedBecauseSomethingElseAnswered(t *testing.T) {
+	h := newHarness(t)
+	h.health.set(false)
+	h.procs.onStart = func(pid int) {
+		h.health.foreign = true
+		delete(h.procs.alive, pid)
+	}
+
+	_, err := h.svc.Start(ctx(), gateway.StartInput{})
+	e, ok := apperr.As(err)
+	if !ok || e.Code != "AOS_GATEWAY_NOT_OURS" {
+		t.Fatalf("err = %v, want AOS_GATEWAY_NOT_OURS", err)
+	}
+	if h.store.meta != nil {
+		t.Errorf("the dead child's pid was recorded: %+v", h.store.meta)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -210,7 +211,7 @@ func (c *Client) Status(ctx context.Context) (wailsvc.AuthStatus, error) {
 		return wailsvc.AuthStatus{}, errUnreadable(c.base, err)
 	}
 	if envelope.Error != nil {
-		return wailsvc.AuthStatus{}, envelope.Error.asError()
+		return wailsvc.AuthStatus{}, envelope.Error.asError(res.StatusCode)
 	}
 	return envelope.Data, nil
 }
@@ -281,22 +282,39 @@ func (c *Client) Session(ctx context.Context) (wailsvc.PublicUser, error) {
 		return wailsvc.PublicUser{}, errUnreadable(c.base, err)
 	}
 	if envelope.Error != nil {
-		return wailsvc.PublicUser{}, envelope.Error.asError()
+		return wailsvc.PublicUser{}, envelope.Error.asError(res.StatusCode)
 	}
 	return envelope.Data.User, nil
 }
 
+// apiError is the daemon's error envelope, as the auth routes answer it.
 type apiError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Status  int    `json:"-"`
+	Code    string                `json:"code"`
+	Message string                `json:"message"`
+	Issues  map[string]any        `json:"issue,omitempty"`
+	Actions []apperr.CallToAction `json:"cta,omitempty"`
 }
 
-func (e *apiError) asError() error {
-	return apperr.New(strings.TrimPrefix(e.Code, "AOS_")).
+// asError rebuilds the daemon's refusal, with the status it was answered with.
+//
+// The window reads this on the other side of the Wails bridge — the error is
+// marshalled into the call's rejection — so what it carries is what the page
+// can act on. It used to be a 401 with no issue and no call to action whatever
+// the daemon had said, which made a wrong password (422) read as a missing
+// credential to anything that looked at the status.
+func (e *apiError) asError(status int) error {
+	if status < 400 {
+		status = apperr.StatusInternalServerError
+	}
+	err := apperr.New(e.Code).
 		Causer("daemonclient").
 		Msgf("%s", e.Message).
-		Status(apperr.StatusUnauthorized)
+		Status(status).
+		CTA(e.Actions...)
+	for k, v := range e.Issues {
+		err = err.Issue(k, v)
+	}
+	return err
 }
 
 // authRequest is Login and Onboarding's shared body: POST JSON, decode the
@@ -331,7 +349,7 @@ func (c *Client) authRequest(ctx context.Context, path string, body map[string]s
 		return wailsvc.AuthResult{}, errUnreadable(c.base, err)
 	}
 	if envelope.Error != nil {
-		return wailsvc.AuthResult{}, envelope.Error.asError()
+		return wailsvc.AuthResult{}, envelope.Error.asError(res.StatusCode)
 	}
 	c.SetToken(envelope.Data.Token)
 	return wailsvc.AuthResult{User: envelope.Data.User, ExpiresAt: envelope.Data.ExpiresAt.Format(time.RFC3339)}, nil
@@ -389,7 +407,7 @@ func (c *Client) Manifest(ctx context.Context) (command.Manifest, error) {
 		return command.Manifest{}, errUnreadable(c.base, err)
 	}
 	if envelope.Error != nil {
-		return command.Manifest{}, envelope.Error.asError()
+		return command.Manifest{}, envelope.Error.asError(res.StatusCode)
 	}
 	return envelope.Data, nil
 }
@@ -415,6 +433,40 @@ func (c *Client) Ready(ctx context.Context) (bool, error) {
 	}
 	defer func() { _ = res.Body.Close() }()
 	return res.StatusCode == http.StatusOK, nil
+}
+
+// HealthInfo is what the daemon says about itself on /api/health.
+type HealthInfo struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Version string `json:"version"`
+}
+
+// Health reads the daemon's own account of itself — above all its version,
+// which is the running binary's and not whatever started it.
+//
+// Ready answers whether something is serving; this answers what. The window
+// needs the second: an install replaces the application bundle while the
+// daemon it started keeps running, and a new window that only asked "is it
+// up" adopted the old daemon, with every defect the update had fixed.
+func (c *Client) Health(ctx context.Context) (HealthInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/api/health", nil)
+	if err != nil {
+		return HealthInfo{}, errUnreachable(c.base, err)
+	}
+	res, err := c.http.Do(req)
+	if err != nil {
+		return HealthInfo{}, errUnreachable(c.base, err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusOK {
+		return HealthInfo{}, errUnreadable(c.base, fmt.Errorf("health answered %d", res.StatusCode))
+	}
+	var info HealthInfo
+	if err := json.NewDecoder(res.Body).Decode(&info); err != nil {
+		return HealthInfo{}, errUnreadable(c.base, err)
+	}
+	return info, nil
 }
 
 func errUnreachable(base string, cause error) error {

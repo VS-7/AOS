@@ -198,6 +198,34 @@ func TestReadyIsWhatTheSplashWaitsOn(t *testing.T) {
 	}
 }
 
+// The window compares the daemon's own version with its own: an install
+// replaces the bundle under a daemon that keeps running, and the new window
+// used to adopt the old daemon — with every bug the update fixed — without a
+// word.
+func TestHealthReportsTheDaemonsOwnVersion(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/health" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"name":"aos","status":"ok","version":"v0.15.0"}`))
+	}))
+	defer server.Close()
+
+	got, err := daemonclient.New(daemonclient.Options{BaseURL: server.URL}).Health(ctx())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Version != "v0.15.0" {
+		t.Errorf("version = %q, want the daemon's", got.Version)
+	}
+
+	down := daemonclient.New(daemonclient.Options{BaseURL: "http://127.0.0.1:1", Timeout: 2 * time.Second})
+	if _, err := down.Health(ctx()); err == nil {
+		t.Error("nothing answered and Health reported a daemon")
+	}
+}
+
 // TestATrailingSlashInTheAddressDoesNotDoubleUp.
 func TestATrailingSlashInTheAddressDoesNotDoubleUp(t *testing.T) {
 	var path string
@@ -399,6 +427,34 @@ func TestARefusedLoginKeepsTheDaemonsOwnCode(t *testing.T) {
 	}
 	if h := server.lastHeader("authorization"); h != "" {
 		t.Fatalf("a failed login left a credential behind: %q", h)
+	}
+}
+
+// The refusal crosses the Wails bridge as this error marshalled, and the
+// window reads its code, status and call to action from there. It used to be
+// rebuilt as a 401 with no call to action whatever the daemon had said — a
+// wrong password (422) read as "unauthenticated" to anything that looked at
+// the status, and the daemon's own next step was dropped on the floor.
+func TestARefusalKeepsTheDaemonsStatusAndCallToAction(t *testing.T) {
+	server := newAuthServer(t, map[string]string{
+		"/api/auth/login": `{"error":{"code":"AOS_AUTH_INVALID_CREDENTIALS","message":"no match","issue":{"identifier":"vitor"},"cta":[{"label":"check the password"}]}}`,
+	})
+	server.status["/api/auth/login"] = http.StatusUnprocessableEntity
+	client := daemonclient.New(daemonclient.Options{BaseURL: server.URL})
+
+	_, err := client.Login(ctx(), "vitor", "wrong")
+	app, ok := apperr.As(err)
+	if !ok {
+		t.Fatalf("err is %T, not an apperr: %v", err, err)
+	}
+	if app.HTTPStatus != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want the daemon's 422", app.HTTPStatus)
+	}
+	if len(app.Actions) != 1 || app.Actions[0].Label != "check the password" {
+		t.Errorf("actions = %+v, want the daemon's call to action", app.Actions)
+	}
+	if app.Issues["identifier"] != "vitor" {
+		t.Errorf("issues = %+v, want the daemon's", app.Issues)
 	}
 }
 

@@ -12,10 +12,12 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -53,6 +55,15 @@ import (
 //
 //go:embed all:dist
 var assets embed.FS
+
+// distFS is the embedded bundle as the asset server sees it, rooted at dist.
+func distFS() fs.FS {
+	sub, err := fs.Sub(assets, "dist")
+	if err != nil {
+		return assets
+	}
+	return sub
+}
 
 func main() {
 	log := logging.New(logging.Config{})
@@ -95,19 +106,29 @@ func main() {
 	port := resolver.Int(env.KeyServerPort, build.Port)
 	address := fmt.Sprintf("http://%s:%d", host, port)
 
+	// Which credential this window signs in with, and what it remembers of
+	// signing in and out — see windowSession for why the terminal's
+	// credential and the window's own session are kept apart.
+	session := newWindowSession(
+		filepath.Join(paths.Root, desktopTokenFile),
+		localToken(resolver, paths),
+		strings.TrimSpace(resolver.String("TOKEN", "")) != "",
+		log,
+	)
+
 	daemon := daemonclient.New(daemonclient.Options{
 		BaseURL: address,
 		// AOS_TOKEN first, for pointing this window at a daemon it did not
-		// start; then the installation's own credential, which is what makes
-		// the application remember you.
+		// start; then the window's own session from its last sign-in; then
+		// the installation's own credential, which is what makes the
+		// application remember you on a first launch.
 		//
-		// It read neither. The token lived only in this process's memory and
-		// was set by AuthService.Login, so every launch of the application
-		// showed the Login page — while `aos` in a terminal on the same
-		// machine, as the same person, needed no password at all, because it
-		// reads exactly this file. There was nothing to log *into*: the
-		// account already existed and the credential was already on disk.
-		Token:     localToken(resolver, paths),
+		// It used to read none of them. The token lived only in this
+		// process's memory and was set by AuthService.Login, so every launch
+		// of the application showed the Login page — while `aos` in a
+		// terminal on the same machine, as the same person, needed no password
+		// at all, because it reads local.token.
+		Token:     session.Initial(),
 		Workspace: resolver.String(env.KeyWorkspaceID, ""),
 	})
 
@@ -190,6 +211,9 @@ func main() {
 	// goes through and to the relay. Without this the bridge kept addressing
 	// the workspace the window opened with, whatever the person picked.
 	domainSvc := wailsvc.NewDomain(daemon)
+	// And remembered, for the moments this process has to decide again on its
+	// own — see chosenWorkspace.
+	chosen := &chosenWorkspace{}
 
 	platform := &wailsPlatform{}
 	// The system service starts without a workspace and is told which one it
@@ -226,6 +250,7 @@ func main() {
 	// arrives by now — onboarding no longer registers anything, so the
 	// workspace the wizard creates reaches this process here, and only here.
 	domainSvc.OnWorkspaceChange(func(id string) {
+		chosen.Set(id)
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
@@ -247,7 +272,7 @@ func main() {
 		Services: []application.Service{
 			application.NewService(systemSvc),
 			application.NewService(domainSvc),
-			application.NewService(wailsvc.NewAuth(daemon, func(ctx context.Context, event wailsvc.AuthEvent) {
+			application.NewService(wailsvc.NewAuth(session.Caller(daemon), func(ctx context.Context, event wailsvc.AuthEvent) {
 				// A successful login or onboarding is the first moment this
 				// client can call anything past /api/auth — workspace
 				// registration needed a token it didn't have until now.
@@ -256,7 +281,7 @@ func main() {
 				// registered: after onboarding the wizard is still holding the
 				// name and the copilot's settings, so this only adopts. See
 				// openWorkspace.
-				opened, err := openWorkspace(ctx, daemon, root, event)
+				opened, err := openWorkspace(ctx, daemon, root, chosen.Get(), event)
 				if err == nil {
 					adopt(opened)
 					return
@@ -272,17 +297,26 @@ func main() {
 			})),
 		},
 		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(assets),
-			// The one daemon path the window has to serve itself: an <img>
-			// cannot carry a bearer, and the bridge answers strings. See
-			// bridgeContent.
-			Middleware: bridgeContent(daemon, log),
+			// A deep route gets the interface rather than a 404 — see
+			// spaFallback.
+			Handler: spaFallback(distFS(), application.AssetFileServerFS(assets)),
+			// The daemon paths the window has to serve itself — an <img> or
+			// an artifact's <iframe> cannot carry a bearer, and the bridge
+			// answers strings — and the guard on the bridge that serving an
+			// artifact here needs. See bridgeDaemon.
+			Middleware: bridgeDaemon(daemon, log),
 		},
 		LogLevel: slog.LevelWarn,
 	})
 
 	window := desktop.Window.NewWithOptions(windowOptions(address))
 	platform.window = window
+	// The menu's Reload goes through the page, which keeps the parameters the
+	// window was opened with — see applicationMenu, and hasMenuBar for why
+	// only macOS has one.
+	if hasMenuBar(runtime.GOOS) {
+		desktop.Menu.Set(applicationMenu(func() { window.EmitEvent(ReloadEventName) }))
+	}
 	emitRealtime = func(event any) { window.EmitEvent(RealtimeEventName, event) }
 	emitDaemon = func(event any) { window.EmitEvent(DaemonEventName, event) }
 
@@ -323,11 +357,13 @@ func main() {
 
 	// The daemon is asked to be running, not started blindly. Two things
 	// supervising one process is how you end up with two of it.
-	go ensureDaemon(supervisor, daemon, root, adopt, log)
+	// The daemon has to be this window's version — see versionGuard.
+	versions := newVersionGuard(build.Version)
+	go ensureDaemon(supervisor, daemon, root, chosen, versions, adopt, log)
 	// And then kept running. Supervision used to stop after that one call, so
 	// a daemon that crashed left the window answering every action with a
 	// failure and no way back short of relaunching — see watchDaemon.
-	go watchDaemon(realtimeCtx, supervisor, daemon, adopt, root, func(event any) {
+	go watchDaemon(realtimeCtx, supervisor, daemon, adopt, root, chosen, versions, func(event any) {
 		if emitDaemon != nil {
 			emitDaemon(event)
 		}
@@ -346,7 +382,8 @@ func main() {
 	}
 }
 
-// localToken is the credential this installation already holds.
+// localToken is the credential this installation already holds — the shared
+// one, which windowSession uses until the window has a session of its own.
 //
 // `~/.aos/local.token` is written once, at onboarding, as the same-machine
 // credential (authapi's own doc comment); `aos` has always read it and the
@@ -362,6 +399,13 @@ func localToken(resolver *env.Resolver, paths corecfg.Paths) string {
 		return ""
 	}
 	return strings.TrimSpace(string(raw))
+}
+
+// daemonStarter is the slice of the gateway service the window's startup
+// needs: start a daemon, and replace one from another version.
+type daemonStarter interface {
+	supervision
+	Start(ctx context.Context, in gateway.StartInput) (gateway.State, error)
 }
 
 // daemonSupervisor adapts the gateway service to the narrow slice the window's
@@ -385,19 +429,29 @@ func (d daemonSupervisor) Restart(ctx context.Context) error {
 // A failure here does not stop the window from opening: an interface that says
 // it cannot reach the daemon is more useful than an application that refuses to
 // start and does not say why.
-func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, root string, adopt func(workspaceRef), log *slog.Logger) {
+func ensureDaemon(supervisor daemonStarter, client *daemonclient.Client, root string, chosen *chosenWorkspace, versions *versionGuard, adopt func(workspaceRef), log *slog.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	healthy := false
-	if state, err := supervisor.Status(ctx, gateway.StatusInput{}); err == nil && state.Healthy {
-		healthy = true
+	// Asked of the port, not of the supervisor's record. The record only knows
+	// the daemons this supervisor started, and a daemon started any other way
+	// — `aosd serve` in a terminal, `task dev`, a lost gateway.json — read as
+	// stopped: a second one was spawned beside it, died on "cannot listen",
+	// and its dead pid was recorded as the daemon.
+	if info, err := client.Health(ctx); err == nil {
+		// Serving, but perhaps from a previous install: see versionGuard.
+		versions.check(ctx, supervisor, info.Version, log)
 	} else if _, err := supervisor.Start(ctx, gateway.StartInput{}); err != nil {
 		log.Error("the daemon is not running and could not be started", "err", err)
-	} else {
-		healthy = true
+		return
 	}
-	if !healthy {
+
+	// Nobody signed in yet — a fresh installation, or a window whose person
+	// signed out. There is nothing to open, and asking anyway was the
+	// `POST /api/workspace/list` 401 at the start of every such launch in the
+	// daemon's log. AuthService opens the workspace after the sign-in.
+	if status, err := client.Status(ctx); err == nil && !status.Authenticated {
+		log.Debug("nobody is signed in yet; the workspace is opened after sign-in")
 		return
 	}
 
@@ -405,7 +459,11 @@ func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, root
 	// installation that already has an account and a workspace is adopted, and
 	// a window launched inside a repository registers it. Only onboarding is
 	// restricted, and only because onboarding has a wizard still deciding.
-	if opened, err := openWorkspace(ctx, client, root, wailsvc.AuthLogin); err != nil {
+	//
+	// The interface may already have said which workspace it means — a daemon
+	// that took a while to start leaves time for the page to load — and a
+	// choice it made wins over this process's own guess.
+	if opened, err := openWorkspace(ctx, client, root, chosen.Get(), wailsvc.AuthLogin); err != nil {
 		log.Warn("could not open a workspace yet", "path", root, "err", err)
 	} else {
 		adopt(opened)
@@ -462,7 +520,18 @@ func daemonEnv(root string) []string {
 //
 // So onboarding adopts and never creates. The wizard owns the first workspace,
 // because it is the only party that knows what to call it.
-func openWorkspace(ctx context.Context, client *daemonclient.Client, root string, event wailsvc.AuthEvent) (opened workspaceRef, err error) {
+//
+// preferred is the workspace the interface last chose (chosenWorkspace), and it
+// comes before all of that when it still exists: this runs again after the
+// daemon restarts and after every sign-in, long after the person picked one.
+func openWorkspace(ctx context.Context, client *daemonclient.Client, root, preferred string, event wailsvc.AuthEvent) (opened workspaceRef, err error) {
+	if preferred != "" {
+		if w, err := readWorkspace(ctx, client, preferred); err == nil && w.ID != "" && !w.Archived {
+			return workspaceRef{ID: w.ID, Path: w.Path}, nil
+		}
+		// Gone, archived, or unreadable right now: fall through to what this
+		// process would have chosen with no preference at all.
+	}
 	if event != wailsvc.AuthOnboarding && root != "" {
 		return introspectWorkspace(ctx, client, root)
 	}
@@ -501,6 +570,34 @@ func errNoWorkspaceYet() error {
 		CTA(apperr.CallToAction{
 			Label: "finish onboarding — the workspace it creates is the one this window will open",
 		})
+}
+
+// chosenWorkspace is the workspace the interface last pointed this window at,
+// through DomainService.SetWorkspace.
+//
+// This process decides which workspace to address on its own three times —
+// when the daemon first answers, after it restarts, and after every sign-in —
+// and each time it used to adopt the first registered workspace by id. The
+// interface had already said its choice once and did not say it again, so the
+// switcher kept reading "VS" while every call and the event relay went to
+// whichever workspace sorted first.
+type chosenWorkspace struct {
+	mu sync.Mutex
+	id string
+}
+
+// Set records the interface's choice.
+func (c *chosenWorkspace) Set(id string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.id = strings.TrimSpace(id)
+}
+
+// Get is the choice, or "" when the interface has not made one yet.
+func (c *chosenWorkspace) Get() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.id
 }
 
 // workspaceRef is the workspace this window addresses: the id every call is

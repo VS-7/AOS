@@ -48,10 +48,12 @@ const daemonFailuresBeforeRestart = 3
 // coming back is how two daemons end up fighting over one port.
 func watchDaemon(
 	ctx context.Context,
-	supervisor *gateway.Service,
+	supervisor daemonStarter,
 	client *daemonclient.Client,
 	adopt func(workspaceRef),
 	root string,
+	chosen *chosenWorkspace,
+	versions *versionGuard,
 	emit func(event any),
 	log *slog.Logger,
 ) {
@@ -66,16 +68,22 @@ func watchDaemon(
 		}
 
 		probe, cancel := context.WithTimeout(ctx, 3*time.Second)
-		ready, err := client.Ready(probe)
+		info, err := client.Health(probe)
 		cancel()
 
-		if err == nil && ready {
+		if err == nil {
 			if !healthy {
-				log.Info("the daemon is answering again")
+				log.Info("the daemon is answering again", "version", info.Version)
+				// Whatever brought it back may not have been this window: a
+				// daemon started from another install is replaced first, so
+				// what is re-adopted below is the one that stays.
+				if versions.check(ctx, supervisor, info.Version, log) {
+					log.Info("replaced the daemon that came back with this window's version")
+				}
 				// The workspace, the file root and the event relay all
 				// followed the daemon that went away; a new one has none of
 				// them until it is adopted again.
-				reopen(ctx, client, root, adopt, log)
+				reopen(ctx, client, root, chosen.Get(), adopt, log)
 			}
 			misses, healthy = 0, true
 			emitDaemonState(emit, true)
@@ -114,12 +122,13 @@ func emitDaemonState(emit func(event any), healthy bool) {
 //
 // A restarted daemon is a different process with none of this window's
 // per-session state: the client's workspace, the file root and the event
-// relay were all bound to the one that died.
-func reopen(ctx context.Context, client *daemonclient.Client, root string, adopt func(workspaceRef), log *slog.Logger) {
+// relay were all bound to the one that died. The workspace it re-adopts is the
+// one the interface chose, when it chose one — see chosenWorkspace.
+func reopen(ctx context.Context, client *daemonclient.Client, root, preferred string, adopt func(workspaceRef), log *slog.Logger) {
 	open, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	opened, err := openWorkspace(open, client, root, wailsvc.AuthLogin)
+	opened, err := openWorkspace(open, client, root, preferred, wailsvc.AuthLogin)
 	if err != nil {
 		log.Debug("no workspace to re-adopt after the daemon came back", "err", err)
 		return

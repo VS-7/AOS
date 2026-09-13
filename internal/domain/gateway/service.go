@@ -180,6 +180,16 @@ func (s *Service) Start(ctx context.Context, _ StartInput) (State, error) {
 	case Stopped:
 	}
 
+	// Nothing this supervisor started is running, and something is answering
+	// on the port anyway: a daemon started some other way (`aosd serve` in a
+	// terminal, `task dev`) or one whose record was lost. Spawning beside it
+	// used to produce a second daemon that died on "cannot listen" — while
+	// the first answered the health probe below, so Start reported success
+	// and recorded the dead pid, and Restart then stopped nothing.
+	if s.health.Probe(ctx, s.host, s.port) == nil {
+		return State{}, errNotOurs(s.host, s.port)
+	}
+
 	cmd, err := s.resolver.Resolve(ctx)
 	if err != nil {
 		return State{}, err
@@ -215,6 +225,12 @@ func (s *Service) waitHealthy(ctx context.Context, pid int) error {
 	deadline := s.clock.Now().Add(s.startTimeout)
 	for {
 		if err := s.health.Probe(ctx, s.host, s.port); err == nil {
+			// An answer is only this child's if the child is still alive: a
+			// daemon that bound the port first answers just the same while
+			// ours exits on "cannot listen".
+			if !s.procs.Alive(pid) {
+				return errNotOurs(s.host, s.port)
+			}
 			return nil
 		}
 		// A process that exited is not going to start answering. Reporting that

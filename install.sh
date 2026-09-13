@@ -191,6 +191,15 @@ if [ "$os" = darwin ]; then
   apps="/Applications"
   [ -w "$apps" ] || apps="$HOME/Applications"
   mkdir -p "$apps"
+  # The daemon the previous bundle started is detached and outlives its
+  # window, so replacing the files under it left it running — and the new
+  # window adopted the old daemon, with every fix this update carries for it
+  # still missing. Asked to stop politely; the new window starts its own.
+  if pgrep -f "$apps/AOS.app/Contents/MacOS/aosd" >/dev/null 2>&1; then
+    pkill -TERM -f "$apps/AOS.app/Contents/MacOS/aosd" 2>/dev/null || true
+    say "stopped the daemon the previous install was running"
+  fi
+
   # Replaced whole rather than merged: a bundle that is half one version and
   # half another is worse than either, and the daemon inside it has to match
   # the application that supervises it (build.Compatible).

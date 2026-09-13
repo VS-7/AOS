@@ -36,13 +36,10 @@ export interface Client {
  * the desktop transport work happens at the network layer, nothing JS can
  * inspect ahead of a call. This reflects confirmedDesktop (declared further
  * down, alongside the desktop transport): false until the first domain call
- * actually succeeds through it, true from then on. client.invoke() itself
- * doesn't use this — it tries the desktop transport fresh on every call,
- * which is the only check that's actually reliable moment to moment. This
- * is for the handful of call sites (native chrome, the file picker) that
- * need a synchronous answer before they can act at all, and can tolerate
- * that answer starting out wrong for the first call or two after the
- * window opens.
+ * actually succeeds through it, true from then on. client.invoke() does not
+ * use this: it reads `isDesktopWindow` (lib/wails.ts), which the window
+ * states in its own URL and is right from the first line of the bundle.
+ * Prefer that one; this is kept for the call sites that already read it.
  */
 export function isDesktop(): boolean {
   return isDesktopConfirmed();
@@ -67,13 +64,18 @@ export class DomainError extends Error {
     status?: number;
     issues?: Record<string, unknown>;
     actions?: Array<{ label: string; command?: string; tool?: string }>;
+    // The names the daemon actually sends (internal/core/apperr's `issue`
+    // and `cta` tags). Only the plural spellings were read, so every error
+    // that reached the page arrived with no issue and no call to action.
+    issue?: Record<string, unknown>;
+    cta?: Array<{ label: string; command?: string; tool?: string }>;
   }) {
     super(payload.message ?? payload.code ?? "the call failed");
     this.name = "DomainError";
     this.code = payload.code ?? "UNKNOWN";
     this.status = payload.status ?? 500;
-    this.issues = payload.issues ?? {};
-    this.actions = payload.actions ?? [];
+    this.issues = payload.issues ?? payload.issue ?? {};
+    this.actions = payload.actions ?? payload.cta ?? [];
   }
 }
 
@@ -125,20 +127,36 @@ export function isDaemonUnreachable(error: unknown): boolean {
   return code === DAEMON_UNREACHABLE_CODE || code === "TRANSPORT_UNREACHABLE";
 }
 
+/**
+ * Whether an error says the credential is no good.
+ *
+ * By any code that ends that way: the daemon answers AOS_HTTP_UNAUTHENTICATED
+ * when a request carries no credential at all, and passes auth.Service's
+ * AOS_AUTH_UNAUTHENTICATED through for one that is expired or revoked
+ * (httpapi's authenticate middleware). Only the first was recognised, so a
+ * revoked session never went back to Login — its screens rendered empty and
+ * said nothing. The envelope carries no HTTP status (apperr's HTTPStatus is
+ * not serialised), so `status` only helps an error the page built itself.
+ */
+function isUnauthenticated(error: { code?: string; status?: number }): boolean {
+  return error.status === 401 || /(^|_)UNAUTHENTICATED$/.test(error.code ?? "");
+}
+
 function announceIfUnauthenticated(error: { code?: string; status?: number }): void {
-  const unauthenticated =
-    error.status === 401 ||
-    error.code === "AOS_HTTP_UNAUTHENTICATED" ||
-    error.code === "HTTP_UNAUTHENTICATED";
-  if (!unauthenticated || typeof window === "undefined") return;
+  if (!isUnauthenticated(error) || typeof window === "undefined") return;
   window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
+}
+
+/** A domain error, announced first when it is about the credential. */
+function raise(payload: ConstructorParameters<typeof DomainError>[0]): DomainError {
+  announceIfUnauthenticated(payload);
+  return new DomainError(payload);
 }
 
 export function unwrap<T>(raw: unknown): T {
   const envelope = raw as Envelope<T>;
   if (envelope && typeof envelope === "object" && "error" in envelope && envelope.error) {
-    announceIfUnauthenticated(envelope.error);
-    throw new DomainError(envelope.error);
+    throw raise(envelope.error);
   }
   if (envelope && typeof envelope === "object" && "data" in envelope) {
     return envelope.data as T;
@@ -166,24 +184,98 @@ export interface SkillInstallResult {
 const DOMAIN_SERVICE_INVOKE = `${WAILSVC_PKG}.DomainService.Invoke`;
 
 /**
- * Whether a failed desktop call is worth retrying rather than surfacing (or
- * falling back to HTTP) immediately.
+ * What a rejected bridge call means, when the bridge answered at all.
  *
- * A well-formed DomainError means the call reached the daemon and back —
- * we're genuinely inside the desktop window, and a business error (not
- * found, validation, ...) isn't fixed by trying again. Anything else —
- * Call.ByName rejecting outright with a ReferenceError, TypeError, or a
- * plain network error — is exactly what happens both when there's truly no
- * Wails host to intercept the call *and* when there is one but it isn't
- * warmed up yet on the very first calls a window makes. Retrying costs
- * milliseconds in the first case and saves the second.
+ * A bound Go method that returns an error does not resolve with an envelope
+ * the way DomainService.Invoke does: Wails rejects the call with a
+ * RuntimeError whose `cause` is that error marshalled — for an apperr, the
+ * same `{code, message, issue, cta}` a daemon envelope carries. That is a
+ * real answer from a warm bridge (AuthService refusing a password, the Go
+ * client saying the daemon is down, Fetch refusing a path), and it was read
+ * as the bridge being absent: retried for four seconds and then repeated over
+ * HTTP, which is how one wrong password was checked six times.
+ *
+ * Null for a rejection that carries no code — a fetch that never reached a
+ * host, a bridge still warming up. Those are the only failures worth waiting
+ * out.
  */
-function isRetryableDesktopError(err: unknown): boolean {
-  if (!(err instanceof DomainError)) return true;
-  return (
-    err.code === "AOS_DAEMON_UNREACHABLE" || // the daemon hasn't finished starting yet
-    err.code === "AOS_DESKTOP_NO_COMMAND_NAMED" // an argument mixup in the bridge under concurrency
-  );
+export function bridgeAnswer(err: unknown): DomainError | null {
+  if (err instanceof DomainError) return err;
+  if (!err || typeof err !== "object") return null;
+
+  let cause: unknown = (err as { cause?: unknown }).cause;
+  if (typeof cause === "string") {
+    try {
+      cause = JSON.parse(cause);
+    } catch {
+      // Not JSON; the message below is the other place a code can be.
+    }
+  }
+  const payload = cause as ConstructorParameters<typeof DomainError>[0] | null;
+  if (payload && typeof payload === "object" && typeof payload.code === "string" && payload.code) {
+    return raise(payload);
+  }
+
+  // An error Wails could not marshal still reaches the page as its Error()
+  // string, and an apperr's reads "CODE: text".
+  const message = (err as { message?: unknown }).message;
+  const coded = typeof message === "string" ? /^(AOS_[A-Z0-9_]+): ([\s\S]*)$/.exec(message) : null;
+  if (coded) return raise({ code: coded[1], message: coded[2] });
+  return null;
+}
+
+/** What a desktop call reports when the bridge itself never answered. */
+function bridgeUnavailable(method: string, cause: unknown): DomainError {
+  return new DomainError({
+    code: "TRANSPORT_UNREACHABLE",
+    message: "the desktop bridge did not answer",
+    status: 503,
+    issues: { method, cause: cause instanceof Error ? cause.message : String(cause) },
+  });
+}
+
+/**
+ * Calls a bound Go method, waiting out a bridge that is still warming up and
+ * nothing else.
+ *
+ * `retryAnswer` names the answers worth asking again for; by default none is.
+ * What this never does is fall back to HTTP. Inside the desktop window the
+ * credential lives in the Go process, so a plain request from the page is
+ * cross-origin and anonymous, and its failure — a 401, a refused connection —
+ * is not the answer to anything the person did. Every screen used to show
+ * that failure instead of the bridge's real one.
+ */
+export async function callBridge(
+  method: string,
+  args: unknown[],
+  retryAnswer: (answer: DomainError) => boolean = () => false,
+): Promise<unknown> {
+  const delays = desktopRetryDelays();
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const raw = await Call.ByName(method, ...args);
+      markDesktopConfirmed();
+      return raw;
+    } catch (err) {
+      const answer = bridgeAnswer(err);
+      // An answer of any kind proves the bridge is there.
+      if (answer) markDesktopConfirmed();
+      if (answer && !retryAnswer(answer)) throw answer;
+      const delay = delays[attempt];
+      if (delay === undefined) throw answer ?? bridgeUnavailable(method, err);
+      await sleep(delay);
+    }
+  }
+}
+
+/**
+ * The answers from DomainService.Invoke worth asking again for: a daemon the
+ * window started moments ago that has not finished starting, and an argument
+ * mixup in the bridge under concurrency. Not found, validation, a refusal —
+ * none of those is fixed by repeating it.
+ */
+function retryInvokeAnswer(answer: DomainError): boolean {
+  return answer.code === DAEMON_UNREACHABLE_CODE || answer.code === "AOS_DESKTOP_NO_COMMAND_NAMED";
 }
 
 /**
@@ -202,29 +294,14 @@ function isRetryableDesktopError(err: unknown): boolean {
  * string into Go value of type ...". Handing over the object lets that one
  * encoding pass do the job once, correctly.
  *
- * Retries — Call.ByName included, not just the response it resolves with —
- * before giving up; see isRetryableDesktopError for why a rejected call
- * needs this exactly as much as a successful one carrying a transient
- * DomainError, and desktopRetryDelays for why how long to retry depends on
- * whether the desktop has already proven itself. client.invoke() below only
- * sees the final, exhausted failure, which is what lets a page that's never
- * inside the desktop still fall back to HTTP after a bounded number of
- * attempts rather than none.
+ * Waits out a bridge that is still warming up, and asks again only for the
+ * answers retryInvokeAnswer names — see callBridge. The daemon's own refusal
+ * arrives inside the envelope and is thrown as it is.
  */
 const desktop: Client = {
   async invoke(key, input) {
-    const delays = desktopRetryDelays();
-    for (let attempt = 0; ; attempt++) {
-      try {
-        const raw = await Call.ByName(DOMAIN_SERVICE_INVOKE, key, input ?? {});
-        markDesktopConfirmed();
-        return unwrap(typeof raw === "string" ? JSON.parse(raw) : raw);
-      } catch (err) {
-        const delay = delays[attempt];
-        if (!isRetryableDesktopError(err) || delay === undefined) throw err;
-        await sleep(delay);
-      }
-    }
+    const raw = await callBridge(DOMAIN_SERVICE_INVOKE, [key, input ?? {}], retryInvokeAnswer);
+    return unwrap(typeof raw === "string" ? JSON.parse(raw) : raw);
   },
 };
 
@@ -348,8 +425,10 @@ export interface BridgeResponse {
  * tree, the editor, the diffs and the account roster were empty in the
  * application while working perfectly in a browser tab.
  *
- * Rejects when there is no bridge — a browser tab — which is the signal for
- * the caller to use `fetch`, where the session cookie is sent automatically.
+ * Desktop window only. A browser tab has no bridge and never asks — it uses
+ * `fetch`, where the session cookie is sent automatically — and inside the
+ * window a failure here is the answer: see callBridge for why it is never
+ * repeated over HTTP.
  */
 export async function bridgeFetch(
   method: string,
@@ -357,13 +436,12 @@ export async function bridgeFetch(
   contentType = "",
   body = "",
 ): Promise<BridgeResponse> {
-  return (await Call.ByName(
-    `${WAILSVC_PKG}.DomainService.Fetch`,
+  return (await callBridge(`${WAILSVC_PKG}.DomainService.Fetch`, [
     method,
     path,
     contentType,
     body,
-  )) as BridgeResponse;
+  ])) as BridgeResponse;
 }
 
 /**
@@ -448,19 +526,26 @@ export function rememberedWorkspace(): string {
  *   cookie the page sets, so switching workspace in the application changed
  *   nothing at all;
  * - localStorage, so the choice survives a reload.
+ *
+ * Resolves once the bridge has applied it, and a caller about to make a
+ * workspace-scoped call awaits that. It was fire-and-forget, so the store's
+ * first `workspace_get` raced it and sometimes answered for whichever
+ * workspace the Go side had adopted on its own. The bridge is told every
+ * time, even for the id this module already holds: the Go side forgets the
+ * page's choice when the daemon restarts or somebody signs in again, and a
+ * repeated id was exactly what never reached it.
  */
-export function setWorkspace(id: string): void {
-  if (activeWorkspace === id) return;
+export async function setWorkspace(id: string): Promise<void> {
   activeWorkspace = id;
   try {
     if (id) localStorage.setItem(WORKSPACE_STORAGE_KEY, id);
   } catch {
     // The choice still applies to this session.
   }
-  // Fire and forget: in a browser tab there is no bridge to tell, and the
-  // header above is already the whole answer there.
-  if (id) {
-    void Call.ByName(`${WAILSVC_PKG}.DomainService.SetWorkspace`, id).catch(() => {});
+  // A browser tab has no bridge to tell; the header above is the whole
+  // answer there.
+  if (id && isDesktopWindow) {
+    await callBridge(`${WAILSVC_PKG}.DomainService.SetWorkspace`, [id]);
   }
 }
 
@@ -474,36 +559,22 @@ function workspaceHeader(): Record<string, string> {
 }
 
 /**
- * The client this page runs on.
+ * The client this page runs on: the bridge inside the desktop window, HTTP in
+ * a browser tab, decided once by `isDesktopWindow` — a synchronous fact, since
+ * the window states it in the URL it opens (`?daemon=`).
  *
- * Every call tries the desktop transport first and falls back to HTTP on
- * failure, rather than deciding once which one applies. There is no reliable
- * synchronous "am I in the desktop window" signal in Wails3 (see isDesktop's
- * comment) — but attempting the call is itself a reliable signal: inside the
- * desktop window the native host answers, and in a browser tab the request
- * to /wails/runtime just 404s against whatever the daemon or dev server
- * serves there, which Call.ByName surfaces as a rejected promise. Once a
- * page has confirmed which one it is (see confirmedDesktop above), this
- * costs one fast rejected call per request for the loser transport; only
- * the first few seconds of a page that turns out not to be the desktop pay
- * the full retry budget, while genuinely waiting for the window's own
- * bridge to warm up.
+ * There is no fallback from one to the other, in either direction. A browser
+ * tab that probed the bridge paid a rejected `POST /wails/runtime` per call
+ * and roughly seven seconds of cold-start retries before its first screen.
+ * And a window that fell back to HTTP after *any* bridge failure — a chat that
+ * does not exist, a precondition, a daemon that is down — sent that request
+ * from `wails://localhost` with no credential, so the screen showed the
+ * retry's 401 or refused connection instead of the real answer, and a 401
+ * announced from a transport that never held the session sent AuthGate round
+ * a loop that remounted the whole application.
  */
 export const client: Client = {
   async invoke(key, input) {
-    // A browser tab does not probe the bridge. `isDesktopWindow` is a
-    // synchronous fact — the window states it in the URL it opens
-    // (`?daemon=`) — and trying anyway cost a rejected `POST /wails/runtime`
-    // per call, logged by the daemon at WARN, plus the full cold-start retry
-    // budget on the first few: roughly seven seconds before a server
-    // installation drew its first screen.
-    if (!isDesktopWindow) {
-      return http.invoke(key, input);
-    }
-    try {
-      return await desktop.invoke(key, input);
-    } catch {
-      return http.invoke(key, input);
-    }
+    return isDesktopWindow ? desktop.invoke(key, input) : http.invoke(key, input);
   },
 };

@@ -403,3 +403,42 @@ func TestThePasswordComesFromTheQueryString(t *testing.T) {
 		t.Fatalf("gotPassword = %q", gotPassword)
 	}
 }
+
+// The route follows the workspace the request names, the same routing every
+// command gets. It served only the workspace the daemon started in, so an
+// artifact from any other one answered AOS_ARTIFACT_NOT_FOUND.
+func TestTheArtifactComesFromTheWorkspaceTheRequestNames(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "demo/index.html", "from the second workspace")
+	scoped := &fakeArtifacts{artifact: &artifact.Artifact{ID: "demo", Entrypoint: "index.html"}, authorize: alwaysAllow}
+
+	h := artifactapi.New(artifactapi.Config{
+		Artifacts: &fakeArtifacts{authorize: alwaysAllow}, // the daemon's own: has no such artifact
+		Files:     fakeFiles{root: t.TempDir()},
+		Scope: func(context.Context) (artifactapi.Artifacts, artifactapi.Files, error) {
+			return scoped, fakeFiles{root: root}, nil
+		},
+	})
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/artifacts/demo/", nil))
+	if rec.Code != http.StatusOK || rec.Body.String() != "from the second workspace" {
+		t.Fatalf("status = %d, body = %q", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAWorkspaceThatCannotBeResolvedIsTheAnswer(t *testing.T) {
+	h := artifactapi.New(artifactapi.Config{
+		Artifacts: &fakeArtifacts{authorize: alwaysAllow},
+		Files:     fakeFiles{root: t.TempDir()},
+		Scope: func(context.Context) (artifactapi.Artifacts, artifactapi.Files, error) {
+			return nil, nil, apperr.New("WORKSPACE_UNAVAILABLE").Status(apperr.StatusServiceUnavailable)
+		},
+	})
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/artifacts/demo/", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want the scope's own failure", rec.Code)
+	}
+}

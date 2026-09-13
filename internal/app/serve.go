@@ -102,8 +102,17 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 		AuthRoutes: authapi.New(authapi.Config{Service: a.Auth, Log: log, Clock: a.Clock, Paths: a.Paths}),
 		Bot:        botapi.New(botapi.Config{Registry: a.Bots, Log: log}),
 		Artifacts: artifactapi.New(artifactapi.Config{
-			Artifacts:       a.Artifacts,
-			Files:           a.ArtifactFiles,
+			Artifacts: a.Artifacts,
+			Files:     a.ArtifactFiles,
+			// The workspace the request names, the same routing every command
+			// gets (scopeFor) — see artifactapi.Config.Scope.
+			Scope: func(ctx context.Context) (artifactapi.Artifacts, artifactapi.Files, error) {
+				target, err := a.scopeFor(ctx)
+				if err != nil {
+					return nil, nil, err
+				}
+				return target.Artifacts, target.ArtifactFiles, nil
+			},
 			Auth:            a.Auth,
 			SecurityEnabled: securityEnabled,
 			Log:             log,
