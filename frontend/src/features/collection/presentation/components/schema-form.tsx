@@ -170,7 +170,7 @@ export function SchemaForm({
                       onValueChange={(nextValue) => field.onChange(JSON.parse(nextValue))}
                     >
                       <SelectTrigger className="h-11 w-full rounded-2xl border-border/70 bg-background/70 px-4 shadow-none">
-                        <SelectValue placeholder={`Select ${label.toLowerCase()}`} />
+                        <SelectValue placeholder={t("Select {{field}}", { field: label })} />
                       </SelectTrigger>
                       <SelectContent>
                         {fieldSchema.enum?.map((option) => (
@@ -205,7 +205,7 @@ export function SchemaForm({
 
                 <div className="flex items-center justify-between gap-3 rounded-[20px] border border-border/70 bg-background/70 px-4 py-3">
                   <div className="text-sm text-muted-foreground">
-                    {field.value === true ? "Enabled" : "Disabled"}
+                    {field.value === true ? t("Yes") : t("No")}
                   </div>
                   <FormControl>
                     <Switch
@@ -241,12 +241,49 @@ export function SchemaForm({
                     <Input
                       type="number"
                       value={typeof field.value === "number" ? String(field.value) : ""}
-                      placeholder={description ?? `Enter ${label.toLowerCase()}`}
+                      placeholder={description ?? t("Enter {{field}}", { field: label })}
                       disabled={disabled}
                       className="h-11 rounded-2xl border-border/70 bg-background/70 px-4 shadow-none"
                       onChange={(event) => {
                         const nextValue = event.target.value;
                         field.onChange(nextValue === "" ? undefined : Number(nextValue));
+                      }}
+                    />
+                  </FormControl>
+                  <FormMessage className="text-xs" />
+                </div>
+              </FormItem>
+            )}
+          />
+        );
+      }
+
+      if (fieldSchema.format === "date") {
+        // A collection date is RFC 3339, which nobody types. The picker holds
+        // a calendar day and the value is that day at midnight UTC — what the
+        // daemon validates against, and what reads back as the same day.
+        return (
+          <FormField
+            key={name}
+            control={form.control}
+            name={name as never}
+            render={({ field }) => (
+              <FormItem className={isArrayItem ? "space-y-2" : "grid gap-3 sm:grid-cols-[minmax(0,190px)_minmax(0,1fr)] sm:gap-8"}>
+                {isArrayItem ? (
+                  <FormLabel className="sr-only">{label}</FormLabel>
+                ) : (
+                  <FieldMeta label={label} description={description} required={required} />
+                )}
+                <div className="space-y-2">
+                  <FormControl>
+                    <Input
+                      type="date"
+                      value={typeof field.value === "string" ? (field.value as string).slice(0, 10) : ""}
+                      disabled={disabled}
+                      className="h-11 rounded-2xl border-border/70 bg-background/70 px-4 shadow-none"
+                      onChange={(event) => {
+                        const day = event.target.value;
+                        field.onChange(day ? `${day}T00:00:00Z` : undefined);
                       }}
                     />
                   </FormControl>

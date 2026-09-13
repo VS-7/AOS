@@ -43,6 +43,14 @@ import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middl
 import { ButtonGroup } from "@/components/ui/button-group";
 import { t } from "@/lib/i18n";
 import { errorMessage } from "@/lib/aos-facade";
+import { formatViewValue } from "@/lib/view-spec";
+import {
+  fieldsOf,
+  recordLabel,
+  type CollectionDefinition,
+  type CollectionField,
+  type CollectionRecord,
+} from "../../helpers/collection-fields.helper";
 import {
   DataTable,
   DataTableProvider,
@@ -59,63 +67,29 @@ import {
 const MotionSpan = motion.create("span");
 const MotionTableRow = motion.create("tr");
 
-function getRecordColumns(records: Record<string, unknown>[]) {
-  const keys = new Set<string>();
+/**
+ * One table row: the record's declared fields, each already in the form a
+ * person reads, beside the record itself.
+ *
+ * The table used to be built from the keys of the record *envelope* — `id`,
+ * `collection`, `data`, `createdAt`, `updatedAt` — so its columns were
+ * "Collection | Data | Created At", the Data cell raw JSON and both dates
+ * `0001-01-01` (a record has no timestamps unless its collection declares
+ * them). Search and filters only ever saw that JSON.
+ *
+ * Cells are display strings so the search, the filters and the export all
+ * work on what is on screen. The id and the record ride under keys a field
+ * name cannot take (field names are identifiers, never `__`-prefixed here).
+ */
+type RecordRow = Record<string, string> & { __id: string; __record: CollectionRecord };
 
-  for (const record of records) {
-    for (const key of Object.keys(record)) {
-      if (key === "id" || key === "content" || key === "path") {
-        continue;
-      }
-
-      keys.add(key);
-
-      if (keys.size >= 8) {
-        return Array.from(keys);
-      }
+function toRows(fields: CollectionField[], records: CollectionRecord[]): RecordRow[] {
+  return records.map((record) => {
+    const row: Record<string, unknown> = { __id: record.id, __record: record };
+    for (const field of fields) {
+      row[field.name] = formatViewValue(record.data?.[field.name]);
     }
-  }
-
-  return Array.from(keys);
-}
-
-function renderCell(value: unknown) {
-  if (value === null || value === undefined) {
-    return "—";
-  }
-
-  if (typeof value === "string") {
-    return value.length > 96 ? `${value.slice(0, 93)}...` : value;
-  }
-
-  return JSON.stringify(value);
-}
-
-function matchesRecordSearch(record: Record<string, unknown>, search: string) {
-  if (!search.trim()) {
-    return true;
-  }
-
-  const term = search.trim().toLowerCase();
-
-  return Object.entries(record).some(([key, value]) => {
-    if (key.toLowerCase().includes(term)) {
-      return true;
-    }
-
-    if (typeof value === "string") {
-      return value.toLowerCase().includes(term);
-    }
-
-    if (typeof value === "number" || typeof value === "boolean") {
-      return String(value).toLowerCase().includes(term);
-    }
-
-    if (value && typeof value === "object") {
-      return JSON.stringify(value).toLowerCase().includes(term);
-    }
-
-    return false;
+    return row as RecordRow;
   });
 }
 
@@ -154,7 +128,11 @@ export const CollectionPage = aos
     // `DormantGate` (wrapping the returned JSX in `withComponent`) with
     // the 404 page instead.
     if (isDormant("collection")) {
-      return { collection: undefined as any, records: [] as unknown[] };
+      return {
+        collection: undefined as unknown as CollectionDefinition,
+        records: [] as CollectionRecord[],
+        recordsError: null as string | null,
+      };
     }
 
     try {
@@ -180,8 +158,11 @@ export const CollectionPage = aos
       // to `allRecords` below wherever any record existed, breaking every
       // `.map`/`.length` use on it instead of quietly returning nothing.
       return {
-        collection: collection.data.collection,
-        records: records.data?.records ?? [],
+        collection: collection.data.collection as CollectionDefinition,
+        records: (records.data?.records ?? []) as CollectionRecord[],
+        // A refused list is not an empty collection. It used to render as
+        // "0 total — Nothing Here!" over a collection that had records.
+        recordsError: records.error ? (errorMessage(records.error) ?? t("The records could not be listed.")) : null,
       };
     } catch {
       return response.notFound();
@@ -195,7 +176,11 @@ export const CollectionPage = aos
     const loaderData = route.useLoaderData();
 
     const collection = loaderData.collection;
-    const allRecords: Record<string, any>[] = loaderData.records;
+    const fields = React.useMemo(() => fieldsOf(collection), [collection]);
+    const allRecords = React.useMemo(
+      () => toRows(fields, loaderData.records),
+      [fields, loaderData.records],
+    );
 
     const { mutate: deleteRecord } =
       client.collection.deleteRecord.useMutation({
@@ -204,21 +189,19 @@ export const CollectionPage = aos
           await router.invalidate();
         },
         onError: (error) => {
-          toast.error(
-            error instanceof Error ? error.message : "Unable to delete record.",
-          );
+          toast.error(errorMessage(error) ?? t("Unable to delete record."));
         },
       });
 
-    const columns = React.useMemo(() => getRecordColumns(allRecords), [allRecords]);
+    const columns = React.useMemo(() => fields.map((field) => field.name), [fields]);
 
     const tableColumns = React.useMemo(() => {
       const cols: any[] = [
         {
-          accessorKey: "id",
+          accessorKey: "__id",
           header: "id",
           cell: ({ row }: any) => {
-            const recordId = row.original.id;
+            const recordId = row.original.__id;
             return (
               <span className="font-mono text-xs font-medium text-foreground">
                 {recordId}
@@ -235,7 +218,7 @@ export const CollectionPage = aos
           cell: ({ row }: any) => {
             return (
               <span className="text-muted-foreground truncate max-w-64 block">
-                {renderCell(row.original[colKey])}
+                {row.original[colKey] || "—"}
               </span>
             );
           },
@@ -244,9 +227,10 @@ export const CollectionPage = aos
 
       cols.push({
         id: "actions",
-        header: "Actions",
+        header: () => t("Actions"),
         cell: ({ row }: any) => {
-          const recordId = row.original.id;
+          const recordId = row.original.__id;
+          const label = recordLabel(fields, row.original.__record?.data) ?? recordId;
           return (
             <ButtonGroup>
               <Button
@@ -273,9 +257,9 @@ export const CollectionPage = aos
                   // without asking and records could not be deleted from the
                   // desktop window. See lib/wails.ts.
                   const accepted = await confirm({
-                    title: `Delete "${recordId}"?`,
-                    description: "This record cannot be recovered.",
-                    confirmText: "Delete",
+                    title: t("Delete \"{{name}}\"?", { name: label }),
+                    description: t("This record cannot be recovered."),
+                    confirmText: t("Delete"),
                     variant: "destructive",
                   });
                   if (!accepted) return;
@@ -296,7 +280,7 @@ export const CollectionPage = aos
       });
 
       return cols;
-    }, [columns, collectionId, navigate, deleteRecord, confirm]);
+    }, [columns, fields, collectionId, navigate, deleteRecord, confirm]);
 
     const filters = React.useMemo(() => {
       return generateFiltersFromData(allRecords, columns);
@@ -314,7 +298,7 @@ export const CollectionPage = aos
             collection={collection}
             collectionId={collectionId}
             allRecords={allRecords}
-            deleteRecord={deleteRecord}
+            recordsError={loaderData.recordsError}
           />
         </DataTableProvider>
       </DormantGate>
@@ -326,12 +310,12 @@ function CollectionPageContent({
   collection,
   collectionId,
   allRecords,
-  deleteRecord,
+  recordsError,
 }: {
-  collection: any;
+  collection: CollectionDefinition;
   collectionId: string;
-  allRecords: any[];
-  deleteRecord: any;
+  allRecords: RecordRow[];
+  recordsError: string | null;
 }) {
   const navigate = useNavigate();
   const router = useRouter();
@@ -348,9 +332,9 @@ function CollectionPageContent({
 
     // See the per-row delete above on why this is not `window.confirm`.
     const accepted = await confirm({
-      title: `Delete ${selectedRows.length} record(s)?`,
-      description: "The selected records cannot be recovered.",
-      confirmText: "Delete",
+      title: t("Delete {{count}} record(s)?", { count: selectedRows.length }),
+      description: t("The selected records cannot be recovered."),
+      confirmText: t("Delete"),
       variant: "destructive",
     });
     if (!accepted) return;
@@ -363,7 +347,7 @@ function CollectionPageContent({
       aos.client.collection.deleteRecord.mutateOrThrow({
         params: {
           collection: collectionId,
-          record: row.original.id,
+          record: row.original.__id,
         },
       })
     );
@@ -387,8 +371,8 @@ function CollectionPageContent({
         table.resetRowSelection();
       }),
       {
-        loading: `Deleting ${selectedRows.length} record(s)...`,
-        success: () => `${selectedRows.length} record(s) deleted successfully.`,
+        loading: t("Deleting {{count}} record(s)...", { count: selectedRows.length }),
+        success: () => t("{{count}} record(s) deleted.", { count: selectedRows.length }),
         error: (err) => errorMessage(err) ?? t("Failed to delete some records."),
       },
     );
@@ -399,11 +383,13 @@ function CollectionPageContent({
       <PageHeader>
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="truncate text-sm font-semibold text-foreground">
+            <div className="flex min-w-0 items-center gap-2">
+              {/* The name keeps its room; the badges beside it give way first.
+                  It used to shrink to "Con…" the moment the toolbar grew. */}
+              <h1 className="max-w-[20rem] shrink-0 truncate text-sm font-semibold text-foreground">
                 {collection.name}
               </h1>
-              <ButtonGroup className="bg-secondary/30 rounded-full">
+              <ButtonGroup className="bg-secondary/30 min-w-0 overflow-hidden rounded-full">
                 <Badge variant="outline">
                   <BookType
                     data-icon="inline-start"
@@ -418,28 +404,28 @@ function CollectionPageContent({
                   />
                   {collection.scope === "skill"
                     ? `skill:${collection.skill}`
-                    : "workspace"}
+                    : t("workspace")}
                 </Badge>
                 <Badge variant="outline">
                   <Database
                     data-icon="inline-start"
                     className="size-3 text-muted-foreground"
                   />
-                  <AnimatedCount value={allRecords.length} label="total" />
+                  <AnimatedCount value={allRecords.length} label={t("total")} />
                 </Badge>
                 <Badge variant="outline">
                   <Eye
                     data-icon="inline-start"
                     className="size-3 text-muted-foreground"
                   />
-                  <AnimatedCount value={visibleCount} label="visible" />
+                  <AnimatedCount value={visibleCount} label={t("visible")} />
                 </Badge>
                 <Badge variant="outline">
                   <Columns3
                     data-icon="inline-start"
                     className="size-3 text-muted-foreground"
                   />
-                  <AnimatedCount value={visibleColumnsCount} label="columns" />
+                  <AnimatedCount value={visibleColumnsCount} label={t("columns")} />
                 </Badge>
               </ButtonGroup>
             </div>
@@ -463,7 +449,7 @@ function CollectionPageContent({
               onClick={handleDeleteSelected}
             >
               <Trash2 className="size-4 mr-2" />
-              {t("Delete Selected (")}{selectedRows.length})
+              {t("Delete selected ({{count}})", { count: selectedRows.length })}
             </Button>
           )}
           <Button
@@ -481,11 +467,19 @@ function CollectionPageContent({
       </PageHeader>
 
       <PageBody className="min-h-0 gap-0 overflow-hidden p-0 flex flex-col">
-        <div className="flex-1 overflow-auto max-h-[calc(100vh-20rem)]">
-          <DataTable className="w-full text-sm" />
-        </div>
+        {recordsError ? (
+          <div role="alert" className="m-6 rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            {t("The records of this collection could not be listed: {{reason}}", { reason: recordsError })}
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 overflow-auto max-h-[calc(100vh-20rem)]">
+              <DataTable className="w-full text-sm" />
+            </div>
 
-        <DataTablePagination />
+            <DataTablePagination />
+          </>
+        )}
       </PageBody>
     </Page>
   );

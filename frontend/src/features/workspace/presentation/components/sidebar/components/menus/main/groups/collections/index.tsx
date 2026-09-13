@@ -19,7 +19,7 @@ import {
 import { aos } from "@/app/aos";
 import { t } from "@/lib/i18n";
 
-function getCurrentCollectionName(pathname: string): string | undefined {
+function getCurrentCollectionId(pathname: string): string | undefined {
   if (!pathname.startsWith("/collections/")) {
     return undefined;
   }
@@ -34,14 +34,17 @@ export function WorkspaceSidebarCollectionsGroupMenu() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
-  const currentCollectionName = getCurrentCollectionName(pathname);
+  const currentCollectionId = getCurrentCollectionId(pathname);
 
   const collections = aos.stores.collections.useState(
     (state) => state.items,
   );
 
-  function openCollection(collectionName: string) {
-    void navigate({ to: "/collections/$id", params: { id: collectionName } });
+  // By id, the collection directory name, which is what the page resolves;
+  // the name is only the label. Opening by name reached "Page not found", or
+  // an empty table for a name differing from the id only in case.
+  function openCollection(collectionId: string) {
+    void navigate({ to: "/collections/$id", params: { id: collectionId } });
   }
 
   return (
@@ -66,13 +69,13 @@ export function WorkspaceSidebarCollectionsGroupMenu() {
           <SidebarMenuSub>
             {collections.length > 0 ? (
               collections.map((collection) => {
-                const isActive = currentCollectionName === collection.name;
+                const isActive = currentCollectionId === collection.id;
 
                 return (
-                  <SidebarMenuSubItem key={collection.name}>
+                  <SidebarMenuSubItem key={collection.id}>
                     <SidebarMenuSubButton
                       isActive={isActive}
-                      onClick={() => openCollection(collection.name)}
+                      onClick={() => openCollection(collection.id)}
                     >
                       <HugeiconsIcon
                         icon={DatabaseIcon}

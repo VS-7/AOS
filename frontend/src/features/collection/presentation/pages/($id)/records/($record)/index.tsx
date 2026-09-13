@@ -53,26 +53,31 @@ import {
 } from "../../../../helpers/form-schema.helper";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
+import {
+  cleanRecordData,
+  fieldsOf,
+  fieldsToJsonSchema,
+  recordLabel,
+  requiredFieldCount,
+  type CollectionDefinition,
+  type CollectionField,
+  type CollectionRecord,
+} from "../../../../helpers/collection-fields.helper";
 
 function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Unable to save this record.";
+  return errorMessage(error) ?? t("Unable to save this record.");
 }
 
-function isRecordObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function extractRecordData(record: Record<string, unknown> | null) {
-  if (!record) {
-    return {};
-  }
-
-  const { id: _id, content: _content, path: _path, ...data } = record;
-  return data;
+/**
+ * The record's own fields. The page used to take the whole record envelope
+ * minus `id`/`content`/`path` — `collection`, `data`, `createdAt`,
+ * `updatedAt` — and send that back as the data, which the daemon refused
+ * field by field.
+ */
+function extractRecordData(record: CollectionRecord | null) {
+  const data = record?.data;
+  return data && typeof data === "object" && !Array.isArray(data) ? data : {};
 }
 
 function resolveRecord(result: unknown) {
@@ -88,27 +93,11 @@ function resolveRecord(result: unknown) {
 }
 
 function getPrimaryLabel(
+  fields: CollectionField[],
   recordId: string,
   data: Record<string, unknown> | null | undefined,
 ) {
-  const candidates = ["name", "title", "label", "email"];
-
-  for (const candidate of candidates) {
-    const value = data?.[candidate];
-
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value.trim();
-    }
-  }
-
-  return recordId === "new"
-    ? "New entry"
-    : FormSchemaHelper.prettifyLabel(recordId);
-}
-
-function getRequiredCount(schema: Record<string, unknown>) {
-  const required = schema.required;
-  return Array.isArray(required) ? required.length : 0;
+  return recordLabel(fields, data) ?? (recordId === "new" ? t("New record") : recordId);
 }
 
 export const CollectionRecordUpsertPage = aos
@@ -127,7 +116,11 @@ export const CollectionRecordUpsertPage = aos
     // `withComponent` below, which bails before this stub's fields (e.g.
     // `collection.format`) are ever dereferenced.
     if (isDormant("collection")) {
-      return { collection: {} as any, mode: "create" as const, record: null };
+      return {
+        collection: {} as unknown as CollectionDefinition,
+        mode: "create" as const,
+        record: null as CollectionRecord | null,
+      };
     }
 
     const collectionResult = await client.collection.getById.query({
@@ -144,9 +137,9 @@ export const CollectionRecordUpsertPage = aos
 
     if (isCreate) {
       return {
-        collection,
+        collection: collection as CollectionDefinition,
         mode: "create" as const,
-        record: null,
+        record: null as CollectionRecord | null,
       };
     }
 
@@ -157,16 +150,16 @@ export const CollectionRecordUpsertPage = aos
       },
     });
 
-    const record = resolveRecord(recordResult.data);
+    const record = resolveRecord(recordResult.data) as CollectionRecord | null | undefined;
 
     if (!record) {
       return response.notFound();
     }
 
     return {
-      collection,
+      collection: collection as CollectionDefinition,
       mode: "edit" as const,
-      record,
+      record: record as CollectionRecord | null,
     };
   })
   .withComponent(({ route }) => {
@@ -175,8 +168,12 @@ export const CollectionRecordUpsertPage = aos
     const { collection, mode, record } = route.useLoaderData();
     const collectionId = route.useParams().id;
     const recordParam = route.useParams().record;
-    const schema = isRecordObject(collection.schema) ? collection.schema : {};
-    const requiredCount = getRequiredCount(schema);
+    // The form is built from the fields the collection declares. It read
+    // `collection.schema`, which the daemon never sends, and so rendered no
+    // inputs at all: nothing could be created and nothing edited.
+    const fields = React.useMemo(() => fieldsOf(collection), [collection]);
+    const schema = React.useMemo(() => fieldsToJsonSchema(fields), [fields]);
+    const requiredCount = requiredFieldCount(fields);
     const isEditMode = mode === "edit";
     const recordId = typeof record?.id === "string" ? record.id : recordParam;
     const formSchema = React.useMemo(
@@ -204,7 +201,7 @@ export const CollectionRecordUpsertPage = aos
           });
         },
         onError: (error) => {
-          toast.error(getErrorMessage(error));
+          toast.error(errorMessage(error) ?? t("Unable to delete record."));
         },
       });
 
@@ -214,7 +211,9 @@ export const CollectionRecordUpsertPage = aos
       preventNavigation: false,
       onSubmit: async (values: CollectionUpsertFormValues) => {
         const body = {
-          data: values.data,
+          data: cleanRecordData(fields, values.data),
+          // The body of an md record goes with its fields on both writes;
+          // records-update keeps the stored body only when content is absent.
           ...(collection.format === "md"
             ? { content: values.content ?? "" }
             : {}),
@@ -231,7 +230,7 @@ export const CollectionRecordUpsertPage = aos
             return;
           }
 
-          toast.success(isEditMode ? "Record updated." : "Record created.");
+          toast.success(t("Record updated."));
 
           router.invalidate();
           navigate({ to: "/collections/$id", params: { id: collectionId } });
@@ -249,7 +248,7 @@ export const CollectionRecordUpsertPage = aos
           return;
         }
 
-        toast.success(isEditMode ? "Record updated." : "Record created.");
+        toast.success(t("Record created."));
 
         router.invalidate();
         navigate({ to: "/collections/$id", params: { id: collectionId } });
@@ -258,6 +257,7 @@ export const CollectionRecordUpsertPage = aos
 
     const liveData = form.watch("data");
     const displayTitle = getPrimaryLabel(
+      fields,
       recordId,
       FormSchemaHelper.isPlainObject(liveData)
         ? liveData
@@ -265,11 +265,13 @@ export const CollectionRecordUpsertPage = aos
     );
     const editorStateLabel = form.isLoading
       ? isEditMode
-        ? "Saving changes..."
-        : "Creating record..."
+        ? t("Saving changes...")
+        : t("Creating record...")
       : form.formState.isDirty
-        ? "Unsaved changes"
-        : "Everything saved";
+        ? t("Unsaved changes")
+        : isEditMode
+          ? t("Everything saved")
+          : t("Not created yet");
 
     function handleBack() {
       void navigate({ to: "/collections/$id", params: { id: collectionId } });
@@ -300,22 +302,29 @@ export const CollectionRecordUpsertPage = aos
                       </SplitPageLayout.ContentTitle>
 
                       <ButtonGroup className="bg-secondary/30 rounded-full">
+                        {/* Badge icons at the size and slot every other badge
+                            in the app uses; unsized, they drew twice as large. */}
                         <Badge variant="outline">
-                          <Database />
+                          <Database data-icon="inline-start" className="size-3 text-muted-foreground" />
                           {collection.name}
                         </Badge>
                         <Badge variant="outline">
-                          {isEditMode ? <PencilLine /> : <PlusCircle />}
-                          {isEditMode ? "Editing" : "New"}
+                          {isEditMode ? (
+                            <PencilLine data-icon="inline-start" className="size-3 text-muted-foreground" />
+                          ) : (
+                            <PlusCircle data-icon="inline-start" className="size-3 text-muted-foreground" />
+                          )}
+                          {isEditMode ? t("Editing") : t("New")}
                         </Badge>
                         <Badge variant="outline">
-                          <FileCode2 />
-                          {collection.format.toUpperCase()}
+                          <FileCode2 data-icon="inline-start" className="size-3 text-muted-foreground" />
+                          {collection.format}
                         </Badge>
                         <Badge variant="outline">
-                          <BadgeCheck />
-                          {requiredCount} required{" "}
-                          {requiredCount === 1 ? "field" : "fields"}
+                          <BadgeCheck data-icon="inline-start" className="size-3 text-muted-foreground" />
+                          {requiredCount === 1
+                            ? t("{{count}} required field", { count: requiredCount })
+                            : t("{{count}} required fields", { count: requiredCount })}
                         </Badge>
                       </ButtonGroup>
                     </SplitPageLayout.ContentHeaderMain>
@@ -345,9 +354,10 @@ export const CollectionRecordUpsertPage = aos
                                   {t("Delete this record?")}
                                 </AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  {t("This action removes")}{" "}
-                                  <strong>{recordId}</strong> from{" "}
-                                  <strong>{collection.name}</strong>.
+                                  {t("This removes \"{{record}}\" from {{collection}}.", {
+                                    record: displayTitle,
+                                    collection: collection.name,
+                                  })}
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
@@ -366,7 +376,7 @@ export const CollectionRecordUpsertPage = aos
                                     })
                                   }
                                 >
-                                  {isDeleting ? "Deleting..." : "Delete record"}
+                                  {isDeleting ? t("Deleting...") : t("Delete record")}
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
@@ -382,10 +392,10 @@ export const CollectionRecordUpsertPage = aos
                         >
                           <Save />
                           {form.isLoading
-                            ? "Saving..."
+                            ? t("Saving...")
                             : isEditMode
-                              ? "Save changes"
-                              : "Create record"}
+                              ? t("Save changes")
+                              : t("Create record")}
                         </Button>
                       </ButtonGroup>
                     </SplitPageLayout.ContentHeaderActions>
@@ -468,7 +478,7 @@ export const CollectionRecordUpsertPage = aos
                             {t("Mode")}
                           </span>
                           <span className="text-xs">
-                            {isEditMode ? "Editing" : "Creating"}
+                            {isEditMode ? t("Editing") : t("Creating")}
                           </span>
                         </SplitPageLayout.WidgetItem>
                         <SplitPageLayout.WidgetItem>
@@ -477,7 +487,7 @@ export const CollectionRecordUpsertPage = aos
                             {t("Format")}
                           </span>
                           <Badge variant="outline">
-                            <FileCode2 />
+                            <FileCode2 data-icon="inline-start" className="size-3 text-muted-foreground" />
                             {collection.format}
                           </Badge>
                         </SplitPageLayout.WidgetItem>
@@ -487,7 +497,9 @@ export const CollectionRecordUpsertPage = aos
                             {t("Schema")}
                           </span>
                           <span className="text-xs">
-                            {requiredCount} required
+                            {requiredCount === 1
+                              ? t("{{count}} required field", { count: requiredCount })
+                              : t("{{count}} required fields", { count: requiredCount })}
                           </span>
                         </SplitPageLayout.WidgetItem>
                       </SplitPageLayout.WidgetContent>
@@ -512,7 +524,7 @@ export const CollectionRecordUpsertPage = aos
                         <SplitPageLayout.WidgetItem>
                           <Hash className="size-3.5 shrink-0 text-muted-foreground" />
                           <span className="w-16 shrink-0 text-xs text-muted-foreground">
-                            {t("Record")}
+                            {t("Record ID")}
                           </span>
                           <span className="truncate text-xs">{recordId}</span>
                         </SplitPageLayout.WidgetItem>

@@ -68,8 +68,10 @@ export const DataTablePagination = React.memo(function DataTablePagination<
         {/* -- Rows selected count -- */}
         <div className="flex items-center !text-xs gap-x-3">
           <div className="font-medium text-muted-foreground whitespace-nowrap">
-            {table.getFilteredSelectedRowModel().rows.length} of{" "}
-            {table.getFilteredRowModel().rows.length} selected
+            {t("{{selected}} of {{total}} selected", {
+              selected: table.getFilteredSelectedRowModel().rows.length,
+              total: table.getFilteredRowModel().rows.length,
+            })}
           </div>
 
           {/* Business Rule: Allow selecting/unselecting all rows across all pages */}
@@ -84,8 +86,8 @@ export const DataTablePagination = React.memo(function DataTablePagination<
               }}
             >
               {table.getIsAllRowsSelected()
-                ? "Clear Selection"
-                : `Select all ${table.getFilteredRowModel().rows.length}`}
+                ? t("Clear selection")
+                : t("Select all {{count}}", { count: table.getFilteredRowModel().rows.length })}
             </Button>
           )}
         </div>
@@ -113,7 +115,9 @@ export const DataTablePagination = React.memo(function DataTablePagination<
         <div className="flex items-center justify-between px-2">
           <div className="flex items-center space-x-6 lg:space-x-8">
             <div className="flex w-[100px] items-center justify-center text-xs font-medium">
-              {t("Page")} {pageIndex + 1} of {pageCount}
+              {/* An empty table is on its one and only page: "Page 1 of 0"
+                  described a page that does not exist. */}
+              {t("Page {{page}} of {{count}}", { page: pageIndex + 1, count: Math.max(pageCount, 1) })}
             </div>
             <div className="flex items-center space-x-2">
               {/* Botão "Primeira página" (desktop) */}

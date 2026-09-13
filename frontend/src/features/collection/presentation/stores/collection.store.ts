@@ -1,10 +1,10 @@
 import { AosStore } from "@/app/builders/store";
-import { type CustomCollection } from "@/features/collection/interfaces/collection.interfaces";
+import type { CollectionDefinition } from "@/features/collection/presentation/helpers/collection-fields.helper";
 import { api } from "@/lib/aos-facade";
 
 export const CollectionStore = AosStore.create("collections")
   .withState({
-    items: [] as CustomCollection[],
+    items: [] as CollectionDefinition[],
   })
   .withPersistence({
     enabled: false,
