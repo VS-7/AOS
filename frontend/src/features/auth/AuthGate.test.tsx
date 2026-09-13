@@ -58,19 +58,33 @@ describe("AuthGate, once somebody is signed in", () => {
   // times a second, forever.
   it("keeps the application mounted while it asks again", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    status.mockResolvedValue({ onboarded: true, authenticated: true });
+    status.mockResolvedValueOnce({ onboarded: true, authenticated: true });
     mount();
     expect(await screen.findByText("the application")).toBeTruthy();
 
+    // The recheck's answer is held back, so what is on screen is what the
+    // gate draws *while* it asks. Answering at once let React fold the
+    // checking state and the answer into one render, and an unmount never
+    // showed.
+    let answer!: (value: { onboarded: boolean; authenticated: boolean }) => void;
+    status.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
     await act(async () => {
       window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
       await vi.advanceTimersByTimeAsync(5_000);
     });
     await flush();
 
+    expect(status).toHaveBeenCalledTimes(2);
     expect(screen.getByText("the application")).toBeTruthy();
     expect(mounts).toBe(1);
-    expect(status).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      answer({ onboarded: true, authenticated: true });
+    });
+    await flush();
+
+    expect(screen.getByText("the application")).toBeTruthy();
+    expect(mounts).toBe(1);
   });
 
   it("asks at most once for a burst, while the last answer is fresh", async () => {
