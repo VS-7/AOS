@@ -311,16 +311,77 @@ describe("the sandbox a browser tab's frame gets", () => {
 
     expect(wails.frameSandbox("/v/artifacts/sales/")).not.toContain("allow-same-origin");
     expect(wails.frameSandbox(`${window.location.origin}/v/artifacts/sales/`)).not.toContain("allow-same-origin");
+    expect(wails.frameSandbox("/v/frame/g/sales/")).not.toContain("allow-same-origin");
     expect(wails.frameSandbox("/v/artifacts/sales/")).toContain("allow-scripts");
   });
 
   it("keeps an external site's own origin, which it needs to work at all", async () => {
     const wails = await loadAt(DESKTOP);
     expect(wails.frameSandbox("https://example.com/")).toContain("allow-same-origin");
+    // Same host, another scheme: somebody else's.
+    const other = `${window.location.protocol === "http:" ? "https:" : "http:"}//${window.location.host}/`;
+    expect(wails.frameSandbox(other)).toContain("allow-same-origin");
   });
 
+  // Not safe, latent: see frameSandbox. Changing it alone breaks what a
+  // browser tab can show today.
   it("changes nothing in a browser tab", async () => {
     const wails = await loadAt("");
     expect(wails.frameSandbox("/v/artifacts/sales/")).toContain("allow-same-origin");
+  });
+});
+
+/**
+ * The frame is opaque, so an artifact's own stylesheet, script and images are
+ * cross-origin loads. The window answers those only at an address it hands out
+ * per artifact (cmd/aos-desktop's artifactFrames); the plain /v/artifacts/ path
+ * answers the window's own origin, and framed there every one of them was
+ * cancelled.
+ */
+describe("the address an artifact is framed at", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("is the one the window hands out, asked for with the window's header", async () => {
+    const wails = await loadAt(DESKTOP);
+    const fetchMock = vi.fn(
+      async (_input: string, _init?: RequestInit) =>
+        new Response(JSON.stringify({ url: "/v/frame/g/sales/?tab=1" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await wails.frameAddress("/v/artifacts/sales/?tab=1")).toBe("/v/frame/g/sales/?tab=1");
+    const [input, init] = fetchMock.mock.calls[0]!;
+    // The page's own scheme and host too: the window names the artifact's
+    // absolute address in its connect-src, which WebKit needs before an opaque
+    // page may fetch its own files.
+    const base = `${window.location.protocol}//${window.location.host}`;
+    expect(input).toBe(
+      `/v/frame-address?url=${encodeURIComponent("/v/artifacts/sales/?tab=1")}&base=${encodeURIComponent(base)}`,
+    );
+    expect(new Headers(init?.headers).get("x-aos-frame")).toBe("1");
+  });
+
+  it("fails rather than framing the address whose files are refused", async () => {
+    const wails = await loadAt(DESKTOP);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("no", { status: 404 })));
+
+    await expect(wails.frameAddress("/v/artifacts/sales/")).rejects.toThrow();
+  });
+
+  it("leaves anything else, and every URL in a browser tab, as it is", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const desktop = await loadAt(DESKTOP);
+    expect(await desktop.frameAddress("https://example.com/v/artifacts/sales/")).toBe(
+      "https://example.com/v/artifacts/sales/",
+    );
+    expect(await desktop.frameAddress("/docs/readme")).toBe("/docs/readme");
+
+    const tab = await loadAt("");
+    expect(await tab.frameAddress("/v/artifacts/sales/")).toBe("/v/artifacts/sales/");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

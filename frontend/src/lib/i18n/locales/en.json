@@ -1022,6 +1022,7 @@
   "This agent does not have routines yet.": "This agent does not have routines yet.",
   "This agent doesn't have indexed memory nodes yet.": "This agent doesn't have indexed memory nodes yet.",
   "This agent hasn't recorded anything yet.": "This agent hasn't recorded anything yet.",
+  "This artifact could not be opened.": "This artifact could not be opened.",
   "This channel is coming soon.": "This channel is coming soon.",
   "This collection schema has no declared properties yet.": "This collection schema has no declared properties yet.",
   "This explorer context is empty right now.": "This explorer context is empty right now.",

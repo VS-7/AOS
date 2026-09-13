@@ -218,24 +218,99 @@ export function reloadHere(): void {
  * The `sandbox` a browser tab's `<iframe>` gets for `url`.
  *
  * Inside the desktop window, content from the window's own origin — an
- * artifact above all, which `cmd/aos-desktop` serves at `/v/artifacts/` with
- * the window's credential — is framed without `allow-same-origin`. An artifact
- * is HTML a model generated; with its real origin, a script in it could reach
+ * artifact above all, which `cmd/aos-desktop` serves with the window's
+ * credential — is framed without `allow-same-origin`. An artifact is HTML a
+ * model generated; with its real origin, a script in it could reach
  * `window.parent` and the Wails bridge, which is every command the person can
  * run. An external site keeps its own origin, which it needs to work at all
- * and which gives it nothing of this window's. A browser tab is unchanged: the
- * daemon serves the page there and has no bridge to reach.
+ * and which gives it nothing of this window's.
+ *
+ * A browser tab is left as it was, and not because it is safe. There the
+ * daemon serves the artifact from the API's own origin, and a same-origin page
+ * can call `/api` with the session cookie — as reachable as the bridge is in
+ * the window. It is latent today: the daemon refuses a private or workspace
+ * artifact to a frame (it reads no cookie on /v), and a by_password one gets
+ * no password on its own files, so no artifact script runs with a session
+ * behind it. Making the frame opaque here alone would break the artifacts a
+ * browser tab can show — the daemon's same-origin resource policy then cancels
+ * their own files — so it belongs with the decision on how a browser tab opens
+ * an artifact at all, which the window answers with `frameAddress`.
  */
 export function frameSandbox(url: string): string {
   const permissive = "allow-scripts allow-same-origin allow-forms";
   if (!isDesktopWindow || typeof window === "undefined") return permissive;
-  let origin: string;
+  let target: URL;
   try {
-    origin = new URL(url, window.location.href).origin;
+    target = new URL(url, window.location.href);
   } catch {
     return "allow-scripts allow-forms";
   }
-  return origin === window.location.origin ? "allow-scripts allow-forms" : permissive;
+  return fromThisPage(target) ? "allow-scripts allow-forms" : permissive;
+}
+
+/**
+ * Whether `target` is served by whatever serves this page.
+ *
+ * Compared by scheme and host rather than by `origin`. The window's scheme is
+ * `wails:` on macOS and Linux, and the URL standard gives a scheme it does not
+ * know an opaque origin, serialised "null": whether `new URL(…).origin` and
+ * `location.origin` then agree is up to the engine, and a disagreement here
+ * would frame the window's own content with its origin, or an artifact at the
+ * address whose files are refused.
+ */
+function fromThisPage(target: URL): boolean {
+  return target.protocol === window.location.protocol && target.host === window.location.host;
+}
+
+/** Where the desktop window's asset host says where to frame an artifact. */
+const FRAME_ADDRESS_ROUTE = "/v/frame-address";
+
+/**
+ * The address to frame `url` at.
+ *
+ * Anything but an artifact, and anything at all in a browser tab, is framed
+ * where it is. An artifact in the desktop window is not: its frame is opaque
+ * (see `frameSandbox`), so its own stylesheet, script and images are
+ * cross-origin loads, and the window's asset host — which attaches the
+ * window's credential to what it forwards — answers those only at an address
+ * it hands out for that one artifact (`cmd/aos-desktop`'s artifactFrames).
+ * Framed at its plain `/v/artifacts/` URL, an artifact rendered as unstyled,
+ * inert HTML.
+ *
+ * The question carries a header no cross-origin request can carry without a
+ * preflight the window refuses. A failure is thrown rather than answered with
+ * `url`: framing the plain address is exactly the broken page.
+ */
+export async function frameAddress(url: string): Promise<string> {
+  if (!isDesktopWindow || typeof window === "undefined") return url;
+  let target: URL;
+  try {
+    target = new URL(url, window.location.href);
+  } catch {
+    return url;
+  }
+  if (!fromThisPage(target) || !target.pathname.startsWith("/v/artifacts/")) {
+    return url;
+  }
+  const own = target.pathname + target.search + target.hash;
+  // The page's scheme and host, which the asset server does not pass on: the
+  // window names the frame's absolute address in the artifact's connect-src,
+  // since WebKit stops counting an opaque page's own URL as 'self' there.
+  // Built from protocol and host rather than `origin`, which a URL standard
+  // reading serialises as "null" for a scheme like wails:.
+  const base = `${window.location.protocol}//${window.location.host}`;
+  const response = await fetch(
+    `${FRAME_ADDRESS_ROUTE}?url=${encodeURIComponent(own)}&base=${encodeURIComponent(base)}`,
+    { headers: { "x-aos-frame": "1" } },
+  );
+  if (!response.ok) {
+    throw new Error(`the window has no frame address for ${own} (${response.status})`);
+  }
+  const answer = (await response.json()) as { url?: unknown };
+  if (typeof answer.url !== "string" || !answer.url) {
+    throw new Error(`the window answered no frame address for ${own}`);
+  }
+  return answer.url;
 }
 
 /* -------------------------------------------------------------------------
