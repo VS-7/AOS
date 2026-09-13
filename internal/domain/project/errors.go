@@ -15,13 +15,13 @@ func errNotFound(id string) error {
 		})
 }
 
-// errNameRequired fires when Create is asked to name nothing.
+// errNameRequired fires when Create's name has no letter or digit to slug.
 func errNameRequired() error {
 	return apperr.New("PROJECT_NAME_REQUIRED").
 		Causer("project.Service.Create").
-		Msgf("a project needs a name").
+		Msgf("a project needs a name with at least one letter or digit").
 		Status(apperr.StatusBadRequest).
-		CTA(apperr.CallToAction{Label: "name the project before creating it"})
+		CTA(apperr.CallToAction{Label: "name the project with at least one letter or digit"})
 }
 
 // errSourceInvalid fires when Source fails one of the three checks the
@@ -56,4 +56,19 @@ func errWriteFailed(op string, cause error) error {
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause).
 		CTA(apperr.CallToAction{Label: "retry; if it persists, this is a bug"})
+}
+
+// errAlreadyExists fires when the id Create derives is one another project
+// already has. It used to surface as PROJECT_WRITE_FAILED, a 500 whose call
+// to action called it a bug, when the fix is the person's: another name.
+func errAlreadyExists(id string) error {
+	return apperr.New("PROJECT_ALREADY_EXISTS").
+		Causer("project.Service.Create").
+		Msgf("a project %q already exists", id).
+		Issue("id", id).
+		Status(apperr.StatusConflict).
+		CTA(apperr.CallToAction{
+			Label: "choose a different name, or update the existing project instead",
+			Tool:  "projects_update",
+		})
 }

@@ -2,9 +2,11 @@ package goal
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
+	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/core/slug"
@@ -158,6 +160,9 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Goal, error) {
 	if id == "" {
 		return nil, errTitleRequired()
 	}
+	if _, err := s.repo.Get(ctx, collections.Key{"id": id}); err == nil {
+		return nil, errAlreadyExists(id)
+	}
 
 	status := in.Status
 	if status == "" {
@@ -184,6 +189,12 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Goal, error) {
 		CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.repo.Create(ctx, &g); err != nil {
+		// The lookup above and this write are not atomic: another writer can
+		// take the id in between, and the repository reports that as a
+		// conflict — still a title for the person to change, not a bug.
+		if errors.Is(err, apperr.ErrConflict) {
+			return nil, errAlreadyExists(id)
+		}
 		return nil, errWriteFailed("Create", err)
 	}
 	s.notify(ctx, "created", &g)
@@ -195,14 +206,18 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Goal, error) {
 type UpdateInput struct {
 	ID string `json:"id" jsonschema:"Identifier of the goal to update." validate:"required,notblank"`
 
-	Title       *string    `json:"title,omitempty" jsonschema:"New title. Omit to leave unchanged."`
-	Description *string    `json:"description,omitempty" jsonschema:"New one-line summary of the outcome. Omit to leave unchanged."`
-	Status      *Status    `json:"status,omitempty" jsonschema:"New lifecycle status: active, achieved, abandoned, or paused. Omit to leave unchanged."`
-	Priority    *Priority  `json:"priority,omitempty" jsonschema:"New priority: no_priority, urgent, high, medium or low. Omit to leave unchanged."`
-	Project     *string    `json:"project,omitempty" jsonschema:"New project this goal belongs to. Empty string clears it. Omit to leave unchanged."`
-	DueAt       *time.Time `json:"dueAt,omitempty" jsonschema:"New due date. Omit to leave unchanged."`
-	Measure     *string    `json:"measure,omitempty" jsonschema:"New measure that makes this goal checkable rather than aspirational. Omit to leave unchanged."`
-	Content     *string    `json:"content,omitempty" jsonschema:"New body content, in Markdown. Omit to leave unchanged."`
+	Title       *string   `json:"title,omitempty" jsonschema:"New title. Omit to leave unchanged."`
+	Description *string   `json:"description,omitempty" jsonschema:"New one-line summary of the outcome. Empty string clears it. Omit to leave unchanged."`
+	Status      *Status   `json:"status,omitempty" jsonschema:"New lifecycle status: active, achieved, abandoned, or paused. Omit to leave unchanged."`
+	Priority    *Priority `json:"priority,omitempty" jsonschema:"New priority: no_priority, urgent, high, medium or low. Omit to leave unchanged."`
+	Project     *string   `json:"project,omitempty" jsonschema:"New project this goal belongs to. Empty string clears it. Omit to leave unchanged."`
+	// DueAt is text rather than *time.Time because a pointer to a time has
+	// no value that means "none": JSON null decodes to nil, which is "leave
+	// unchanged", so a deadline once set could never be removed. The empty
+	// string is that value, the same one tasks_update takes.
+	DueAt   *string `json:"dueAt,omitempty" jsonschema:"New due date, an RFC3339 instant. Empty string clears it. Omit to leave unchanged."`
+	Measure *string `json:"measure,omitempty" jsonschema:"New measure that makes this goal checkable rather than aspirational. Empty string clears it. Omit to leave unchanged."`
+	Content *string `json:"content,omitempty" jsonschema:"New body content, in Markdown. Omit to leave unchanged."`
 
 	command.Reasoning
 }
@@ -237,7 +252,11 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Goal, error) {
 		current.Project = *in.Project
 	}
 	if in.DueAt != nil {
-		current.DueAt = in.DueAt
+		due, err := parseDueAt(*in.DueAt)
+		if err != nil {
+			return nil, err
+		}
+		current.DueAt = due
 	}
 	if in.Measure != nil {
 		current.Measure = *in.Measure
@@ -253,6 +272,20 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Goal, error) {
 	}
 	s.notify(ctx, "updated", current)
 	return current, nil
+}
+
+// parseDueAt reads UpdateInput.DueAt: blank clears the deadline, anything
+// else must be an RFC3339 instant.
+func parseDueAt(raw string) (*time.Time, error) {
+	text := strings.TrimSpace(raw)
+	if text == "" {
+		return nil, nil
+	}
+	due, err := time.Parse(time.RFC3339, text)
+	if err != nil {
+		return nil, errDueAtInvalid(raw)
+	}
+	return &due, nil
 }
 
 // DeleteInput names one goal to remove.

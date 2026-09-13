@@ -235,7 +235,7 @@ Change the describable parts of a goal, including moving it to achieved or aband
         "null",
         "string"
       ],
-      "description": "New one-line summary of the outcome. Omit to leave unchanged."
+      "description": "New one-line summary of the outcome. Empty string clears it. Omit to leave unchanged."
     },
     "status": {
       "type": [
@@ -276,14 +276,14 @@ Change the describable parts of a goal, including moving it to achieved or aband
         "null",
         "string"
       ],
-      "description": "New due date. Omit to leave unchanged."
+      "description": "New due date, an RFC3339 instant. Empty string clears it. Omit to leave unchanged."
     },
     "measure": {
       "type": [
         "null",
         "string"
       ],
-      "description": "New measure that makes this goal checkable rather than aspirational. Omit to leave unchanged."
+      "description": "New measure that makes this goal checkable rather than aspirational. Empty string clears it. Omit to leave unchanged."
     },
     "content": {
       "type": [

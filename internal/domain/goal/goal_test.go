@@ -388,11 +388,12 @@ func TestUpdateChangesEveryOptionalField(t *testing.T) {
 	newDesc := "a new description"
 	newProject := "new-project"
 	newDue := refTime.Add(48 * time.Hour)
+	newDueText := newDue.Format(time.RFC3339)
 	newMeasure := "shipped to prod"
 	newContent := "# Notes\nUpdated."
 	updated, err := svc.Update(ctx(), goal.UpdateInput{
 		ID: created.ID, Description: &newDesc, Project: &newProject,
-		DueAt: &newDue, Measure: &newMeasure, Content: &newContent,
+		DueAt: &newDueText, Measure: &newMeasure, Content: &newContent,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -496,5 +497,136 @@ func TestPriorityPublishesItsValues(t *testing.T) {
 	}
 	if goal.Priority("vibes").Valid() {
 		t.Error("an unknown priority reports itself valid")
+	}
+}
+
+// The goal page cleared a deadline by leaving dueAt out of the update, which
+// Go reads as "unchanged", and there was no value that meant "none": a
+// deadline, once set, could never be removed. An empty string is that value,
+// the same one tasks_update already takes.
+func TestUpdateClearsTheDueDateWithAnEmptyString(t *testing.T) {
+	repo := newFakeRepository()
+	svc := newService(repo, &fakeTasks{})
+	due := refTime.Add(24 * time.Hour)
+	created, err := svc.Create(ctx(), goal.CreateInput{Title: "Dated", DueAt: &due})
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := ""
+	updated, err := svc.Update(ctx(), goal.UpdateInput{ID: created.ID, DueAt: &empty})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.DueAt != nil {
+		t.Fatalf("DueAt = %v, want it cleared", updated.DueAt)
+	}
+	stored, _ := repo.Get(ctx(), collections.Key{"id": created.ID})
+	if stored.DueAt != nil {
+		t.Fatalf("stored DueAt = %v, want it cleared", stored.DueAt)
+	}
+}
+
+func TestUpdateRefusesADueDateThatIsNotAnInstant(t *testing.T) {
+	repo := newFakeRepository()
+	svc := newService(repo, &fakeTasks{})
+	created, err := svc.Create(ctx(), goal.CreateInput{Title: "Dated"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	day := "2026-09-20"
+	_, err = svc.Update(ctx(), goal.UpdateInput{ID: created.ID, DueAt: &day})
+	if code := codeOf(t, err); code != "AOS_GOAL_DUE_AT_INVALID" {
+		t.Fatalf("code = %q, want GOAL_DUE_AT_INVALID", code)
+	}
+	if status := apperr.StatusOf(err); status != 400 {
+		t.Fatalf("status = %d, want 400", status)
+	}
+}
+
+// Emptying Description and choosing "No project" on the goal page must reach
+// the record: an empty string clears, it does not mean "leave unchanged".
+func TestUpdateClearsTheDescribableFieldsWithEmptyStrings(t *testing.T) {
+	repo := newFakeRepository()
+	svc := newService(repo, &fakeTasks{})
+	created, err := svc.Create(ctx(), goal.CreateInput{
+		Title: "Full", Description: "d", Project: "p", Measure: "m", Content: "c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := ""
+	updated, err := svc.Update(ctx(), goal.UpdateInput{
+		ID: created.ID, Description: &empty, Project: &empty, Measure: &empty, Content: &empty,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Description != "" || updated.Project != "" || updated.Measure != "" || updated.Content != "" {
+		t.Fatalf("got %+v, want every describable field cleared", updated)
+	}
+}
+
+// Two goals whose titles slug to the same id used to end in GOAL_WRITE_FAILED,
+// a 500 that told the person to retry and call it a bug. The fix is theirs to
+// make — another title — and the refusal says so.
+func TestCreateRefusesADuplicateTitleAsAConflict(t *testing.T) {
+	repo := newFakeRepository()
+	svc := newService(repo, &fakeTasks{})
+	if _, err := svc.Create(ctx(), goal.CreateInput{Title: "Launch V1"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := svc.Create(ctx(), goal.CreateInput{Title: "launch v1!"})
+	if code := codeOf(t, err); code != "AOS_GOAL_ALREADY_EXISTS" {
+		t.Fatalf("code = %q, want GOAL_ALREADY_EXISTS", code)
+	}
+	if status := apperr.StatusOf(err); status != 409 {
+		t.Fatalf("status = %d, want 409", status)
+	}
+}
+
+// racingRepository misses every lookup and reports the collision only on
+// write, the way a real repository does when another writer takes the id
+// between Create's lookup and its write.
+type racingRepository struct{ *fakeRepository }
+
+func (racingRepository) Get(context.Context, collections.Key) (*goal.Goal, error) {
+	return nil, errors.New("not found")
+}
+
+func (r racingRepository) Create(c context.Context, g *goal.Goal) error {
+	if err := r.fakeRepository.Create(c, g); err != nil {
+		return collections.AlreadyExistsError("goals", collections.Key{"id": g.ID})
+	}
+	return nil
+}
+
+func TestCreateReportsARacedDuplicateAsAConflict(t *testing.T) {
+	repo := racingRepository{newFakeRepository()}
+	svc := goal.NewService(goal.Deps{Repo: repo, Tasks: &fakeTasks{}, Clock: clockx.Fixed{At: refTime}})
+	if _, err := svc.Create(ctx(), goal.CreateInput{Title: "Twice"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := svc.Create(ctx(), goal.CreateInput{Title: "Twice"})
+	if code := codeOf(t, err); code != "AOS_GOAL_ALREADY_EXISTS" {
+		t.Fatalf("code = %q, want GOAL_ALREADY_EXISTS", code)
+	}
+}
+
+// The window sends Date.prototype.toISOString(), which carries milliseconds;
+// RFC3339 parsing has to take them, or every deadline picked there is refused.
+func TestUpdateAcceptsTheInstantABrowserWrites(t *testing.T) {
+	repo := newFakeRepository()
+	svc := newService(repo, &fakeTasks{})
+	created, err := svc.Create(ctx(), goal.CreateInput{Title: "Dated"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	picked := "2026-09-20T00:00:00.000Z"
+	updated, err := svc.Update(ctx(), goal.UpdateInput{ID: created.ID, DueAt: &picked})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC); updated.DueAt == nil || !updated.DueAt.Equal(want) {
+		t.Fatalf("DueAt = %v, want %v", updated.DueAt, want)
 	}
 }
