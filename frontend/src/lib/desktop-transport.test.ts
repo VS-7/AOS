@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { renderHook } from "@testing-library/react";
+import { QueryClient } from "@tanstack/react-query";
 
 /**
  * The desktop window's transports, driven through a fake bridge.
@@ -18,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const bridge = vi.hoisted(() => ({ byName: vi.fn() }));
 vi.mock("@wailsio/runtime", () => ({
   Call: { ByName: bridge.byName },
+  Events: { On: () => () => {} },
   System: { IsMac: () => false, IsWindows: () => false, IsLinux: () => false },
 }));
 
@@ -42,7 +45,8 @@ async function loadAt(url: string) {
   const client = await import("./client");
   const auth = await import("./auth");
   const file = await import("./file");
-  return { client, auth, file };
+  const realtime = await import("./realtime");
+  return { client, auth, file, realtime };
 }
 
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -200,6 +204,33 @@ describe("a browser tab", () => {
     );
 
     await expect(auth.status()).resolves.toEqual({ onboarded: true, authenticated: true });
+    expect(bridge.byName).not.toHaveBeenCalled();
+  });
+});
+
+describe("the event channel in a browser tab", () => {
+  // The page's own origin is the daemon there. Asking the bridge where the
+  // daemon is cost a rejected POST /wails/runtime (a 404 from the daemon) on
+  // every page load before the socket opened.
+  it("opens against the page's own origin without asking a bridge", async () => {
+    const { client, realtime } = await loadAt("/");
+    const opened: string[] = [];
+    vi.stubGlobal(
+      "WebSocket",
+      class {
+        constructor(url: string) {
+          opened.push(url);
+        }
+        close() {}
+      },
+    );
+    await client.setWorkspace("vs");
+
+    const { unmount } = renderHook(() => realtime.useRealtime(new QueryClient()));
+    await vi.waitFor(() => expect(opened).toHaveLength(1));
+    unmount();
+
+    expect(opened[0]).toBe(`ws://${window.location.host}/ws?workspace=vs`);
     expect(bridge.byName).not.toHaveBeenCalled();
   });
 });
