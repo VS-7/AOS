@@ -272,6 +272,25 @@ func TestGitIsInitialisedWhenAbsent(t *testing.T) {
 	if out.Scaffold.GitWarning != "" {
 		t.Errorf("unexpected warning: %q", out.Scaffold.GitWarning)
 	}
+	// A repository with no commit has no branch, and a task's checkout is cut
+	// from a branch: every tasks_branch in a fresh workspace failed with
+	// "invalid reference: main". The repository is born with a commit.
+	if h.git.commits[repoRoot] != 1 {
+		t.Errorf("commits = %v, want the new repository given its first commit", h.git.commits)
+	}
+}
+
+func TestAFirstCommitThatFailsIsVisible(t *testing.T) {
+	h := newHarness(t)
+	h.git.commitErr = errors.New("fatal: unable to auto-detect email address")
+
+	out := h.create(t, workspace.CreateInput{Name: "Project Alpha", Path: repoRoot})
+	if !out.Scaffold.GitInit {
+		t.Error("the repository was created and the report says it was not")
+	}
+	if !strings.Contains(out.Scaffold.GitWarning, "no commit") {
+		t.Errorf("warning = %q, want it to say the repository has no commit", out.Scaffold.GitWarning)
+	}
 }
 
 func TestAnExistingRepositoryIsLeftAlone(t *testing.T) {
@@ -648,5 +667,52 @@ func TestRegisterPublishesTheWholeGroup(t *testing.T) {
 		if d.Annotations() != w {
 			t.Errorf("%s annotations = %+v, want %+v", d.Key(), d.Annotations(), w)
 		}
+	}
+}
+
+// Update applied the patch and saved it with no check at all. Clearing the name
+// in Settings autosaved "Workspace profile updated successfully!" and the
+// switcher then read "No Workspace"; a direct call stored a name of spaces, a
+// colour of "notacolor" and a worktree limit of zero.
+func TestUpdateRefusesAWorkspaceItCouldNotShow(t *testing.T) {
+	for name, set := range map[string]map[string]any{
+		"an empty name":        {"name": ""},
+		"a name of spaces":     {"name": "   "},
+		"a colour that is not": {"color": "notacolor"},
+		"no worktrees at all":  {"worktrees.worktreeLimit": 0},
+		"too many worktrees":   {"worktrees.worktreeLimit": 51},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t)
+			h.create(t, workspace.CreateInput{Name: "Project Alpha", Path: repoRoot})
+
+			_, err := h.svc.Update(ctx(), workspace.UpdateInput{Workspace: "project-alpha", Set: set})
+			app, ok := apperr.As(err)
+			if !ok || app.Code != "AOS_WORKSPACE_INVALID_VALUE" || app.HTTPStatus != apperr.StatusBadRequest || len(app.Actions) == 0 {
+				t.Fatalf("err = %v, want AOS_WORKSPACE_INVALID_VALUE with a next step", err)
+			}
+			stored, err := h.svc.Get(ctx(), workspace.GetInput{Workspace: "project-alpha"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stored.Name != "Project Alpha" || stored.Color != workspace.DefaultColor || stored.Worktrees.WorktreeLimit != workspace.DefaultWorktrees().WorktreeLimit {
+				t.Errorf("the refused patch was stored: %+v", stored)
+			}
+		})
+	}
+}
+
+// A name is kept as the person means it, without the spaces around it, and a
+// record that predates a rule is not refused an unrelated change.
+func TestUpdateTrimsTheNameAndJudgesOnlyWhatChanged(t *testing.T) {
+	h := newHarness(t)
+	h.create(t, workspace.CreateInput{Name: "Project Alpha", Path: repoRoot})
+
+	got, err := h.svc.Update(ctx(), workspace.UpdateInput{Workspace: "project-alpha", Set: map[string]any{"name": "  Project Beta  ", "color": "#5ed296"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "Project Beta" || got.Color != "#5ed296" {
+		t.Fatalf("update = %q / %q", got.Name, got.Color)
 	}
 }

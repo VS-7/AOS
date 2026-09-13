@@ -58,6 +58,13 @@ type Store struct {
 	// and an expired token is then an error that says to log in again.
 	Refresh RefreshFunc
 
+	// Renewable reports why Refresh cannot run on this machine, or nil when
+	// it can. It is asked before the lock is taken: a renewal that is
+	// impossible — one that needs a client this build does not carry — has no
+	// business leaving a lock file beside somebody else's credential, and its
+	// reason is the one worth reporting. Nil means always renewable.
+	Renewable func() error
+
 	// Clock is injected so a test can expire a token without waiting.
 	Clock func() time.Time
 
@@ -114,6 +121,11 @@ func (s *Store) Token(ctx context.Context) (string, error) {
 	}
 	if s.Refresh == nil || creds.RefreshToken == "" {
 		return "", errExpired(s.Path, s.Owner)
+	}
+	if s.Renewable != nil {
+		if err := s.Renewable(); err != nil {
+			return "", errRefreshFailed(s.Path, s.Owner, err)
+		}
 	}
 
 	// The lock is across processes: the daemon and a CLI both refreshing would

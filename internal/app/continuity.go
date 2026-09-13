@@ -501,31 +501,37 @@ type subconsciousModels struct {
 }
 
 func (m subconsciousModels) Subconscious(ctx context.Context, agentID string) (agentloop.LLMProvider, agentloop.ModelRef, error) {
-	current, err := m.config.Get(ctx, config.GetInput{})
+	// Raw, for the reason models.For gives: Get redacts every key to a
+	// fingerprint, and keyFor below would then hand the adapter "***…1234" to
+	// authenticate with. Every observation on an API-key provider was refused
+	// that way, silently, because a failed observation is only a warning.
+	current, err := m.config.Raw(ctx)
 	if err != nil {
 		return nil, agentloop.ModelRef{}, err
 	}
 
-	var own agentloop.AgentModel
-	if found, err := m.agents.Get(ctx, agent.GetInput{ID: agentID}); err == nil && found != nil {
-		own = agentloop.AgentModel{Provider: found.Provider, Model: found.Model, Reasoning: found.Reasoning}
-	}
-
 	slot := current.Agents.Models[config.SlotSubconscious]
 	fallback := current.Agents.Models[config.SlotDefault]
-
-	// Resolve takes two levels; the third is folded in by preferring the
-	// subconscious slot and falling back to the default one as the config level.
 	configured := agentloop.ConfigModel{
-		Provider: slot.Provider, Model: slot.Model, Reasoning: slot.Reasoning,
+		Provider: fallback.Provider, Model: fallback.Model, Reasoning: fallback.Reasoning,
 	}
-	if configured.Model == "" {
-		configured = agentloop.ConfigModel{
-			Provider: fallback.Provider, Model: fallback.Model, Reasoning: fallback.Reasoning,
+
+	// The first level decides alone when it is set. It went through Resolve
+	// as the configuration level, and Resolve ranks an agent's own model above
+	// the configuration — right for the agent's turn, backwards here: an
+	// agent that named an expensive model was observed with it, and the cheap
+	// slot somebody set for exactly that case was ignored. Resolve still reads
+	// it, as the agent level, so "gpt-5 (openai)" and a model with no provider
+	// resolve the way they do everywhere else.
+	want := agentloop.AgentModel{Provider: slot.Provider, Model: slot.Model, Reasoning: slot.Reasoning}
+	if strings.TrimSpace(slot.Model) == "" {
+		want = agentloop.AgentModel{}
+		if found, err := m.agents.Get(ctx, agent.GetInput{ID: agentID}); err == nil && found != nil {
+			want = agentloop.AgentModel{Provider: found.Provider, Model: found.Model, Reasoning: found.Reasoning}
 		}
 	}
 
-	ref, err := agentloop.Resolve(own, configured)
+	ref, err := agentloop.Resolve(want, configured)
 	if err != nil {
 		return nil, agentloop.ModelRef{}, err
 	}

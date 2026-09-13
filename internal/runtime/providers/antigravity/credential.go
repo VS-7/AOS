@@ -120,11 +120,12 @@ func newTokens(home string, clock func() time.Time) *tokens {
 	out := &tokens{stores: make([]*oauthfile.Store, 0, len(paths))}
 	for _, path := range paths {
 		out.stores = append(out.stores, &oauthfile.Store{
-			Path:    path,
-			Owner:   owner,
-			Parse:   parseCredential,
-			Refresh: renew,
-			Clock:   clock,
+			Path:      path,
+			Owner:     owner,
+			Parse:     parseCredential,
+			Refresh:   renew,
+			Renewable: renewable,
+			Clock:     clock,
 		})
 	}
 	return out
@@ -179,6 +180,15 @@ func parseCredential(raw []byte) (oauthfile.Credentials, error) {
 		out.ExpiresAt = expiry
 	}
 	return out, nil
+}
+
+// renewable reports whether this process can renew a login at all, which
+// without the OAuth client pair it cannot — see oauthClient.
+func renewable() error {
+	if _, _, ok := oauthClient(); !ok {
+		return errNoOAuthClient()
+	}
+	return nil
 }
 
 // renew exchanges a refresh token for a new access token.

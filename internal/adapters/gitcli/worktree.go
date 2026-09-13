@@ -51,8 +51,20 @@ func resolve(path string) string {
 // that was branched, pruned and branched again should return to its own work,
 // not fail because the name is taken.
 func (w *Worktrees) Create(ctx context.Context, spec task.WorktreeSpec) (string, error) {
+	// Never from an enclosing repository: the checkout would hold somebody
+	// else's files, on a branch of somebody else's repository.
+	if err := w.git.ownRepository(ctx, "worktree add", w.repo); err != nil {
+		return "", err
+	}
 	path := filepath.Clean(spec.Path)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", err
+	}
+	// A checkout deleted from disk is still registered, and git refuses both to
+	// add one where it has that record and to check out a branch it believes is
+	// checked out there — which is exactly what cutting a lost checkout again
+	// runs into.
+	if err := w.forgetMissing(ctx, path, spec.Branch); err != nil {
 		return "", err
 	}
 
@@ -79,9 +91,11 @@ func (w *Worktrees) Create(ctx context.Context, spec task.WorktreeSpec) (string,
 // itself is left alone — the work on it is the point of having made it.
 func (w *Worktrees) Remove(ctx context.Context, path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		// Still worth pruning the administrative record, which git keeps
-		// separately and which otherwise reports a worktree that is gone.
-		_, _ = w.git.run(ctx, w.repo, "worktree", "prune")
+		// Still worth forgetting the administrative record, which git keeps
+		// separately and which otherwise reports a worktree that is gone. Only
+		// this one's: `git worktree prune` also forgets somebody's own checkout
+		// on a drive that is not mounted right now.
+		_, _ = w.git.run(ctx, w.repo, "worktree", "remove", "--force", path)
 		return nil
 	}
 	if _, err := w.git.run(ctx, w.repo, "worktree", "remove", "--force", path); err != nil {
@@ -91,25 +105,143 @@ func (w *Worktrees) Remove(ctx context.Context, path string) error {
 }
 
 // List reports the checkouts that exist, excluding the main working tree.
+//
+// A checkout git still has a record of but whose directory is gone is not one
+// that exists: counting it against the limit made room for nothing, and
+// removing it is only forgetting the record, which Create does before it adds.
 func (w *Worktrees) List(ctx context.Context) ([]string, error) {
+	listed, err := w.listed(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, entry := range listed {
+		// The main working tree is not one of ours to prune.
+		if entry.path == w.repo || entry.prunable || !isDir(entry.path) {
+			continue
+		}
+		paths = append(paths, entry.path)
+	}
+	return paths, nil
+}
+
+// Exists reports whether path is one of this repository's checkouts, other
+// than the main working tree, is on disk, and sits under root.
+//
+// Both are compared once links are resolved, the way git reports the checkout
+// and the way the sandbox roots itself: a link placed under root that leads to
+// a checkout somewhere else is where it leads, not where it is spelled.
+func (w *Worktrees) Exists(ctx context.Context, root, path string) bool {
+	want := resolve(path)
+	if !inside(resolve(root), want) {
+		return false
+	}
+	listed, err := w.listed(ctx)
+	if err != nil {
+		return false
+	}
+	for _, entry := range listed {
+		if entry.path == want {
+			return entry.path != w.repo && !entry.prunable && isDir(entry.path)
+		}
+	}
+	return false
+}
+
+// forgetMissing drops git's record of a checkout whose directory is gone when
+// it stands in the way of this one: it is at the same path, or it holds the
+// branch. Nothing on disk is touched and the branch keeps its commits.
+func (w *Worktrees) forgetMissing(ctx context.Context, path, branch string) error {
+	listed, err := w.listed(ctx)
+	if err != nil {
+		return err
+	}
+	want := resolve(path)
+	for _, entry := range listed {
+		if entry.path == w.repo || (!entry.prunable && isDir(entry.path)) {
+			continue
+		}
+		if entry.path != want && (branch == "" || entry.branch != "refs/heads/"+branch) {
+			continue
+		}
+		if _, err := w.git.run(ctx, w.repo, "worktree", "remove", "--force", entry.path); err != nil {
+			return errGitFailed("worktree remove", entry.path, err)
+		}
+	}
+	return nil
+}
+
+// worktreeEntry is one block of `git worktree list --porcelain`.
+type worktreeEntry struct {
+	path   string
+	branch string
+
+	// prunable is git's own word for a checkout whose directory is gone.
+	prunable bool
+}
+
+func (w *Worktrees) listed(ctx context.Context) ([]worktreeEntry, error) {
 	out, err := w.git.run(ctx, w.repo, "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, errGitFailed("worktree list", w.repo, err)
 	}
-
-	var paths []string
+	var entries []worktreeEntry
 	for _, line := range strings.Split(out, "\n") {
-		rest, ok := strings.CutPrefix(strings.TrimSpace(line), "worktree ")
-		if !ok {
+		line = strings.TrimSpace(line)
+		if rest, ok := strings.CutPrefix(line, "worktree "); ok {
+			entries = append(entries, worktreeEntry{path: resolve(rest)})
 			continue
 		}
-		path := resolve(rest)
-		if path == w.repo {
-			continue // the main working tree is not one of ours to prune
+		if len(entries) == 0 {
+			continue
 		}
-		paths = append(paths, path)
+		last := &entries[len(entries)-1]
+		if line == "prunable" || strings.HasPrefix(line, "prunable ") {
+			last.prunable = true
+		}
+		if ref, ok := strings.CutPrefix(line, "branch "); ok {
+			last.branch = ref
+		}
 	}
-	return paths, nil
+	return entries, nil
+}
+
+// inside reports whether path is strictly below dir, as a relative path rather
+// than a string prefix, so "/w/trees-of-mine" is not inside "/w/trees".
+func inside(dir, path string) bool {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil {
+		return false
+	}
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func isDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+// Source reports what a checkout for spec would be cut from.
+func (w *Worktrees) Source(ctx context.Context, spec task.WorktreeSpec) (task.WorktreeSource, error) {
+	top, own, err := w.git.topOf(ctx, w.repo)
+	if err != nil {
+		return task.WorktreeSource{}, err
+	}
+	out := task.WorktreeSource{Dir: w.repo, Toplevel: top, Own: own}
+	if !own {
+		return out, nil
+	}
+	if w.hasBranch(ctx, spec.Branch) {
+		out.BaseExists = true
+		return out, nil
+	}
+	base := strings.TrimSpace(spec.Base)
+	if base == "" {
+		base = "HEAD"
+	}
+	_, err = w.git.run(ctx, w.repo, "rev-parse", "--verify", "--quiet", base+"^{commit}")
+	out.BaseExists = err == nil
+	return out, nil
 }
 
 // hasBranch reports whether a branch name already exists.

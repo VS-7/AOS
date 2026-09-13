@@ -512,3 +512,39 @@ func TestARenewalWritesBackUnderTheKeyTheFileAlreadyUses(t *testing.T) {
 		t.Errorf("token.expiry = %v", token["expiry"])
 	}
 }
+
+// A renewal that cannot run — Antigravity's needs an OAuth client pair the
+// desktop daemon never has — still took the cross-process lock first, and left
+// a .lock file beside another tool's credential on every attempt. Whether a
+// renewal is possible is asked before anything is touched.
+func TestARenewalThatCannotRunTouchesNothing(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "creds.json")
+	writeJSON(t, path, map[string]any{
+		"access_token": "stale", "refresh_token": "rt", "expiry_date": time.Now().Add(-time.Hour).UnixMilli(),
+	})
+	impossible := apperr.New("TEST_NO_CLIENT").Msgf("renewing needs a client this build does not carry")
+	var refreshed atomic.Bool
+	s := &oauthfile.Store{
+		Path: path, Owner: "the Test CLI", Parse: geminiParse,
+		Renewable: func() error { return impossible },
+		Refresh: func(context.Context, string) (oauthfile.Credentials, error) {
+			refreshed.Store(true)
+			return oauthfile.Credentials{AccessToken: "fresh"}, nil
+		},
+	}
+
+	_, err := s.Token(context.Background())
+	if code := codeOf(t, err); code != "AOS_OAUTH_REFRESH_FAILED" {
+		t.Fatalf("code = %q, want AOS_OAUTH_REFRESH_FAILED", code)
+	}
+	if !errors.Is(err, impossible) {
+		t.Errorf("err = %v, want the reason renewal cannot run inside it", err)
+	}
+	if refreshed.Load() {
+		t.Error("a renewal that cannot run was attempted anyway")
+	}
+	if _, err := os.Stat(path + ".lock"); !os.IsNotExist(err) {
+		t.Errorf("a lock file was left beside the credential: %v", err)
+	}
+}

@@ -13,6 +13,8 @@
 // one provider failing without losing the others, and nothing else.
 package model
 
+import "github.com/OWNER/aos/internal/core/apperr"
+
 // Model is one model a provider serves.
 type Model struct {
 	ID   string `json:"id" jsonschema:"The identifier to configure, spelled the way the provider spells it."`
@@ -31,4 +33,8 @@ type Provider struct {
 	ID     string  `json:"id" jsonschema:"The provider this catalogue belongs to."`
 	Models []Model `json:"models" jsonschema:"What it serves, best first where the provider publishes a ranking."`
 	Error  string  `json:"error,omitempty" jsonschema:"Why this provider's catalogue is empty, when it is empty because asking failed."`
+
+	// Actions is what to do about Error, innermost first: the advice written
+	// closest to the cause is the specific one.
+	Actions []apperr.CallToAction `json:"cta,omitempty" jsonschema:"What to do about the failure, most specific first."`
 }

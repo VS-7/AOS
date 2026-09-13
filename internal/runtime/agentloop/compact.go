@@ -145,6 +145,76 @@ func pairedCutoff(messages []Message, cutoff int) int {
 	return cutoff
 }
 
+// PairToolMessages returns the history with every tool call and tool result
+// that lacks its counterpart removed: a result is kept only when an earlier
+// message offers its call, and a call only when a later message answers it.
+//
+// Every provider refuses the other shape outright — the Responses API with "No
+// tool call found for function call output", Anthropic with a tool_result that
+// names no tool_use — and refuses the whole request, so one unpaired item makes
+// a conversation unanswerable for good. pairedCutoff keeps a prune from making
+// one; this is what makes a history that already holds one sendable, whatever
+// wrote it. Conversations stored before answers recorded their calls beside
+// their results are the case that exists.
+//
+// The input is not modified. A history with nothing to repair comes back as it
+// was given.
+func PairToolMessages(messages []Message) []Message {
+	offeredAt := map[string]int{}
+	lastAnswerAt := map[string]int{}
+	for i, m := range messages {
+		for _, c := range m.ToolCalls {
+			if _, seen := offeredAt[c.ID]; !seen {
+				offeredAt[c.ID] = i
+			}
+		}
+		if m.Role == RoleTool {
+			lastAnswerAt[m.CallID] = i
+		}
+	}
+
+	// Nil until the first message that has to change, so an intact history
+	// costs two passes and no copy.
+	var out []Message
+	for i, m := range messages {
+		kept, drop := m, false
+		switch {
+		case m.Role == RoleTool:
+			at, offered := offeredAt[m.CallID]
+			drop = !offered || at >= i
+		case len(m.ToolCalls) > 0:
+			calls := make([]ToolCall, 0, len(m.ToolCalls))
+			for _, c := range m.ToolCalls {
+				if answer, ok := lastAnswerAt[c.ID]; ok && offeredAt[c.ID] == i && answer > i {
+					calls = append(calls, c)
+				}
+			}
+			if len(calls) != len(m.ToolCalls) {
+				kept.ToolCalls = calls
+				if len(calls) == 0 {
+					kept.ToolCalls = nil
+					// An assistant message that only asked for what was
+					// removed carries nothing the model could read.
+					drop = isEmpty(kept)
+				}
+			}
+		}
+
+		changed := drop || len(kept.ToolCalls) != len(m.ToolCalls)
+		if changed && out == nil {
+			out = make([]Message, i, len(messages))
+			copy(out, messages[:i])
+		}
+		if out != nil && !drop {
+			out = append(out, kept)
+		}
+	}
+	if out == nil {
+		return messages
+	}
+	return out
+}
+
 func isEmpty(m Message) bool {
 	return m.Text == "" && m.Reasoning == "" && m.Encrypted == "" &&
 		len(m.ToolCalls) == 0 && len(m.Result) == 0

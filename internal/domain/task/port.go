@@ -48,6 +48,38 @@ type Worktrees interface {
 
 	// List reports the checkouts that exist, so the prune can see what it has.
 	List(ctx context.Context) ([]string, error)
+
+	// Exists reports whether path is one of this repository's checkouts, is
+	// still on disk, and — once links are resolved — sits under root. A task's
+	// recorded path is read back from a file that is copied, restored and
+	// edited, and it becomes a sandbox root: it is asked about rather than
+	// believed.
+	Exists(ctx context.Context, root, path string) bool
+
+	// Source reports what a checkout for spec would be cut from, before
+	// anything is created or pruned — so a workspace with nothing to cut from
+	// is refused with the reason rather than with git's last words.
+	Source(ctx context.Context, spec WorktreeSpec) (WorktreeSource, error)
+}
+
+// WorktreeSource is the repository a task's checkout would come from.
+type WorktreeSource struct {
+	// Dir is the workspace directory checkouts are cut from.
+	Dir string
+
+	// Toplevel is the top of the working tree Dir belongs to, or "" when it
+	// belongs to none.
+	Toplevel string
+
+	// Own reports whether that working tree is Dir itself. A workspace inside
+	// somebody else's repository — a home directory under version control is
+	// the usual one — must not have checkouts cut from it.
+	Own bool
+
+	// BaseExists reports whether there is something to check out: the branch
+	// already exists, or the base (HEAD when none is named) is a commit. A
+	// repository nobody has committed to has neither.
+	BaseExists bool
 }
 
 // WorktreeSpec is what it takes to cut one.

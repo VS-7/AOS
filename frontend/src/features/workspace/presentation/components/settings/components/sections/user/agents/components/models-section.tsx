@@ -9,7 +9,9 @@ import {
   type AgentModelSelectValue,
 } from "@/components/ui/agent-model-select";
 import type { ModelProvider } from "@/features/model/interfaces/model.interfaces";
+import { t } from "@/lib/i18n";
 import { useProviderLogo } from "../hooks/use-provider-logo";
+import { unlistedModel } from "./unlisted-model";
 
 type SlotKey = "default" | "subconscious" | "realtime" | "voice" | "image" | "video";
 
@@ -152,6 +154,8 @@ export function ModelsSection({ providers, value, onChange }: ModelsSectionProps
         const hasReasoning =
           meta.capability === "reasoning" ||
           currentModel?.capabilities?.reasoning === true;
+        const unlisted = unlistedModel(providers, current);
+        const providerName = providers.find((p) => p.id === current.provider)?.name ?? current.provider;
 
         return (
           <div
@@ -163,6 +167,14 @@ export function ModelsSection({ providers, value, onChange }: ModelsSectionProps
               <p className="text-xs text-muted-foreground leading-tight">
                 {meta.description}
               </p>
+              {unlisted ? (
+                <p className="mt-1 text-xs leading-tight text-destructive" role="alert">
+                  {t("{{provider}} no longer lists {{model}}, so turns on this slot will be refused. Choose another model.", {
+                    provider: providerName,
+                    model: unlisted,
+                  })}
+                </p>
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
               <AgentModelSelect

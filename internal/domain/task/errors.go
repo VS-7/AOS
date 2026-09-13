@@ -1,6 +1,8 @@
 package task
 
 import (
+	"strconv"
+
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/build"
 )
@@ -196,14 +198,78 @@ func errWorktreesUnavailable(id string) error {
 		})
 }
 
+// errWorktreeFailed carries what git said in the message itself. The cause is
+// not rendered on any surface, and "could not be created" with the reason only
+// in there left a person and an agent alike with nothing to act on.
 func errWorktreeFailed(id, branch string, cause error) error {
 	return apperr.New("TASK_WORKTREE_FAILED").
 		Causer("task.Service.Branch").
-		Msgf("the isolated checkout could not be created").
+		Msgf("the isolated checkout could not be created: %s", reasonOf(cause)).
 		Issue("task", id).
 		Issue("branch", branch).
 		Status(apperr.StatusInternalServerError).
-		Wrap(cause)
+		Wrap(cause).
+		CTA(apperr.CallToAction{
+			Label: "fix what git reported and branch again, or execute the task in the workspace without an isolated checkout",
+			Tool:  "tasks_branch",
+			Input: map[string]any{"id": id},
+		})
+}
+
+// errWorktreeNoRepository is a workspace checkouts cannot be cut from, because
+// the repository git finds is not the workspace's: either there is none, or it
+// is one the workspace merely sits inside, such as a home directory under
+// version control.
+func errWorktreeNoRepository(id string, source WorktreeSource) error {
+	e := apperr.New("TASK_WORKTREE_NO_REPOSITORY").
+		Causer("task.Service.Branch").
+		Issue("task", id).
+		Issue("workspace", source.Dir).
+		Status(apperr.StatusConflict).
+		CTA(apperr.CallToAction{
+			Label:   "make the workspace a Git repository of its own and commit once, then branch again",
+			Command: "git -C " + strconv.Quote(source.Dir) + " init && git -C " + strconv.Quote(source.Dir) + " commit --allow-empty -m \"Start the workspace\"",
+		}, apperr.CallToAction{
+			Label: "or execute the task in the workspace itself, without an isolated checkout",
+		})
+	if source.Toplevel == "" {
+		return e.Msgf("the workspace at %s is not a Git repository, so no isolated checkout can be cut from it", source.Dir)
+	}
+	return e.Issue("enclosingRepository", source.Toplevel).
+		Msgf("the workspace at %s is not a Git repository of its own: it sits inside the repository at %s, and a checkout cut from that one would hold its files, not the workspace's", source.Dir, source.Toplevel)
+}
+
+// errWorktreeBaseMissing is a repository with nothing to check out: the base
+// names no commit. A repository nobody has committed to yet is the usual case.
+func errWorktreeBaseMissing(id, base string, source WorktreeSource) error {
+	named := base
+	if named == "" {
+		named = "HEAD"
+	}
+	return apperr.New("TASK_WORKTREE_BASE_MISSING").
+		Causer("task.Service.Branch").
+		Msgf("there is no commit on %q to cut the task's branch from", named).
+		Issue("task", id).
+		Issue("base", named).
+		Issue("workspace", source.Dir).
+		Status(apperr.StatusConflict).
+		CTA(apperr.CallToAction{
+			Label:   "commit once on " + named + " in the workspace, then branch again",
+			Command: "git -C " + strconv.Quote(source.Dir) + " commit --allow-empty -m \"Start the workspace\"",
+		}, apperr.CallToAction{
+			Label: "or branch again naming a base that exists",
+			Tool:  "tasks_branch",
+			Input: map[string]any{"id": id},
+		})
+}
+
+// reasonOf is the sentence closest to what went wrong: an application error's
+// own message rather than its code, or the error as it came.
+func reasonOf(err error) string {
+	if app, ok := apperr.As(err); ok && app.Message != "" {
+		return app.Message
+	}
+	return err.Error()
 }
 
 func errWorktreeLimit(limit, existing int) error {

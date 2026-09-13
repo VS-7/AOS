@@ -155,6 +155,8 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
               <FormItem className="grid gap-2">
                 <Label htmlFor="color">{t("Brand Color")}</Label>
                 <div className="flex gap-2">
+                  {/* Hex, as the workspace stores it, whichever format
+                      the channels are shown in. */}
                   <ColorPickerPopover
                     triggerShowRemove
                     // "" rather than null: the schema says string, and a null
@@ -162,6 +164,7 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
                     // control for it once Create Workspace actually submitted.
                     onTriggerRemove={() => field.onChange("")}
                     value={field.value}
+                    valueFormat="hex"
                     onValueChange={(v) => field.onChange(v)}
                   />
                 </div>

@@ -114,3 +114,60 @@ func TestPruneKeepsTheLastUserMessage(t *testing.T) {
 		t.Fatalf("last message = %+v, want the user's own request", last)
 	}
 }
+
+// TestARequestNeverCarriesAToolMessageWithoutItsPair is the repair for
+// conversations stored before persistence recorded calls beside results.
+//
+// A stored answer could hold the results of a turn's earliest tool calls and
+// not the calls themselves — compaction had pruned the calls out of the
+// transcript persistence read them from. Replayed, those results reach the
+// provider as function_call_output items with no function_call, the request is
+// refused, and so is every later one: the conversation could never be answered
+// again. Whatever the history holds, what is sent must pair.
+func TestARequestNeverCarriesAToolMessageWithoutItsPair(t *testing.T) {
+	s := &agentloop.State{Messages: []agentloop.Message{
+		{Role: agentloop.RoleUser, Text: "build the API"},
+		// A result whose call is gone: the stored shape of the defect.
+		{Role: agentloop.RoleTool, CallID: "orphan", Name: "Read", Result: []byte(`"lost"`)},
+		{Role: agentloop.RoleAssistant, Text: "reading", ToolCalls: []agentloop.ToolCall{
+			{ID: "kept", Name: "Read"},
+			// A call nothing answered, which the provider refuses just as firmly.
+			{ID: "unanswered", Name: "Glob"},
+		}},
+		{Role: agentloop.RoleTool, CallID: "kept", Name: "Read", Result: []byte(`"ok"`)},
+		// A result that answers a call made only after it.
+		{Role: agentloop.RoleTool, CallID: "late", Name: "Read", Result: []byte(`"early"`)},
+		{Role: agentloop.RoleAssistant, ToolCalls: []agentloop.ToolCall{{ID: "late", Name: "Read"}}},
+		{Role: agentloop.RoleUser, Text: "and now?"},
+	}}
+
+	sent := s.Request().Messages
+	offered := map[string]bool{}
+	answered := map[string]bool{}
+	for _, m := range sent {
+		if m.Role == agentloop.RoleTool {
+			if !offered[m.CallID] {
+				t.Errorf("result %s was sent with no call before it", m.CallID)
+			}
+			answered[m.CallID] = true
+		}
+		for _, c := range m.ToolCalls {
+			offered[c.ID] = true
+		}
+	}
+	for id := range offered {
+		if !answered[id] {
+			t.Errorf("call %s was sent with no result after it", id)
+		}
+	}
+	if !offered["kept"] || !answered["kept"] {
+		t.Error("the exchange that was whole did not survive the repair")
+	}
+	if last := sent[len(sent)-1]; last.Role != agentloop.RoleUser || last.Text != "and now?" {
+		t.Errorf("last message = %+v, want the question", last)
+	}
+	// The stored history is the record; only what is sent is repaired.
+	if len(s.Messages) != 7 || len(s.Messages[2].ToolCalls) != 2 {
+		t.Error("building the request rewrote the state's own history")
+	}
+}

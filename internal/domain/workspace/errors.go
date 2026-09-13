@@ -1,6 +1,9 @@
 package workspace
 
 import (
+	"fmt"
+	"strconv"
+
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/build"
 )
@@ -112,6 +115,25 @@ func errUnknownField(path string) error {
 			Label:   "read the workspace to see the fields it has",
 			Command: build.Name + " workspace get",
 			Tool:    "workspace_get",
+		})
+}
+
+func errInvalidValue(field string, value any, want string, example map[string]any) error {
+	shown := fmt.Sprint(value)
+	if text, ok := value.(string); ok {
+		// Quoted, so a blank name reads as "" rather than as nothing at all.
+		shown = strconv.Quote(text)
+	}
+	return apperr.New("WORKSPACE_INVALID_VALUE").
+		Causer("workspace.Service.Update").
+		Msgf("%s cannot be %s: it takes %s", field, shown, want).
+		Issue("field", field).
+		Issue("value", value).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{
+			Label: "set " + field + " to " + want,
+			Tool:  "workspace_update",
+			Input: map[string]any{"set": example},
 		})
 }
 

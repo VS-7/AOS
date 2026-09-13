@@ -27,21 +27,32 @@ func (s *Service) Branch(ctx context.Context, in BranchInput) (*Worktree, error)
 	if s.worktrees == nil {
 		return nil, errWorktreesUnavailable(current.ID)
 	}
-	if current.Worktree.Path != "" {
-		return &current.Worktree, nil
-	}
-
 	policy, err := s.worktreePolicy(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if policy.Limit > 0 {
-		if err := s.pruneToLimit(ctx, policy); err != nil {
-			return nil, err
+
+	// A recorded checkout that is still one of ours is the answer. One that is
+	// gone — deleted by hand, lost with the data directory, a workspace copied
+	// to another machine — is cut again: this used to return the recorded path
+	// as long as there was one, so the command that makes a checkout could not
+	// bring a lost one back, and the task's conversation had no way out.
+	recorded := current.Worktree.Path
+	if recorded != "" {
+		if s.ownCheckout(ctx, policy, recorded) {
+			return &current.Worktree, nil
 		}
+		s.log.Warn("a task's recorded checkout is not there; cutting it again",
+			"task", current.ID, "path", recorded)
 	}
 
+	// The branch the task already has, when it has one, so a checkout cut
+	// again comes back to the work committed on it rather than to a new
+	// branch named after whatever the task is called today.
 	branch := strings.TrimSpace(in.Branch)
+	if branch == "" {
+		branch = current.Worktree.Branch
+	}
 	if branch == "" {
 		branch = BranchNameFor(policy.BranchPrefix, current)
 	}
@@ -52,11 +63,33 @@ func (s *Service) Branch(ctx context.Context, in BranchInput) (*Worktree, error)
 	if base == "" {
 		base = policy.DefaultBase
 	}
+	spec := WorktreeSpec{
+		TaskID: current.ID, Branch: branch, Base: base, Path: filepath.Join(policy.Root, current.ID),
+	}
 
-	path := filepath.Join(policy.Root, current.ID)
-	created, err := s.worktrees.Create(ctx, WorktreeSpec{
-		TaskID: current.ID, Branch: branch, Base: base, Path: path,
-	})
+	// Asked before anything is pruned or created. The two ways a workspace
+	// has nothing to cut from — it is not a repository of its own, or its base
+	// has no commit — both reached git, and what came back was
+	// TASK_WORKTREE_FAILED with the reason in a cause nothing renders, which
+	// is where an executor agent stopped the task for good.
+	source, err := s.worktrees.Source(ctx, spec)
+	if err != nil {
+		return nil, errWorktreeFailed(current.ID, branch, err)
+	}
+	if !source.Own {
+		return nil, errWorktreeNoRepository(current.ID, source)
+	}
+	if !source.BaseExists {
+		return nil, errWorktreeBaseMissing(current.ID, base, source)
+	}
+
+	if policy.Limit > 0 {
+		if err := s.pruneToLimit(ctx, policy); err != nil {
+			return nil, err
+		}
+	}
+
+	created, err := s.worktrees.Create(ctx, spec)
 	if err != nil {
 		return nil, errWorktreeFailed(current.ID, branch, err)
 	}
@@ -87,6 +120,48 @@ func (s *Service) Branch(ctx context.Context, in BranchInput) (*Worktree, error)
 	}
 	s.notify(ctx, "branched", current, map[string]any{"branch": branch, "path": created})
 	return &current.Worktree, nil
+}
+
+// Checkout is the directory a turn on this task is confined to: the task's
+// isolated checkout, or "" when it has none that can be used — and then the
+// turn runs in the workspace, as it did before the task was branched.
+//
+// The recorded path is read back from TASK.md, which lives in a workspace that
+// is versioned, copied and edited, and it becomes a sandbox root. So it counts
+// only when it is a checkout this installation placed under its own worktree
+// root and it is still there. A path edited to point anywhere else used to
+// become the root as written, and a checkout that had gone failed every turn
+// in the task's conversation for good.
+func (s *Service) Checkout(ctx context.Context, id string) (string, error) {
+	current, err := s.load(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	recorded := current.Worktree.Path
+	if recorded == "" || s.worktrees == nil {
+		return "", nil
+	}
+	policy, err := s.worktreePolicy(ctx)
+	if err != nil {
+		return "", err
+	}
+	if !s.ownCheckout(ctx, policy, recorded) {
+		s.log.Warn("a task's recorded checkout is not one of this workspace's; its turn runs in the workspace",
+			"task", current.ID, "path", recorded, "worktreeRoot", policy.Root)
+		return "", nil
+	}
+	return recorded, nil
+}
+
+// ownCheckout reports whether a recorded path is a checkout this workspace
+// placed — under its worktree root, where nothing else is put — and git still
+// has it on disk.
+func (s *Service) ownCheckout(ctx context.Context, policy WorktreePolicy, path string) bool {
+	root := strings.TrimSpace(policy.Root)
+	if root == "" || !filepath.IsAbs(path) || !underRoot(root, path) {
+		return false
+	}
+	return s.worktrees.Exists(ctx, root, path)
 }
 
 // BranchNameFor builds the branch of a task from the workspace prefix and the
@@ -227,5 +302,5 @@ func underRoot(root, path string) bool {
 	if err != nil {
 		return false
 	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

@@ -6,11 +6,14 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/OWNER/aos/internal/core/apperr"
+	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/runtime/toolexec"
 )
@@ -134,6 +137,7 @@ func (l *Loop) Run(ctx context.Context, s *State) (*Result, error) {
 	}
 
 	var calls []ToolResult
+	var offered []ToolCall
 	stop := StopEnd
 
 	for s.Steps < l.limits.MaxSteps {
@@ -174,6 +178,7 @@ func (l *Loop) Run(ctx context.Context, s *State) (*Result, error) {
 			return nil, err
 		}
 		calls = append(calls, results...)
+		offered = append(offered, resp.ToolCalls...)
 		s.AppendToolResults(results, l.clock.Now())
 
 		if s.Steps >= l.limits.MaxSteps {
@@ -195,6 +200,7 @@ func (l *Loop) Run(ctx context.Context, s *State) (*Result, error) {
 		Compactions: s.Compactions,
 		StopReason:  stop,
 		ToolCalls:   calls,
+		Calls:       offered,
 		Duration:    l.clock.Now().Sub(started),
 	}, nil
 }
@@ -208,7 +214,7 @@ func (l *Loop) call(ctx context.Context, s *State) (Response, error) {
 	if l.emitter == nil {
 		resp, err := l.provider.Generate(ctx, req)
 		if err != nil {
-			return Response{}, errProviderFailed(l.provider.Name(), err)
+			return Response{}, l.providerFailed(req.Model, err)
 		}
 		return resp, nil
 	}
@@ -223,7 +229,7 @@ func (l *Loop) call(ctx context.Context, s *State) (Response, error) {
 
 	stream, err := l.provider.Stream(ctx, req)
 	if err != nil {
-		return Response{}, errProviderFailed(l.provider.Name(), err)
+		return Response{}, l.providerFailed(req.Model, err)
 	}
 	defer func() { _ = stream.Close() }()
 
@@ -233,11 +239,58 @@ func (l *Loop) call(ctx context.Context, s *State) (Response, error) {
 			break
 		}
 		if err != nil {
-			return Response{}, errProviderFailed(l.provider.Name(), err)
+			return Response{}, l.providerFailed(req.Model, err)
 		}
 		l.emitter.Delta(ctx, chunk)
 	}
 	return stream.Response(), nil
+}
+
+// providerFailed classifies a failed model call: a refusal of the model itself
+// is its own failure, because the fix is choosing another model rather than
+// checking a credential or waiting out a rate limit.
+func (l *Loop) providerFailed(model string, err error) error {
+	if modelRefused(err, model) {
+		return errModelUnavailable(l.provider.Name(), model, err)
+	}
+	return errProviderFailed(l.provider.Name(), err)
+}
+
+// refusalPhrases are how providers word "you cannot use this model": Codex's
+// "is not supported when using Codex with a ChatGPT account", OpenAI's
+// "model_not_found" and "does not exist or you do not have access to it",
+// Google's "is not found for API version", OpenRouter's "is not a valid model
+// ID".
+var refusalPhrases = []string{
+	"not supported", "unsupported", "not found", "does not exist", "not exist",
+	"not a valid model", "invalid model", "do not have access", "does not have access",
+	"not available", "not enabled", "not allowed",
+}
+
+// modelRefused reports whether a provider refused the request because of the
+// model it names. It is deliberately narrow: the refusal has to be a client
+// error, name the model, and say one of the things providers say about an
+// unusable model — a context-length error mentions "model" and is not this.
+func modelRefused(err error, model string) bool {
+	var app *apperr.Error
+	if strings.TrimSpace(model) == "" || !errors.As(err, &app) || app.Code != build.ErrorPrefix+"_PROVIDER_REFUSED" {
+		return false
+	}
+	switch app.Issues["status"] {
+	case apperr.StatusBadRequest, apperr.StatusForbidden, apperr.StatusNotFound, apperr.StatusUnprocessableEntity:
+	default:
+		return false
+	}
+	text := strings.ToLower(app.Message)
+	if !strings.Contains(text, strings.ToLower(model)) || !strings.Contains(text, "model") {
+		return false
+	}
+	for _, phrase := range refusalPhrases {
+		if strings.Contains(text, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 // compactNow prunes the history, after giving the hooks a chance to say what

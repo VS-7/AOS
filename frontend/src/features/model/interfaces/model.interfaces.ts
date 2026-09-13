@@ -64,6 +64,8 @@ export interface ModelProvider {
   modelsDiscovered?: boolean;
   /** Why the provider could not be asked, when asking failed. */
   modelsError?: string;
+  /** What to do about `modelsError`, most specific first. */
+  modelsErrorActions?: string[];
 }
 
 export interface ModelProviderAuth {

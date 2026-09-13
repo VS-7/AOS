@@ -115,6 +115,13 @@ func (s *Service) ensureGit(ctx context.Context, w *Workspace) (initialised bool
 	if err := s.git.Init(ctx, w.Path); err != nil {
 		return false, "the workspace was created but is not under version control: " + err.Error()
 	}
+	// Empty, so nothing of the person's is committed on their behalf — the
+	// .env beside it least of all. It exists because a repository with no
+	// commit has no branch, and a task's isolated checkout is cut from one:
+	// without it every tasks_branch here failed with "invalid reference".
+	if err := s.git.CommitEmpty(ctx, w.Path, "Start the "+build.DisplayName+" workspace"); err != nil {
+		return true, "the workspace is a Git repository with no commit yet, so tasks cannot be branched from it until one is made: " + err.Error()
+	}
 	return true, ""
 }
 

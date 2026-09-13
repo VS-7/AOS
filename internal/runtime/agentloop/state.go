@@ -93,8 +93,12 @@ func (s *State) Request() Request {
 	// s.Append would then overwrite the message the provider was handed — a
 	// provider that retries, or that reads the request after returning, would
 	// see a conversation that changed underneath it.
+	//
+	// And paired, here rather than in any one provider: every provider refuses
+	// a tool result without its call, and this is the one place every request
+	// to every provider is built. See PairToolMessages.
 	messages := make([]Message, 0, len(s.Messages)+len(s.Pending))
-	messages = append(messages, s.Messages...)
+	messages = append(messages, PairToolMessages(s.Messages)...)
 	for _, text := range s.Pending {
 		messages = append(messages, Message{Role: RoleUser, Text: text})
 	}
@@ -137,6 +141,16 @@ type Result struct {
 	// returned. It is what an activity feed and a task comment are written
 	// from, and what makes a run auditable.
 	ToolCalls []ToolResult
+
+	// Calls is every tool call the model asked for in the turn, in order, as
+	// it asked for it — one per entry of ToolCalls.
+	//
+	// Messages cannot answer this. It is the working transcript, and a turn
+	// long enough to compact has had its earliest calls pruned out of it while
+	// their results stayed in ToolCalls. The stored answer read its calls from
+	// Messages, so it kept results whose calls were gone, and every later turn
+	// of that conversation was refused by the provider.
+	Calls []ToolCall
 
 	Duration time.Duration
 }
