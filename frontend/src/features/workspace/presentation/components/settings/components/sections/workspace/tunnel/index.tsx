@@ -61,8 +61,11 @@ export function WorkspaceTunnelSection() {
     onSubmit: async (values) => {
       const previousEnabled = context.config?.tunnel?.enabled ?? false;
 
+      // `mutateOrThrow`, not `mutate`: `mutate` resolves with `{data, error}`
+      // and never rejects, so this try/catch reported every refusal from the
+      // daemon as "Tunnel started!".
       try {
-        await api.config.update.mutate({
+        await api.config.update.mutateOrThrow({
           body: {
             tunnel: {
               enabled: values.enabled,
@@ -71,11 +74,11 @@ export function WorkspaceTunnelSection() {
         });
 
         if (values.enabled) {
-          const result = await api.tunnel.start.mutate();
-          const publicUrl = result.data?.url ?? tunnelPublicUrl;
+          const result = await api.tunnel.start.mutateOrThrow();
+          const publicUrl = result?.url ?? tunnelPublicUrl;
           toast.success(`Tunnel started! URL: ${publicUrl}`);
         } else {
-          await api.tunnel.stop.mutate();
+          await api.tunnel.stop.mutateOrThrow();
           toast.success(t("Tunnel stopped."));
         }
 
@@ -112,8 +115,10 @@ export function WorkspaceTunnelSection() {
       const hostname = values.hostname?.trim() ?? "";
       const token = values.token?.trim() ?? "";
 
+      // `mutateOrThrow` for the same reason as the activation form above: a
+      // refused save must reach the catch, not the success toast.
       try {
-        await api.config.update.mutate({
+        await api.config.update.mutateOrThrow({
           body: {
             tunnel: {
               hostname,
@@ -123,8 +128,8 @@ export function WorkspaceTunnelSection() {
         });
 
         if (enabled && hostname && token) {
-          const result = await api.tunnel.start.mutate();
-          const publicUrl = result.data?.url ?? tunnelPublicUrl;
+          const result = await api.tunnel.start.mutateOrThrow();
+          const publicUrl = result?.url ?? tunnelPublicUrl;
           toast.success(`Tunnel settings saved and started! URL: ${publicUrl}`);
         } else {
           toast.success(t("Tunnel settings saved."));
