@@ -190,6 +190,9 @@ func main() {
 	// goes through and to the relay. Without this the bridge kept addressing
 	// the workspace the window opened with, whatever the person picked.
 	domainSvc := wailsvc.NewDomain(daemon)
+	// And remembered, for the moments this process has to decide again on its
+	// own — see chosenWorkspace.
+	chosen := &chosenWorkspace{}
 
 	platform := &wailsPlatform{}
 	// The system service starts without a workspace and is told which one it
@@ -226,6 +229,7 @@ func main() {
 	// arrives by now — onboarding no longer registers anything, so the
 	// workspace the wizard creates reaches this process here, and only here.
 	domainSvc.OnWorkspaceChange(func(id string) {
+		chosen.Set(id)
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
@@ -256,7 +260,7 @@ func main() {
 				// registered: after onboarding the wizard is still holding the
 				// name and the copilot's settings, so this only adopts. See
 				// openWorkspace.
-				opened, err := openWorkspace(ctx, daemon, root, event)
+				opened, err := openWorkspace(ctx, daemon, root, chosen.Get(), event)
 				if err == nil {
 					adopt(opened)
 					return
@@ -323,11 +327,11 @@ func main() {
 
 	// The daemon is asked to be running, not started blindly. Two things
 	// supervising one process is how you end up with two of it.
-	go ensureDaemon(supervisor, daemon, root, adopt, log)
+	go ensureDaemon(supervisor, daemon, root, chosen, adopt, log)
 	// And then kept running. Supervision used to stop after that one call, so
 	// a daemon that crashed left the window answering every action with a
 	// failure and no way back short of relaunching — see watchDaemon.
-	go watchDaemon(realtimeCtx, supervisor, daemon, adopt, root, func(event any) {
+	go watchDaemon(realtimeCtx, supervisor, daemon, adopt, root, chosen, func(event any) {
 		if emitDaemon != nil {
 			emitDaemon(event)
 		}
@@ -385,7 +389,7 @@ func (d daemonSupervisor) Restart(ctx context.Context) error {
 // A failure here does not stop the window from opening: an interface that says
 // it cannot reach the daemon is more useful than an application that refuses to
 // start and does not say why.
-func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, root string, adopt func(workspaceRef), log *slog.Logger) {
+func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, root string, chosen *chosenWorkspace, adopt func(workspaceRef), log *slog.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -405,7 +409,11 @@ func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, root
 	// installation that already has an account and a workspace is adopted, and
 	// a window launched inside a repository registers it. Only onboarding is
 	// restricted, and only because onboarding has a wizard still deciding.
-	if opened, err := openWorkspace(ctx, client, root, wailsvc.AuthLogin); err != nil {
+	//
+	// The interface may already have said which workspace it means — a daemon
+	// that took a while to start leaves time for the page to load — and a
+	// choice it made wins over this process's own guess.
+	if opened, err := openWorkspace(ctx, client, root, chosen.Get(), wailsvc.AuthLogin); err != nil {
 		log.Warn("could not open a workspace yet", "path", root, "err", err)
 	} else {
 		adopt(opened)
@@ -462,7 +470,18 @@ func daemonEnv(root string) []string {
 //
 // So onboarding adopts and never creates. The wizard owns the first workspace,
 // because it is the only party that knows what to call it.
-func openWorkspace(ctx context.Context, client *daemonclient.Client, root string, event wailsvc.AuthEvent) (opened workspaceRef, err error) {
+//
+// preferred is the workspace the interface last chose (chosenWorkspace), and it
+// comes before all of that when it still exists: this runs again after the
+// daemon restarts and after every sign-in, long after the person picked one.
+func openWorkspace(ctx context.Context, client *daemonclient.Client, root, preferred string, event wailsvc.AuthEvent) (opened workspaceRef, err error) {
+	if preferred != "" {
+		if w, err := readWorkspace(ctx, client, preferred); err == nil && w.ID != "" && !w.Archived {
+			return workspaceRef{ID: w.ID, Path: w.Path}, nil
+		}
+		// Gone, archived, or unreadable right now: fall through to what this
+		// process would have chosen with no preference at all.
+	}
 	if event != wailsvc.AuthOnboarding && root != "" {
 		return introspectWorkspace(ctx, client, root)
 	}
@@ -501,6 +520,34 @@ func errNoWorkspaceYet() error {
 		CTA(apperr.CallToAction{
 			Label: "finish onboarding — the workspace it creates is the one this window will open",
 		})
+}
+
+// chosenWorkspace is the workspace the interface last pointed this window at,
+// through DomainService.SetWorkspace.
+//
+// This process decides which workspace to address on its own three times —
+// when the daemon first answers, after it restarts, and after every sign-in —
+// and each time it used to adopt the first registered workspace by id. The
+// interface had already said its choice once and did not say it again, so the
+// switcher kept reading "VS" while every call and the event relay went to
+// whichever workspace sorted first.
+type chosenWorkspace struct {
+	mu sync.Mutex
+	id string
+}
+
+// Set records the interface's choice.
+func (c *chosenWorkspace) Set(id string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.id = strings.TrimSpace(id)
+}
+
+// Get is the choice, or "" when the interface has not made one yet.
+func (c *chosenWorkspace) Get() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.id
 }
 
 // workspaceRef is the workspace this window addresses: the id every call is

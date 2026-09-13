@@ -183,17 +183,29 @@ async function resolveWorkspaces(
   const current =
     workspaces.find((workspace) => workspace.id === preferredId) ?? workspaces[0];
 
-  setWorkspace(current.id);
+  // Awaited: inside the desktop window this is what points the bridge at the
+  // workspace, and a scoped call made before it lands addresses whichever one
+  // the Go side had adopted on its own. A failure is said, not swallowed —
+  // but it does not stop the store, whose list entry is already an answer.
+  try {
+    await setWorkspace(current.id);
+  } catch (err) {
+    console.error(`[workspace] the window could not be pointed at ${current.id}`, err);
+  }
   if (typeof document !== "undefined") {
     document.cookie = `x-workspace-id=${encodeURIComponent(current.id)}; path=/; max-age=31536000; SameSite=Lax`;
   }
 
-  // Now that the request carries an id, ask for the full record. The list
-  // entry is already complete today; this keeps working if `workspace_get`
-  // ever returns more than `workspace_list` does, and costs one call.
+  // Now ask for the full record, by id. The list entry is already complete
+  // today; this keeps working if `workspace_get` ever returns more than
+  // `workspace_list` does, and costs one call. Naming the workspace, rather
+  // than leaving it to whatever the request's header says, is what keeps the
+  // snapshot from belonging to a different workspace than the data: the
+  // answer used to depend on the order two concurrent bridge calls arrived in.
   let detail = current;
   try {
     detail = ((await client.invoke("workspace_get", {
+      workspace: current.id,
       _reasoning: "populating the workspace store's current-workspace snapshot (task-type taxonomy, name) at app start",
     })) as CurrentWorkspaceState) ?? current;
   } catch {
@@ -305,7 +317,11 @@ const workspaceStore = AosStore.create("workspace")
         if (!known) {
           return { error: { message: `No workspace ${workspaceId}.` } };
         }
-        setWorkspace(workspaceId);
+        try {
+          await setWorkspace(workspaceId);
+        } catch (err) {
+          console.error(`[workspace] the window could not be pointed at ${workspaceId}`, err);
+        }
         if (typeof document !== "undefined") {
           document.cookie = `x-workspace-id=${encodeURIComponent(workspaceId)}; path=/; max-age=31536000; SameSite=Lax`;
         }

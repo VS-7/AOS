@@ -83,7 +83,7 @@ func TestOnboardingDoesNotRegisterAWorkspaceBehindTheWizard(t *testing.T) {
 	srv := daemon.server(t)
 	client := daemonclient.New(daemonclient.Options{BaseURL: srv.URL})
 
-	_, err := openWorkspace(context.Background(), client, "/home/me/project", wailsvc.AuthOnboarding)
+	_, err := openWorkspace(context.Background(), client, "/home/me/project", "", wailsvc.AuthOnboarding)
 	if err == nil {
 		t.Fatal("with nothing registered yet, onboarding has no workspace to adopt and must say so")
 	}
@@ -103,7 +103,7 @@ func TestOnboardingStillAdoptsAWorkspaceThatAlreadyExists(t *testing.T) {
 	srv := daemon.server(t)
 	client := daemonclient.New(daemonclient.Options{BaseURL: srv.URL})
 
-	opened, err := openWorkspace(context.Background(), client, "", wailsvc.AuthOnboarding)
+	opened, err := openWorkspace(context.Background(), client, "", "", wailsvc.AuthOnboarding)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestLoginStillRegistersTheDirectoryItWasLaunchedIn(t *testing.T) {
 	srv := daemon.server(t)
 	client := daemonclient.New(daemonclient.Options{BaseURL: srv.URL})
 
-	opened, err := openWorkspace(context.Background(), client, "/home/me/project", wailsvc.AuthLogin)
+	opened, err := openWorkspace(context.Background(), client, "/home/me/project", "", wailsvc.AuthLogin)
 	if err != nil {
 		t.Fatal(err)
 	}
