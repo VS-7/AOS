@@ -79,6 +79,8 @@ func New(cfg Config) http.Handler {
 	r.Post("/password", s.changePassword)
 	r.Post("/profile", s.updateProfile)
 	r.Get("/users", s.users)
+	r.Get("/api-token", s.apiToken)
+	r.Post("/api-token", s.regenerateAPIToken)
 	return r
 }
 
@@ -282,6 +284,54 @@ func (s *server) updateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, map[string]any{"user": updated})
+}
+
+// apiTokenView is what a client is told about an API credential: enough to
+// tell which one is configured, nothing that authenticates.
+type apiTokenView struct {
+	Prefix     string     `json:"prefix"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+}
+
+// apiToken describes the signed-in account's API credential, or answers
+// {"token": null} when it has none.
+//
+// Settings > Developers shows it, so a person can tell whether the token in
+// their MCP client is the current one. Identity sits outside the command
+// registry (see the package doc), so this is a route and not a command.
+func (s *server) apiToken(w http.ResponseWriter, r *http.Request) {
+	user, err := s.authenticate(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	current, err := s.svc.APIToken(r.Context(), user.ID)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if current == nil {
+		s.writeJSON(w, map[string]any{"token": nil})
+		return
+	}
+	s.writeJSON(w, map[string]any{"token": apiTokenView{Prefix: current.Prefix, CreatedAt: current.CreatedAt, LastUsedAt: current.LastUsed}})
+}
+
+// regenerateAPIToken replaces the signed-in account's API credential and
+// answers the new value — the only time it is ever answered.
+func (s *server) regenerateAPIToken(w http.ResponseWriter, r *http.Request) {
+	user, err := s.authenticate(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	token, plain, err := s.svc.RegenerateAPIToken(r.Context(), user.ID)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, map[string]any{"token": plain, "prefix": token.Prefix, "createdAt": token.CreatedAt})
 }
 
 func (s *server) authenticate(r *http.Request) (*auth.User, error) {

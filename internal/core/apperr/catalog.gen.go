@@ -43,7 +43,7 @@ var Catalog = []Entry{
 	{Code: "AOS_AUTH_EMAIL_TAKEN", Package: "internal/domain/auth", File: "internal/domain/auth/errors.go", Line: 104, Status: 409, Causer: "auth.Service.UpdateProfile", CTA: true, Issues: []string{"email"}},
 	{Code: "AOS_AUTH_HTTP_BAD_BODY", Package: "internal/transport/authapi", File: "internal/transport/authapi/errors.go", Line: 23, Status: 400, Causer: "authapi.decode", CTA: true},
 	{Code: "AOS_AUTH_HTTP_BODY_TOO_LARGE", Package: "internal/transport/authapi", File: "internal/transport/authapi/errors.go", Line: 14, Status: 413, Causer: "authapi.decode", CTA: true, Issues: []string{"limit"}},
-	{Code: "AOS_AUTH_HTTP_INTERNAL", Package: "internal/transport/authapi", File: "internal/transport/authapi/authapi.go", Line: 373, Status: 500, Causer: "authapi", CTA: false},
+	{Code: "AOS_AUTH_HTTP_INTERNAL", Package: "internal/transport/authapi", File: "internal/transport/authapi/authapi.go", Line: 423, Status: 500, Causer: "authapi", CTA: false},
 	{Code: "AOS_AUTH_HTTP_UNAUTHENTICATED", Package: "internal/transport/authapi", File: "internal/transport/authapi/errors.go", Line: 6, Status: 401, Causer: "authapi", CTA: true},
 	{Code: "AOS_AUTH_IMAGE_INVALID", Package: "internal/domain/auth", File: "internal/domain/auth/errors.go", Line: 89, Status: 400, Causer: "auth.Service.UpdateProfile", CTA: true, Issues: []string{"image"}},
 	{Code: "AOS_AUTH_INVALID_CREDENTIALS", Package: "internal/domain/auth", File: "internal/domain/auth/errors.go", Line: 36, Status: 401, Causer: "auth.Service.Login", CTA: true},

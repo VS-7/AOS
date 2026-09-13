@@ -240,6 +240,67 @@ func (s *Service) IssueToken(ctx context.Context, in IssueTokenInput) (Token, st
 	return token, plain, nil
 }
 
+// APITokenName names the credential an account hands to REST and MCP clients.
+// One per account: regenerating replaces it, and the session and the
+// terminal's own credential are other names that it never touches.
+const APITokenName = "api"
+
+// APIToken describes the account's active API credential — the record, never
+// the value, which is kept only as a hash — or nil when it has none.
+func (s *Service) APIToken(ctx context.Context, userID string) (*Token, error) {
+	users, err := s.store.Load(ctx)
+	if err != nil {
+		return nil, errStoreFailed("APIToken", err)
+	}
+	idx := indexOf(users, userID)
+	if idx < 0 {
+		return nil, errUserNotFound(userID)
+	}
+	now := s.clock.Now()
+	var current *Token
+	for j := range users[idx].Tokens {
+		t := users[idx].Tokens[j]
+		if t.Name == APITokenName && t.Active(now) {
+			current = &t
+		}
+	}
+	return current, nil
+}
+
+// RegenerateAPIToken retires the account's API credential and issues a new
+// one, returning its plain value once.
+//
+// Regenerating is the only way to see a value again, so it is also how a lost
+// one is replaced — which is why the old one stops working at once rather
+// than after a grace period: a token somebody lost is a token somebody else
+// may have.
+func (s *Service) RegenerateAPIToken(ctx context.Context, userID string) (Token, string, error) {
+	users, err := s.store.Load(ctx)
+	if err != nil {
+		return Token{}, "", errStoreFailed("RegenerateAPIToken", err)
+	}
+	idx := indexOf(users, userID)
+	if idx < 0 {
+		return Token{}, "", errUserNotFound(userID)
+	}
+	plain, token, err := s.mintToken(APITokenName, nil)
+	if err != nil {
+		return Token{}, "", err
+	}
+	now := s.clock.Now()
+	for j := range users[idx].Tokens {
+		if users[idx].Tokens[j].Name == APITokenName && users[idx].Tokens[j].RevokedAt == nil {
+			users[idx].Tokens[j].RevokedAt = &now
+		}
+	}
+	users[idx].Tokens = append(users[idx].Tokens, token)
+	users[idx].UpdatedAt = now
+	if err := s.store.Save(ctx, users); err != nil {
+		return Token{}, "", errStoreFailed("RegenerateAPIToken", err)
+	}
+	return token, plain, nil
+}
+
 // RevokeToken marks a credential as no longer valid, keeping the record.
 //
 // The record stays because a revoked token is evidence: when it was created,

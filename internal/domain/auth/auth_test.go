@@ -704,3 +704,45 @@ func TestUpdateProfileOfAnAccountThatIsNotThere(t *testing.T) {
 		t.Fatalf("error = %v, want not found", err)
 	}
 }
+
+// TestRegeneratingTheAPITokenReplacesOnlyThatOne. Settings > Developers offered
+// "Generate API Token" and answered "isn't wired up in this build yet": the
+// domain could mint a token, and nothing let the person get one to put in an
+// MCP client. Regenerating is the only way to see a value again — it is kept
+// hashed — so it must retire the previous API token and leave the session and
+// the terminal's credential alone.
+func TestRegeneratingTheAPITokenReplacesOnlyThatOne(t *testing.T) {
+	svc, _ := newService(t)
+	out := onboard(t, svc)
+
+	if got, err := svc.APIToken(ctx(), out.User.ID); err != nil || got != nil {
+		t.Fatalf("a fresh account has an API token: %+v, %v", got, err)
+	}
+
+	_, first, err := svc.RegenerateAPIToken(ctx(), out.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, second, err := svc.RegenerateAPIToken(ctx(), out.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.Authenticate(ctx(), first); err == nil {
+		t.Error("the replaced API token still authenticates")
+	}
+	if _, err := svc.Authenticate(ctx(), second); err != nil {
+		t.Errorf("the new API token does not authenticate: %v", err)
+	}
+	if _, err := svc.Authenticate(ctx(), out.Token); err != nil {
+		t.Errorf("regenerating the API token signed the session out: %v", err)
+	}
+
+	current, err := svc.APIToken(ctx(), out.User.ID)
+	if err != nil || current == nil {
+		t.Fatalf("APIToken = %+v, %v", current, err)
+	}
+	if current.ID != record.ID || !strings.HasPrefix(second, current.Prefix) {
+		t.Errorf("APIToken = %+v, want the one just issued (%s…)", current, record.Prefix)
+	}
+}
