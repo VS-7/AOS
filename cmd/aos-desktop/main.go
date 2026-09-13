@@ -110,7 +110,8 @@ func main() {
 	// signing in and out — see windowSession for why the terminal's
 	// credential and the window's own session are kept apart.
 	session := newWindowSession(
-		filepath.Join(paths.Root, desktopTokenFile),
+		// Audited at boot with the other secret files (Paths.SecretFiles).
+		paths.DesktopToken(),
 		localToken(resolver, paths),
 		strings.TrimSpace(resolver.String("TOKEN", "")) != "",
 		log,

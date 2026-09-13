@@ -13,10 +13,6 @@ import (
 	"github.com/OWNER/aos/internal/transport/wailsvc"
 )
 
-// desktopTokenFile is where the window keeps its own session, beside
-// local.token in the state directory.
-const desktopTokenFile = "desktop.token"
-
 // windowSession is the credential this window signs in with, and what it
 // remembers about it between launches.
 //
