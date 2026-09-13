@@ -21,7 +21,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Textarea } from "@/components/ui/textarea";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { SettingsContentContainer } from "../../../../../content-container";
@@ -214,10 +213,17 @@ export function SelectedTemplateContent() {
                   <FormItem>
                     <FormLabel className="opacity-60">{t("Content")}</FormLabel>
                     <FormControl>
-                      <MarkdownEditor
+                      {/* Plain text, not MarkdownEditor. A template body is
+                          Liquid source, and a markdown round-trip rewrites
+                          it: MDX parsing dropped every {{ output }} tag, and
+                          re-serializing escaped the braces of the rest, so a
+                          one-character edit saved "Hi {{ name }}" as "Hi !". */}
+                      <Textarea
+                        {...field}
                         value={field.value ?? ""}
-                        onValueChange={field.onChange}
+                        spellCheck={false}
                         placeholder={t("Write the Liquid template body...")}
+                        className="min-h-64 resize-y font-mono text-sm leading-relaxed"
                       />
                     </FormControl>
                     <FormMessage />
