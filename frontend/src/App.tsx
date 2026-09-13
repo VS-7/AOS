@@ -70,18 +70,25 @@ function RealtimeConnection(): JSX.Element | null {
 }
 
 /**
- * A line across the top, not a blocking overlay.
+ * A notice, not a blocking overlay.
  *
  * What is already on screen was read from a daemon that was answering, so it
  * is still worth looking at; what is not worth doing is a write that will
  * fail. The banner says which of the two the window is in and gets out of the
  * way when the daemon comes back.
+ *
+ * At the bottom, and letting clicks through. It was a bar across the top 28px
+ * of the window, which is the tab strip, the toolbar and — on macOS — the
+ * strip the traffic lights sit in: the "AOS" tab was cut in half and the
+ * toolbar icons were under it for as long as the outage lasted. The layout
+ * cannot make room for it in flow (the sidebar is fixed to the full height),
+ * so it floats where nothing structural lives.
  */
 function DaemonUnreachableBanner(): JSX.Element {
   return (
     <div
       role="status"
-      className="fixed inset-x-0 top-0 z-50 bg-destructive px-4 py-1.5 text-center text-xs font-medium text-destructive-foreground"
+      className="pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-full bg-destructive px-4 py-1.5 text-center text-xs font-medium text-destructive-foreground shadow-md"
     >
       {t("The daemon is not answering. Reconnecting…")}
     </div>
