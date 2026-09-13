@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionsOf, toSpec, type RenderedView } from "./view-spec";
+import { actionsOf, formatViewValue, toSpec, type RenderedView } from "./view-spec";
 
 /**
  * The fixtures are what `views_render` actually answers: `view.Rendered`, with
@@ -82,13 +82,16 @@ describe("toSpec", () => {
     expect((spec.state as { records: unknown[] }).records).toHaveLength(2);
   });
 
-  it("fills a table's rows from the records, projected onto its columns", () => {
+  // The catalog's Table takes `rows: string[][]` in column order and calls
+  // `row.map` on each; rows built as objects threw "row.map is not a
+  // function", and json-render swallowed it into a blank page.
+  it("fills a table's rows from the records, as cell strings in column order", () => {
     const spec = toSpec(scaffoldedTable)!;
     const table = spec.elements[spec.root] as { type: string; props: Record<string, unknown> };
     expect(table.type).toBe("Table");
     expect(table.props["rows"]).toEqual([
-      { id: "d-1", name: "Acme", stage: "won" },
-      { id: "d-2", name: "Globex", stage: "open" },
+      ["Acme", "won"],
+      ["Globex", "open"],
     ]);
     // A table renders once whatever the record count: it takes the rows itself.
     expect(Object.keys(spec.elements)).toHaveLength(1);
@@ -147,10 +150,13 @@ describe("toSpec", () => {
       records: [],
     })!;
 
+    // `press` is the event the registry's Button and Link emit. Bindings keyed
+    // under `click` never matched, so every button in a view did nothing.
     const button = spec.elements[spec.root] as { on?: Record<string, any> };
-    expect(button.on?.["click"].action).toBe("Close deal");
-    expect(button.on?.["click"].params).toEqual({ status: "done" });
-    expect(button.on?.["click"].confirm).toBeDefined();
+    expect(button.on?.["click"]).toBeUndefined();
+    expect(button.on?.["press"].action).toBe("Close deal");
+    expect(button.on?.["press"].params).toEqual({ status: "done" });
+    expect(button.on?.["press"].confirm).toBeDefined();
   });
 
   it("has nothing to render without a tree", () => {
@@ -183,5 +189,27 @@ describe("actionsOf", () => {
   it("answers nothing for a tree with no buttons", () => {
     expect(actionsOf({ component: "Text" })).toEqual({});
     expect(actionsOf(undefined)).toEqual({});
+  });
+});
+
+describe("formatViewValue", () => {
+  // A bound value reached Text and Badge raw: a boolean rendered as an empty
+  // badge, a list as its items run together ("mathpoet"), a date as ISO.
+  it("gives every JSON type a readable form", () => {
+    expect(formatViewValue(true)).toBe("Yes");
+    expect(formatViewValue(false)).toBe("No");
+    expect(formatViewValue(["math", "poet"])).toBe("math, poet");
+    expect(formatViewValue(null)).toBe("");
+    expect(formatViewValue(undefined)).toBe("");
+    expect(formatViewValue("plain")).toBe("plain");
+    expect(formatViewValue({ a: 1 })).toBe('{"a":1}');
+    expect(formatViewValue(1234.5)).toMatch(/1.?234/);
+  });
+
+  it("shows a midnight UTC date as the calendar day it names, not the day before", () => {
+    const shown = formatViewValue("1815-12-10T00:00:00Z");
+    expect(shown).not.toContain("T00:00");
+    expect(shown).toMatch(/10/);
+    expect(shown).toMatch(/1815/);
   });
 });

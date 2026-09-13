@@ -59,8 +59,10 @@ export function WorkspaceSidebarSurfacesGroupMenu() {
         typeof view.metadata?.icon === "string"
           ? view.metadata.icon
           : undefined,
-      isActive: currentView === view.name,
-      onOpen: () => openView(view.name),
+      // By id, which is what `/views/$id` and the URL carry; the name is only
+      // the label. Opening by name landed on "Page not found".
+      isActive: currentView === view.id,
+      onOpen: () => openView(view.id),
     }));
 
     const artifactRows: SurfaceRow[] = artifacts.map((artifact) => ({

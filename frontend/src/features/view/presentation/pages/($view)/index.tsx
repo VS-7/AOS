@@ -1,6 +1,6 @@
 import * as React from "react";
 import type { Spec } from "@/features/view/interfaces/collections.interfaces";
-import { Page, PageBody } from "@/components/ui/page";
+import { Page, PageBody, PageHeader } from "@/components/ui/page";
 import { aos } from "@/app/aos";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/aos-facade";
@@ -32,7 +32,7 @@ export const ViewPage = aos
     // declared dormant the empty envelope does not reach the `!view` check
     // below and preempt `DormantGate` with a 404.
     if (isDormant("view")) {
-      return { view: null, viewId, renderResult: null };
+      return { view: null, viewId, renderResult: null, renderError: null };
     }
 
     const viewResult = await client.view.getById.query({
@@ -59,6 +59,9 @@ export const ViewPage = aos
       view,
       viewId,
       renderResult: renderResponse,
+      // Why the view could not be rendered — a source collection that is gone,
+      // say. Without it the page could only say it had no spec to draw.
+      renderError: renderResult.error ? (errorMessage(renderResult.error) ?? null) : null,
     };
   })
   .withComponent(({ route }) => {
@@ -72,7 +75,7 @@ export const ViewPage = aos
       return <DormantGate feature="view">{null}</DormantGate>;
     }
 
-    const { view, viewId, renderResult } = route.useLoaderData();
+    const { view, viewId, renderResult, renderError } = route.useLoaderData();
     const [spec, setSpec] = React.useState<Spec | null>(() =>
       ViewDataHelper.getSpec(renderResult),
     );
@@ -132,9 +135,26 @@ export const ViewPage = aos
       );
     }, [viewDef, viewId]);
 
+    const title =
+      (view as ViewDefinition & { title?: string; name?: string }).title ||
+      (view as ViewDefinition & { name?: string }).name ||
+      viewId;
+    const description = (view as ViewDefinition & { description?: string }).description;
+
     return (
       <Page>
-        <PageBody className="!p-0">
+        {/* The view's own title: the composed tree has none, so a board or a
+            detail sheet used to render as bare values flush against the
+            sidebar, with nothing saying which view this was. */}
+        <PageHeader>
+          <div className="min-w-0 flex-col !items-start gap-0">
+            <h1 className="truncate text-sm font-semibold text-foreground">{title}</h1>
+            {description ? (
+              <p className="truncate text-xs text-muted-foreground">{description}</p>
+            ) : null}
+          </div>
+        </PageHeader>
+        <PageBody className="px-6 py-4">
           <CollectionViewProvider
             view={viewDef}
             viewId={viewId}
@@ -161,7 +181,16 @@ export const ViewPage = aos
             }}
           >
             <div className="flex h-full min-h-0 w-full flex-1 flex-col">
-              <ViewRenderer spec={spec} handlers={handlers} />
+              {/* Keyed by view: json-render keeps each element's error state
+                  across renders, so without a remount one view that failed
+                  left the next one opened blank too. */}
+              {renderError ? (
+                <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                  {t("This view could not be rendered: {{reason}}", { reason: renderError })}
+                </div>
+              ) : (
+                <ViewRenderer key={viewId} spec={spec} handlers={handlers} />
+              )}
             </div>
           </CollectionViewProvider>
         </PageBody>

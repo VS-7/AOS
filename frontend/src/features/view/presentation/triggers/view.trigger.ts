@@ -5,7 +5,9 @@ import { String } from "@/core/helpers/string";
 export const viewGroup = AosTriggerGroup.create("Views")
   .withOrder(5)
   .withLoader(({ query, stores }) => {
-    const views: ViewSummary[] = stores.views.state.items;
+    // `view`, the key app/stores.ts registers. `views` was undefined, and the
+    // throw it caused emptied the whole command palette, not just this group.
+    const views: ViewSummary[] = stores.view?.state.items ?? [];
 
     const items = !query
       ? views
@@ -17,12 +19,14 @@ export const viewGroup = AosTriggerGroup.create("Views")
       });
 
     const triggerItems = items.map((view) => ({
-      id: `view.navigate.${view.name}`,
+      // By id: `/views/$id` looks the view up by id, and a name ("Contacts
+      // table") landed on "Page not found".
+      id: `view.navigate.${view.id}`,
       label: String.capitalizeFirst(view.title || view.name),
       icon: "Layout" as "Layout",
       group: "Views",
       handler: ({ response }: { response: import("@/app/builders/response").AosResponse }) => {
-        response.redirect(`/views/${view.name}`);
+        response.redirect(`/views/${encodeURIComponent(view.id)}`);
       },
     }));
 

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { resolveLucideIcon } from "../shared/resolve-lucide-icon";
+import { formatViewValue } from "@/lib/view-spec";
 
 type IconProps = {
   name: string;
@@ -65,7 +66,7 @@ export function BadgeComponent({ props }: BaseComponentProps<BadgeProps>) {
       color={props.color ?? "gray"}
       className={props.className ?? undefined}
     >
-      {props.text}
+      {formatViewValue(props.text)}
     </Badge>
   );
 }
@@ -168,7 +169,7 @@ export function StatComponent({ props }: BaseComponentProps<StatProps>) {
           {props.label}
         </span>
         <span className="min-w-0 flex-1 truncate text-foreground">
-          {props.value}
+          {formatViewValue(props.value)}
         </span>
       </div>
     );
@@ -195,7 +196,7 @@ export function StatComponent({ props }: BaseComponentProps<StatProps>) {
             />
           ) : null}
           <span className="truncate text-sm font-semibold tabular-nums tracking-tight text-foreground">
-            {props.value}
+            {formatViewValue(props.value)}
           </span>
         </div>
       </div>
@@ -224,7 +225,7 @@ export function StatComponent({ props }: BaseComponentProps<StatProps>) {
           </span>
         </div>
         <span className="truncate text-sm font-semibold tabular-nums leading-none tracking-tight text-foreground">
-          {props.value}
+          {formatViewValue(props.value)}
         </span>
       </div>
     );
@@ -248,7 +249,7 @@ export function StatComponent({ props }: BaseComponentProps<StatProps>) {
       <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {props.label}
       </span>
-      <span className="min-w-0 truncate text-foreground/90">{props.value}</span>
+      <span className="min-w-0 truncate text-foreground/90">{formatViewValue(props.value)}</span>
     </div>
   );
 }

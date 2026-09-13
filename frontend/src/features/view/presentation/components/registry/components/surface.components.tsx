@@ -16,6 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { resolveLucideIcon } from "../shared/resolve-lucide-icon";
+import { formatViewValue } from "@/lib/view-spec";
 
 type CardProps = {
   title?: string | null;
@@ -57,7 +58,7 @@ export function CardComponent({
     >
       {props.title || props.description ? (
         <CardHeader>
-          {props.title ? <CardTitle>{props.title}</CardTitle> : null}
+          {props.title ? <CardTitle>{formatViewValue(props.title)}</CardTitle> : null}
           {props.description ? (
             <CardDescription>{props.description}</CardDescription>
           ) : null}

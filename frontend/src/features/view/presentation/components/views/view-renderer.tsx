@@ -57,11 +57,10 @@ export function ViewRenderer({
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
         <p className="text-sm font-medium text-foreground">
-          {t("This view has no renderable json-render spec.")}
+          {t("This view has nothing to show.")}
         </p>
         <p className="text-muted-foreground text-sm max-w-md">
-          {t("Expected a flat")} <code className="text-xs">elements</code> {t("map with a valid")} <code className="text-xs">root</code>. If the API returned
-          <code className="text-xs"> &quot;[Circular]&quot;</code>{t(", restart the gateway after the view service serialization fix.")}
+          {t("Its composition is empty. Ask an agent to scaffold it again from its collection.")}
         </p>
       </div>
     );
