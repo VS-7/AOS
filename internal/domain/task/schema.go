@@ -53,6 +53,7 @@ type CreateInput struct {
 
 	Worktree bool   `json:"worktree,omitempty" cli:"flag" jsonschema:"Run this task in an isolated Git checkout."`
 	Base     string `json:"base,omitempty" cli:"flag" jsonschema:"Branch the checkout is cut from."`
+	Branch   string `json:"branch,omitempty" cli:"flag" jsonschema:"Branch the checkout is cut on. Generated from the workspace prefix and the task slug when left out."`
 
 	Content string `json:"content,omitempty" jsonschema:"The description and plan, in Markdown."`
 

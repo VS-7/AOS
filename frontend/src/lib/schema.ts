@@ -1106,6 +1106,8 @@ export interface CommandMap {
     "assigned"?: string;
     /** Branch the checkout is cut from. */
     "base"?: string;
+    /** Branch the checkout is cut on. Generated from the workspace prefix and the task slug when left out. */
+    "branch"?: string;
     /** The description and plan, in Markdown. */
     "content"?: string;
     /** Tasks that must finish before this one can start. */
