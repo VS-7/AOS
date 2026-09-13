@@ -324,7 +324,9 @@ export function ProvidersSection({ providers, models, onRefresh }: ProvidersSect
               {t("Disconnect {{provider}}?", { provider: disconnecting?.name ?? "" })}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {t("The saved credential is removed from this installation.")}
+              {t("{{provider}} is removed from this installation's connected providers. Nothing else on this machine is touched.", {
+                provider: disconnecting?.name ?? "",
+              })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {disconnectImpact.slots.length > 0 || disconnectImpact.agents.length > 0 ? (
@@ -336,9 +338,16 @@ export function ProvidersSection({ providers, models, onRefresh }: ProvidersSect
               ) : null}
               {disconnectImpact.agents.length > 0 ? (
                 <li>
-                  {t("Agents that use it and will stop answering: {{agents}}", {
-                    agents: disconnectImpact.agents.join(", "),
-                  })}
+                  {disconnecting?.auth.mode === "api-key" && disconnecting.auth.required
+                    ? t("Agents that use it and will stop answering: {{agents}}", {
+                        agents: disconnectImpact.agents.join(", "),
+                      })
+                    : // A login-file or optional-key provider is still
+                      // reachable without an entry, so "will stop
+                      // answering" would not be true of it.
+                      t("Agents that name it: {{agents}}", {
+                        agents: disconnectImpact.agents.join(", "),
+                      })}
                 </li>
               ) : null}
             </ul>
