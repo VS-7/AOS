@@ -335,22 +335,34 @@ func resolveRef(ref string, defs map[string]any) map[string]any {
 
 // contents renders the conversation. This API calls the assistant "model" and
 // carries a tool result as a functionResponse part on a user turn.
+//
+// The results of one step go back as one turn, a part per call. Gemini counts
+// them against the call turn before, and a step that called two tools was
+// answered by two turns of one part each — refused with "the number of
+// function response parts is equal to the number of function call parts of the
+// function call turn", on every step that called tools in parallel and on
+// every stored answer, which holds all of a turn's calls on one message.
 func contents(messages []agentloop.Message) []map[string]any {
 	out := make([]map[string]any, 0, len(messages))
+	var responses []map[string]any
+	flush := func() {
+		if len(responses) > 0 {
+			out = append(out, map[string]any{"role": "user", "parts": responses})
+			responses = nil
+		}
+	}
 	for _, m := range messages {
 		switch m.Role {
 		case agentloop.RoleTool:
-			out = append(out, map[string]any{
-				"role": "user",
-				"parts": []map[string]any{{
-					"functionResponse": map[string]any{
-						"name":     m.Name,
-						"response": responseValue(m.Result),
-					},
-				}},
+			responses = append(responses, map[string]any{
+				"functionResponse": map[string]any{
+					"name":     m.Name,
+					"response": responseValue(m.Result),
+				},
 			})
 
 		case agentloop.RoleAssistant:
+			flush()
 			var parts []map[string]any
 			if m.Text != "" {
 				parts = append(parts, map[string]any{"text": m.Text})
@@ -376,11 +388,13 @@ func contents(messages []agentloop.Message) []map[string]any {
 			out = append(out, map[string]any{"role": "model", "parts": parts})
 
 		default:
+			flush()
 			out = append(out, map[string]any{
 				"role": "user", "parts": []map[string]any{{"text": m.Text}},
 			})
 		}
 	}
+	flush()
 	return out
 }
 
@@ -448,10 +462,11 @@ func translate(g generated, model string) agentloop.Response {
 		switch {
 		case p.FunctionCall != nil:
 			// This API does not give a call an id, and the loop pairs a result
-			// with its call by one, so the position in the answer becomes it.
+			// with its call by one, so one is made up — unique, not just the
+			// position in the answer: see providers.CallID.
 			index++
 			out.ToolCalls = append(out.ToolCalls, agentloop.ToolCall{
-				ID:        p.FunctionCall.Name + "-" + itoa(index),
+				ID:        providers.CallID(p.FunctionCall.Name, index),
 				Name:      p.FunctionCall.Name,
 				Input:     providers.ToolArguments(string(p.FunctionCall.Args)),
 				Signature: p.ThoughtSignature,
@@ -558,16 +573,4 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var out []byte
-	for n > 0 {
-		out = append([]byte{byte('0' + n%10)}, out...)
-		n /= 10
-	}
-	return string(out)
 }

@@ -808,26 +808,28 @@ func answerParts(result *agentloop.Result, reasoning []string) []chat.Part {
 	// ("No tool call found for function call output").
 	//
 	// `result.Calls` is what the model asked for in this turn and nothing else,
-	// kept where no prune reaches. A call is stored only with its result and a
-	// result only with its call, so what is written can always be sent back.
-	answered := make(map[string]bool, len(result.ToolCalls))
-	for _, r := range result.ToolCalls {
-		answered[r.CallID] = true
-	}
-	asked := make(map[string]bool, len(result.Calls))
-	for _, c := range result.Calls {
-		if !answered[c.ID] || asked[c.ID] {
-			continue
+	// kept where no prune reaches, one entry per entry of `result.ToolCalls`.
+	// They are paired by position, not by id: ids are not unique within a turn
+	// on every provider — Google names a call after its place in the answer,
+	// so every step that starts with Read asks for "Read-1" — and keeping only
+	// the first call with an id stored one call for three results. A call is
+	// stored only with its result and a result only with its call, so what is
+	// written can always be sent back.
+	n := min(len(result.Calls), len(result.ToolCalls))
+	paired := make([]int, 0, n)
+	for i := range n {
+		if result.Calls[i].ID == result.ToolCalls[i].CallID {
+			paired = append(paired, i)
 		}
-		asked[c.ID] = true
+	}
+	for _, i := range paired {
+		c := result.Calls[i]
 		parts = append(parts, chat.Part{
 			Type: chat.PartToolCall, ToolName: c.Name, ToolCallID: c.ID, Input: c.Input,
 		})
 	}
-	for _, r := range result.ToolCalls {
-		if !asked[r.CallID] {
-			continue
-		}
+	for _, i := range paired {
+		r := result.ToolCalls[i]
 		parts = append(parts, chat.Part{
 			Type: chat.PartToolResult, ToolName: r.Name, ToolCallID: r.CallID, Output: r.Output,
 		})

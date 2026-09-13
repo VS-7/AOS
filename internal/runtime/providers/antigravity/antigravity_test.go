@@ -654,3 +654,39 @@ func TestOneHalfOfThePairIsNotEnough(t *testing.T) {
 		t.Errorf("oauthClient() = %q, %q, %v", id, secret, ok)
 	}
 }
+
+// TestCallsWithNoIdAreNamedApartAcrossSteps. Named by position alone, every
+// step that began with Read asked for "Read-1", and the chat drew every result
+// into the last call of that name.
+func TestCallsWithNoIdAreNamedApartAcrossSteps(t *testing.T) {
+	seen := map[string]bool{}
+	for range 3 {
+		out := translate(mustGenerated(t, `{"candidates":[{"content":{"parts":[
+			{"functionCall":{"name":"Read","args":{}}}]}}]}`), "m")
+		for _, c := range out.ToolCalls {
+			if seen[c.ID] {
+				t.Fatalf("the id %q names more than one call", c.ID)
+			}
+			seen[c.ID] = true
+		}
+	}
+}
+
+// TestAStepsResultsGoBackAsOneTurn: one user turn with a response part per
+// call, not one turn per result.
+func TestAStepsResultsGoBackAsOneTurn(t *testing.T) {
+	got := contents([]agentloop.Message{
+		{Role: agentloop.RoleUser, Text: "read both"},
+		{Role: agentloop.RoleAssistant, ToolCalls: []agentloop.ToolCall{{ID: "a", Name: "Read"}, {ID: "b", Name: "Read"}}},
+		{Role: agentloop.RoleTool, CallID: "a", Name: "Read", Result: json.RawMessage(`"1"`)},
+		{Role: agentloop.RoleTool, CallID: "b", Name: "Read", Result: json.RawMessage(`"2"`)},
+		{Role: agentloop.RoleUser, Text: "and now?"},
+	})
+	if len(got) != 4 {
+		t.Fatalf("turns = %d, want the question, the calls, the results and the next question", len(got))
+	}
+	parts, _ := got[2]["parts"].([]map[string]any)
+	if got[2]["role"] != "user" || len(parts) != 2 {
+		t.Fatalf("the results turn = %v, want one user turn with both responses", got[2])
+	}
+}
