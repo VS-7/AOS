@@ -6,13 +6,16 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAlert } from "@/components/ui/alert-provider";
 import type { Goal } from "@/features/goal/interfaces/goal.interfaces";
 import { GoalHelper } from "@/features/goal/presentation/helpers/goal.helper";
 import {
   GOAL_STATUS_CONFIG,
-  GOAL_PRIORITY_CONFIG,
+  GOAL_STATUS_ORDER,
   goalPriorityConfig,
 } from "@/features/goal/presentation/consts/goal";
 import { aos } from "@/app/aos";
@@ -30,6 +33,7 @@ interface GoalListRowProps {
 
 export function GoalListRow({ goal }: GoalListRowProps) {
   const router = useRouter();
+  const { confirm } = useAlert();
   const status = GoalHelper.getStatus(goal.status);
   const StatusIcon = status.icon;
   const priority = goalPriorityConfig(goal.priority);
@@ -44,7 +48,7 @@ export function GoalListRow({ goal }: GoalListRowProps) {
         body: { priority },
       });
       toast.success(
-        `Priority updated to ${goalPriorityConfig(priority).label}`,
+        t("Priority updated to {{priority}}", { priority: goalPriorityConfig(priority).label }),
       );
       router.invalidate();
     } catch (error) {
@@ -58,17 +62,30 @@ export function GoalListRow({ goal }: GoalListRowProps) {
         params: { goal: goal.id },
         body: { status },
       });
-      toast.success(`Moved to ${GoalHelper.getStatus(status).label}`);
+      toast.success(t("Moved to {{status}}", { status: GoalHelper.getStatus(status).label }));
       router.invalidate();
     } catch (error) {
       toast.error(t("Failed to update status"), { description: errorMessage(error) });
     }
   };
 
+  // The same question the goal page asks: a row's menu removed the goal on
+  // the first click, with no way back.
   const handleDelete = async () => {
+    const confirmed = await confirm({
+      title: t("Delete this goal?"),
+      description: t("This permanently removes {{name}}. Tasks that serve it are kept, without the goal.", {
+        name: goal.title,
+      }),
+      confirmText: t("Delete goal"),
+      cancelText: t("Cancel"),
+      variant: "destructive",
+    });
+    if (!confirmed) return;
     try {
       await aos.client.goal.delete.mutateOrThrow({ params: { goal: goal.id } });
-      toast.success(`Goal ${goal.id} deleted`);
+      toast.success(t("Goal {{name}} deleted", { name: goal.title }));
+      void aos.stores.goals.actions.refresh();
       router.invalidate();
     } catch (error) {
       toast.error(t("Failed to delete goal"), { description: errorMessage(error) });
@@ -77,7 +94,7 @@ export function GoalListRow({ goal }: GoalListRowProps) {
 
   const handleCopyIdentifier = () => {
     navigator.clipboard.writeText(goal.id);
-    toast.success(`${goal.id} copied`);
+    toast.success(t("{{value}} copied", { value: goal.id }));
   };
 
   return (
@@ -119,19 +136,27 @@ export function GoalListRow({ goal }: GoalListRowProps) {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
-          {Object.entries(GOAL_STATUS_CONFIG).map(([s, cfg]) => {
-            const Icon = cfg.icon;
-            return (
-              <DropdownMenuItem
-                key={s}
-                onClick={() => handleStatusChange(s as Goal["status"])}
-                className="flex items-center gap-2"
-              >
-                <Icon className={`size-4 ${cfg.color}`} />
-                <span>{cfg.label}</span>
-              </DropdownMenuItem>
-            );
-          })}
+          {/* The list's own section order, with the current status marked —
+              the priority menu beside it already did both. */}
+          <DropdownMenuRadioGroup
+            value={goal.status}
+            onValueChange={(value) => handleStatusChange(value as Goal["status"])}
+          >
+            {GOAL_STATUS_ORDER.map((value) => {
+              const cfg = GOAL_STATUS_CONFIG[value];
+              const Icon = cfg.icon;
+              return (
+                <DropdownMenuRadioItem
+                  key={value}
+                  value={value}
+                  className="flex items-center gap-2"
+                >
+                  <Icon className={`size-4 ${cfg.color}`} />
+                  <span className="whitespace-nowrap pr-2">{cfg.label}</span>
+                </DropdownMenuRadioItem>
+              );
+            })}
+          </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
 

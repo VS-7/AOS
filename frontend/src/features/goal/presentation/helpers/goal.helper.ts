@@ -1,5 +1,6 @@
 import { GOAL_STATUS_ORDER, goalStatusConfig } from "@/features/goal/presentation/consts/goal";
 import type { Goal } from "@/features/goal/interfaces/goal.interfaces";
+import { formatDeadline, isDeadlineOverdue } from "./goal-deadline";
 
 /**
  * @class GoalHelper
@@ -38,14 +39,13 @@ export class GoalHelper {
 
   /**
    * @method formatDeadline
-   * @description Formats an ISO deadline string into a readable date.
+   * @description The deadline's calendar day, in the interface's language —
+   * see `goal-deadline.ts` for why a picked day is read in UTC.
    * @param {string | undefined} isoString - The ISO timestamp.
    * @returns {string | null} The formatted date or null.
    */
   public static formatDeadline(isoString?: string): string | null {
-    if (!isoString) return null;
-    const date = new Date(isoString);
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return formatDeadline(isoString);
   }
 
   /**
@@ -55,7 +55,6 @@ export class GoalHelper {
    * @returns {boolean} True if the deadline is in the past.
    */
   public static isOverdue(isoString?: string): boolean {
-    if (!isoString) return false;
-    return new Date(isoString) < new Date();
+    return isDeadlineOverdue(isoString);
   }
 }

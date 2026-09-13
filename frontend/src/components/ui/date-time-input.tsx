@@ -1,12 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
+import { enUS, ptBR } from "react-day-picker/locale";
 
 import { Calendar } from "@/components/ui/calendar";
-import { type ButtonProps } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { t } from "@/lib/i18n";
+import { calendarDayOf, dayAsUtcMidnight } from "@/lib/calendar-day";
+import { getLocale, t } from "@/lib/i18n";
 import {
   Popover,
   PopoverContent,
@@ -24,16 +26,15 @@ interface DateTimeInputProps {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /**
+   * The label of the action that removes the date, shown under the calendar
+   * while one is set. Without it a date, once picked, could only be replaced.
+   */
+  clearLabel?: string;
 }
 
 function isValidDate(value: Date) {
   return !Number.isNaN(value.getTime());
-}
-
-function toUtcDateOnlyIso(date: Date) {
-  return new Date(
-    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
-  ).toISOString();
 }
 
 function toLocalDateTimeIso(date: Date, hours: number, minutes: number) {
@@ -64,24 +65,21 @@ function parseTimeValue(value?: string | null) {
 function getDateFromValue(value?: string | null, showTime = false) {
   if (!value) return null;
 
+  if (!showTime) return calendarDayOf(value);
+
   const parsed = new Date(value);
-  if (!isValidDate(parsed)) return null;
-
-  if (showTime) return parsed;
-
-  return new Date(
-    parsed.getUTCFullYear(),
-    parsed.getUTCMonth(),
-    parsed.getUTCDate(),
-  );
+  return isValidDate(parsed) ? parsed : null;
 }
 
 function formatLabel(value?: string | null, showTime = false) {
   const date = getDateFromValue(value, showTime);
   if (!date) return null;
 
+  // The interface's language, not the browser's: inside the desktop window
+  // the browser default is the system's, which is how an English interface
+  // came to show "20 de set. de 2026".
   return new Intl.DateTimeFormat(
-    undefined,
+    getLocale(),
     showTime
       ? {
           dateStyle: "medium",
@@ -99,9 +97,10 @@ export function DateTimeInput({
   variant: _variant = "outline",
   size: _size = "default",
   showTime = false,
-  placeholder = showTime ? "Pick a date and time" : "Pick a date",
+  placeholder = showTime ? t("Pick a date and time") : t("Pick a date"),
   disabled,
   className: _className,
+  clearLabel,
 }: DateTimeInputProps) {
   const [open, setOpen] = React.useState(false);
   const selectedDate = getDateFromValue(value, showTime);
@@ -129,7 +128,7 @@ export function DateTimeInput({
       return;
     }
 
-    onValueChange(toUtcDateOnlyIso(date));
+    onValueChange(dayAsUtcMidnight(date));
     setOpen(false);
   }
 
@@ -156,13 +155,40 @@ export function DateTimeInput({
       </PopoverTrigger>
       <PopoverContent className="p-0" align="start">
         <div className="p-1.5 w-full">
+          {/* mode="single": react-day-picker makes a day clickable only when
+              a selection mode (or onDayClick) is given — without it every day
+              was plain text and nothing could be picked. `required` keeps a
+              click on the selected day from deselecting it into a silent
+              "no date"; removing the date is the explicit action below. */}
           <CalendarInput
+            mode="single"
+            required
+            locale={getLocale() === "pt-BR" ? ptBR : enUS}
             selected={selectedDate ?? undefined}
+            defaultMonth={selectedDate ?? undefined}
             onSelect={handleDateChange}
             initialFocus
             className="w-full"
           />
         </div>
+
+        {clearLabel && value ? (
+          <div className="border-t p-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start gap-2 text-muted-foreground"
+              onClick={() => {
+                onValueChange(undefined);
+                setOpen(false);
+              }}
+            >
+              <X className="size-3.5" />
+              {clearLabel}
+            </Button>
+          </div>
+        ) : null}
 
         {showTime ? (
           <div className="border-t p-3">
