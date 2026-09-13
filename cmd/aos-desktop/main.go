@@ -306,6 +306,7 @@ func main() {
 			// artifact here needs. See bridgeDaemon.
 			Middleware: bridgeDaemon(daemon, log),
 		},
+		Server:   serverOptions(),
 		LogLevel: slog.LevelWarn,
 	})
 
@@ -380,6 +381,20 @@ func main() {
 		log.Error("the window closed with an error", "err", err)
 		exitCode = 1
 	}
+}
+
+// serverOptions is the HTTP server a `-tags server` build serves the window
+// from; any other build ignores it.
+//
+// Wails gives that server a thirty-second write deadline by default, which
+// bounds every bridge call's answer. A call that took longer had its answer
+// refused, the connection closed with nothing written, and the browser —
+// which resends a request whose kept-alive connection closed before any
+// answer — sent the same POST /wails/runtime again, so the command ran twice.
+// How long a call may wait is decided by daemonclient, while the daemon is
+// alive; a stream from /api/file/content lasts as long as somebody watches.
+func serverOptions() application.ServerOptions {
+	return application.ServerOptions{WriteTimeout: 24 * time.Hour}
 }
 
 // localToken is the credential this installation already holds — the shared
