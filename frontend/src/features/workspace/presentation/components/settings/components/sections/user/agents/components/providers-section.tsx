@@ -130,6 +130,17 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
             >
               {catalogueLabel(provider)}
             </p>
+            {provider.modelsError ? (
+              // On the row, not only in a tooltip nobody hovers: the reason
+              // is the part that says whether signing in again can help, and
+              // the first action is what to do instead when it cannot.
+              <div className="mt-1 space-y-0.5 text-xs leading-tight text-muted-foreground">
+                <p className="line-clamp-2 break-words">{provider.modelsError}</p>
+                {provider.modelsErrorActions?.[0] ? (
+                  <p className="break-words text-foreground/80">→ {provider.modelsErrorActions[0]}</p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <div className="flex items-center gap-2">
             <DropdownMenu>

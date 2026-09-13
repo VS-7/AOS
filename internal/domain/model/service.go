@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"sort"
 	"sync"
+
+	"github.com/OWNER/aos/internal/core/apperr"
 )
 
 // Service is the catalogue aggregate.
@@ -82,13 +84,54 @@ func (s *Service) ask(ctx context.Context, id string) Provider {
 		// Logged as well as returned: the message reaches whoever asked, and
 		// the log is where somebody looks when a provider has been quietly
 		// failing for a week.
-		s.log.Warn("could not read a provider's model catalogue", "provider", id, "err", err)
-		return Provider{ID: id, Models: []Model{}, Error: err.Error()}
+		reason, actions := explain(err)
+		s.log.Warn("could not read a provider's model catalogue", "provider", id, "err", reason)
+		return Provider{ID: id, Models: []Model{}, Error: reason, Actions: actions}
 	}
 	if models == nil {
 		models = []Model{}
 	}
 	return Provider{ID: id, Models: models}
+}
+
+// explain renders a failure as what failed and why, with every call to action
+// in the chain.
+//
+// err.Error() is the outermost error alone, and the outermost error is the
+// layer that gave up, not the reason: an Antigravity login that could not be
+// renewed read "the credential ... could not be renewed" and "sign in again",
+// while the cause — renewal needs an OAuth client pair this process was never
+// given — and the call to action that says how to supply it were one level
+// down, where neither Settings nor the log looked.
+func explain(err error) (string, []apperr.CallToAction) {
+	var chain []*apperr.Error
+	for next := err; next != nil; {
+		app, ok := apperr.As(next)
+		if !ok {
+			break
+		}
+		chain = append(chain, app)
+		next = app.Cause
+	}
+	if len(chain) == 0 {
+		return err.Error(), nil
+	}
+
+	reason := chain[0].Error()
+	if deepest := chain[len(chain)-1]; len(chain) > 1 && deepest.Message != "" {
+		reason += ": " + deepest.Message
+	}
+	var actions []apperr.CallToAction
+	seen := map[string]bool{}
+	for i := len(chain) - 1; i >= 0; i-- {
+		for _, cta := range chain[i].Actions {
+			if !seen[cta.Label] {
+				seen[cta.Label] = true
+				actions = append(actions, cta)
+			}
+		}
+	}
+	return reason, actions
 }
 
 func contains(list []string, want string) bool {

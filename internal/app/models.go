@@ -22,6 +22,18 @@ import (
 // A changed credential does not wait for it — see catalogEntry.credential.
 const catalogTTL = 5 * time.Minute
 
+// catalogFailureTTL is how long a provider that could not be asked is not
+// asked again.
+//
+// Short, because the usual fixes — a key pasted again, a login refreshed — are
+// made and retried within seconds, and a failure served past them would make
+// the fix look like it did not work. Not zero, because the settings screen asks
+// on every render: a provider that cannot answer was asked again each time,
+// which for a file-based credential meant another renewal attempt against
+// somebody else's file and another warning in the log. A changed credential
+// does not wait for this either.
+const catalogFailureTTL = 30 * time.Second
+
 // catalogTimeout bounds one provider's answer.
 //
 // The shared provider client allows ten minutes, which is right for a reasoning
@@ -50,6 +62,10 @@ type modelCatalog struct {
 type catalogEntry struct {
 	models  []model.Model
 	fetched time.Time
+
+	// err is a failed answer, kept for catalogFailureTTL rather than
+	// catalogTTL.
+	err error
 
 	// credential fingerprints the key the answer was fetched with, so that
 	// correcting a wrong key shows the right catalogue immediately instead of
@@ -96,7 +112,7 @@ func (c *modelCatalog) Models(ctx context.Context, provider string) ([]model.Mod
 	fingerprint := fingerprintOf(key)
 
 	if hit, ok := c.fresh(provider, fingerprint); ok {
-		return hit, nil
+		return hit.models, hit.err
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, catalogTimeout)
@@ -104,10 +120,10 @@ func (c *modelCatalog) Models(ctx context.Context, provider string) ([]model.Mod
 
 	found, err := providers.Models(ctx, provider, providers.Config{APIKey: key, Home: c.home})
 	if err != nil {
-		// A failure is not cached. The common causes — a key just pasted
-		// wrong, a network that is down for a minute — are the ones a person
-		// fixes and retries within seconds, and caching the failure would make
-		// the fix look like it did not work.
+		// Kept only briefly: see catalogFailureTTL.
+		c.mu.Lock()
+		c.cached[provider] = catalogEntry{fetched: c.clock.Now(), credential: fingerprint, err: err}
+		c.mu.Unlock()
 		return nil, err
 	}
 
@@ -122,24 +138,31 @@ func (c *modelCatalog) Models(ctx context.Context, provider string) ([]model.Mod
 	return models, nil
 }
 
-// fresh returns a cached answer when it was fetched recently with this same
-// credential.
-func (c *modelCatalog) fresh(provider, fingerprint string) ([]model.Model, bool) {
+// fresh returns a cached answer — a catalogue, or the failure to read one —
+// when it was fetched recently with this same credential.
+func (c *modelCatalog) fresh(provider, fingerprint string) (catalogEntry, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	entry, ok := c.cached[provider]
 	if !ok || entry.credential != fingerprint {
-		return nil, false
+		return catalogEntry{}, false
 	}
-	if c.clock.Now().Sub(entry.fetched) >= catalogTTL {
-		return nil, false
+	ttl := catalogTTL
+	if entry.err != nil {
+		ttl = catalogFailureTTL
 	}
-	// A copy: the caller owns what it receives, and the domain sorts and
-	// filters what it is given.
-	out := make([]model.Model, len(entry.models))
-	copy(out, entry.models)
-	return out, true
+	if c.clock.Now().Sub(entry.fetched) >= ttl {
+		return catalogEntry{}, false
+	}
+	// A copy of the models: the caller owns what it receives, and the domain
+	// sorts and filters what it is given.
+	if entry.models != nil {
+		models := make([]model.Model, len(entry.models))
+		copy(models, entry.models)
+		entry.models = models
+	}
+	return entry, true
 }
 
 // fingerprintOf hashes a credential so the cache can tell one from another

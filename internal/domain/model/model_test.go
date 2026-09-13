@@ -204,3 +204,35 @@ func TestNoProvidersConnectedIsAnEmptyAnswerNotAnError(t *testing.T) {
 		t.Fatalf("answered %v", out)
 	}
 }
+
+// Antigravity's expired login could not be renewed because the desktop daemon
+// never has the CLI's OAuth client pair. That reason, and the call to action
+// that says how to supply the pair, were the inner error; Provider.Error was
+// err.Error(), which keeps only the outermost code and sentence. Settings and
+// the log both said "could not be renewed" and "sign in again", which is the
+// half that does not explain anything.
+func TestAFailedCatalogueCarriesTheInnermostReasonAndItsCallToAction(t *testing.T) {
+	inner := apperr.New("ANTIGRAVITY_NO_OAUTH_CLIENT").
+		Msgf("the Antigravity login expired and renewing it needs the CLI's OAuth client, which this build does not carry").
+		CTA(apperr.CallToAction{Label: "set AOS_ANTIGRAVITY_CLIENT_ID and AOS_ANTIGRAVITY_CLIENT_SECRET; or sign in again"})
+	outer := apperr.New("OAUTH_REFRESH_FAILED").
+		Msgf("the credential in /home/me/.gemini/jetski-standalone-oauth-token could not be renewed").
+		Wrap(inner).
+		CTA(apperr.CallToAction{Label: "sign in again with the Antigravity CLI (agy)"})
+
+	catalog := &fakeCatalog{
+		connected: []string{"antigravity"},
+		fails:     map[string]error{"antigravity": outer},
+	}
+	out, err := newService(catalog).List(context.Background(), model.ListInput{Reasoning: reason()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := out.Providers[0]
+	if !strings.Contains(got.Error, "could not be renewed") || !strings.Contains(got.Error, "needs the CLI's OAuth client") {
+		t.Errorf("error = %q, want what failed and why", got.Error)
+	}
+	if len(got.Actions) == 0 || !strings.Contains(got.Actions[0].Label, "AOS_ANTIGRAVITY_CLIENT_ID") {
+		t.Errorf("actions = %+v, want the innermost call to action first", got.Actions)
+	}
+}

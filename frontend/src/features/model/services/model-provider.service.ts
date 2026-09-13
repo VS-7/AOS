@@ -70,6 +70,7 @@ export function useModelProviders(): ModelProvider[] {
           models: discovered ? found : entry.models,
           modelsDiscovered: discovered,
           modelsError: discovery.errors.get(entry.id),
+          modelsErrorActions: discovery.actions.get(entry.id),
         };
       }),
     [connected, discovery],

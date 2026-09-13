@@ -27,6 +27,8 @@ interface DiscoveredProvider {
   models?: { id?: string; name?: string }[];
   /** Why this provider's catalogue is empty, when asking failed. */
   error?: string;
+  /** What to do about `error`, most specific first. */
+  cta?: { label?: string }[];
 }
 
 interface ListModelsOutput {
@@ -38,11 +40,13 @@ interface ListModelsOutput {
 export interface ModelDiscovery {
   models: Map<string, ModelProviderOption[]>;
   errors: Map<string, string>;
+  /** The call-to-action labels that came with each error. */
+  actions: Map<string, string[]>;
   /** True while the first answer is still in flight. */
   pending: boolean;
 }
 
-const EMPTY: ModelDiscovery = { models: new Map(), errors: new Map(), pending: false };
+const EMPTY: ModelDiscovery = { models: new Map(), errors: new Map(), actions: new Map(), pending: false };
 
 /**
  * How long an answer is reused before asking again.
@@ -73,10 +77,17 @@ export function useDiscoveredModels(enabled: boolean): ModelDiscovery {
 
     const models = new Map<string, ModelProviderOption[]>();
     const errors = new Map<string, string>();
+    const actions = new Map<string, string[]>();
 
     for (const provider of data.providers) {
       if (!provider?.id) continue;
-      if (provider.error) errors.set(provider.id, provider.error);
+      if (provider.error) {
+        errors.set(provider.id, provider.error);
+        const labels = (provider.cta ?? [])
+          .map((cta) => cta?.label?.trim())
+          .filter((label): label is string => !!label);
+        if (labels.length > 0) actions.set(provider.id, labels);
+      }
 
       const options = (provider.models ?? [])
         .filter((m): m is { id: string; name?: string } => !!m?.id)
@@ -91,6 +102,6 @@ export function useDiscoveredModels(enabled: boolean): ModelDiscovery {
 
       if (options.length > 0) models.set(provider.id, options);
     }
-    return { models, errors, pending };
+    return { models, errors, actions, pending };
   }, [data, pending]);
 }
