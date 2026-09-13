@@ -1159,6 +1159,7 @@
   "Theme mode": "Theme mode",
   "theme settings": "theme settings",
   "themePreview: ThemeConfig =": "themePreview: ThemeConfig =",
+  "These are written into the instructions of the copilot this workspace creates. You can edit them later in its agent settings.": "These are written into the instructions of the copilot this workspace creates. You can edit them later in its agent settings.",
   "These preferences aren't wired to a running orchestrator yet — the one this workspace gets is seeded automatically when it's created.": "These preferences aren't wired to a running orchestrator yet — the one this workspace gets is seeded automatically when it's created.",
   "This action removes": "This action removes",
   "This agent does not have routines yet.": "This agent does not have routines yet.",
