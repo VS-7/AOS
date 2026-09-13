@@ -135,7 +135,9 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
               // is the part that says whether signing in again can help, and
               // the first action is what to do instead when it cannot.
               <div className="mt-1 space-y-0.5 text-xs leading-tight text-muted-foreground">
-                <p className="line-clamp-2 break-words">{provider.modelsError}</p>
+                {/* Whole, not clamped: the part that says why comes last,
+                    after the path of the file that could not be renewed. */}
+                <p className="wrap-anywhere">{provider.modelsError}</p>
                 {provider.modelsErrorActions?.[0] ? (
                   <p className="break-words text-foreground/80">→ {provider.modelsErrorActions[0]}</p>
                 ) : null}
