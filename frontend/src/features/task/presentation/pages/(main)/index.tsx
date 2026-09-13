@@ -2,7 +2,7 @@ import { aos } from "@/app/aos";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
 import { Schema } from "@/core/helpers/schema.helper";
 import { z } from "zod";
-import type { Task, TaskPriority } from "@/features/task/interfaces/task.interfaces";
+import type { Task } from "@/features/task/interfaces/task.interfaces";
 
 import { TasksProvider } from "./context";
 import { TasksPageInner } from "./inner";
@@ -17,19 +17,6 @@ const TasksPageSearchSchema = Schema.object({
   goal: z.string().optional(),
 });
 
-function parseMultiValue(value?: string): string[] {
-  if (!value) return [];
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function parseOptionalMultiValue(value?: string): string[] | undefined {
-  const values = parseMultiValue(value);
-  return values.length > 0 ? values : undefined;
-}
-
 export const TasksPage = aos
   .page("/tasks")
   .withMetadata({
@@ -40,22 +27,19 @@ export const TasksPage = aos
   .use(WorkspacePageMiddleware())
   .withLoader(async ({ client, request }) => {
     const query = request.query || {};
-    const priority = parseOptionalMultiValue(query.priority) as
-      | TaskPriority[]
-      | undefined;
-    const type = parseOptionalMultiValue(query.type);
-    const project = parseOptionalMultiValue(query.project);
-    const goal = parseOptionalMultiValue(query.goal);
 
+    // Only the search goes to the daemon. Priority, type, project and goal
+    // are applied by the page (`TasksProvider`, `filterTasks`): tasks_list
+    // takes one value for each, so a priority array was refused and a second
+    // type or project was ignored.
     const response = await client.task.list.query({
-      query: {
-        query: query.query?.trim() || undefined,
-        ...(priority ? { priority } : {}),
-        ...(type ? { type } : {}),
-        ...(project ? { project } : {}),
-        ...(goal ? { goal } : {}),
-      },
+      query: { query: query.query?.trim() || undefined },
     });
+
+    // A refused or failed read used to become an empty list, which is
+    // indistinguishable from a workspace with no tasks. Thrown, it reaches
+    // the route's error screen with the daemon's reason and a retry.
+    if (response.error) throw response.error;
 
     // The facade's `query()` deliberately returns `Envelope<unknown>` (see
     // `lib/aos-facade.ts`) — the ported code assumed a strongly-typed RPC

@@ -12,6 +12,7 @@ import { DraggableTaskListRow } from "./draggable-task-list-row.component";
 import { useDroppable } from "@dnd-kit/core";
 import { useDragContext } from "../../../context";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 interface TasksListSectionProps {
   status: Task["status"];
@@ -26,10 +27,14 @@ export const TasksListSection = React.memo(function TasksListSection({
   const Icon = config.icon;
   const isEmpty = tasks.length === 0;
   const [isOpen, setIsOpen] = React.useState(!isEmpty);
-  const { isDragActive } = useDragContext();
+  const { isDragActive, acceptsDrop } = useDragContext();
+  // A section the dragged task cannot move to takes no drop: the row used to
+  // land, get refused by the daemon and snap back without a word.
+  const accepts = acceptsDrop(status);
 
   const { setNodeRef, isOver } = useDroppable({
     id: status,
+    disabled: !accepts,
   });
 
   React.useEffect(() => {
@@ -62,7 +67,8 @@ export const TasksListSection = React.memo(function TasksListSection({
             ref={setNodeRef}
             className={cn(
               "flex flex-col rounded-md border shadow-inner bg-muted divide-y overflow-hidden transition-[border-color,background-color,box-shadow]",
-              isDragActive && "border-dashed border-border/85 bg-muted/30",
+              isDragActive && accepts && "border-dashed border-border/85 bg-muted/30",
+              isDragActive && !accepts && "opacity-50",
               isOver && "border-primary/35 bg-accent/30 ring-1 ring-primary/10",
             )}
           >
@@ -73,9 +79,11 @@ export const TasksListSection = React.memo(function TasksListSection({
                   isOver && "text-foreground font-medium",
                 )}
               >
-                {isOver
-                  ? "Drop task here"
-                  : `No tasks in ${config.label.toLowerCase()}`}
+                {isDragActive && !accepts
+                  ? t("This task cannot move here")
+                  : isOver
+                    ? t("Drop task here")
+                    : t("No tasks in {{status}}", { status: config.label })}
               </div>
             ) : (
               tasks.map((task) => (

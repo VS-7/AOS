@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { aos } from "@/app/aos";
 import { errorMessage } from "@/lib/aos-facade";
 import { t } from "@/lib/i18n";
 import type {
@@ -18,7 +19,8 @@ import type {
 } from "@/features/task/interfaces/task.interfaces";
 import { TaskHelper } from "../../helpers/task.helper";
 import { TASK_STATUS_ORDER } from "../../consts/task";
-import { useTasksStatusTransition } from "../../hooks/tasks-status-transition.hook";
+import { canMoveTo } from "../../helpers/task-lifecycle.helper";
+import { filterTasks, filterableTypes } from "../../helpers/task-filter.helper";
 import type {
   DragStartEvent,
   DragEndEvent,
@@ -43,6 +45,8 @@ interface DragContextValue {
   overContainerId: Task["status"] | null;
   isDragActive: boolean;
   activeDropStatus: Task["status"] | null;
+  /** Whether the task being dragged can be dropped on this status. True when nothing is dragged. */
+  acceptsDrop: (status: Task["status"]) => boolean;
   handleDragStart: (event: DragStartEvent) => void;
   handleDragOver: (event: DragOverEvent) => void;
   handleDragEnd: (event: DragEndEvent) => void;
@@ -85,6 +89,9 @@ interface TasksContextValue {
   hasStatusShortcut: "all" | Task["status"];
   currentView: "list" | "kanban";
 
+  /** Whether a search or a filter is narrowing the list. */
+  isNarrowed: boolean;
+
   // Actions (stable refs)
   updateSearch: (next: Partial<TasksPageSearchSchema>) => void;
   handleViewChange: (view: "list" | "kanban") => void;
@@ -97,9 +104,6 @@ interface TasksContextValue {
   handleToggleGoal: (goal: string) => void;
   clearFilters: () => void;
   setSearchDraft: (value: string) => void;
-
-  // Finish dialog
-  finishTransition: ReturnType<typeof useTasksStatusTransition>;
 }
 
 const TasksContext = createContext<TasksContextValue | null>(null);
@@ -158,7 +162,9 @@ export function TasksProvider({
   const [overContainerId, setOverContainerId] = useState<
     Task["status"] | null
   >(null);
-  const finishTransition = useTasksStatusTransition();
+  const workspaceTypes = aos.stores.workspace.useState(
+    (state) => state.current?.tasks,
+  );
 
   // Keep a stable ref to tasks for drag handlers so they don't stale-close
   const tasksRef = useRef(tasks);
@@ -194,27 +200,37 @@ export function TasksProvider({
   // --- Derived data (memoized) ---
 
   const taskTypes = useMemo(
+    () => filterableTypes(workspaceTypes ?? [], tasks),
+    [workspaceTypes, tasks],
+  );
+
+  // Priority, type, project and goal are applied here, over everything the
+  // loader read — see `filterTasks` for why they are no longer sent.
+  const matchingTasks = useMemo(
     () =>
-      Array.from(new Set(tasks.map((task) => task.type))).sort((a, b) =>
-        a.localeCompare(b),
-      ),
-    [tasks],
+      filterTasks(tasks, {
+        priorities: selectedPriorities,
+        types: selectedTypes,
+        projects: selectedProjects,
+        goals: selectedGoals,
+      }),
+    [tasks, selectedPriorities, selectedTypes, selectedProjects, selectedGoals],
   );
 
   const statusCountByType = useMemo(() => {
     return TASK_STATUS_ORDER.reduce(
       (acc, status) => {
-        acc[status] = tasks.filter((task) => task.status === status).length;
+        acc[status] = matchingTasks.filter((task) => task.status === status).length;
         return acc;
       },
       {} as Record<Task["status"], number>,
     );
-  }, [tasks]);
+  }, [matchingTasks]);
 
   const filteredTasks = useMemo(() => {
-    if (selectedStatuses.length === 0) return tasks;
-    return tasks.filter((task) => selectedStatuses.includes(task.status));
-  }, [tasks, selectedStatuses]);
+    if (selectedStatuses.length === 0) return matchingTasks;
+    return matchingTasks.filter((task) => selectedStatuses.includes(task.status));
+  }, [matchingTasks, selectedStatuses]);
 
   const displayedGroupedTasks = useMemo(
     () => TaskHelper.groupByStatus(filteredTasks),
@@ -240,6 +256,12 @@ export function TasksProvider({
 
   const currentView = search.view === "kanban" ? "kanban" : "list";
   const isDragActive = activeTaskId !== null;
+  const isNarrowed = activeFilterCount > 0 || Boolean(search.query?.trim());
+
+  const acceptsDrop = useCallback(
+    (status: Task["status"]) => !activeTask || activeTask.status === status || canMoveTo(activeTask, status),
+    [activeTask],
+  );
 
   // --- Stable action callbacks ---
 
@@ -404,13 +426,23 @@ export function TasksProvider({
       const task = tasksRef.current.find((t) => t.id === activeId);
       if (!task || task.status === resolvedOverStatus) return;
 
-      if (resolvedOverStatus === "finished") {
-        finishTransition.open(task, resolvedOverStatus);
+      const to = TaskHelper.getStatus(resolvedOverStatus).label;
+
+      // A column the lifecycle does not reach from here takes no drop (see
+      // `acceptsDrop`), so this is the drop that raced a change of status.
+      // Said, rather than sent for the daemon to refuse.
+      if (!canMoveTo(task, resolvedOverStatus)) {
+        toast.error(t("Failed to update status"), {
+          description: t("A task in {{from}} cannot move to {{to}}.", {
+            from: TaskHelper.getStatus(task.status).label,
+            to,
+          }),
+        });
         return;
       }
 
       const { error } = await client.task.setStatus.mutate({
-        params: { id: activeId },
+        params: { task: activeId },
         body: { status: resolvedOverStatus },
       });
 
@@ -420,9 +452,10 @@ export function TasksProvider({
         toast.error(t("Failed to update status"), { description: errorMessage(error) });
         return;
       }
+      toast.success(t("Moved to {{status}}", { status: to }));
       router.invalidate();
     },
-    [resolveStatusFromId, client, router, finishTransition],
+    [resolveStatusFromId, client, router],
   );
 
   const handleDragCancel = useCallback(() => {
@@ -460,7 +493,7 @@ export function TasksProvider({
       handleToggleProject,
       handleToggleGoal,
       clearFilters,
-      finishTransition,
+      isNarrowed,
     }),
     [
       tasks,
@@ -488,7 +521,7 @@ export function TasksProvider({
       handleToggleProject,
       handleToggleGoal,
       clearFilters,
-      finishTransition,
+      isNarrowed,
     ],
   );
 
@@ -499,6 +532,7 @@ export function TasksProvider({
       overContainerId,
       isDragActive,
       activeDropStatus: overContainerId,
+      acceptsDrop,
       handleDragStart,
       handleDragOver,
       handleDragEnd,
@@ -509,6 +543,7 @@ export function TasksProvider({
       activeTask,
       overContainerId,
       isDragActive,
+      acceptsDrop,
       handleDragStart,
       handleDragOver,
       handleDragEnd,

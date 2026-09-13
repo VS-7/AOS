@@ -6,6 +6,8 @@ import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
 import { TaskKanbanCard } from "./task-kanban-card.component";
 
 import { useDroppable } from "@dnd-kit/core";
+import { useDragContext } from "../../../context";
+import { t } from "@/lib/i18n";
 
 interface TaskKanbanColumnProps {
   status: Task["status"];
@@ -26,15 +28,21 @@ export const TaskKanbanColumn = React.memo(function TaskKanbanColumn({
   const Icon = config.icon;
   const isEmpty = tasks.length === 0;
 
+  const { acceptsDrop } = useDragContext();
+  // A column the dragged card cannot move to takes no drop; see the list
+  // section for what happened before.
+  const accepts = acceptsDrop(status);
   const { setNodeRef } = useDroppable({
     id: status,
+    disabled: !accepts,
   });
 
   return (
     <section
       className={cn(
         "flex h-full min-h-0 w-80 flex-col p-3 transition-colors",
-        isActiveDropTarget && "bg-accent/20",
+        isActiveDropTarget && accepts && "bg-accent/20",
+        isDragActive && !accepts && "opacity-50",
       )}
     >
       <header
@@ -54,8 +62,8 @@ export const TaskKanbanColumn = React.memo(function TaskKanbanColumn({
         ref={setNodeRef}
         className={cn(
           "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-xl border border-transparent p-1 pr-2 transition-[border-color,background-color,box-shadow]",
-          isDragActive && "border-dashed border-border/80 bg-muted/25",
-          isActiveDropTarget &&
+          isDragActive && accepts && "border-dashed border-border/80 bg-muted/25",
+          isActiveDropTarget && accepts &&
             "border-primary/35 bg-accent/30 shadow-inner ring-1 ring-primary/10",
           isEmpty && "justify-center",
         )}
@@ -74,9 +82,11 @@ export const TaskKanbanColumn = React.memo(function TaskKanbanColumn({
               "flex h-full items-center justify-center rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground transition-colors",
             )}
           >
-            {isActiveDropTarget
-              ? "Drop task here"
-              : `No tasks in ${config.label.toLowerCase()}`}
+            {isDragActive && !accepts
+              ? t("This task cannot move here")
+              : isActiveDropTarget
+                ? t("Drop task here")
+                : t("No tasks in {{status}}", { status: config.label })}
           </div>
         )}
       </div>
