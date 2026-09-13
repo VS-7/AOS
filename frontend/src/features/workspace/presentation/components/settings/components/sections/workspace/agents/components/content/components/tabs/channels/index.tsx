@@ -320,7 +320,7 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
 
                         <div className="flex items-center justify-end border-t border-border/60 pt-4">
                           <Button type="submit" disabled={form.isLoading}>
-                            {form.isLoading ? "Saving..." : "Save Telegram"}
+                            {form.isLoading ? t("Saving...") : t("Save Telegram")}
                           </Button>
                         </div>
                       </div>

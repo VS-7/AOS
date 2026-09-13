@@ -182,6 +182,9 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Agent, error) {
 	if in.Sandbox != nil {
 		current.Sandbox = in.Sandbox
 	}
+	if in.Channels != nil {
+		current.Channels = *in.Channels
+	}
 	if in.Leader != nil {
 		leader := normalizeID(*in.Leader)
 		if err := s.checkLeaderChain(ctx, id, leader); err != nil {
