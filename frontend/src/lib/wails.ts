@@ -45,10 +45,54 @@ import { Browser, Clipboard, Dialogs, System, Window } from "@wailsio/runtime";
 /** Go's GOOS, which is what the Wails runtime reports. */
 export type Platform = "darwin" | "windows" | "linux" | "";
 
-const params =
-  typeof window === "undefined"
-    ? new URLSearchParams()
-    : new URLSearchParams(window.location.search);
+/** Where a window keeps the parameters it was opened with, for its reloads. */
+const WINDOW_PARAMS_KEY = "aos.window";
+
+/**
+ * The parameters the desktop window states about itself — the daemon's address
+ * and the platform — from the URL it was opened at, or, failing that, from
+ * the last time this same window read them.
+ *
+ * The URL alone is not enough. The router strips the query string on the
+ * first navigation, and the native menu's View › Reload (Cmd+R) reloads the
+ * URL as it is by then — which `reloadHere` below cannot intercept. The
+ * bundle came back without `?daemon=` and became a browser tab: relative
+ * `/api` calls reached the asset host, the event channel had nowhere to open,
+ * and the window stayed broken until the application was restarted. Session
+ * storage survives a reload of the same window and nothing else, which is
+ * exactly the lifetime these have.
+ */
+function readWindowParams(): URLSearchParams {
+  const out = new URLSearchParams();
+  if (typeof window === "undefined") return out;
+  const stated = new URLSearchParams(window.location.search);
+  for (const key of ["daemon", "platform"]) {
+    const value = stated.get(key);
+    if (value !== null) out.set(key, value);
+  }
+  try {
+    if (out.has("daemon")) {
+      window.sessionStorage.setItem(WINDOW_PARAMS_KEY, out.toString());
+    } else {
+      const remembered = window.sessionStorage.getItem(WINDOW_PARAMS_KEY);
+      if (remembered) return new URLSearchParams(remembered);
+    }
+  } catch {
+    // Storage off: the URL is still the answer, as it always was.
+  }
+  return out;
+}
+
+const params = readWindowParams();
+
+/**
+ * The daemon's address as this window stated it, or null in a browser tab.
+ *
+ * The one place it is read: `lib/daemon-origin.ts` and `lib/realtime.ts` used
+ * to read the query string themselves, which is three places to lose it on a
+ * reload instead of one to keep it.
+ */
+export const declaredDaemon: string | null = params.get("daemon");
 
 /**
  * Whether this page is the desktop window.
@@ -61,7 +105,7 @@ const params =
  * during exactly the window this has to be right for.
  */
 export const isDesktopWindow: boolean =
-  typeof window !== "undefined" && params.has("daemon");
+  typeof window !== "undefined" && declaredDaemon !== null;
 
 /**
  * The seed value for the platform, stated by the window that opened this page.

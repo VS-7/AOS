@@ -1,3 +1,5 @@
+import { declaredDaemon as declared } from "./wails";
+
 /**
  * Where an HTTP call to the daemon has to be addressed.
  *
@@ -20,14 +22,9 @@
  * did not work in the desktop window.
  *
  * The address is the one the window states in its own URL when it opens
- * (`cmd/aos-desktop`'s WebviewWindowOptions.URL), read once at module load
- * because the router rewrites that URL on the first navigation. It is the same
- * value `lib/realtime.ts` reads, for the same reason.
+ * (`cmd/aos-desktop`'s WebviewWindowOptions.URL), kept by `lib/wails.ts`
+ * across the router's rewrite of that URL and across a reload.
  */
-const declared =
-  typeof window === "undefined"
-    ? null
-    : new URLSearchParams(window.location.search).get("daemon");
 
 /** The origin to prefix an API path with. Empty in a browser. */
 export const daemonOrigin: string = declared ? declared.replace(/\/+$/, "") : "";

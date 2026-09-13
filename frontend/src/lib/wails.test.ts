@@ -38,8 +38,11 @@ vi.mock("@wailsio/runtime", () => ({
  * The module reads the query string once at load, because the router rewrites
  * the URL on the first navigation — so each case has to be a fresh module.
  */
-async function loadAt(search: string) {
+async function loadAt(search: string, { reload = false } = {}) {
   window.history.replaceState({}, "", `/${search}`);
+  // A fresh window has nothing in its session storage; a reload of the same
+  // window keeps it — which is the whole difference the reload case tests.
+  if (!reload) sessionStorage.clear();
   vi.resetModules();
   return import("./wails");
 }
@@ -59,6 +62,20 @@ describe("knowing which window this is", () => {
   it("is the desktop only when the window said where the daemon is", async () => {
     expect((await loadAt(DESKTOP)).isDesktopWindow).toBe(true);
     expect((await loadAt("?welcome=true")).isDesktopWindow).toBe(false);
+  });
+
+  // View › Reload (Cmd+R) in the native menu reloads whatever the URL is now,
+  // and the router strips `?daemon=` on the first navigation. The bundle came
+  // back as a browser tab: relative /api calls to the asset host, no event
+  // channel, a broken window until the application was restarted.
+  it("is still the desktop after a reload at a URL the router stripped", async () => {
+    await loadAt(DESKTOP);
+    const reloaded = await loadAt("goals", { reload: true });
+
+    expect(reloaded.isDesktopWindow).toBe(true);
+    expect(reloaded.declaredDaemon).toBe("http://127.0.0.1:5326");
+    expect(reloaded.platform()).toBe("darwin");
+    expect(reloaded.desktopURL("/tasks")).toContain("daemon=");
   });
 
   it("takes the platform from the URL before the Wails environment exists", async () => {

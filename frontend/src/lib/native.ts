@@ -13,7 +13,7 @@
  * reasoning about what a WebView can and cannot do is written down. This file
  * is only the shape the ported code reaches for, laid over it.
  */
-import { Call } from "@wailsio/runtime";
+import { Call, Events } from "@wailsio/runtime";
 import { system } from "./client";
 import {
   closeWindow,
@@ -22,8 +22,15 @@ import {
   isDesktopWindow,
   isWindowMaximised,
   minimiseWindow,
+  reloadHere,
   toggleMaximiseWindow,
 } from "./wails";
+
+/**
+ * The window event the native menu's View › Reload sends, instead of
+ * reloading the webview itself — see cmd/aos-desktop's applicationMenu.
+ */
+export const RELOAD_EVENT = "aos:reload";
 
 const WAILSVC_PKG = "github.com/OWNER/aos/internal/transport/wailsvc";
 
@@ -58,6 +65,10 @@ export function installNativeBridge(): void {
   // the available option.
   installExternalLinkHandler();
   installClipboardFallback();
+
+  // Reload keeps the window's parameters only when the page does it; the
+  // webview's own reload re-runs the bundle at the URL the router left behind.
+  Events.On(RELOAD_EVENT, () => reloadHere());
 
   window.aos = {
     instructions: {

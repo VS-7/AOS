@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { Events } from "@wailsio/runtime";
 import { getWorkspace, system } from "./client";
+import { declaredDaemon } from "./wails";
 
 /** One event from the daemon's realtime channel. */
 export interface RealtimeEvent {
@@ -69,18 +70,10 @@ function backoffFor(attempt: number): number {
  */
 let daemonOrigin: string | null = null;
 
-/**
- * Read at module load, before anything can navigate.
- *
- * The window states the daemon's address in its own URL, and the router
- * rewrites that URL on the first navigation — which happens well before the
- * socket is ready to open, since it waits for a workspace first. Reading it
- * lazily meant reading it after it was already gone.
- */
-const declaredDaemon =
-  typeof window === "undefined"
-    ? null
-    : new URLSearchParams(window.location.search).get("daemon");
+// The window's stated daemon address comes from lib/wails.ts, which reads it
+// before anything can navigate and keeps it across a reload. Reading it here
+// lazily, from the URL, meant reading it after the router had already
+// rewritten it.
 
 async function originForSocket(): Promise<string> {
   if (daemonOrigin !== null) return daemonOrigin;

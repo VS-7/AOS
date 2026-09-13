@@ -15,6 +15,9 @@ vi.mock("@wailsio/runtime", () => ({
 
 async function loadAt(search: string) {
   window.history.replaceState({}, "", `/${search}`);
+  // Each case is a fresh window; lib/wails.ts remembers a desktop window's
+  // parameters in session storage for its own reloads.
+  sessionStorage.clear();
   vi.resetModules();
   return import("./save-file");
 }

@@ -4,6 +4,7 @@ const bridge = vi.hoisted(() => ({ byName: vi.fn(async (..._args: unknown[]) => 
 vi.mock("@wailsio/runtime", () => ({
   Call: { ByName: bridge.byName },
   Browser: { OpenURL: vi.fn() },
+  Events: { On: vi.fn(() => () => {}) },
   Clipboard: { SetText: vi.fn() },
   Dialogs: { Question: vi.fn() },
   System: { IsMac: () => false, IsWindows: () => false, IsLinux: () => false },

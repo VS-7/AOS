@@ -12,6 +12,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -53,6 +54,15 @@ import (
 //
 //go:embed all:dist
 var assets embed.FS
+
+// distFS is the embedded bundle as the asset server sees it, rooted at dist.
+func distFS() fs.FS {
+	sub, err := fs.Sub(assets, "dist")
+	if err != nil {
+		return assets
+	}
+	return sub
+}
 
 func main() {
 	log := logging.New(logging.Config{})
@@ -286,7 +296,9 @@ func main() {
 			})),
 		},
 		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(assets),
+			// A deep route gets the interface rather than a 404 — see
+			// spaFallback.
+			Handler: spaFallback(distFS(), application.AssetFileServerFS(assets)),
 			// The one daemon path the window has to serve itself: an <img>
 			// cannot carry a bearer, and the bridge answers strings. See
 			// bridgeContent.
@@ -297,6 +309,9 @@ func main() {
 
 	window := desktop.Window.NewWithOptions(windowOptions(address))
 	platform.window = window
+	// The menu's Reload goes through the page, which keeps the parameters the
+	// window was opened with — see applicationMenu.
+	desktop.Menu.Set(applicationMenu(func() { window.EmitEvent(ReloadEventName) }))
 	emitRealtime = func(event any) { window.EmitEvent(RealtimeEventName, event) }
 	emitDaemon = func(event any) { window.EmitEvent(DaemonEventName, event) }
 
