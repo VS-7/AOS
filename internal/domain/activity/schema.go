@@ -26,9 +26,9 @@ type ListInput struct {
 // ListOutput is a page of the inbox.
 type ListOutput struct {
 	Activities []Entry `json:"activities" jsonschema:"The entries, newest first, each saying whether you have read it."`
-	Total      int        `json:"total" jsonschema:"How many matched before the page was cut."`
-	Unread     int        `json:"unread" jsonschema:"How many of the matches you have not read."`
-	Actor      string     `json:"actor" jsonschema:"Whose read state was applied."`
+	Total      int     `json:"total" jsonschema:"How many matched before the page was cut."`
+	Unread     int     `json:"unread" jsonschema:"How many of the matches you have not read."`
+	Actor      string  `json:"actor" jsonschema:"Whose read state was applied."`
 }
 
 // Entry is one line of an inbox page: the activity, and whether the actor the
