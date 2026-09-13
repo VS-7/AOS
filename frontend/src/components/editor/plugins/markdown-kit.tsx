@@ -4,7 +4,6 @@ import {
 } from '@platejs/footnote';
 import { MarkdownPlugin, remarkMdx, remarkMention, type MdRules } from '@platejs/markdown';
 import { KEYS } from 'platejs';
-import type { Processor } from 'unified';
 import remarkEmoji from 'remark-emoji';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -53,7 +52,10 @@ function withoutBraceEscapes(extension: ToMarkdownExtension): ToMarkdownExtensio
 // a person both read with the backslashes in. Unescaped, the next load parses
 // the brace as an expression again, and the rule above turns it back into
 // the same text. Must come after remarkMdx, whose extension it edits.
-function remarkPlainBraces(this: Processor) {
+// `this` is the unified processor. Only `data()` is used, so it is typed by
+// that alone rather than by importing `unified`, which is not a dependency of
+// this package and resolved only because something else hoisted it.
+function remarkPlainBraces(this: { data(): unknown }) {
   const data = this.data() as { toMarkdownExtensions?: ToMarkdownExtension[] };
   data.toMarkdownExtensions = (data.toMarkdownExtensions ?? []).map(withoutBraceEscapes);
 }

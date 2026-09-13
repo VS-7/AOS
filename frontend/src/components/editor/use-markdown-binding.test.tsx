@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { MarkdownPlugin } from "@platejs/markdown";
 import { Plate, PlateContent, usePlateEditor, type PlateEditor } from "platejs/react";
-import { ELEMENT_TO_NODE } from "slate-dom";
 import { useState } from "react";
 
 import { useMarkdownBinding } from "./use-markdown-binding";
@@ -11,6 +10,7 @@ afterEach(cleanup);
 
 let setFromOutside: (value: string) => void = () => {};
 let rerenderParent: () => void = () => {};
+let currentEditor: PlateEditor | null = null;
 
 // A controlled editor the way every screen uses MarkdownEditor: the value
 // lives in the parent (a react-hook-form field), and each edit comes back
@@ -21,6 +21,7 @@ function Controlled({ initial }: { initial: string }) {
   setFromOutside = setValue;
   rerenderParent = () => setTick((tick) => tick + 1);
   const editor = usePlateEditor({ plugins: [MarkdownPlugin] }, []);
+  currentEditor = editor;
   const { handleChange } = useMarkdownBinding({ editor, markdown: value, onEdit: setValue });
   return (
     <>
@@ -35,7 +36,9 @@ function Controlled({ initial }: { initial: string }) {
 function mountedEditor(): PlateEditor {
   const root = document.querySelector("[data-slate-editor]");
   expect(root, "the editor rendered no editable").not.toBeNull();
-  return ELEMENT_TO_NODE.get(root as HTMLElement) as unknown as PlateEditor;
+  // The editor the component mounted, handed out directly rather than read
+  // back from the DOM through `slate-dom`, which this package does not depend on.
+  return currentEditor as PlateEditor;
 }
 
 async function type(text: string) {
