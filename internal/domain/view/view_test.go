@@ -493,6 +493,55 @@ func TestScaffoldForDetailProducesAViewThatValidates(t *testing.T) {
 	}
 }
 
+// Board and Detail used to scaffold the same bare Stack of field nodes, so the
+// two kinds rendered identically: one run of unlabelled values with nothing
+// marking where one record ends. Each record is a Card now — a grid of compact
+// cards for a board, a column of labelled rows for a detail sheet — and the
+// Card is the node that binds, which is what makes it the part the frontend
+// repeats per record.
+func TestScaffoldGivesBoardAndDetailTheirOwnLayouts(t *testing.T) {
+	svc := newService(t, withCollection(contactsSchema()))
+
+	board, err := svc.Scaffold(ctx(), view.ScaffoldInput{Collection: "contacts", Kind: view.KindBoard})
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail, err := svc.Scaffold(ctx(), view.ScaffoldInput{Collection: "contacts", Kind: view.KindDetail})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if board.Tree.Component != "Grid" || len(board.Tree.Children) != 1 || board.Tree.Children[0].Component != "Card" {
+		t.Fatalf("board tree = %+v, want a Grid holding one Card", board.Tree)
+	}
+	if detail.Tree.Component != "Stack" || len(detail.Tree.Children) != 1 || detail.Tree.Children[0].Component != "Card" {
+		t.Fatalf("detail tree = %+v, want a Stack holding one Card", detail.Tree)
+	}
+	for name, card := range map[string]view.Node{"board": board.Tree.Children[0], "detail": detail.Tree.Children[0]} {
+		if card.Bind["title"] != "name" {
+			t.Fatalf("%s card binds %v, want its title bound to the first text field", name, card.Bind)
+		}
+	}
+	for _, row := range detail.Tree.Children[0].Children {
+		if row.Component != "Stat" || row.Props["variant"] != "row" || row.Props["label"] == "" {
+			t.Fatalf("detail row = %+v, want a labelled Stat row", row)
+		}
+	}
+	// The board's card title already shows the name; repeating it as a field
+	// would print it twice.
+	for _, field := range board.Tree.Children[0].Children {
+		if field.Bind["text"] == "name" {
+			t.Fatalf("the board card repeats its title as a field: %+v", field)
+		}
+	}
+
+	for id, v := range map[string]*view.View{"board-view": board, "detail-view": detail} {
+		if _, err := svc.Create(ctx(), view.CreateInput{ID: id, Source: v.Source, Tree: v.Tree}); err != nil {
+			t.Fatalf("%s: the scaffold does not validate: %v", id, err)
+		}
+	}
+}
+
 // ExecuteAction does not execute anything itself: it resolves the declared
 // action and dispatches through the registry.
 func TestExecuteActionDispatchesThroughTheRegistry(t *testing.T) {
