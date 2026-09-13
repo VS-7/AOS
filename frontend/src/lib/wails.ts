@@ -214,6 +214,30 @@ export function reloadHere(): void {
   reloadAt(window.location.pathname + window.location.search + window.location.hash);
 }
 
+/**
+ * The `sandbox` a browser tab's `<iframe>` gets for `url`.
+ *
+ * Inside the desktop window, content from the window's own origin — an
+ * artifact above all, which `cmd/aos-desktop` serves at `/v/artifacts/` with
+ * the window's credential — is framed without `allow-same-origin`. An artifact
+ * is HTML a model generated; with its real origin, a script in it could reach
+ * `window.parent` and the Wails bridge, which is every command the person can
+ * run. An external site keeps its own origin, which it needs to work at all
+ * and which gives it nothing of this window's. A browser tab is unchanged: the
+ * daemon serves the page there and has no bridge to reach.
+ */
+export function frameSandbox(url: string): string {
+  const permissive = "allow-scripts allow-same-origin allow-forms";
+  if (!isDesktopWindow || typeof window === "undefined") return permissive;
+  let origin: string;
+  try {
+    origin = new URL(url, window.location.href).origin;
+  } catch {
+    return "allow-scripts allow-forms";
+  }
+  return origin === window.location.origin ? "allow-scripts allow-forms" : permissive;
+}
+
 /* -------------------------------------------------------------------------
  * The operating system's own facilities
  * ---------------------------------------------------------------------- */

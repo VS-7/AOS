@@ -298,3 +298,29 @@ describe("confirming something destructive", () => {
     expect(await wails.confirmNatively({ title: "Delete?" })).toBe(false);
   });
 });
+
+/**
+ * An artifact is HTML a model generated, and inside the window it is served
+ * from the window's own origin (cmd/aos-desktop forwards /v/artifacts with the
+ * window's credential). Framed with allow-same-origin, a script in it could
+ * reach `window.parent` and the Wails bridge — every command, as the person.
+ */
+describe("the sandbox a browser tab's frame gets", () => {
+  it("drops same-origin for the window's own content inside the desktop window", async () => {
+    const wails = await loadAt(DESKTOP);
+
+    expect(wails.frameSandbox("/v/artifacts/sales/")).not.toContain("allow-same-origin");
+    expect(wails.frameSandbox(`${window.location.origin}/v/artifacts/sales/`)).not.toContain("allow-same-origin");
+    expect(wails.frameSandbox("/v/artifacts/sales/")).toContain("allow-scripts");
+  });
+
+  it("keeps an external site's own origin, which it needs to work at all", async () => {
+    const wails = await loadAt(DESKTOP);
+    expect(wails.frameSandbox("https://example.com/")).toContain("allow-same-origin");
+  });
+
+  it("changes nothing in a browser tab", async () => {
+    const wails = await loadAt("");
+    expect(wails.frameSandbox("/v/artifacts/sales/")).toContain("allow-same-origin");
+  });
+});

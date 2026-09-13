@@ -299,10 +299,11 @@ func main() {
 			// A deep route gets the interface rather than a 404 — see
 			// spaFallback.
 			Handler: spaFallback(distFS(), application.AssetFileServerFS(assets)),
-			// The one daemon path the window has to serve itself: an <img>
-			// cannot carry a bearer, and the bridge answers strings. See
-			// bridgeContent.
-			Middleware: bridgeContent(daemon, log),
+			// The daemon paths the window has to serve itself — an <img> or
+			// an artifact's <iframe> cannot carry a bearer, and the bridge
+			// answers strings — and the guard on the bridge that serving an
+			// artifact here needs. See bridgeDaemon.
+			Middleware: bridgeDaemon(daemon, log),
 		},
 		LogLevel: slog.LevelWarn,
 	})

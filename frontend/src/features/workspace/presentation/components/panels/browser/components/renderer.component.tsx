@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { frameSandbox } from "@/lib/wails";
 import { ViewportTabState } from "@/features/workspace/presentation/stores/viewport.store";
 
 /**
@@ -84,12 +85,13 @@ export function BrowserRenderer({
           className="flex-1 w-full border-0 bg-background"
           onLoad={handleLoad}
           onError={handleError}
-          // Same posture as the artifact CSP this most often points at:
-          // same-origin, no popups, no top-level navigation out from inside
-          // the frame. A general external site that needs more than this
-          // to function will not fully work in-frame — see this file's own
-          // top comment.
-          sandbox="allow-scripts allow-same-origin allow-forms"
+          // No popups, no top-level navigation out from inside the frame. A
+          // general external site that needs more than this to function will
+          // not fully work in-frame — see this file's own top comment. In the
+          // desktop window the window's own content (an artifact) is also
+          // denied its origin, which would reach the Wails bridge — see
+          // frameSandbox.
+          sandbox={frameSandbox(tab.url)}
         />
       ) : null}
     </div>
