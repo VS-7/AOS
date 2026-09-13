@@ -82,7 +82,13 @@ seguinte remove os `.prev` que um install terminado não conseguiu apagar (no
 Windows, o próprio `aosd.exe` que rodou a troca), nunca os de um install que
 parou no meio. O download não tem prazo total, só de progresso: desiste
 quando os bytes param de chegar, e não quando quem pediu parou de esperar.
-`Download` e `Apply` recusam agentes e clientes MCP
+`Status` diz se um download ou install está rodando agora (`busy`, a trava
+tomada), e é assim que a janela acompanha um download cuja resposta ela
+perdeu — a ponte desistiu de esperar, ou reenviou e ouviu
+`UPDATE_IN_PROGRESS` — em vez de mostrar um erro: lê o status até a trava
+soltar e mostra o que ficou. Um `Download` que chega no instante em que um
+`Status` olha a trava espera esse instante em vez de ouvir
+`UPDATE_IN_PROGRESS`. `Download` e `Apply` recusam agentes e clientes MCP
 (`UPDATE_NOT_FOR_AGENTS`); `Check` e `Status` respondem a eles.
 
 ## Objetivo

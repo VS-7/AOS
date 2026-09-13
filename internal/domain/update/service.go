@@ -29,6 +29,15 @@ const (
 	pollInterval           = 200 * time.Millisecond
 )
 
+// lockAttempts and lockRetry bound how long a Download or Apply waits for the
+// installation's lock before it answers UPDATE_IN_PROGRESS. Status and Check
+// take the lock for an instant to see whether anything is running, and a
+// download that arrived in that instant was told another one was.
+const (
+	lockAttempts = 5
+	lockRetry    = 20 * time.Millisecond
+)
+
 // daemonBinary is the binary a terminal runs to install a staged release —
 // see InstallFromTerminal. windowBinary is the one an open window runs.
 const (
@@ -270,15 +279,36 @@ func (s *service) remember(ctx context.Context, check LastCheck) {
 }
 
 // exclusive takes the installation's update lock for one Download or Apply.
+// A lock still held after a few short retries is a download or an install,
+// not a look at whether one is running.
 func (s *service) exclusive(ctx context.Context, causer string) (func(), error) {
-	unlock, ok, err := s.lock.TryLock(ctx)
-	switch {
-	case err != nil:
-		return nil, errLockFailed(causer, err)
-	case !ok:
-		return nil, errInProgress(causer)
+	for attempt := 1; ; attempt++ {
+		unlock, ok, err := s.lock.TryLock(ctx)
+		switch {
+		case err != nil:
+			return nil, errLockFailed(causer, err)
+		case ok:
+			return unlock, nil
+		case attempt == lockAttempts:
+			return nil, errInProgress(causer)
+		}
+		if err := s.sleeper.Sleep(ctx, lockRetry); err != nil {
+			return nil, errInProgress(causer)
+		}
 	}
-	return unlock, nil
+}
+
+// busy reports whether a Download or an Apply holds the installation's lock
+// right now. A lock that cannot be read says nothing is known to be running.
+func (s *service) busy(ctx context.Context) bool {
+	unlock, ok, err := s.lock.TryLock(ctx)
+	if err != nil {
+		return false
+	}
+	if ok {
+		unlock()
+	}
+	return !ok
 }
 
 // tidyIfIdle removes the backups a finished install could not, when no
@@ -307,7 +337,7 @@ func (s *service) tidyLocked(ctx context.Context) {
 // Status reports without touching the network: the version, whether a feed
 // exists, what the last check found, and what is staged.
 func (s *service) Status(ctx context.Context, _ StatusInput) (Status, error) {
-	st := Status{Current: s.version, Channel: ChannelStable, Configured: s.source.Configured()}
+	st := Status{Current: s.version, Channel: ChannelStable, Configured: s.source.Configured(), Busy: s.busy(ctx)}
 	record, err := s.store.Load(ctx)
 	if err != nil {
 		s.log.Warn("could not read the update record", "err", err)

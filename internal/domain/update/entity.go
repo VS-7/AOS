@@ -243,6 +243,11 @@ type Status struct {
 	LastState CheckState `json:"lastState,omitempty"`
 	// Staged is a verified release waiting for Apply, when there is one.
 	Staged *Staged `json:"staged,omitempty"`
+	// Busy is true while a Download or an Apply is running on this
+	// installation — in this daemon or in a terminal. A caller that lost the
+	// answer to its own download (a bridge that gave up waiting, a retry
+	// told UPDATE_IN_PROGRESS) follows it here until it ends.
+	Busy bool `json:"busy,omitempty"`
 }
 
 // Record is what the service keeps between calls, through Store.

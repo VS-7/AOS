@@ -196,7 +196,7 @@ silently failed.`,
 		Group:   "update",
 		Name:    "status",
 		Summary: "Report the current version, the last check and what is staged, without checking the network.",
-		Doc:     "Read this installation's own version, whether it has a release feed, what the last check found, what is staged, and how a release would be installed here.",
+		Doc:     "Read this installation's own version, whether it has a release feed, what the last check found, what is staged, how a release would be installed here, and whether a download or install is running right now (busy) — which is how a caller follows a download whose answer it never received.",
 		Examples: []command.Example{
 			{Description: "what am I running", Input: StatusInput{}},
 		},

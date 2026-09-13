@@ -978,6 +978,60 @@ func TestOneDownloadOrApplyAtATime(t *testing.T) {
 	wantCode(t, err, "UPDATE_NOTHING_STAGED")
 }
 
+// lockFreeAfter is a lock something else holds for its first n attempts.
+type lockFreeAfter struct {
+	mu    sync.Mutex
+	n     int
+	tries int
+}
+
+func (l *lockFreeAfter) TryLock(context.Context) (func(), bool, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.tries++
+	return func() {}, l.tries > l.n, nil
+}
+
+// A download whose answer was lost — the window's bridge gave up waiting, or
+// sent it again and was told UPDATE_IN_PROGRESS — is followed through Status
+// until it ends.
+func TestStatusSaysWhileADownloadOrInstallIsRunning(t *testing.T) {
+	h := newHarness(t)
+	release := h.signedRelease(t, "v0.10.0", "aosd")
+	st, err := h.svc.Status(context.Background(), update.StatusInput{})
+	if err != nil || st.Busy {
+		t.Fatalf("nothing is running: %+v, %v", st, err)
+	}
+
+	var during update.Status
+	h.source.beforeFetch = func() { during, _ = h.svc.Status(context.Background(), update.StatusInput{}) }
+	h.download(t, release)
+	if !during.Busy {
+		t.Fatalf("while the download ran, status = %+v", during)
+	}
+	h.source.beforeFetch = nil
+	if st, _ := h.svc.Status(context.Background(), update.StatusInput{}); st.Busy || st.Staged == nil {
+		t.Fatalf("after it, status = %+v", st)
+	}
+
+	busy := newHarness(t, sameMachineAs(h), withLock(fakeLock{busy: true}))
+	if st, _ := busy.svc.Status(context.Background(), update.StatusInput{}); !st.Busy {
+		t.Fatalf("with the lock held elsewhere, status = %+v", st)
+	}
+}
+
+// Status and Check take the lock for an instant to look. A download that
+// arrives in that instant waits it out rather than being told another one is
+// running.
+func TestADownloadIsNotRefusedForALookAtTheLock(t *testing.T) {
+	h := newHarness(t)
+	release := h.signedRelease(t, "v0.10.0", "aosd")
+	glance := newHarness(t, sameMachineAs(h), withLock(&lockFreeAfter{n: 2}))
+	if _, err := glance.svc.Download(context.Background(), update.DownloadInput{Release: release}); err != nil {
+		t.Fatalf("a lock held for a glance should be waited out, got %v", err)
+	}
+}
+
 // On Windows a program's own file can be renamed while it runs and not
 // removed. `aosd.exe update apply` runs from the aosd.exe it renames to
 // aosd.exe.prev, so its Commit cannot remove that backup, and 50 MB stayed
