@@ -18,7 +18,7 @@ vi.mock("@/app/aos", () => ({
   },
 }));
 
-import { openUserDmTab, teamPeople } from "./open-chat-tab.helper";
+import { openUserDmTab, syncChatTabTitle, teamPeople } from "./open-chat-tab.helper";
 
 beforeEach(() => {
   list.mockReset();
@@ -60,5 +60,26 @@ describe("teamPeople", () => {
     const users = [{ id: "me", name: "Vitor" }, { id: "ana", name: "Ana" }];
     expect(teamPeople(users, "me").map((u) => u.id)).toEqual(["ana"]);
     expect(teamPeople(users, undefined).map((u) => u.id)).toEqual(["me", "ana"]);
+  });
+});
+
+describe("syncChatTabTitle", () => {
+  // A deep link or a restored tab only knows the id; nothing named it after
+  // the conversation once the conversation loaded.
+  it("renames the chat's tab once, and leaves other tabs alone", () => {
+    viewport.state.tabs.items = [
+      { id: "t-1", type: "chat", title: "42ea4b04-1569-45cc", metadata: { chatId: "42ea4b04-1569-45cc" } },
+      { id: "t-2", type: "chat", title: "Other", metadata: { chatId: "c-9" } },
+    ];
+    viewport.actions.updateTab.mockClear();
+
+    syncChatTabTitle("42ea4b04-1569-45cc", "Luara");
+    expect(viewport.actions.updateTab).toHaveBeenCalledWith("t-1", { title: "Luara" });
+
+    viewport.actions.updateTab.mockClear();
+    viewport.state.tabs.items[0].title = "Luara";
+    syncChatTabTitle("42ea4b04-1569-45cc", "Luara");
+    syncChatTabTitle("missing", "Nobody");
+    expect(viewport.actions.updateTab).not.toHaveBeenCalled();
   });
 });

@@ -18,6 +18,25 @@ import {
   type ChatComposerRichTextInputRef,
 } from "./components/body/chat-composer-rich-text-input";
 import { ChatProcessingIndicator } from "../chat-processing-indicator";
+import { t } from "@/lib/i18n";
+
+/** What the empty composer invites, for the surface it is on. */
+function composerPlaceholder({
+  isDirectMessage,
+  kind,
+}: Pick<ChatComposerProps, "isDirectMessage" | "kind">): string {
+  if (isDirectMessage) return t("Message this agent…");
+  switch (kind) {
+    case "task":
+      return t("Message this task's thread, or type / for commands and @ to mention a teammate…");
+    case "run":
+      return t("Message this run, or type / for commands…");
+    case "dm":
+      return t("Message this conversation…");
+    default:
+      return t("Message this channel, or type / for commands and skills and @ to mention a teammate…");
+  }
+}
 
 function ChatComposerSurface(props: ChatComposerProps) {
   const composerRef = React.useRef<HTMLDivElement | null>(null);
@@ -81,11 +100,7 @@ function ChatComposerSurface(props: ChatComposerProps) {
                         : undefined
                   }
                   onSelectionChange={composer.syncMentionState}
-                  placeholder={
-                    props.isDirectMessage
-                      ? "Message this agent, attach files, or record a voice note..."
-                      : "Message this channel, attach context, or type / to insert a skill or @ to mention a teammate..."
-                  }
+                  placeholder={composerPlaceholder(props)}
                   ref={editorRef}
                   value={composer.controller.textInput.value}
                 />

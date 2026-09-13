@@ -291,6 +291,27 @@ export async function openUserDmTab(params: {
 }
 
 /**
+ * Names a chat's tab after the conversation, once the conversation is known.
+ *
+ * A tab opened from a deep link (`/chats/<id>`) or restored from a previous
+ * session has only the id to go on, and nothing renamed it later: the tab
+ * read "42ea4b04-1569-45cc-aa6c…" beside a header reading "Luara", for good.
+ *
+ * @param chatId - Chat whose tab to rename.
+ * @param title - What the conversation is called.
+ */
+export function syncChatTabTitle(chatId: string, title: string): void {
+  const next = title.trim();
+  if (!next) return;
+  const tab = aos.stores.viewport.state.tabs.items.find(
+    (item) => item.type === "chat" && getTabChatId(item) === chatId,
+  );
+  if (tab && tab.title !== next) {
+    aos.stores.viewport.actions.updateTab(tab.id, { title: next });
+  }
+}
+
+/**
  * Closes the viewport tab bound to a chat id, if one is open.
  *
  * @param chatId - Chat id to close.
