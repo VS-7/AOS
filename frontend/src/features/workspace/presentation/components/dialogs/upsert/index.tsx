@@ -33,6 +33,18 @@ const formSchema = z.object({
 });
 
 export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }: CreateWorkspaceDialogProps) {
+  // Controlled when the caller passes `open`; otherwise the dialog keeps its
+  // own state, which is how the workspace switcher uses it. It needs one
+  // either way: a successful create has to close the dialog, and with only
+  // Radix's internal state the dialog stayed open over the workspace it had
+  // just switched to.
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
+  const isOpen = open ?? uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    if (open === undefined) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
+
   const form = aos.useForm({
     schema: formSchema,
     mutation: "workspace.create",
@@ -77,6 +89,8 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
       }
 
       toast.success(t("Workspace created."));
+      form.reset();
+      setOpen(false);
       onSuccess?.(created);
     }
   });
@@ -85,7 +99,7 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
   const currentColor = form.watch("color");
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={setOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className="sm:max-w-106.25">
         <DialogHeader>
@@ -143,7 +157,10 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
                 <div className="flex gap-2">
                   <ColorPickerPopover
                     triggerShowRemove
-                    onTriggerRemove={() => field.onChange(null)}
+                    // "" rather than null: the schema says string, and a null
+                    // here failed validation under a field with no visible
+                    // control for it once Create Workspace actually submitted.
+                    onTriggerRemove={() => field.onChange("")}
                     value={field.value}
                     onValueChange={(v) => field.onChange(v)}
                   />
@@ -155,7 +172,7 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
 
           <DialogFooter className="mt-4">
             <Button type="submit" disabled={form.isLoading}>
-              {form.isLoading ? "Creating..." : "Create Workspace"}
+              {form.isLoading ? t("Creating...") : t("Create Workspace")}
             </Button>
           </DialogFooter>
         </Form>
