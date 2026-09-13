@@ -19,6 +19,7 @@ var Catalog = []Entry{
 	{Code: "AOS_AGENT_NO_ORCHESTRATOR", Package: "internal/domain/agent", File: "internal/domain/agent/errors.go", Line: 89, Status: 404, Causer: "agent.Service.Me", CTA: true},
 	{Code: "AOS_AGENT_NO_PROVIDER", Package: "internal/runtime/agentloop", File: "internal/runtime/agentloop/errors.go", Line: 9, Status: 500, Causer: "agentloop.Loop.Run", CTA: true},
 	{Code: "AOS_AGENT_PROVIDER_FAILED", Package: "internal/runtime/agentloop", File: "internal/runtime/agentloop/errors.go", Line: 49, Status: 502, Causer: "agentloop.Loop.call", CTA: true, Issues: []string{"provider"}},
+	{Code: "AOS_AGENT_PROVIDER_NOT_CONNECTED", Package: "internal/app", File: "internal/app/runtime.go", Line: 281, Status: 400, Causer: "app.models.For", CTA: true, Issues: []string{"agent", "provider"}},
 	{Code: "AOS_AGENT_PROVIDER_NOT_ENABLED", Package: "internal/runtime/agentloop", File: "internal/runtime/agentloop/errors.go", Line: 34, Status: 400, Causer: "agentloop.Resolve", CTA: true},
 	{Code: "AOS_AGENT_STEPS_EXHAUSTED", Package: "internal/runtime/agentloop", File: "internal/runtime/agentloop/errors.go", Line: 98, Status: 422, Causer: "agentloop.Loop.Run", CTA: true, Issues: []string{"maxSteps", "tokens"}},
 	{Code: "AOS_AGENT_TURN_CANCELLED", Package: "internal/runtime/agentloop", File: "internal/runtime/agentloop/errors.go", Line: 82, Status: 408, Causer: "agentloop.Loop.Run", CTA: true, Issues: []string{"steps", "tokens"}},
