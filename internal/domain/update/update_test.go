@@ -367,6 +367,9 @@ type harness struct {
 	customFeed bool
 	flavour    string
 	pub, priv  string
+	// sleeper is how the service waits; the stepping clock unless a test
+	// needs a wait that notices its context.
+	sleeper update.Sleeper
 	// chosenInstall is set by installed(): the test decided what is on this
 	// machine, and signedRelease leaves it alone. Otherwise a release
 	// covers exactly what is installed, which is what a real one does.
@@ -385,6 +388,7 @@ func withFlavour(f string) option          { return func(h *harness) { h.flavour
 func withStore(store update.Store) option  { return func(h *harness) { h.store = store } }
 func withOperators(o fakeOperators) option { return func(h *harness) { h.operators = o } }
 func withLock(l update.Lock) option        { return func(h *harness) { h.lock = l } }
+func withSleeper(s update.Sleeper) option  { return func(h *harness) { h.sleeper = s } }
 
 // sameMachineAs builds the service over another harness's machine, feed,
 // daemon and key: a second binary on the same installation.
@@ -418,10 +422,13 @@ func newHarness(t *testing.T, opts ...option) *harness {
 	if h.supervisor.machine == nil {
 		h.supervisor.machine, h.supervisor.oldVersion = h.machine, h.version
 	}
+	if h.sleeper == nil {
+		h.sleeper = h.clock
+	}
 	h.svc = update.NewService(update.Deps{
 		Source: h.source, Stager: h.machine, Installer: h.machine, Store: h.store, Lock: h.lock,
 		Supervisor: h.supervisor, Operators: h.operators, ActiveWork: h.activeWork,
-		Clock: h.clock, Sleeper: h.clock,
+		Clock: h.clock, Sleeper: h.sleeper,
 		PublicKey: h.pub, Platform: h.platform, Version: h.version, CustomFeed: h.customFeed,
 		Flavour: h.flavour,
 	})
@@ -1029,6 +1036,27 @@ func TestADownloadIsNotRefusedForALookAtTheLock(t *testing.T) {
 	glance := newHarness(t, sameMachineAs(h), withLock(&lockFreeAfter{n: 2}))
 	if _, err := glance.svc.Download(context.Background(), update.DownloadInput{Release: release}); err != nil {
 		t.Fatalf("a lock held for a glance should be waited out, got %v", err)
+	}
+}
+
+// contextSleeper waits no time, and stops waiting once its context has ended.
+type contextSleeper struct{}
+
+func (contextSleeper) Sleep(ctx context.Context, _ time.Duration) error { return ctx.Err() }
+
+// An install whose caller gave up while it waited for the lock was answered
+// "another download or install is running", which nothing had said.
+func TestAnInstallThatStopsWaitingForTheLockDoesNotSayAnotherIsRunning(t *testing.T) {
+	h := newHarness(t)
+	h.download(t, h.signedRelease(t, "v0.10.0", "aosd"))
+	waiting := newHarness(t, sameMachineAs(h), withLock(&lockFreeAfter{n: 2}), withSleeper(contextSleeper{}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := waiting.svc.Apply(ctx, update.ApplyInput{Version: "v0.10.0"})
+	wantCode(t, err, "UPDATE_LOCK_FAILED")
+	if h.machine.liveAt("aosd") != "old aosd" || h.supervisor.restarts != 0 {
+		t.Fatal("nothing may be swapped or restarted")
 	}
 }
 

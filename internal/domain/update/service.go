@@ -292,8 +292,10 @@ func (s *service) exclusive(ctx context.Context, causer string) (func(), error) 
 		case attempt == lockAttempts:
 			return nil, errInProgress(causer)
 		}
+		// A caller that stopped waiting has not learned that another update
+		// is running, only that it could not tell.
 		if err := s.sleeper.Sleep(ctx, lockRetry); err != nil {
-			return nil, errInProgress(causer)
+			return nil, errLockFailed(causer, err)
 		}
 	}
 }
