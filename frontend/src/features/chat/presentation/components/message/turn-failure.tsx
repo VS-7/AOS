@@ -74,13 +74,69 @@ export function runsOf(message: unknown): ChatMessageRun[] | undefined {
   return (message as { runs?: ChatMessageRun[] } | null | undefined)?.runs;
 }
 
-export function ChatTurnFailure({ run }: { run: ChatMessageRun }) {
+/**
+ * A failure this window can explain better than the daemon's advice does.
+ *
+ * The daemon's call to action is written for whoever holds the tools — "point
+ * the default slot at a provider and a model in .aos/config.json" — in
+ * English. For the failures a person meets first, before any provider is set
+ * up or after a key stops working, the fix is a screen in this window, and
+ * the card says so in the interface's language and opens it.
+ */
+export function explainFailure(
+  run: ChatMessageRun,
+): { text: string; section: SettingsSectionId } | null {
+  const code = run.error?.code?.trim();
+  const message = run.error?.message ?? "";
+  switch (code) {
+    case "AOS_AGENT_PROVIDER_NOT_ENABLED":
+    case "AOS_AGENT_NO_PROVIDER":
+      return {
+        text: t("No AI provider is connected for this agent. Connect one in Settings › AI Providers and choose a model."),
+        section: "user.agents",
+      };
+    case "AOS_OAUTH_FILE_MISSING":
+      return {
+        text: t("This provider's sign-in is missing. Sign in again in Settings › AI Providers."),
+        section: "user.agents",
+      };
+    case "AOS_AGENT_PROVIDER_FAILED":
+      // Only a refused credential: a timeout or a rate limit is not fixed on
+      // that screen, and sending the person there would be a wrong answer.
+      if (/\b(401|403)\b|unauthori[sz]ed|forbidden|api[ -]?key/i.test(message)) {
+        return {
+          text: t("The AI provider refused the credentials. Check the key, or sign in again, in Settings › AI Providers."),
+          section: "user.agents",
+        };
+      }
+      return null;
+    default:
+      return null;
+  }
+}
+
+export function ChatTurnFailure({
+  run,
+  agentName,
+}: {
+  run: ChatMessageRun;
+  /** The agent's display name. The run records only its id — a slug. */
+  agentName?: string;
+}) {
   const message = run.error?.message?.trim();
   const code = run.error?.code?.trim();
-  const actions = (run.error?.cta ?? []).filter((cta) => cta?.label?.trim());
+  const explained = explainFailure(run);
+  // The daemon's own advice, unless the explanation above replaces it.
+  const actions = explained
+    ? []
+    : (run.error?.cta ?? []).filter((cta) => cta?.label?.trim());
   // The first action that has a screen, because the order is the daemon's:
   // the most specific advice comes first.
-  const section = actions.map(settingsSectionFor).find((found) => found !== null) ?? null;
+  const section =
+    explained?.section ??
+    actions.map(settingsSectionFor).find((found) => found !== null) ??
+    null;
+  const agent = agentName?.trim() || run.agentId;
 
   return (
     <div className="px-6 py-1.5" role="alert">
@@ -88,10 +144,13 @@ export function ChatTurnFailure({ run }: { run: ChatMessageRun }) {
         <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-medium text-destructive">
-            {run.agentId
-              ? t("{{agent}} could not answer", { agent: run.agentId })
+            {agent
+              ? t("{{agent}} could not answer", { agent })
               : t("The agent could not answer")}
           </p>
+          {explained ? (
+            <p className="mt-0.5 text-xs break-words text-foreground/80">{explained.text}</p>
+          ) : null}
           {message ? (
             <p className="mt-0.5 text-xs break-words text-muted-foreground">{message}</p>
           ) : null}

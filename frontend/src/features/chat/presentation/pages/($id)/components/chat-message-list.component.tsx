@@ -12,6 +12,7 @@ import type {
 import type { WorkspaceDirectoryUser } from "@/features/workspace/interfaces/directory.interfaces";
 import { ChatThreadHelper } from "@/features/chat/presentation/helpers/chat-thread.helper";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
 import {
   ChatMessageItem,
   type ChatMessageReaction,
@@ -191,7 +192,12 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
         animateIn={!persisted}
       />
 
-      {failure ? <ChatTurnFailure run={failure} /> : null}
+      {failure ? (
+        <ChatTurnFailure
+          run={failure}
+          agentName={agents.find((agent) => agent.id === failure.agentId)?.name}
+        />
+      ) : null}
     </React.Fragment>
   );
 }, areRowsEqual);
@@ -238,12 +244,8 @@ export function ChatMessageList({
       onSuccess: () => {
         onReactionToggled?.();
       },
-      onError: (error: any) => {
-        toast.error(
-          error?.error?.message ||
-            error?.message ||
-            "Unable to update reaction.",
-        );
+      onError: (error: unknown) => {
+        toast.error(errorMessage(error) ?? t("Unable to update reaction."));
       },
     });
 

@@ -188,7 +188,7 @@ export function ChatSearch({
           >
             {hits.length === 0 ? (
               <p className="px-2 py-4 text-center text-xs text-muted-foreground/60">
-                {t("No chats match “")}{query}”
+                {t("No chats match “{{query}}”", { query })}
               </p>
             ) : (
               <SidebarMenu>
@@ -289,7 +289,7 @@ export function ChatSearchToggle({
         open && "bg-sidebar-accent text-sidebar-foreground",
         className,
       )}
-      aria-label={open ? "Close chat search" : "Search chats"}
+      aria-label={open ? t("Close chat search") : t("Search chats")}
       aria-pressed={open}
       onClick={() => onOpenChange(!open)}
     >

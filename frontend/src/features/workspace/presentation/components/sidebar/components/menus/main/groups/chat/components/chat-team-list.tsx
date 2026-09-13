@@ -349,7 +349,7 @@ export function ChatTeamList({ agents, currentChatId }: ChatTeamListProps) {
         }
       }
 
-      return "Teammate";
+      return t("Teammate");
     },
     [chats, selfUserId],
   );

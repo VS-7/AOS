@@ -56,6 +56,44 @@ describe("ChatTurnFailure", () => {
   });
 });
 
+describe("ChatTurnFailure for a provider that is not set up", () => {
+  // The card said "luara could not answer — no model provider is configured
+  // for this agent", in English, under the agent's slug.
+  it("names the agent and explains the fix in the interface's words", () => {
+    render(
+      <ChatTurnFailure
+        agentName="Luara"
+        run={{
+          agentId: "luara",
+          status: "error",
+          error: {
+            code: "AOS_AGENT_PROVIDER_NOT_ENABLED",
+            message: "no model provider is configured for this agent",
+            cta: [{ label: "point the default slot at a provider and a model in .aos/config.json", tool: "config_update" }],
+          },
+        }}
+      />,
+    );
+    expect(screen.getByText(/^Luara could not answer$/)).toBeTruthy();
+    expect(screen.getByText(/No AI provider is connected/)).toBeTruthy();
+    // The daemon's advice names a file; the explanation above replaces it.
+    expect(screen.queryByText(/config\.json/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /AI Providers/i }));
+    expect(openSettings).toHaveBeenCalledWith("user.agents");
+  });
+
+  it("sends a refused credential to the providers screen too", () => {
+    render(
+      <ChatTurnFailure
+        run={{ agentId: "luara", status: "error", error: { code: "AOS_AGENT_PROVIDER_FAILED", message: "the anthropic provider did not answer: the anthropic provider answered 401: invalid x-api-key" } }}
+      />,
+    );
+    expect(screen.getByText(/refused the credentials/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /AI Providers/i }));
+    expect(openSettings).toHaveBeenCalledWith("user.agents");
+  });
+});
+
 describe("settingsSectionFor", () => {
   it("maps the tools this window has a screen for", () => {
     expect(settingsSectionFor({ tool: "config_update" })).toBe("user.agents");

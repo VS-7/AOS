@@ -163,27 +163,6 @@ function AgentThinkingHeader({ summary }: { summary: AgentThinkingSummary }) {
   );
 }
 
-function formatReactionTooltip(
-  actors: string[],
-  emoji: string,
-  currentUserName: string,
-): string {
-  const formatted = actors.map((a) =>
-    a.trim() === currentUserName.trim() ? "You" : a,
-  );
-
-  if (formatted.length === 1) {
-    return `${formatted[0]} reacted with ${emoji}`;
-  }
-
-  if (formatted.length === 2) {
-    return `${formatted[0]} and ${formatted[1]} reacted with ${emoji}`;
-  }
-
-  const othersCount = formatted.length - 2;
-  return `${formatted[0]}, ${formatted[1]}, and ${othersCount} other${othersCount > 1 ? "s" : ""} reacted with ${emoji}`;
-}
-
 export interface ChatMessageReaction {
   actors: string[];
   count: number;
@@ -458,7 +437,7 @@ export function ChatMessageItem({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-foreground">
-                  {part.filename || "Voice note"}
+                  {part.filename || t("Voice note")}
                 </p>
                 <p className="text-xs text-muted-foreground">{mediaType}</p>
               </div>
@@ -478,7 +457,7 @@ export function ChatMessageItem({
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-foreground">
-                {part.filename || "Attachment"}
+                {part.filename || t("Attachment")}
               </p>
               <p className="text-xs text-muted-foreground">{mediaType}</p>
             </div>
@@ -636,14 +615,16 @@ export function ChatMessageItem({
                         : "text-muted-foreground hover:text-foreground",
                     )}
                     disabled={reactionsDisabled}
-                    label={`${reaction.emoji} reaction`}
+                    label={t("{{emoji}} reaction", { emoji: reaction.emoji })}
                     onClick={() => onToggleReaction(reaction.emoji)}
                     size="xs"
-                    tooltip={formatReactionTooltip(
-                      reaction.actors,
-                      reaction.emoji,
-                      userName,
-                    )}
+                    tooltip={ChatThreadHelper.formatReactionTooltip({
+                      actors: reaction.actors,
+                      emoji: reaction.emoji,
+                      selfUserId,
+                      usersById,
+                      agents,
+                    })}
                     variant="ghost"
                   >
                     <span className="text-[11px] leading-none">
@@ -720,9 +701,9 @@ function ChatMessageCompactActions({
           key={emoji}
           className="size-5 rounded-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           disabled={disabled}
-          label={`Add ${emoji} reaction`}
+          label={t("Add {{emoji}} reaction", { emoji })}
           onClick={() => onToggleReaction(emoji)}
-          tooltip={`React with ${emoji}`}
+          tooltip={t("React with {{emoji}}", { emoji })}
           variant="ghost"
         >
           <span className="text-[11px] leading-none">{emoji}</span>
@@ -753,9 +734,9 @@ function ChatMessageCompactActions({
       <MessageAction
         className="size-5 rounded-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground"
         disabled={textDisabled}
-        label={copied ? "Copied" : "Copy message"}
+        label={copied ? t("Copied") : t("Copy message")}
         onClick={onCopy}
-        tooltip={copied ? "Copied" : "Copy message"}
+        tooltip={copied ? t("Copied") : t("Copy message")}
         variant="ghost"
       >
         {copied ? (
@@ -790,7 +771,7 @@ function ChatMessageEmojiPicker({
           {t("Loading emojis...")}
         </EmojiPicker.Loading>
         <EmojiPicker.Empty className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-          {({ search }: { search: string }) => `No emoji found for "${search}"`}
+          {({ search }: { search: string }) => t("No emoji found for “{{search}}”", { search })}
         </EmojiPicker.Empty>
         <EmojiPicker.List
           className="pb-3"
