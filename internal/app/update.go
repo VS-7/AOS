@@ -3,8 +3,12 @@ package app
 import (
 	"context"
 	_ "embed"
+	"net"
+	"os"
+	"strconv"
 	"strings"
 
+	"github.com/OWNER/aos/internal/adapters/supervise"
 	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/core/env"
@@ -39,9 +43,10 @@ func updateFeed(resolver *env.Resolver) (feed string, custom bool) {
 }
 
 // updateSupervisor adapts gateway.Service to update.DaemonSupervisor — the
-// narrow slice update.Apply needs (restart, health), not the whole
-// Start/Stop/Status surface. update does not import gateway directly, the
-// same discipline internal/domain/tunnel's own Config port documents.
+// narrow slice update.Apply needs (which daemon answers, and restarting it),
+// not the whole Start/Stop/Status surface. update does not import gateway
+// directly, the same discipline internal/domain/tunnel's own Config port
+// documents.
 //
 // It holds two copies of the gateway because the update service runs in two
 // kinds of process. Inside the daemon, the gateway refuses to restart the
@@ -59,30 +64,58 @@ type updateSupervisor struct {
 	inside  *gateway.Service
 	outside *gateway.Service
 	serving func() bool
+	// host and port are where this installation's daemon is configured to
+	// answer: where to look when no record names a daemon.
+	host string
+	port int
+	// identify reads which daemon answers at an address — supervise.Health.
+	identify func(ctx context.Context, host string, port int) (supervise.Identity, error)
 }
 
-// CanRestart is false in the daemon itself, which cannot restart onto new
-// binaries and still be there to roll them back.
-func (u updateSupervisor) CanRestart(context.Context) bool {
-	return u.outside != nil && !u.serving()
+// Observe crosses the outside gateway's record — the process it started, if
+// that is still alive — with what the daemon answering says about itself.
+//
+// "A gateway exists" was the whole test once, and a daemon started by hand
+// passed it: `aosd update apply` restarted nothing, found the previous release
+// answering the port, and reported the new one installed. Which process
+// answers is what tells the two apart.
+func (u updateSupervisor) Observe(ctx context.Context) (update.Daemon, error) {
+	state, err := u.outside.Status(ctx, gateway.StatusInput{})
+	if err != nil {
+		return update.Daemon{}, err
+	}
+	host, port := u.host, u.port
+	var daemon update.Daemon
+	if state.Status == gateway.Running && state.Meta != nil {
+		daemon.RecordedPID = state.Meta.PID
+		// The record says where the daemon it started answers, which is
+		// where it answers even when this process was configured otherwise.
+		host, port = state.Meta.Host, state.Meta.Port
+	}
+	daemon.Address = net.JoinHostPort(host, strconv.Itoa(port))
+	if u.serving() {
+		// The daemon itself: no need to ask the port who it is.
+		daemon.Self, daemon.Answering = true, true
+		daemon.PID, daemon.Version = os.Getpid(), build.Version
+		return daemon, nil
+	}
+	identify := u.identify
+	if identify == nil {
+		identify = supervise.NewHealth().Identify
+	}
+	if id, err := identify(ctx, host, port); err == nil {
+		daemon.Answering, daemon.PID, daemon.Version = true, id.PID, id.Version
+	}
+	return daemon, nil
 }
 
 func (u updateSupervisor) Restart(ctx context.Context) error {
-	svc := u.inside
-	if u.CanRestart(ctx) {
-		svc = u.outside
+	svc := u.outside
+	if u.serving() {
+		svc = u.inside
 	}
 	_, err := svc.Restart(ctx, gateway.RestartInput{})
 	return err
-}
-
-func (u updateSupervisor) Healthy(ctx context.Context) bool {
-	svc := u.inside
-	if u.CanRestart(ctx) {
-		svc = u.outside
-	}
-	state, err := svc.Status(ctx, gateway.StatusInput{})
-	return err == nil && state.Healthy
 }
 
 // updateOperators answers update.Operators from the account the request

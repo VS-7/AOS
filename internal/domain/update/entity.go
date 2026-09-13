@@ -175,7 +175,52 @@ type Install struct {
 	// replaces here. The window already open goes on running the previous
 	// release until it is quit and opened again.
 	Reopen bool `json:"reopen,omitempty"`
+	// Unsupervised is true when the daemon answering was not started by this
+	// installation's supervisor — the desktop application or `aos gateway` —
+	// but by hand (`aosd serve`) or by a service manager. Command cannot
+	// restart a daemon it did not start: that one is stopped where it was
+	// started first, and Command then starts the new version itself.
+	Unsupervised bool `json:"unsupervised,omitempty"`
 }
+
+// Daemon is which daemon answers for this installation, as the process asking
+// sees it — DaemonSupervisor.Observe's answer.
+//
+// It exists because "something answers on the port" was the whole question,
+// and it is the wrong one twice over. An install that restarted nothing it
+// had started found the previous daemon still answering and reported the new
+// version running; and a restart onto the binaries it had just replaced was
+// taken for proof whichever binary the daemon had actually been started from.
+type Daemon struct {
+	// Self is true when the process asking is the daemon itself.
+	Self bool
+	// Address is where this installation's daemon answers, as host:port.
+	Address string
+	// RecordedPID is the process the supervisor's record names, while that
+	// process is alive; 0 when there is no record or its process has gone.
+	RecordedPID int
+	// Answering is true when a daemon answered its health check at Address.
+	Answering bool
+	// PID and Version are what the daemon answering says about itself. PID
+	// is 0 when it does not say, as a release from before it did.
+	PID     int
+	Version string
+}
+
+// supervised: the daemon answering is the very process the supervisor
+// started, so a restart stops it and brings the binaries in place up instead.
+func (d Daemon) supervised() bool {
+	return d.Answering && d.RecordedPID > 0 && d.PID == d.RecordedPID
+}
+
+// idle: no daemon runs at all — nothing answers, and the supervisor's record
+// names no live process — so an install starts the new version rather than
+// restarting one.
+func (d Daemon) idle() bool { return !d.Answering && d.RecordedPID == 0 }
+
+// restartable reports whether an install from the process asking can bring
+// the new version up, and bring the previous one back if it does not.
+func (d Daemon) restartable() bool { return !d.Self && (d.supervised() || d.idle()) }
 
 // Staged is what Download left ready for Apply, as a caller sees it.
 type Staged struct {

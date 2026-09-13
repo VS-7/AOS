@@ -6,11 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/OWNER/aos/internal/core/command"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +22,7 @@ import (
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/clockx"
+	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/core/env"
 	"github.com/OWNER/aos/internal/core/identity"
 	"github.com/OWNER/aos/internal/core/relsig"
@@ -32,6 +35,12 @@ import (
 // state directory, inside the daemon or outside it.
 func realGateway(t *testing.T, dir string, inside bool) *gateway.Service {
 	t.Helper()
+	return gatewayOn(t, dir, inside, 1)
+}
+
+// gatewayOn is realGateway for a daemon configured to answer on port.
+func gatewayOn(t *testing.T, dir string, inside bool, port int) *gateway.Service {
+	t.Helper()
 	return gateway.NewService(gateway.Deps{
 		Processes: supervise.NewProcesses(),
 		Health:    supervise.NewHealth(),
@@ -41,9 +50,57 @@ func realGateway(t *testing.T, dir string, inside bool) *gateway.Service {
 		Clock:     clockx.System{},
 		Sleeper:   supervise.Sleeper{},
 		Host:      "127.0.0.1",
-		Port:      1,
+		Port:      port,
 		Inside:    inside,
 	})
+}
+
+// releasePlatform is the platform the test release is published for, which
+// the services under test are told they run on.
+const releasePlatform = "linux/amd64"
+
+// installDaemon puts a stand-in daemon binary in binDir and returns its path.
+func installDaemon(t *testing.T, binDir string) string {
+	t.Helper()
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	aosd := filepath.Join(binDir, "aosd")
+	if err := os.WriteFile(aosd, []byte("the running daemon"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return aosd
+}
+
+// publishRelease serves a feed publishing aosd v0.10.0 for releasePlatform,
+// signed with a key of its own, and returns the feed, that key and the asset.
+func publishRelease(t *testing.T) (base, pub string, asset []byte) {
+	t.Helper()
+	pub, priv, err := relsig.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	asset = []byte("aosd v0.10.0")
+	sum := sha256.Sum256(asset)
+	checksums := hex.EncodeToString(sum[:]) + "  aosd_v0.10.0_linux_amd64\n"
+	sig, err := relsig.Sign(priv, []byte(checksums))
+	if err != nil {
+		t.Fatal(err)
+	}
+	feed := http.NewServeMux()
+	feed.HandleFunc("/stable.json", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(update.Release{
+			Version: "v0.10.0", ChecksumsURL: base + "/checksums.txt", SignatureURL: base + "/checksums.txt.sig",
+			Assets: []update.Asset{{Binary: "aosd", Platform: releasePlatform, URL: base + "/aosd", Filename: "aosd_v0.10.0_linux_amd64"}},
+		})
+	})
+	feed.HandleFunc("/checksums.txt", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(checksums)) })
+	feed.HandleFunc("/checksums.txt.sig", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(sig)) })
+	feed.HandleFunc("/aosd", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(asset) })
+	srv := httptest.NewServer(feed)
+	t.Cleanup(srv.Close)
+	base = srv.URL
+	return base, pub, asset
 }
 
 // TestApplyInsideTheDaemonRefusesBeforeTouchingAnything wires the real
@@ -56,40 +113,8 @@ func realGateway(t *testing.T, dir string, inside bool) *gateway.Service {
 func TestApplyInsideTheDaemonRefusesBeforeTouchingAnything(t *testing.T) {
 	root := t.TempDir()
 	binDir, stateDir := filepath.Join(root, "bin"), filepath.Join(root, "state")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	aosd := filepath.Join(binDir, "aosd")
-	if err := os.WriteFile(aosd, []byte("the running daemon"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	pub, priv, err := relsig.GenerateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	const platform = "linux/amd64"
-	asset := []byte("aosd v0.10.0")
-	sum := sha256.Sum256(asset)
-	checksums := hex.EncodeToString(sum[:]) + "  aosd_v0.10.0_linux_amd64\n"
-	sig, err := relsig.Sign(priv, []byte(checksums))
-	if err != nil {
-		t.Fatal(err)
-	}
-	feed := http.NewServeMux()
-	var base string
-	feed.HandleFunc("/stable.json", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(update.Release{
-			Version: "v0.10.0", ChecksumsURL: base + "/checksums.txt", SignatureURL: base + "/checksums.txt.sig",
-			Assets: []update.Asset{{Binary: "aosd", Platform: platform, URL: base + "/aosd", Filename: "aosd_v0.10.0_linux_amd64"}},
-		})
-	})
-	feed.HandleFunc("/checksums.txt", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(checksums)) })
-	feed.HandleFunc("/checksums.txt.sig", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(sig)) })
-	feed.HandleFunc("/aosd", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(asset) })
-	srv := httptest.NewServer(feed)
-	t.Cleanup(srv.Close)
-	base = srv.URL
+	aosd := installDaemon(t, binDir)
+	base, pub, asset := publishRelease(t)
 
 	inside := realGateway(t, stateDir, true)
 	installer := updateinstall.New(filepath.Join(stateDir, "staged"), binDir)
@@ -108,7 +133,7 @@ func TestApplyInsideTheDaemonRefusesBeforeTouchingAnything(t *testing.T) {
 		Clock:      clockx.System{},
 		Sleeper:    supervise.Sleeper{},
 		PublicKey:  pub,
-		Platform:   platform,
+		Platform:   releasePlatform,
 		Version:    "v0.9.0",
 	})
 	ctx := context.Background()
@@ -147,6 +172,165 @@ func TestApplyInsideTheDaemonRefusesBeforeTouchingAnything(t *testing.T) {
 	}
 }
 
+// fakeDaemon answers the health check the way a daemon does, as process pid
+// on version, and returns the port it answers on.
+func fakeDaemon(t *testing.T, version string, pid int) int {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/health" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"name": "aos", "status": "ok", "version": version, "pid": pid})
+	}))
+	t.Cleanup(srv.Close)
+	_, port, err := net.SplitHostPort(strings.TrimPrefix(srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := strconv.Atoi(port)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// A terminal `aosd update apply` next to a daemon somebody started by hand —
+// `aosd serve`, a service manager — has no process of its own to restart. It
+// used to swap the binaries anyway: the version-blind health probe found the
+// old daemon answering and reported the install done, deleting the backup,
+// while the old release went on serving; once the gateway refused to start a
+// second daemon beside it, the rollback's restart was refused the same way
+// and the answer was "the daemon did not come back up", about a daemon that
+// never went down.
+func TestTerminalApplyRefusesADaemonItsSupervisorDidNotStart(t *testing.T) {
+	root := t.TempDir()
+	binDir, stateDir := filepath.Join(root, "bin"), filepath.Join(root, "state")
+	aosd := installDaemon(t, binDir)
+	base, pub, asset := publishRelease(t)
+	// Serving v0.9.0 as a process no gateway record names.
+	port := fakeDaemon(t, "v0.9.0", 424242)
+
+	installer := updateinstall.New(filepath.Join(stateDir, "staged"), binDir)
+	svc := update.NewService(update.Deps{
+		Source:    releasesource.New(base),
+		Stager:    installer,
+		Installer: installer,
+		Store:     updateinstall.NewStore(filepath.Join(stateDir, "state.json")),
+		Supervisor: updateSupervisor{
+			inside:   gatewayOn(t, stateDir, true, port),
+			outside:  gatewayOn(t, stateDir, false, port),
+			serving:  func() bool { return false },
+			host:     "127.0.0.1",
+			port:     port,
+			identify: supervise.NewHealth().Identify,
+		},
+		Operators:     updateOperators{},
+		ActiveWork:    updateActiveWork{},
+		Clock:         clockx.System{},
+		Sleeper:       supervise.Sleeper{},
+		PublicKey:     pub,
+		Platform:      releasePlatform,
+		Version:       "v0.9.0",
+		HealthTimeout: time.Second,
+	})
+	ctx := context.Background()
+
+	checked, err := svc.Check(ctx, update.CheckInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Download(ctx, update.DownloadInput{Release: checked.Release}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = svc.Apply(ctx, update.ApplyInput{Version: "v0.10.0"})
+	e, ok := apperr.As(err)
+	if !ok || e.Code != "AOS_UPDATE_DAEMON_NOT_SUPERVISED" {
+		t.Fatalf("expected AOS_UPDATE_DAEMON_NOT_SUPERVISED, got %v", err)
+	}
+	if got, _ := os.ReadFile(aosd); string(got) != "the running daemon" {
+		t.Fatalf("the live daemon binary was replaced: %q", got)
+	}
+	if _, err := os.Stat(aosd + ".prev"); !os.IsNotExist(err) {
+		t.Fatal("no backup should exist: nothing was swapped")
+	}
+	if got, _ := os.ReadFile(filepath.Join(stateDir, "staged", "aosd")); string(got) != string(asset) {
+		t.Fatal("the staged release must survive the refusal")
+	}
+}
+
+// Which daemon answers is read from the outside gateway's record and from the
+// daemon's own health answer together: the record says which process the
+// supervisor started, the answer says which process is serving.
+func TestUpdateSupervisorObservesWhichDaemonAnswers(t *testing.T) {
+	ctx := context.Background()
+	observe := func(t *testing.T, dir string, port int, serving bool) update.Daemon {
+		t.Helper()
+		sup := updateSupervisor{
+			inside:   gatewayOn(t, dir, true, port),
+			outside:  gatewayOn(t, dir, false, port),
+			serving:  func() bool { return serving },
+			host:     "127.0.0.1",
+			port:     port,
+			identify: supervise.NewHealth().Identify,
+		}
+		d, err := sup.Observe(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	record := func(t *testing.T, dir string, pid, port int) {
+		t.Helper()
+		if err := supervise.NewStore(filepath.Join(dir, "gateway.json")).Write(ctx, gateway.Meta{PID: pid, Host: "127.0.0.1", Port: port}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Run("nothing runs", func(t *testing.T) {
+		d := observe(t, t.TempDir(), 1, false)
+		if d.Self || d.Answering || d.RecordedPID != 0 || d.Address != "127.0.0.1:1" {
+			t.Fatalf("daemon = %+v", d)
+		}
+	})
+	t.Run("a daemon started by hand", func(t *testing.T) {
+		d := observe(t, t.TempDir(), fakeDaemon(t, "v0.9.0", 424242), false)
+		if !d.Answering || d.PID != 424242 || d.Version != "v0.9.0" || d.RecordedPID != 0 {
+			t.Fatalf("daemon = %+v", d)
+		}
+	})
+	t.Run("the daemon the supervisor started", func(t *testing.T) {
+		dir := t.TempDir()
+		// This test's own process stands in for the recorded daemon: it is
+		// alive, and nothing here restarts it.
+		port := fakeDaemon(t, "v0.10.0", os.Getpid())
+		record(t, dir, os.Getpid(), port)
+		d := observe(t, dir, 1, false)
+		if !d.Answering || d.RecordedPID != os.Getpid() || d.PID != os.Getpid() || d.Version != "v0.10.0" {
+			t.Fatalf("daemon = %+v", d)
+		}
+		if d.Address != net.JoinHostPort("127.0.0.1", strconv.Itoa(port)) {
+			t.Fatalf("the recorded daemon is looked for where the record says, got %s", d.Address)
+		}
+	})
+	t.Run("another daemon where the supervisor's should be", func(t *testing.T) {
+		dir := t.TempDir()
+		port := fakeDaemon(t, "v0.9.0", 424242)
+		record(t, dir, os.Getpid(), port)
+		d := observe(t, dir, port, false)
+		if !d.Answering || d.RecordedPID != os.Getpid() || d.PID != 424242 {
+			t.Fatalf("daemon = %+v", d)
+		}
+	})
+	t.Run("the daemon itself", func(t *testing.T) {
+		d := observe(t, t.TempDir(), 1, true)
+		if !d.Self || !d.Answering || d.PID != os.Getpid() || d.Version != build.Version {
+			t.Fatalf("daemon = %+v", d)
+		}
+	})
+}
+
 func TestUpdateSupervisorRestartsFromOutsideOnlyOutsideTheDaemon(t *testing.T) {
 	dir := t.TempDir()
 	serving := false
@@ -156,9 +340,6 @@ func TestUpdateSupervisorRestartsFromOutsideOnlyOutsideTheDaemon(t *testing.T) {
 		serving: func() bool { return serving },
 	}
 	ctx := context.Background()
-	if !sup.CanRestart(ctx) {
-		t.Fatal("a process that is not the daemon can restart it")
-	}
 	// Nothing is running and the daemon binary does not exist: the outside
 	// gateway tries, and fails to start it — which is not a self-restart
 	// refusal.
@@ -167,16 +348,10 @@ func TestUpdateSupervisorRestartsFromOutsideOnlyOutsideTheDaemon(t *testing.T) {
 	} else if e, ok := apperr.As(err); ok && e.Code == "AOS_GATEWAY_SELF_RESTART" {
 		t.Fatal("outside the daemon the restart must go through the outside gateway")
 	}
-	if sup.Healthy(ctx) {
-		t.Fatal("nothing is running, so nothing is healthy")
-	}
 
 	serving = true
-	if sup.CanRestart(ctx) {
+	if e, ok := apperr.As(sup.Restart(ctx)); !ok || e.Code != "AOS_GATEWAY_SELF_RESTART" {
 		t.Fatal("the daemon cannot restart itself")
-	}
-	if (updateSupervisor{inside: sup.inside, serving: func() bool { return false }}).CanRestart(ctx) {
-		t.Fatal("with no outside gateway there is nothing to restart with")
 	}
 }
 

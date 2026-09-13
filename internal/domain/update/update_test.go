@@ -206,19 +206,77 @@ func (m *fakeMachine) liveAt(binary string) string {
 	return m.live[binary]
 }
 
+// fakeSupervisor is a daemon and the gateway that started it. Until told
+// otherwise the daemon answering is the process the gateway started, and a
+// restart brings up a new process running whatever version the live
+// binaries on the machine carry.
 type fakeSupervisor struct {
-	mu          sync.Mutex
-	cannot      bool
+	mu      sync.Mutex
+	machine *fakeMachine
+	// oldVersion is what the daemon runs before anything is installed.
+	oldVersion string
+	// self: the process asking is the daemon itself.
+	self bool
+	// unsupervised: the daemon answering was started by hand, and the
+	// gateway has no record of it.
+	unsupervised bool
+	// silent: the gateway's daemon is running and not answering.
+	silent bool
+	// idle: no daemon runs at all until a restart starts one.
+	idle       bool
+	observeErr error
+	// elsewhere: a restart starts the daemon from another copy of the binary
+	// than the one installed, which stays on oldVersion.
+	elsewhere   bool
 	restartErrs []error
-	// newVersionSick keeps the daemon unhealthy after the first restart —
-	// the one onto the new binaries — and healthy after any other.
+	// newVersionSick keeps the daemon from answering after the first
+	// restart — the one onto the new binaries — and not after any other.
 	newVersionSick bool
 	restarts       int
 	// onRestart runs on every restart, while the swap is in place.
 	onRestart func()
 }
 
-func (f *fakeSupervisor) CanRestart(context.Context) bool { return !f.cannot }
+func (f *fakeSupervisor) Observe(context.Context) (update.Daemon, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.observeErr != nil {
+		return update.Daemon{}, f.observeErr
+	}
+	pid := 1000 + f.restarts
+	d := update.Daemon{Address: "127.0.0.1:5326", Self: f.self}
+	switch {
+	case f.self && f.unsupervised:
+		d.Answering, d.PID, d.Version = true, 777, f.oldVersion
+	case f.self:
+		d.Answering, d.PID, d.RecordedPID, d.Version = true, pid, pid, f.oldVersion
+	case f.unsupervised:
+		d.Answering, d.PID, d.Version = true, 777, f.oldVersion
+	case f.idle && f.restarts == 0:
+	case f.silent, f.newVersionSick && f.restarts == 1:
+		d.RecordedPID = pid
+	default:
+		d.Answering, d.PID, d.RecordedPID, d.Version = true, pid, pid, f.runningVersion()
+	}
+	return d, nil
+}
+
+// runningVersion is the version a daemon started now runs: the release the
+// live binaries carry once one is swapped in.
+func (f *fakeSupervisor) runningVersion() string {
+	if f.restarts == 0 || f.elsewhere {
+		return f.oldVersion
+	}
+	f.machine.mu.Lock()
+	defer f.machine.mu.Unlock()
+	for _, content := range f.machine.live {
+		if strings.HasPrefix(content, "new ") {
+			fields := strings.Fields(content)
+			return fields[len(fields)-1]
+		}
+	}
+	return f.oldVersion
+}
 
 func (f *fakeSupervisor) Restart(context.Context) error {
 	f.mu.Lock()
@@ -231,12 +289,6 @@ func (f *fakeSupervisor) Restart(context.Context) error {
 		return f.restartErrs[f.restarts-1]
 	}
 	return nil
-}
-
-func (f *fakeSupervisor) Healthy(context.Context) bool {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return !f.newVersionSick || f.restarts != 1
 }
 
 type fakeActiveWork struct {
@@ -362,6 +414,9 @@ func newHarness(t *testing.T, opts ...option) *harness {
 	}
 	for _, o := range opts {
 		o(h)
+	}
+	if h.supervisor.machine == nil {
+		h.supervisor.machine, h.supervisor.oldVersion = h.machine, h.version
 	}
 	h.svc = update.NewService(update.Deps{
 		Source: h.source, Stager: h.machine, Installer: h.machine, Store: h.store, Lock: h.lock,
@@ -627,7 +682,7 @@ func TestCheckRefusesAManifestWhoseVersionIsNotAVersion(t *testing.T) {
 // says how it can be installed: the command, from a terminal.
 func TestCheckNamesTheTerminalCommandWhenThisProcessCannotRestart(t *testing.T) {
 	h := newHarness(t)
-	h.supervisor.cannot = true
+	h.supervisor.self = true
 	h.source.release = &update.Release{Version: "v0.10.0"}
 
 	out, err := h.svc.Check(context.Background(), update.CheckInput{})
@@ -658,7 +713,7 @@ func TestCheckNamesATerminalCommandThatRunsOnThisPlatform(t *testing.T) {
 	for _, c := range cases {
 		h := newHarness(t, onPlatform(c.platform))
 		h.machine.dir = c.dir
-		h.supervisor.cannot = true
+		h.supervisor.self = true
 		h.source.release = &update.Release{Version: "v0.10.0"}
 
 		out, err := h.svc.Check(context.Background(), update.CheckInput{})
@@ -816,7 +871,7 @@ func TestTheTerminalInstallSaysToReopenTheWindowWhenThereIsOne(t *testing.T) {
 		{[]string{"aos", "aosd"}, false},
 	} {
 		h := newHarness(t, installed(c.installed...))
-		h.supervisor.cannot = true
+		h.supervisor.self = true
 		h.download(t, h.signedRelease(t, "v0.10.0", c.installed...))
 
 		out, err := h.svc.Check(context.Background(), update.CheckInput{})
@@ -1358,7 +1413,7 @@ func TestApplySucceedsSwapsTheBinaryInAndCleansUp(t *testing.T) {
 func TestApplyThatCannotRestartRefusesBeforeTouchingAnything(t *testing.T) {
 	h := newHarness(t)
 	h.download(t, h.signedRelease(t, "v0.10.0", "aosd"))
-	h.supervisor.cannot = true
+	h.supervisor.self = true
 
 	_, err := h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
 	e := wantCode(t, err, "UPDATE_RESTART_UNAVAILABLE")
@@ -1370,6 +1425,158 @@ func TestApplyThatCannotRestartRefusesBeforeTouchingAnything(t *testing.T) {
 	}
 	if _, ok := h.machine.staged["aosd"]; !ok {
 		t.Fatal("the staged release must survive the refusal, so it can be installed")
+	}
+}
+
+// A daemon started by hand — `aosd serve`, a service manager — is not one a
+// restart stops. The install used to go ahead beside it: the previous release
+// went on answering, the install was reported done and the backup deleted.
+// It refuses before touching anything now, and says what to stop.
+func TestApplyRefusesADaemonItsSupervisorDidNotStart(t *testing.T) {
+	h := newHarness(t)
+	h.download(t, h.signedRelease(t, "v0.10.0", "aos", "aosd"))
+	h.supervisor.unsupervised = true
+
+	out, err := h.svc.Check(context.Background(), update.CheckInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Install == nil || out.Install.Method != update.InstallFromTerminal || !out.Install.Unsupervised || out.Install.Command == "" {
+		t.Fatalf("beside a daemon started by hand, the offer says to stop it first: %+v", out.Install)
+	}
+
+	_, err = h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+	e := wantCode(t, err, "UPDATE_DAEMON_NOT_SUPERVISED")
+	if !strings.Contains(e.Message, "127.0.0.1:5326") || !strings.Contains(e.Message, "process 777") {
+		t.Fatalf("the refusal should name the daemon in the way, got %q", e.Message)
+	}
+	if len(e.Actions) != 2 || !strings.Contains(e.Actions[0].Label, "stop it where it was started") ||
+		!strings.Contains(e.Actions[1].Command, "update apply --version v0.10.0") {
+		t.Fatalf("the refusal should say what to stop and what to run then, got %+v", e.Actions)
+	}
+	if h.machine.liveAt("aosd") != "old aosd" || h.supervisor.restarts != 0 || h.machine.backups() != 0 {
+		t.Fatal("nothing may be swapped or restarted beside a daemon the supervisor did not start")
+	}
+	if _, ok := h.machine.staged["aosd"]; !ok {
+		t.Fatal("the staged release must survive the refusal")
+	}
+}
+
+// Inside a daemon started by hand, the terminal command is not enough on its
+// own either, and the refusal and the offer both say so.
+func TestTheDaemonStartedByHandSaysToStopItBeforeTheTerminalInstall(t *testing.T) {
+	h := newHarness(t)
+	h.download(t, h.signedRelease(t, "v0.10.0", "aosd"))
+	h.supervisor.self, h.supervisor.unsupervised = true, true
+
+	st, err := h.svc.Status(context.Background(), update.StatusInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Install.Method != update.InstallFromTerminal || !st.Install.Unsupervised {
+		t.Fatalf("install = %+v", st.Install)
+	}
+	_, err = h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+	e := wantCode(t, err, "UPDATE_RESTART_UNAVAILABLE")
+	if len(e.Actions) < 2 || !strings.Contains(e.Actions[0].Label, "stop it where it was started") ||
+		!strings.Contains(e.Actions[1].Command, "update apply --version v0.10.0") {
+		t.Fatalf("calls to action = %+v", e.Actions)
+	}
+
+	// Started by the supervisor, the command alone installs it.
+	h.supervisor.unsupervised = false
+	st, _ = h.svc.Status(context.Background(), update.StatusInput{})
+	if st.Install.Unsupervised {
+		t.Fatalf("a daemon the supervisor started is not unsupervised: %+v", st.Install)
+	}
+}
+
+// The supervisor's daemon is running and not answering: whether a restart
+// would bring the new version up cannot be seen from there.
+func TestApplyRefusesASupervisedDaemonThatDoesNotAnswer(t *testing.T) {
+	h := newHarness(t)
+	h.download(t, h.signedRelease(t, "v0.10.0", "aosd"))
+	h.supervisor.silent = true
+
+	_, err := h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+	e := wantCode(t, err, "UPDATE_DAEMON_NOT_ANSWERING")
+	if len(e.Actions) == 0 || e.Actions[0].Command != "aos gateway restart" {
+		t.Fatalf("calls to action = %+v", e.Actions)
+	}
+	if h.machine.liveAt("aosd") != "old aosd" || h.supervisor.restarts != 0 {
+		t.Fatal("nothing may be swapped or restarted")
+	}
+
+	h.supervisor.silent, h.supervisor.observeErr = false, errors.New("gateway.json unreadable")
+	_, err = h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+	wantCode(t, err, "UPDATE_DAEMON_UNKNOWN")
+	if h.machine.liveAt("aosd") != "old aosd" || h.supervisor.restarts != 0 {
+		t.Fatal("nothing may be swapped or restarted")
+	}
+}
+
+// With no daemon running at all there is nothing to restart: the install
+// starts the new version, and sees it answer as itself.
+func TestApplyWithNoDaemonRunningStartsTheNewVersion(t *testing.T) {
+	h := newHarness(t)
+	h.download(t, h.signedRelease(t, "v0.10.0", "aosd"))
+	h.supervisor.idle = true
+
+	st, _ := h.svc.Status(context.Background(), update.StatusInput{})
+	if st.Install.Method != update.InstallHere {
+		t.Fatalf("install = %+v", st.Install)
+	}
+	if _, err := h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"}); err != nil {
+		t.Fatal(err)
+	}
+	if h.machine.liveAt("aosd") != "new aosd v0.10.0" || h.supervisor.restarts != 1 || h.machine.backups() != 0 {
+		t.Fatalf("live %q, restarts %d, backups %d", h.machine.liveAt("aosd"), h.supervisor.restarts, h.machine.backups())
+	}
+}
+
+// Minutes can pass waiting for turns to finish, and the daemon looked at
+// before them is not necessarily the one there after.
+func TestApplyLooksAtTheDaemonAgainAfterWaitingForWork(t *testing.T) {
+	h := newHarness(t)
+	h.download(t, h.signedRelease(t, "v0.10.0", "aosd"))
+	h.activeWork.counts = []int{1, 0}
+	h.activeWork.during = func() {
+		h.supervisor.mu.Lock()
+		h.supervisor.unsupervised = true
+		h.supervisor.mu.Unlock()
+	}
+
+	_, err := h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+	wantCode(t, err, "UPDATE_DAEMON_NOT_SUPERVISED")
+	if h.machine.liveAt("aosd") != "old aosd" || h.supervisor.restarts != 0 {
+		t.Fatal("nothing may be swapped or restarted")
+	}
+}
+
+// The daemon came back up, as the previous release: the supervisor starts it
+// from another copy of the binary than the one the install replaced. That is
+// not an install, and the backups are what bring the previous state back.
+func TestApplyIsDoneOnlyWhenTheNewVersionAnswers(t *testing.T) {
+	h := newHarness(t)
+	h.download(t, h.signedRelease(t, "v0.10.0", "aos", "aosd"))
+	h.supervisor.elsewhere = true
+
+	out, err := h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+	e := wantCode(t, err, "UPDATE_ROLLED_BACK")
+	if !out.RolledBack || out.Version != "" {
+		t.Fatalf("out = %+v", out)
+	}
+	if !strings.Contains(e.Message, "is v0.9.0, not v0.10.0") {
+		t.Fatalf("the refusal should say which version came back up, got %q", e.Message)
+	}
+	if len(e.Actions) == 0 || !strings.Contains(e.Actions[0].Label, "AOS_DAEMON_PATH") {
+		t.Fatalf("the refusal should point at where the daemon is started from, got %+v", e.Actions)
+	}
+	if h.machine.liveAt("aosd") != "old aosd" || h.machine.liveAt("aos") != "old aos" || len(h.machine.commits) != 0 {
+		t.Fatalf("the previous binaries should be back, and no backup dropped: live %v, commits %v", h.machine.live, h.machine.commits)
+	}
+	if _, ok := h.machine.staged["aosd"]; !ok {
+		t.Fatal("a rolled-back release should stay staged")
 	}
 }
 

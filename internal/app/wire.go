@@ -907,9 +907,12 @@ func New(opts Options) (*App, error) {
 		// `aosd update apply` is a process of its own.
 		Lock: updateinstall.NewLock(filepath.Join(paths.UpdateDir(), "update.lock")),
 		Supervisor: updateSupervisor{
-			inside:  gatewaySvc,
-			outside: gateway.NewService(outsideDeps),
-			serving: serving.Load,
+			inside:   gatewaySvc,
+			outside:  gateway.NewService(outsideDeps),
+			serving:  serving.Load,
+			host:     gatewayDeps.Host,
+			port:     gatewayDeps.Port,
+			identify: supervise.NewHealth().Identify,
 		},
 		Operators:  updateOperators{auth: authSvc},
 		ActiveWork: updateActiveWork{queue: queue},

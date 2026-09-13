@@ -344,15 +344,25 @@ func (s *service) Status(ctx context.Context, _ StatusInput) (Status, error) {
 // install says how a release reaches this installation. version is the
 // release a terminal command would install, when there is one to name.
 func (s *service) install(ctx context.Context, version string) Install {
+	daemon, err := s.supervisor.Observe(ctx)
+	return s.installBeside(ctx, daemon, err == nil, version)
+}
+
+// installBeside is install for a daemon already observed; known is false when
+// it could not be.
+func (s *service) installBeside(ctx context.Context, daemon Daemon, known bool, version string) Install {
 	if why := s.reinstallReason(ctx); why != "" {
 		return Install{Method: InstallReinstall, Reason: why}
 	}
 	_, window, err := s.installer.Target(ctx, windowBinary)
 	reopen := err == nil && window
-	if s.supervisor.CanRestart(ctx) {
+	if known && daemon.restartable() {
 		return Install{Method: InstallHere, Reopen: reopen}
 	}
-	out := Install{Method: InstallFromTerminal, Reopen: reopen}
+	out := Install{
+		Method: InstallFromTerminal, Reopen: reopen,
+		Unsupervised: known && daemon.Answering && !daemon.supervised(),
+	}
 	if version == "" {
 		return out
 	}
@@ -624,15 +634,19 @@ func (s *service) installed(ctx context.Context) {
 
 // Apply swaps in the staged release at a point where nothing is lost:
 //  0. refuse up front what cannot finish: nothing staged under this version,
-//     a release not newer than this one, a bundle, a process that cannot
-//     restart the daemon — before a single file moves
+//     a release not newer than this one, a bundle, a daemon this process
+//     cannot restart — itself, or one its supervisor did not start — before
+//     a single file moves
 //  1. prove the staged files against the signed checksums again, and that
 //     they still cover every binary installed here
-//  2. wait for in-flight turns to finish, bounded by ActiveWorkGrace
+//  2. wait for in-flight turns to finish, bounded by ActiveWorkGrace, and
+//     look at the daemon again: minutes can pass, and it can be another one
 //  3. swap each binary, keeping the previous one as a rollback target — the
 //     Installer proves each file's digest once more as it copies it
-//  4. restart the daemon, and verify health within HealthTimeout; on
-//     failure, roll every swap back and restart again on the previous binaries
+//  4. restart the daemon, and within HealthTimeout see the process the
+//     supervisor started answer as the staged version; otherwise roll every
+//     swap back and restart again on the previous binaries. The previous
+//     binaries are dropped only once the new version has answered as itself.
 func (s *service) Apply(ctx context.Context, in ApplyInput) (ApplyOutput, error) {
 	if err := s.authorize(ctx, "update.Service.Apply"); err != nil {
 		return ApplyOutput{}, err
@@ -656,8 +670,8 @@ func (s *service) Apply(ctx context.Context, in ApplyInput) (ApplyOutput, error)
 	if why := s.reinstallReason(ctx); why != "" {
 		return ApplyOutput{}, errReinstallRequired("update.Service.Apply", why)
 	}
-	if !s.supervisor.CanRestart(ctx) {
-		return ApplyOutput{}, errRestartUnavailable(s.install(ctx, staged.Version))
+	if err := s.mayRestart(ctx, staged.Version); err != nil {
+		return ApplyOutput{}, err
 	}
 	installed, err := s.installedBinaries(ctx, "update.Service.Apply")
 	if err != nil {
@@ -672,6 +686,9 @@ func (s *service) Apply(ctx context.Context, in ApplyInput) (ApplyOutput, error)
 	}
 
 	if err := s.waitForActiveWork(ctx); err != nil {
+		return ApplyOutput{}, err
+	}
+	if err := s.mayRestart(ctx, staged.Version); err != nil {
 		return ApplyOutput{}, err
 	}
 
@@ -709,7 +726,7 @@ func (s *service) Apply(ctx context.Context, in ApplyInput) (ApplyOutput, error)
 	if err := s.supervisor.Restart(ctx); err != nil {
 		return s.rollbackAndRestart(ctx, swapped, err)
 	}
-	if err := s.waitHealthy(ctx); err != nil {
+	if err := s.waitRunning(ctx, staged.Version); err != nil {
 		return s.rollbackAndRestart(ctx, swapped, err)
 	}
 
@@ -724,6 +741,30 @@ func (s *service) Apply(ctx context.Context, in ApplyInput) (ApplyOutput, error)
 	}
 	s.log.Info("applied a release", "version", staged.Version)
 	return ApplyOutput{Version: staged.Version, RolledBack: false}, nil
+}
+
+// mayRestart refuses an install this process cannot bring up — and cannot
+// take back — before anything is swapped, saying what is in the way.
+//
+// Only the daemon the supervisor started is restarted. A daemon somebody
+// started by hand keeps answering through a restart that cannot stop it: the
+// install used to swap the binaries anyway, find the previous release
+// answering, report the new one running and delete the backup; or, once the
+// gateway refused to start a second daemon beside it, report that the daemon
+// did not come back up, about a daemon that had never gone down.
+func (s *service) mayRestart(ctx context.Context, version string) error {
+	daemon, err := s.supervisor.Observe(ctx)
+	switch {
+	case err != nil:
+		return errDaemonUnknown(err)
+	case daemon.Self:
+		return errRestartUnavailable(s.installBeside(ctx, daemon, true, version))
+	case daemon.Answering && !daemon.supervised():
+		return errDaemonNotSupervised(daemon, s.installBeside(ctx, daemon, true, version).Command)
+	case !daemon.restartable():
+		return errDaemonNotAnswering(daemon)
+	}
+	return nil
 }
 
 // verifyStaged proves, again, what Download proved: the checksums file's
@@ -794,7 +835,9 @@ func (s *service) rollbackAndRestart(ctx context.Context, binaries []string, cau
 	if err := s.supervisor.Restart(ctx); err != nil {
 		return ApplyOutput{RolledBack: true}, errRestartAfterRollback(cause, err)
 	}
-	if err := s.waitHealthy(ctx); err != nil {
+	// The previous binaries are whatever version they were; that the process
+	// the supervisor started answers is what there is to see.
+	if err := s.waitRunning(ctx, ""); err != nil {
 		return ApplyOutput{RolledBack: true}, errRestartAfterRollback(cause, err)
 	}
 	return ApplyOutput{RolledBack: true}, errRolledBack(cause)
@@ -825,18 +868,53 @@ func (s *service) waitForActiveWork(ctx context.Context) error {
 	}
 }
 
-func (s *service) waitHealthy(ctx context.Context) error {
+// waitRunning waits, within HealthTimeout, for the process the supervisor
+// started to answer — and, when version is not empty, to answer as version.
+//
+// A version-blind "something answers" was the proof an install used to take:
+// the previous daemon answering beside a restart that stopped nothing, or a
+// daemon restarted from another copy of the binary than the one replaced,
+// passed it, and the install was reported done with the backup deleted.
+func (s *service) waitRunning(ctx context.Context, version string) error {
 	deadline := s.clock.Now().Add(s.healthTimeout)
 	for {
-		if s.supervisor.Healthy(ctx) {
-			return nil
+		daemon, err := s.supervisor.Observe(ctx)
+		if err == nil && daemon.supervised() {
+			if version == "" || daemon.Version == version {
+				return nil
+			}
+			// The process the supervisor just started is running something
+			// else, and waiting will not change which binary it runs.
+			return &wrongVersionError{address: daemon.Address, got: daemon.Version, want: version}
 		}
 		if !s.clock.Now().Before(deadline) {
-			return fmt.Errorf("daemon did not become healthy within %s", s.healthTimeout)
+			return notRunningError(daemon, err, s.healthTimeout)
 		}
 		if err := s.sleeper.Sleep(ctx, pollInterval); err != nil {
 			return err
 		}
+	}
+}
+
+// wrongVersionError: the daemon the supervisor restarted answers, as another
+// version than the one installed.
+type wrongVersionError struct{ address, got, want string }
+
+func (e *wrongVersionError) Error() string {
+	return fmt.Sprintf("the daemon that came back up on %s is %s, not %s", e.address, e.got, e.want)
+}
+
+// notRunningError says what was last seen when the daemon did not come up.
+func notRunningError(daemon Daemon, observeErr error, waited time.Duration) error {
+	switch {
+	case observeErr != nil:
+		return fmt.Errorf("could not tell whether the daemon came back up within %s: %w", waited, observeErr)
+	case !daemon.Answering:
+		return fmt.Errorf("no daemon answered on %s within %s", daemon.Address, waited)
+	case daemon.RecordedPID == 0:
+		return fmt.Errorf("the daemon answering on %s within %s is not one the supervisor started", daemon.Address, waited)
+	default:
+		return fmt.Errorf("the daemon answering on %s within %s is not process %d, the one the supervisor started", daemon.Address, waited, daemon.RecordedPID)
 	}
 }
 

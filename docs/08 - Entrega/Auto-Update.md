@@ -54,6 +54,26 @@ servidor, compilado com `-tags webui` (`build.Flavour`), porque o feed publica
 o `aosd` sem a interface web e trocá-lo deixaria o servidor só com a API —
 esse é reinstalado com `AOS_SERVER=1 install.sh`.
 
+O comando do terminal só reinicia o daemon que o supervisor dele iniciou — o
+aplicativo ou `aos gateway`. Quem é o daemon que responde vem do próprio
+`/api/health`, que diz a versão e o processo: o `Apply` confere que esse
+processo é o do registro do gateway (`gateway.json`) antes de trocar
+qualquer arquivo, e confere de novo depois de esperar os turnos. Ao lado de
+um daemon iniciado à mão (`aosd serve`) ou por um gerenciador de serviços, o
+reinício não para nada, e o install antigo seguia assim mesmo: achava a
+versão anterior respondendo, dizia que tinha instalado e apagava o `.prev`;
+com o gateway recusando subir um segundo daemon (`AOS_GATEWAY_NOT_OURS`),
+dizia que o daemon "não voltou", sobre um daemon que nunca caiu. Agora recusa
+antes (`UPDATE_DAEMON_NOT_SUPERVISED`), e o `install` do `Check`/`Status`
+avisa (`unsupervised`): pare esse daemon onde ele foi iniciado, e o comando
+sobe a nova versão sozinho. Um daemon do supervisor que não responde também
+é recusado (`UPDATE_DAEMON_NOT_ANSWERING`, com `aos gateway restart`). E o
+install só termina quando o processo que o gateway reiniciou responde **como a
+versão staged**: um daemon que volta como outra versão (iniciado de outra
+cópia do binário, `AOS_DAEMON_PATH`) é desfeito como uma falha de saúde, e o
+`.prev` só é apagado depois dessa resposta. Com nenhum daemon rodando, o
+install inicia a nova versão pelo gateway.
+
 Por baixo, um update por vez: `Download` e `Apply` tomam uma trava de arquivo
 (`update.lock`) que vale entre processos — o daemon e o `aosd update apply`
 no terminal — e o registro (`state.json`) só é alterado sob outra trava, para

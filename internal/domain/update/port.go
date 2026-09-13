@@ -147,18 +147,22 @@ type Lock interface {
 }
 
 // DaemonSupervisor is the narrow slice of the gateway this domain needs:
-// restart the daemon process the new binaries were just swapped into, and
-// ask whether it is answering. internal/app wires the real gateway.Service
-// behind this — update does not import another domain directly, the same
-// discipline internal/domain/tunnel's own Config port documents.
+// which daemon answers for this installation, and restarting the one it
+// started onto the binaries just swapped in. internal/app wires the real
+// gateway.Service behind this — update does not import another domain
+// directly, the same discipline internal/domain/tunnel's own Config port
+// documents.
 type DaemonSupervisor interface {
-	// CanRestart reports whether Restart can work from the process this
-	// service runs in. Inside the daemon it cannot — the daemon does not
-	// restart itself (AOS_GATEWAY_SELF_RESTART) — and Apply asks before it
-	// swaps anything rather than finding out after.
-	CanRestart(ctx context.Context) bool
+	// Observe reports, changing nothing, which daemon answers for this
+	// installation and whether it is the process the supervisor started.
+	// Apply asks before it swaps anything — inside the daemon, or beside a
+	// daemon somebody started by hand, a restart cannot bring the new version
+	// up — and again after the restart, to see the new version answering
+	// rather than anything at all.
+	Observe(ctx context.Context) (Daemon, error)
+	// Restart stops the daemon the supervisor started, when one runs, and
+	// starts one on the binaries in place.
 	Restart(ctx context.Context) error
-	Healthy(ctx context.Context) bool
 }
 
 // Operators says who may change this installation's binaries. Checking an

@@ -111,6 +111,55 @@ func TestTheHealthProbeDistinguishesServingFromListening(t *testing.T) {
 	}
 }
 
+// An update restarts only the daemon its supervisor started, and is done only
+// when the daemon answering is the new release: both questions are asked of
+// the health answer, which says which process and which release it is.
+func TestIdentifyReadsWhichDaemonAnswers(t *testing.T) {
+	health := supervise.NewHealth()
+
+	daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/health" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"name":"aos","status":"ok","version":"v0.10.0","pid":4242}`))
+	}))
+	defer daemon.Close()
+	host, port := splitHostPort(t, daemon.URL)
+	id, err := health.Identify(ctx(), host, port)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id.Version != "v0.10.0" || id.PID != 4242 || id.Name != "aos" {
+		t.Fatalf("identity = %+v", id)
+	}
+
+	older := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"name":"aos","status":"ok","version":"v0.9.0"}`))
+	}))
+	defer older.Close()
+	host, port = splitHostPort(t, older.URL)
+	if id, err := health.Identify(ctx(), host, port); err != nil || id.PID != 0 || id.Version != "v0.9.0" {
+		t.Fatalf("a release that does not name its process: %+v, %v", id, err)
+	}
+
+	for name, handler := range map[string]http.HandlerFunc{
+		"an error":         func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusInternalServerError) },
+		"not a health one": func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("<html>")) },
+	} {
+		srv := httptest.NewServer(handler)
+		host, port := splitHostPort(t, srv.URL)
+		if _, err := health.Identify(ctx(), host, port); err == nil {
+			t.Errorf("an answer that is %s identified a daemon", name)
+		}
+		srv.Close()
+	}
+	health.Timeout = 500 * time.Millisecond
+	if _, err := health.Identify(ctx(), "127.0.0.1", 1); err == nil {
+		t.Fatal("something answered on port 1")
+	}
+}
+
 func TestTheHealthProbeFailsFastOnAClosedPort(t *testing.T) {
 	health := supervise.NewHealth()
 	health.Timeout = 500 * time.Millisecond
