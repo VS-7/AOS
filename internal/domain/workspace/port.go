@@ -46,6 +46,12 @@ type Git interface {
 	// its top level, not a directory somewhere inside another one.
 	IsRepository(ctx context.Context, dir string) (bool, error)
 
+	// EnclosingRepository reports the top of the repository dir sits inside
+	// when dir is not a repository of its own, or "" when it is one or sits
+	// inside none. It is what separates a directory nobody versions from a
+	// subfolder of somebody's project.
+	EnclosingRepository(ctx context.Context, dir string) (string, error)
+
 	// Init creates a repository at dir.
 	Init(ctx context.Context, dir string) error
 

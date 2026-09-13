@@ -457,6 +457,18 @@ func New(opts Options) (*App, error) {
 		WorkingDir:    root,
 	})
 
+	// A workspace directory this installation made for itself is given a
+	// repository of its own if it was made before creation did that, and
+	// nothing else is touched — see workspace.Service.EnsureManagedRepository.
+	// Here rather than at Create because those workspaces were created long
+	// ago: the one this was found on sits inside a home directory that is a
+	// repository with no commit, and every task branched in it was refused.
+	if info, err := os.Stat(root); err == nil && info.IsDir() {
+		if _, warning := workspaceSvc.EnsureManagedRepository(context.Background(), root); warning != "" {
+			logger.Warn("the workspace has no repository of its own", "path", root, "reason", warning)
+		}
+	}
+
 	// Now that the registry is readable, the scope declared above can answer.
 	// Everything that publishes an event — chat, activity, collections,
 	// approvals — and the turn itself go through this one resolver, so there

@@ -59,6 +59,20 @@ func (g *Git) IsRepository(ctx context.Context, dir string) (bool, error) {
 	return own, err
 }
 
+// EnclosingRepository reports the top of the repository dir sits inside when
+// dir is not a repository of its own, or "" when it is one or sits inside
+// none.
+func (g *Git) EnclosingRepository(ctx context.Context, dir string) (string, error) {
+	if _, err := os.Stat(dir); err != nil {
+		return "", nil //nolint:nilerr // a directory that does not exist sits inside nothing yet
+	}
+	top, own, err := g.topOf(ctx, dir)
+	if err != nil || own {
+		return "", err
+	}
+	return top, nil
+}
+
 // topOf reports the top of the working tree dir belongs to — "" when it
 // belongs to none — and whether that top is dir itself.
 func (g *Git) topOf(ctx context.Context, dir string) (top string, own bool, err error) {

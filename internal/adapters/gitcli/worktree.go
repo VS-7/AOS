@@ -51,10 +51,16 @@ func resolve(path string) string {
 // that was branched, pruned and branched again should return to its own work,
 // not fail because the name is taken.
 func (w *Worktrees) Create(ctx context.Context, spec task.WorktreeSpec) (string, error) {
-	// Never from an enclosing repository: the checkout would hold somebody
-	// else's files, on a branch of somebody else's repository.
-	if err := w.git.ownRepository(ctx, "worktree add", w.repo); err != nil {
+	// From the repository the workspace is in, which is the project it is a
+	// folder of when it is not a repository of its own — the task domain has
+	// already asked Source whether that repository can hold the workspace.
+	// Never from nothing: git would say so less clearly.
+	top, _, err := w.git.topOf(ctx, w.repo)
+	if err != nil {
 		return "", err
+	}
+	if top == "" {
+		return "", errNotOwnRepository("worktree add", w.repo, "")
 	}
 	path := filepath.Clean(spec.Path)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -115,9 +121,11 @@ func (w *Worktrees) List(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	var paths []string
-	for _, entry := range listed {
-		// The main working tree is not one of ours to prune.
-		if entry.path == w.repo || entry.prunable || !isDir(entry.path) {
+	for i, entry := range listed {
+		// The main working tree, which git always lists first, is not one of
+		// ours to prune — and it is the project's, not the workspace
+		// directory, when the workspace is a folder inside a project.
+		if i == 0 || entry.prunable || !isDir(entry.path) {
 			continue
 		}
 		paths = append(paths, entry.path)
@@ -148,9 +156,9 @@ func (w *Worktrees) Exists(ctx context.Context, root, path string) bool {
 	if err != nil {
 		return false
 	}
-	for _, entry := range listed {
+	for i, entry := range listed {
 		if entry.path == want {
-			return entry.path != w.repo && !entry.prunable && isDir(entry.path)
+			return i != 0 && !entry.prunable && isDir(entry.path)
 		}
 	}
 	return false
@@ -165,8 +173,8 @@ func (w *Worktrees) forgetMissing(ctx context.Context, path, branch string) erro
 		return err
 	}
 	want := resolve(path)
-	for _, entry := range listed {
-		if entry.path == w.repo || (!entry.prunable && isDir(entry.path)) {
+	for i, entry := range listed {
+		if i == 0 || (!entry.prunable && isDir(entry.path)) {
 			continue
 		}
 		if entry.path != want && (branch == "" || entry.branch != "refs/heads/"+branch) {
@@ -236,19 +244,35 @@ func (w *Worktrees) Source(ctx context.Context, spec task.WorktreeSpec) (task.Wo
 		return task.WorktreeSource{}, err
 	}
 	out := task.WorktreeSource{Dir: w.repo, Toplevel: top, Own: own}
-	if !own {
+	if top == "" {
 		return out, nil
 	}
-	if w.hasBranch(ctx, spec.Branch) {
-		out.BaseExists = true
+
+	// What would be checked out: the branch when it exists, the base when it
+	// is a commit. Asked from the workspace directory, which git resolves to
+	// the project above it when the workspace is a folder of one.
+	rev := "refs/heads/" + spec.Branch
+	if !w.hasBranch(ctx, spec.Branch) {
+		rev = strings.TrimSpace(spec.Base)
+		if rev == "" {
+			rev = "HEAD"
+		}
+		if _, err := w.git.run(ctx, w.repo, "rev-parse", "--verify", "--quiet", rev+"^{commit}"); err != nil {
+			return out, nil //nolint:nilerr // no such commit is the answer BaseExists gives
+		}
+	}
+	out.BaseExists = true
+	if own {
 		return out, nil
 	}
-	base := strings.TrimSpace(spec.Base)
-	if base == "" {
-		base = "HEAD"
+
+	rel, err := filepath.Rel(resolve(top), w.repo)
+	if err != nil || !filepath.IsLocal(rel) {
+		return out, nil //nolint:nilerr // a workspace git places outside its own top holds nothing a checkout could
 	}
-	_, err = w.git.run(ctx, w.repo, "rev-parse", "--verify", "--quiet", base+"^{commit}")
-	out.BaseExists = err == nil
+	out.Subdir = rel
+	_, err = w.git.run(ctx, w.repo, "cat-file", "-e", rev+":"+filepath.ToSlash(rel))
+	out.SubdirCommitted = err == nil
 	return out, nil
 }
 

@@ -67,20 +67,29 @@ func (s *Service) Branch(ctx context.Context, in BranchInput) (*Worktree, error)
 		TaskID: current.ID, Branch: branch, Base: base, Path: filepath.Join(policy.Root, current.ID),
 	}
 
-	// Asked before anything is pruned or created. The two ways a workspace
-	// has nothing to cut from — it is not a repository of its own, or its base
-	// has no commit — both reached git, and what came back was
-	// TASK_WORKTREE_FAILED with the reason in a cause nothing renders, which
-	// is where an executor agent stopped the task for good.
+	// Asked before anything is pruned or created. The ways a workspace has
+	// nothing to cut from — it is in no repository, its base has no commit, or
+	// it is a folder the project it sits in never committed — all reached git,
+	// and what came back was TASK_WORKTREE_FAILED with the reason in a cause
+	// nothing renders, which is where an executor agent stopped the task for
+	// good.
+	//
+	// A workspace that is a folder of somebody's project is cut from that
+	// project: the checkout is of the project, and the task's turns are rooted
+	// in the folder inside it (see Checkout). Workspace creation leaves such a
+	// folder to the project rather than nesting a repository in it.
 	source, err := s.worktrees.Source(ctx, spec)
 	if err != nil {
 		return nil, errWorktreeFailed(current.ID, branch, err)
 	}
-	if !source.Own {
+	if source.Toplevel == "" {
 		return nil, errWorktreeNoRepository(current.ID, source)
 	}
 	if !source.BaseExists {
 		return nil, errWorktreeBaseMissing(current.ID, base, source)
+	}
+	if !source.Own && !source.SubdirCommitted {
+		return nil, errWorktreeNotCommitted(current.ID, source)
 	}
 
 	if policy.Limit > 0 {
@@ -108,7 +117,7 @@ func (s *Service) Branch(ctx context.Context, in BranchInput) (*Worktree, error)
 	}
 
 	if script := strings.TrimSpace(policy.OnCreateScript); script != "" && s.setup != nil {
-		if err := s.setup.Run(ctx, current.Assigned, created, script); err != nil {
+		if err := s.setup.Run(ctx, current.Assigned, workspaceInCheckout(created, source), script); err != nil {
 			// The checkout is usable; the setup did not run. That is worth
 			// saying out loud rather than failing: the agent can install what
 			// it needs, and destroying the branch over a failed script would
@@ -150,7 +159,26 @@ func (s *Service) Checkout(ctx context.Context, id string) (string, error) {
 			"task", current.ID, "path", recorded, "worktreeRoot", policy.Root)
 		return "", nil
 	}
-	return recorded, nil
+	// A workspace that is a folder of a project has a checkout of the whole
+	// project, and its turns belong in the folder, where the paths the agent
+	// knows the workspace by still mean the same files.
+	source, err := s.worktrees.Source(ctx, WorktreeSpec{
+		TaskID: current.ID, Branch: current.Worktree.Branch, Base: current.Worktree.Base, Path: recorded,
+	})
+	if err != nil {
+		return recorded, nil //nolint:nilerr // still the task's own checkout; only the folder inside it is unknown
+	}
+	return workspaceInCheckout(recorded, source), nil
+}
+
+// workspaceInCheckout is where the workspace is inside a checkout cut from
+// source: the checkout itself when the workspace is its own repository, the
+// workspace's folder inside it when the workspace is a folder of a project.
+func workspaceInCheckout(checkout string, source WorktreeSource) string {
+	if source.Own || source.Subdir == "" || !filepath.IsLocal(source.Subdir) {
+		return checkout
+	}
+	return filepath.Join(checkout, source.Subdir)
 }
 
 // ownCheckout reports whether a recorded path is the checkout this workspace

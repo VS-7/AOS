@@ -98,12 +98,21 @@ func (s *Service) scaffold(ctx context.Context, w *Workspace) (ScaffoldReport, e
 	return report, nil
 }
 
-// ensureGit puts the workspace under version control when it is not already.
+// ensureGit puts the workspace under version control when that is this
+// installation's to do.
 //
 // The original swallows every failure here. That is the wrong call: a workspace
 // that is not versioned loses the single property that justifies keeping agent
 // state inside the repository, and the user has no way to find out. Here the
 // failure becomes a warning on the result.
+//
+// A repository is made only in a directory this installation created for the
+// workspace, or in one that sits inside no repository at all. A directory
+// somebody chose inside a repository of their own is left to that repository:
+// a monorepo's subfolder used to get a nested .git and an empty commit, task
+// checkouts were then cut from that nearly empty repository instead of the
+// project, and the project's own `git add -A` recorded the folder as an
+// embedded repository.
 func (s *Service) ensureGit(ctx context.Context, w *Workspace) (initialised bool, warning string) {
 	already, err := s.git.IsRepository(ctx, w.Path)
 	if err != nil {
@@ -111,6 +120,15 @@ func (s *Service) ensureGit(ctx context.Context, w *Workspace) (initialised bool
 	}
 	if already {
 		return false, ""
+	}
+	if !s.manages(w.Path) {
+		enclosing, err := s.git.EnclosingRepository(ctx, w.Path)
+		if err != nil {
+			return false, "could not determine whether " + w.Path + " sits inside a Git repository: " + err.Error()
+		}
+		if enclosing != "" {
+			return false, ""
+		}
 	}
 	if err := s.git.Init(ctx, w.Path); err != nil {
 		return false, "the workspace was created but is not under version control: " + err.Error()
@@ -123,6 +141,35 @@ func (s *Service) ensureGit(ctx context.Context, w *Workspace) (initialised bool
 		return true, "the workspace is a Git repository with no commit yet, so tasks cannot be branched from it until one is made: " + err.Error()
 	}
 	return true, ""
+}
+
+// EnsureManagedRepository gives a workspace directory this installation
+// created a repository of its own when it has none, and does nothing to any
+// other directory.
+//
+// Workspaces made before creation followed that rule are the ones that need
+// it: on the machine this was found on, ~/.aos/workspaces/vs/workspace sits
+// inside a home directory that is a repository with no commit, was never given
+// one of its own, and every tasks_branch in it was refused. The composition
+// root calls this when it opens a workspace, so they are repaired without
+// anybody having to create them again.
+func (s *Service) EnsureManagedRepository(ctx context.Context, dir string) (initialised bool, warning string) {
+	if !s.manages(dir) {
+		return false, ""
+	}
+	return s.ensureGit(ctx, &Workspace{Path: path.Clean(dir)})
+}
+
+// manages reports whether dir is inside the directory this installation
+// creates workspaces in, which is what makes versioning it this
+// installation's business.
+func (s *Service) manages(dir string) bool {
+	base := strings.TrimSpace(s.workspacesDir)
+	if base == "" || strings.TrimSpace(dir) == "" {
+		return false
+	}
+	base, dir = path.Clean(base), path.Clean(dir)
+	return dir != base && strings.HasPrefix(dir, base+"/")
 }
 
 // managedBlock renders the section this system owns inside the user's .env.

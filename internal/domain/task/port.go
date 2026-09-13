@@ -71,15 +71,25 @@ type WorktreeSource struct {
 	// belongs to none.
 	Toplevel string
 
-	// Own reports whether that working tree is Dir itself. A workspace inside
-	// somebody else's repository — a home directory under version control is
-	// the usual one — must not have checkouts cut from it.
+	// Own reports whether that working tree is Dir itself. When it is not, the
+	// workspace is a directory inside somebody's repository — a monorepo's
+	// subfolder — and a checkout is of that repository, holding the workspace
+	// at Subdir.
 	Own bool
 
 	// BaseExists reports whether there is something to check out: the branch
 	// already exists, or the base (HEAD when none is named) is a commit. A
 	// repository nobody has committed to has neither.
 	BaseExists bool
+
+	// Subdir is where the workspace sits inside Toplevel when that repository
+	// is not its own, as a relative path; "" when it is.
+	Subdir string
+
+	// SubdirCommitted reports whether what would be checked out holds Subdir.
+	// A folder the enclosing repository never committed is not in a checkout
+	// of it, and a task rooted there would find nothing.
+	SubdirCommitted bool
 }
 
 // WorktreeSpec is what it takes to cut one.
