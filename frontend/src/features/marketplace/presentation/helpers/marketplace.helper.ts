@@ -160,14 +160,6 @@ export function marketplaceSectionId(label: string): string {
     .replace(/^-|-$/g, "");
 }
 
-export function buildInstallCommand(pluginName: string): string {
-  return `aos skills install --source aos/registry --skill ${pluginName}`;
-}
-
-export function buildGithubFolderUrl(pluginName: string, folder: string): string {
-  return `https://github.com/aos/registry/tree/main/skills/${encodeURIComponent(pluginName)}/${folder}`;
-}
-
 export function groupListingsByCategory(
   listings: MarketplaceSkillListing[],
 ): Record<string, MarketplaceSkillListing[]> {
@@ -262,42 +254,6 @@ export function listingForInstalled(
     source: skill.source,
     version: skill.version,
   };
-}
-
-/**
- * Merge marketplace search hits with matching installed-only plugins.
- * Dedupes by plugin name so installed registry plugins are not listed twice.
- */
-export function mergeListingsWithInstalled(
-  marketplaceListings: MarketplaceSkillListing[],
-  installed: Array<{ name: string; description: string }>,
-  allMarketplaceListings: MarketplaceSkillListing[],
-  query?: string,
-): MarketplaceSkillListing[] {
-  const byName = new Map(
-    marketplaceListings.map((listing) => [listing.name, listing]),
-  );
-  const normalizedQuery = (query ?? "").trim().toLowerCase();
-
-  for (const plugin of installed) {
-    if (byName.has(plugin.name)) continue;
-
-    if (normalizedQuery) {
-      const haystack = `${plugin.name} ${plugin.description}`.toLowerCase();
-      if (!haystack.includes(normalizedQuery)) continue;
-    }
-
-    byName.set(
-      plugin.name,
-      resolveInstalledListing(
-        plugin.name,
-        plugin.description,
-        allMarketplaceListings,
-      ),
-    );
-  }
-
-  return [...byName.values()];
 }
 
 export function getRelatedListings(
