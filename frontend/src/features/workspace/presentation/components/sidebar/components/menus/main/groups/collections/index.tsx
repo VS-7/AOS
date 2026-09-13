@@ -1,16 +1,33 @@
 import * as React from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowRight01Icon, DatabaseIcon } from "@hugeicons/core-free-icons";
+import {
+  AddSquareIcon,
+  ArrowRight01Icon,
+  DatabaseIcon,
+  Delete01Icon,
+  MoreHorizontalIcon,
+} from "@hugeicons/core-free-icons";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { toast } from "sonner";
 
 import {
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
-import { CollectionStore } from "@/features/collection/presentation/stores/collection.store";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useAlert } from "@/components/ui/alert-provider";
+import { errorMessage } from "@/lib/aos-facade";
+import type { CollectionDefinition } from "@/features/collection/presentation/helpers/collection-fields.helper";
+import { CreateCollectionDialog } from "./components/create-collection-dialog";
 import {
   Collapsible,
   CollapsibleContent,
@@ -40,14 +57,37 @@ export function WorkspaceSidebarCollectionsGroupMenu() {
     (state) => state.items,
   );
 
-  // By id, the collection directory name, which is what the page resolves;
+  // By id, the collection's directory name, which is what the page resolves;
   // the name is only the label. Opening by name reached "Page not found", or
   // an empty table for a name differing from the id only in case.
   function openCollection(collectionId: string) {
     void navigate({ to: "/collections/$id", params: { id: collectionId } });
   }
 
+  const { confirm } = useAlert();
+  const [creating, setCreating] = React.useState(false);
+
+  async function handleDelete(collection: CollectionDefinition) {
+    const accepted = await confirm({
+      title: t("Delete \"{{name}}\"?", { name: collection.name }),
+      description: t("The collection and every record in it are removed. This action cannot be undone."),
+      confirmText: t("Delete"),
+      variant: "destructive",
+    });
+    if (!accepted) return;
+    try {
+      await aos.client.collection.delete.mutateOrThrow({ params: { collection: collection.id } });
+      await aos.stores.collections.actions.refresh();
+      if (currentCollectionId === collection.id) void navigate({ to: "/" });
+      toast.success(t("Deleted."));
+    } catch (error) {
+      toast.error(errorMessage(error) ?? t("Unable to delete \"{{name}}\".", { name: collection.name }));
+    }
+  }
+
   return (
+    <>
+    <CreateCollectionDialog open={creating} onOpenChange={setCreating} onCreated={openCollection} />
     <Collapsible
       key="collections"
       asChild
@@ -67,6 +107,14 @@ export function WorkspaceSidebarCollectionsGroupMenu() {
         </CollapsibleTrigger>
         <CollapsibleContent>
           <SidebarMenuSub>
+            <SidebarMenuSubItem>
+              <SidebarMenuSubButton asChild className="w-full text-muted-foreground hover:text-foreground">
+                <button type="button" onClick={() => setCreating(true)}>
+                  <HugeiconsIcon icon={AddSquareIcon} className="size-3.5" />
+                  <span>{t("New collection")}</span>
+                </button>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
             {collections.length > 0 ? (
               collections.map((collection) => {
                 const isActive = currentCollectionId === collection.id;
@@ -83,6 +131,25 @@ export function WorkspaceSidebarCollectionsGroupMenu() {
                       />
                       <span className="truncate">{collection.name}</span>
                     </SidebarMenuSubButton>
+                    {/* A skill's collection leaves with the skill. */}
+                    {collection.scope !== "skill" ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <SidebarMenuAction
+                            showOnHover
+                            aria-label={t("Actions for {{name}}", { name: collection.name })}
+                          >
+                            <HugeiconsIcon icon={MoreHorizontalIcon} />
+                          </SidebarMenuAction>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" side="right" className="w-40">
+                          <DropdownMenuItem variant="destructive" onClick={() => void handleDelete(collection)}>
+                            <HugeiconsIcon icon={Delete01Icon} />
+                            {t("Delete")}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : null}
                   </SidebarMenuSubItem>
                 );
               })
@@ -95,5 +162,6 @@ export function WorkspaceSidebarCollectionsGroupMenu() {
         </CollapsibleContent>
       </SidebarMenuItem>
     </Collapsible>
+    </>
   );
 }

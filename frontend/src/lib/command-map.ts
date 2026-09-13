@@ -929,9 +929,10 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // on those three; `records-create` has no record id to rename at all.
   //
   // `collections_get` answers bare (`*Collection`); the loader reads
-  // `collection.data.collection` — `wrapOut: "collection"`. `collections_
-  // create` has no live caller yet — the "add collection" flow was never
-  // ported — so nothing here is asserted for it beyond the field names.
+  // `collection.data.collection` — `wrapOut: "collection"`.
+  // The sidebar's New collection dialog; before it, only an agent could
+  // declare a collection.
+  "collection.create": "collections_create",
   "collection.createRecord": "collections_records-create",
   "collection.delete": { key: "collections_delete", renameIn: { collection: "id" } },
   "collection.deleteRecord": { key: "collections_records-delete", renameIn: { record: "id" } },
