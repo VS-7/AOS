@@ -57,6 +57,19 @@ describe("changePassword", () => {
 });
 
 describe("updateProfile", () => {
+  // The Profile page's avatar picker toasted success and the image never left
+  // the page: this sent only the name and the email.
+  it("sends the avatar when one is given, and leaves it out when not", async () => {
+    stubFetch({ data: { user: { id: "u-1", name: "V", username: "v", email: "v@x.test", role: "super", image: "data:image/png;base64,AA==" } } });
+
+    const result = await updateProfile("V", "v@x.test", "data:image/png;base64,AA==");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ name: "V", email: "v@x.test", image: "data:image/png;base64,AA==" });
+    expect(result.user.image).toBe("data:image/png;base64,AA==");
+
+    await updateProfile("V", "v@x.test");
+    expect(JSON.parse(String(calls[1].init?.body))).toEqual({ name: "V", email: "v@x.test" });
+  });
+
   it("posts the name and email and returns the account", async () => {
     const user: PublicUser = {
       id: "u-1",

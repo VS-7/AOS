@@ -8,6 +8,8 @@ export interface PublicUser {
   name: string;
   username: string;
   email: string;
+  /** The avatar, as an inline data URI; absent when the account has none. */
+  image?: string;
   role: string;
 }
 
@@ -180,12 +182,15 @@ export function session(): Promise<{ user: PublicUser }> {
  * reason: AuthService binds five methods over the bridge and this is not one
  * of them.
  */
-export function updateProfile(name: string, email: string): Promise<{ user: PublicUser }> {
+export function updateProfile(name: string, email: string, image?: string): Promise<{ user: PublicUser }> {
+  // `image` only when given: the daemon reads an absent one as "leave the
+  // avatar as it is" and "" as "remove it".
+  const body = image === undefined ? { name, email } : { name, email, image };
   return call<{ user: PublicUser }>(
     null,
     [],
     "/api/auth/profile",
-    { method: "POST", headers: jsonHeaders, body: JSON.stringify({ name, email }) },
+    { method: "POST", headers: jsonHeaders, body: JSON.stringify(body) },
   );
 }
 

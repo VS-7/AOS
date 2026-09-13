@@ -527,10 +527,14 @@ const authStore = AosStore.create("auth")
        */
       async (params: { name: string; email: string; image?: string }) => {
         try {
-          const { user } = await updateProfile(params.name, params.email);
+          // `image` goes too: it was dropped here, so the avatar picker said
+          // "Profile updated successfully!" over an image nobody kept.
+          const { user } = await updateProfile(params.name, params.email, params.image);
           ctx.state.set((state) => ({
             ...state,
-            user: { ...(state.user ?? {}), ...user } as unknown as AuthSelfProfile,
+            // `image` named even when absent: a removed avatar is missing from
+            // the answer, and the store's merge would otherwise keep the old one.
+            user: { ...(state.user ?? {}), ...user, image: user.image } as unknown as AuthSelfProfile,
           }));
           return { error: undefined as Error | undefined };
         } catch (err) {

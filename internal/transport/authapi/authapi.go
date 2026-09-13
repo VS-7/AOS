@@ -253,7 +253,7 @@ func (s *server) changePassword(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, map[string]any{})
 }
 
-// updateProfile changes the signed-in account's name and email.
+// updateProfile changes the signed-in account's name, email and avatar.
 //
 // Same shape as session on the way out — {"user": {...}} — so the interface
 // can drop the answer straight into the store it read session into, rather
@@ -267,12 +267,15 @@ func (s *server) updateProfile(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Name  string `json:"name"`
 		Email string `json:"email"`
+		// A pointer, so a body that does not mention the avatar leaves it
+		// alone and one that sends "" removes it.
+		Image *string `json:"image"`
 	}
 	if !s.decode(w, r, &in) {
 		return
 	}
 	updated, err := s.svc.UpdateProfile(r.Context(), auth.UpdateProfileInput{
-		UserID: user.ID, Name: in.Name, Email: in.Email,
+		UserID: user.ID, Name: in.Name, Email: in.Email, Image: in.Image,
 	})
 	if err != nil {
 		s.writeError(w, err)

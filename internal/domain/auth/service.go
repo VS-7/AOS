@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -348,6 +349,35 @@ type UpdateProfileInput struct {
 	UserID string
 	Name   string
 	Email  string
+	// Image replaces the avatar when set: a data URI, or "" to remove it. Nil
+	// leaves it as it is, so a caller that only renames does not erase it.
+	Image *string
+}
+
+// MaxImageBytes bounds an avatar. It is read with the account on every
+// session check, so it stays the size of a thumbnail — the interface resizes
+// a picked file to well under this before sending it.
+const MaxImageBytes = 256 << 10
+
+// avatarPrefixes are the inline images an <img> draws and nothing else does:
+// no remote address (a request on every render, to wherever it points) and
+// no SVG (a document, which can carry script).
+var avatarPrefixes = []string{"data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,", "data:image/gif;base64,"}
+
+// validateImage refuses an avatar the interface could not draw safely.
+func validateImage(image string) error {
+	if image == "" {
+		return nil
+	}
+	if len(image) > MaxImageBytes {
+		return errImageInvalid(fmt.Sprintf("it is %d bytes, over the %d byte limit", len(image), MaxImageBytes))
+	}
+	for _, prefix := range avatarPrefixes {
+		if strings.HasPrefix(image, prefix) {
+			return nil
+		}
+	}
+	return errImageInvalid("it is not an inline PNG, JPEG, WebP or GIF image")
 }
 
 // UpdateProfile changes an account's name and email.
@@ -369,6 +399,11 @@ func (s *Service) UpdateProfile(ctx context.Context, in UpdateProfileInput) (Pub
 	if name == "" {
 		return Public{}, errNameRequired()
 	}
+	if in.Image != nil {
+		if err := validateImage(*in.Image); err != nil {
+			return Public{}, err
+		}
+	}
 
 	email := normalizeEmail(in.Email)
 	if email != "" && email != users[idx].Email {
@@ -381,6 +416,9 @@ func (s *Service) UpdateProfile(ctx context.Context, in UpdateProfileInput) (Pub
 	}
 
 	users[idx].Name = name
+	if in.Image != nil {
+		users[idx].Image = *in.Image
+	}
 	users[idx].UpdatedAt = s.clock.Now()
 	if err := s.store.Save(ctx, users); err != nil {
 		return Public{}, errStoreFailed("UpdateProfile", err)

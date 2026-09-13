@@ -385,6 +385,38 @@ func TestProfileChangesTheNameEveryScreenShows(t *testing.T) {
 	}
 }
 
+// TestProfileCarriesTheAvatar: the route decoded only a name and an email, so
+// the image the Profile page sent was dropped before it reached the account.
+func TestProfileCarriesTheAvatar(t *testing.T) {
+	srv := newServer(t)
+	_, env := post(t, srv, "/onboarding", map[string]string{
+		"name": "Vitor", "email": "vitor@example.test", "password": goodPassword,
+	}, "")
+	var onboarded struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(env.Data, &onboarded)
+
+	image := "data:image/png;base64,iVBORw0KGgo="
+	res, _ := post(t, srv, "/profile", map[string]string{"name": "Vitor", "image": image}, onboarded.Token)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("profile status = %d", res.StatusCode)
+	}
+
+	var body struct {
+		User struct {
+			Image string `json:"image"`
+		} `json:"user"`
+	}
+	_, after := get(t, srv, "/session", onboarded.Token)
+	if err := json.Unmarshal(after.Data, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.User.Image != image {
+		t.Errorf("the session reports image %q", body.User.Image)
+	}
+}
+
 // TestProfileNeedsASession. It edits an account, so it may not be reachable by
 // anyone who has not proved which account is theirs.
 func TestProfileNeedsASession(t *testing.T) {
