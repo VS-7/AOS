@@ -15,7 +15,8 @@ takes the staged version, proves the staged files against the signature
 again, swaps them in, waits for in-flight agent turns to finish first,
 restarts the daemon, and rolls back automatically if the new version does
 not report healthy. Download and Apply are for administrators (super
-accounts) only.
+accounts) only, and never for an agent or an MCP client
+(UPDATE_NOT_FOR_AGENTS).
 
 The daemon cannot restart itself, so Apply refuses to run inside it
 (UPDATE_RESTART_UNAVAILABLE) before touching anything; Check's install
@@ -31,9 +32,10 @@ interface that the daemon a release publishes does not.
 - A person checking for updates, or scripting an update in CI/an installer
 
 ## When NOT to use
-- Not from an agent: there is no MCP tool for this group. An update decision
-  is a human's, and Apply restarts the very process serving the agent's own
-  turn.
+- Not from an agent. MCP clients see this group like every other, and Check
+  and Status answer them, but Download and Apply refuse a call made through
+  MCP or by an agent: an update decision is a human's, and Apply restarts the
+  very process serving the agent's own turn.
 
 Composite tool `Update` with 4 actions: apply, check, download, status.
 

@@ -1232,6 +1232,13 @@ func TestDownloadAndApplyAreForOperatorsOnly(t *testing.T) {
 	_, err = h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
 	wantCode(t, err, "UPDATE_FORBIDDEN")
 
+	agent := newHarness(t, withOperators(fakeOperators{err: update.ErrNotAPerson}))
+	_, err = agent.svc.Download(context.Background(), update.DownloadInput{Release: release})
+	e := wantCode(t, err, "UPDATE_NOT_FOR_AGENTS")
+	if e.HTTPStatus != 403 || !strings.Contains(e.Message, "agent or an MCP client") {
+		t.Fatalf("an agent's refusal should say whose decision it is, got %d %q", e.HTTPStatus, e.Message)
+	}
+
 	broken := newHarness(t, withOperators(fakeOperators{err: errors.New("no accounts file")}))
 	_, err = broken.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
 	wantCode(t, err, "UPDATE_AUTHORIZATION_FAILED")

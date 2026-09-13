@@ -165,8 +165,17 @@ type DaemonSupervisor interface {
 // update is anyone's question; installing one replaces the programs every
 // account on the machine runs, which is an administrator's decision.
 type Operators interface {
+	// MayInstall answers for the caller on ctx. A caller that is not a
+	// person at all — an agent, an MCP client — is refused with an error
+	// wrapping ErrNotAPerson, so the refusal can say so rather than ask
+	// for an administrator.
 	MayInstall(ctx context.Context) (bool, error)
 }
+
+// ErrNotAPerson is an Operators refusal of a call made by an agent or through
+// an MCP client. An update restarts the daemon serving the agent's own turn,
+// and docs/08 - Entrega/Auto-Update.md has a person confirm an install.
+var ErrNotAPerson = errors.New("update: installing an update is a person's decision")
 
 // ActiveWork reports how many turns are in flight right now, so Apply can
 // wait for them before it restarts the daemon out from under them.

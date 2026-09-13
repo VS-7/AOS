@@ -400,7 +400,10 @@ func (s *service) authorize(ctx context.Context, causer string) error {
 		return errForbidden(causer)
 	}
 	ok, err := s.operators.MayInstall(ctx)
-	if err != nil {
+	switch {
+	case errors.Is(err, ErrNotAPerson):
+		return errNotForAgents(causer)
+	case err != nil:
 		return errAuthorizationFailed(causer, err)
 	}
 	if !ok {

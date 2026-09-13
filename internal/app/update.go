@@ -6,11 +6,13 @@ import (
 	"strings"
 
 	"github.com/OWNER/aos/internal/core/build"
+	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/core/env"
 	"github.com/OWNER/aos/internal/core/identity"
 	"github.com/OWNER/aos/internal/domain/auth"
 	"github.com/OWNER/aos/internal/domain/gateway"
 	"github.com/OWNER/aos/internal/domain/job"
+	"github.com/OWNER/aos/internal/domain/update"
 )
 
 // releasePubKey is the Ed25519 public key (relsig.GenerateKey's format)
@@ -95,13 +97,20 @@ func (u updateSupervisor) Healthy(ctx context.Context) bool {
 // switched authentication off, which lets every loopback caller do anything
 // by the owner's own choice; or the command runs inside a process started
 // from a terminal — `aosd update apply` — by someone who can already replace
-// these files by hand. An agent is refused either way.
+// these files by hand.
+//
+// An agent is refused either way, and so is every call through MCP. That is
+// told by the surface, not the identity: `aosd --mcp` is started by an MCP
+// client with no account and no agent on its calls, which is exactly what a
+// terminal looks like, and it was let through to install and restart the
+// daemon.
 type updateOperators struct{ auth *auth.Service }
 
 func (u updateOperators) MayInstall(ctx context.Context) (bool, error) {
 	who := identity.From(ctx)
-	if who.AgentID != "" {
-		return false, nil
+	if surface, ok := command.SurfaceOf(ctx); who.AgentID != "" ||
+		(ok && (surface == command.SurfaceMCP || surface == command.SurfaceAgent)) {
+		return false, update.ErrNotAPerson
 	}
 	if who.UserID == "" {
 		return true, nil

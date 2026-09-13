@@ -79,7 +79,7 @@ func (d *descriptor[In, Out]) Invoke(ctx context.Context, surface Surface, raw j
 	if err := d.validate(surface, in); err != nil {
 		return nil, err
 	}
-	return d.cmd.Handler(ctx, in)
+	return d.cmd.Handler(withSurface(ctx, surface), in)
 }
 
 func (d *descriptor[In, Out]) validate(surface Surface, in In) error {

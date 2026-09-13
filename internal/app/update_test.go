@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/OWNER/aos/internal/core/command"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -211,7 +212,6 @@ func TestOnlyAnAdministratorMayInstallUpdates(t *testing.T) {
 	}{
 		{"a super account", identity.Identity{UserID: "u-super"}, true},
 		{"a member", identity.Identity{UserID: "u-member"}, false},
-		{"an agent, even on a super account's token", identity.Identity{UserID: "u-super", AgentID: "atlas"}, false},
 		{"no account: authentication off, or a terminal", identity.Identity{}, true},
 	}
 	for _, c := range cases {
@@ -221,6 +221,32 @@ func TestOnlyAnAdministratorMayInstallUpdates(t *testing.T) {
 		}
 		if got != c.want {
 			t.Errorf("%s: MayInstall = %v, want %v", c.name, got, c.want)
+		}
+	}
+
+	// Not a person: an agent on any token, and anything that arrives through
+	// MCP. `aosd --mcp` carries no account and no agent, so an MCP client
+	// looked like a terminal and was let through to install and restart.
+	notPeople := []struct {
+		name    string
+		who     identity.Identity
+		surface command.Surface
+	}{
+		{"an agent, even on a super account's token", identity.Identity{UserID: "u-super", AgentID: "atlas"}, command.SurfaceHTTP},
+		{"an MCP client of aosd --mcp, with no account", identity.Identity{}, command.SurfaceMCP},
+		{"an MCP client on a super account's token", identity.Identity{UserID: "u-super"}, command.SurfaceMCP},
+		{"the agent's own tool registry", identity.Identity{}, command.SurfaceAgent},
+	}
+	for _, c := range notPeople {
+		ctx := surfaced(identity.With(context.Background(), c.who), c.surface)
+		got, err := ops.MayInstall(ctx)
+		if got || !errors.Is(err, update.ErrNotAPerson) {
+			t.Errorf("%s: MayInstall = %v, %v; want a refusal saying it is not a person", c.name, got, err)
+		}
+	}
+	for _, s := range []command.Surface{command.SurfaceCLI, command.SurfaceHTTP} {
+		if got, err := ops.MayInstall(surfaced(identity.With(context.Background(), identity.Identity{UserID: "u-super"}), s)); err != nil || !got {
+			t.Errorf("a super account through %s: MayInstall = %v, %v", s, got, err)
 		}
 	}
 
@@ -248,4 +274,21 @@ func TestUpdateFeedSaysWhetherItWasSetHere(t *testing.T) {
 	if feed != "http://127.0.0.1:7498/feed" || !custom {
 		t.Fatalf("with %s set: feed %q, custom %v", env.KeyUpdateBaseURL, feed, custom)
 	}
+}
+
+// surfaced is ctx as a handler invoked through surface sees it: SurfaceOf is
+// set by Invoke only, so the call goes through a registered command.
+func surfaced(ctx context.Context, surface command.Surface) context.Context {
+	type in struct{ command.Reasoning }
+	var seen context.Context
+	reg := command.NewRegistry()
+	command.MustRegister(reg, command.Command[in, struct{}]{
+		Group: "probe", Name: "context", Summary: "Hand back the handler's context.",
+		Handler: func(ctx context.Context, _ in) (struct{}, error) { seen = ctx; return struct{}{}, nil },
+	})
+	d, _, _ := reg.Lookup("probe_context")
+	if _, err := d.Invoke(ctx, surface, json.RawMessage(`{"_reasoning":"probe"}`)); err != nil {
+		panic(err)
+	}
+	return seen
 }

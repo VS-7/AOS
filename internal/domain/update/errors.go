@@ -211,6 +211,17 @@ func errForbidden(causer string) error {
 		CTA(apperr.CallToAction{Label: "ask a super account on this installation to install the update"})
 }
 
+// errNotForAgents refuses an agent and an MCP client whatever account they
+// act for: the group is listed to MCP clients like every other, and until
+// this Download and Apply ran for them.
+func errNotForAgents(causer string) error {
+	return apperr.New("UPDATE_NOT_FOR_AGENTS").
+		Causer(causer).
+		Msgf("updates are downloaded and installed by a person; this call came from an agent or an MCP client").
+		Status(apperr.StatusForbidden).
+		CTA(apperr.CallToAction{Label: "ask the person running this installation to install it from Settings › Updates, or from a terminal"})
+}
+
 func errAuthorizationFailed(causer string, cause error) error {
 	return apperr.New("UPDATE_AUTHORIZATION_FAILED").
 		Causer(causer).
