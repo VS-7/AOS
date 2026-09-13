@@ -248,6 +248,7 @@ func TestAnAnswerCarriesOnlyTheToolCallsOfItsOwnTurn(t *testing.T) {
 				{ID: "new-1", Name: "tasks_list"},
 			}},
 		},
+		Calls:     []agentloop.ToolCall{{ID: "new-1", Name: "tasks_list"}},
 		ToolCalls: []agentloop.ToolResult{{CallID: "new-1", Name: "tasks_list"}},
 	}
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -655,4 +656,44 @@ func (a answers) RequestApproval(context.Context, event.ApprovalRequest) (event.
 		res.UpdatedInput = json.RawMessage(a.updated)
 	}
 	return res, nil
+}
+
+// TestACompactedTurnStillReportsEveryCallItMade. Compaction prunes the
+// working transcript, and the calls it prunes were still read back out of it
+// when the answer was stored — so the stored answer kept every result and lost
+// the calls that produced the earliest ones. The calls are reported beside
+// the results, where no prune reaches.
+func TestACompactedTurnStillReportsEveryCallItMade(t *testing.T) {
+	const steps = 20
+	script := make([]fake.Step, 0, steps+1)
+	for i := range steps {
+		id := "call_" + strconv.Itoa(i)
+		script = append(script, fake.Step{Calls: []agentloop.ToolCall{fake.Call(id, "Read", map[string]any{"n": i})}})
+	}
+	script = append(script, fake.Step{Text: "done"})
+
+	big := strings.Repeat("x", 9_000)
+	tool := &recording{name: "Read", fn: func(json.RawMessage) (any, error) { return big, nil }}
+	l := agentloop.New(agentloop.Deps{
+		Provider: &fake.Provider{Script: script},
+		Tools:    toolexec.NewRegistry().Add(tool),
+		Compact:  &agentloop.Compactor{Threshold: 40_000, Policy: agentloop.DefaultPolicy()},
+		Clock:    &clockx.Stepping{At: refTime, Step: time.Second},
+		Log:      quiet(),
+	})
+	res, err := l.Run(context.Background(), state())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Compactions == 0 {
+		t.Fatal("the turn never compacted, so it proves nothing")
+	}
+	if len(res.Calls) != steps || len(res.ToolCalls) != steps {
+		t.Fatalf("calls = %d, results = %d, want %d of each", len(res.Calls), len(res.ToolCalls), steps)
+	}
+	for i := range steps {
+		if res.Calls[i].ID != res.ToolCalls[i].CallID {
+			t.Fatalf("call %d is %s and its result answers %s", i, res.Calls[i].ID, res.ToolCalls[i].CallID)
+		}
+	}
 }

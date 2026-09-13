@@ -134,6 +134,7 @@ func (l *Loop) Run(ctx context.Context, s *State) (*Result, error) {
 	}
 
 	var calls []ToolResult
+	var offered []ToolCall
 	stop := StopEnd
 
 	for s.Steps < l.limits.MaxSteps {
@@ -174,6 +175,7 @@ func (l *Loop) Run(ctx context.Context, s *State) (*Result, error) {
 			return nil, err
 		}
 		calls = append(calls, results...)
+		offered = append(offered, resp.ToolCalls...)
 		s.AppendToolResults(results, l.clock.Now())
 
 		if s.Steps >= l.limits.MaxSteps {
@@ -195,6 +197,7 @@ func (l *Loop) Run(ctx context.Context, s *State) (*Result, error) {
 		Compactions: s.Compactions,
 		StopReason:  stop,
 		ToolCalls:   calls,
+		Calls:       offered,
 		Duration:    l.clock.Now().Sub(started),
 	}, nil
 }

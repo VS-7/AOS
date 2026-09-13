@@ -760,35 +760,40 @@ func answerParts(result *agentloop.Result, reasoning []string) []chat.Part {
 		parts = append(parts, chat.Part{Type: chat.PartReasoning, Text: block})
 	}
 
-	// Only the calls this turn actually made.
+	// Only the calls this turn actually made, each stored beside its result.
 	//
-	// `result.Messages` is the loop's whole working transcript, and the loop
-	// is seeded with the conversation so far — so walking it wrote every tool
-	// call *ever made in this conversation* into this one answer, again, on
-	// every turn. A chat that had run a few tools showed them repeated across
-	// each new message, growing by the whole history each time.
+	// `result.Messages` is the wrong source for them twice over. It is the
+	// loop's whole working transcript, seeded with the conversation so far, so
+	// walking it wrote every tool call ever made in the conversation into each
+	// new answer. And it is what compaction prunes: a turn long enough to
+	// compact had lost its earliest calls from it while their results stayed in
+	// `result.ToolCalls`, so the answer was stored with results whose calls were
+	// gone — and the provider refused every later turn of that conversation
+	// ("No tool call found for function call output").
 	//
-	// `result.ToolCalls` holds the results of this turn (its name is the
-	// loop's, not this layer's). A call whose id produced one of them is a
-	// call this turn made; anything else belongs to an earlier message that
-	// already carries it.
-	thisTurn := make(map[string]bool, len(result.ToolCalls))
-	for _, c := range result.ToolCalls {
-		thisTurn[c.CallID] = true
+	// `result.Calls` is what the model asked for in this turn and nothing else,
+	// kept where no prune reaches. A call is stored only with its result and a
+	// result only with its call, so what is written can always be sent back.
+	answered := make(map[string]bool, len(result.ToolCalls))
+	for _, r := range result.ToolCalls {
+		answered[r.CallID] = true
 	}
-	for _, m := range result.Messages {
-		for _, c := range m.ToolCalls {
-			if !thisTurn[c.ID] {
-				continue
-			}
-			parts = append(parts, chat.Part{
-				Type: chat.PartToolCall, ToolName: c.Name, ToolCallID: c.ID, Input: c.Input,
-			})
+	asked := make(map[string]bool, len(result.Calls))
+	for _, c := range result.Calls {
+		if !answered[c.ID] || asked[c.ID] {
+			continue
 		}
-	}
-	for _, c := range result.ToolCalls {
+		asked[c.ID] = true
 		parts = append(parts, chat.Part{
-			Type: chat.PartToolResult, ToolName: c.Name, ToolCallID: c.CallID, Output: c.Output,
+			Type: chat.PartToolCall, ToolName: c.Name, ToolCallID: c.ID, Input: c.Input,
+		})
+	}
+	for _, r := range result.ToolCalls {
+		if !asked[r.CallID] {
+			continue
+		}
+		parts = append(parts, chat.Part{
+			Type: chat.PartToolResult, ToolName: r.Name, ToolCallID: r.CallID, Output: r.Output,
 		})
 	}
 	return parts
