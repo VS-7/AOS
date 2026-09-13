@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { Link, useRouter } from "@tanstack/react-router";
-import { toast } from "sonner";
-import { AlertTriangle, Link2, Plus, X } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { AlertTriangle, CircleHelp, Link2, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +19,7 @@ import {
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { aos } from "@/app/aos";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
+import type { TaskActions } from "@/features/task/presentation/hooks/task-actions.hook";
 import { t } from "@/lib/i18n";
 import type {
   Task,
@@ -28,30 +28,32 @@ import type {
 
 interface DependenciesWidgetProps {
   task: TaskWithContext;
+  actions: TaskActions;
 }
 
 /**
- * Sidebar widget that renders the resolved upstream dependencies of a task
- * (populated by the backend `get` projection) and lets the user add or
- * remove them.
+ * The tasks this one waits on, and the picker that adds more.
+ *
+ * It rendered `task.dependencies`, a list of resolved summaries the daemon
+ * has never sent: a dependency was saved, the widget still said "No
+ * dependencies yet.", and the picker then hid that task, so it could be
+ * neither seen nor removed. What the daemon does send is `dependsOn` (the
+ * ids) and `blocked` (the ones not finished); names and statuses come from
+ * the task list this widget already reads for its picker.
  */
-export function DependenciesWidget({ task }: DependenciesWidgetProps) {
-  const router = useRouter();
+export function DependenciesWidget({ task, actions }: DependenciesWidgetProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
 
-  const dependencies = task.dependencies ?? [];
   const dependsOnIds = task.dependsOn ?? [];
-  const blockedCount = dependencies.filter(
-    (dependency) => dependency.status !== "finished",
-  ).length;
+  const blocked = new Set(task.blocked ?? []);
 
   const { data: tasksData } = aos.client.task.list.useQuery({
     query: { limit: "200" },
-    enabled: pickerOpen,
   });
   const tasks: Task[] =
     (tasksData as { tasks: Task[] } | null | undefined)?.tasks ?? [];
+  const byId = new Map(tasks.map((candidate) => [candidate.id, candidate]));
 
   const currentIds = new Set(dependsOnIds);
   const candidates = tasks.filter(
@@ -60,33 +62,8 @@ export function DependenciesWidget({ task }: DependenciesWidgetProps) {
 
   async function persistDependsOn(next: string[]) {
     setIsMutating(true);
-    const { error } = await aos.client.task.update.mutate({
-      params: { task: task.id },
-      body: { dependsOn: next },
-    });
-
-    if (error) {
-      // @ts-expect-error - Expected
-      const message = error.error?.message || error.message;
-      toast.error(message || "Failed to update dependencies");
-      setIsMutating(false);
-      return;
-    }
-
-    toast.success(t("Dependencies updated"));
+    await actions.setDependencies(next);
     setIsMutating(false);
-    router.invalidate();
-  }
-
-  async function handleAdd(dependencyId: string) {
-    setPickerOpen(false);
-    await persistDependsOn([...dependsOnIds, dependencyId]);
-  }
-
-  async function handleRemove(dependencyId: string) {
-    await persistDependsOn(
-      dependsOnIds.filter((id) => id !== dependencyId),
-    );
   }
 
   return (
@@ -94,10 +71,10 @@ export function DependenciesWidget({ task }: DependenciesWidgetProps) {
       <SplitPageLayout.WidgetHeader>
         <SplitPageLayout.WidgetTitle>{t("Dependencies")}</SplitPageLayout.WidgetTitle>
         <div className="ml-auto flex items-center gap-2">
-          {blockedCount > 0 && (
+          {blocked.size > 0 && (
             <span className="flex items-center gap-1 text-xs text-warning">
               <AlertTriangle className="size-3" />
-              {blockedCount} unfinished
+              {t("{{count}} unfinished", { count: blocked.size })}
             </span>
           )}
           <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
@@ -125,7 +102,10 @@ export function DependenciesWidget({ task }: DependenciesWidgetProps) {
                         <CommandItem
                           key={candidate.id}
                           value={`${candidate.id} ${candidate.name}`}
-                          onSelect={() => handleAdd(candidate.id)}
+                          onSelect={() => {
+                            setPickerOpen(false);
+                            void persistDependsOn([...dependsOnIds, candidate.id]);
+                          }}
                         >
                           <StatusIcon
                             className={cn("size-3.5 shrink-0", status.color)}
@@ -134,7 +114,7 @@ export function DependenciesWidget({ task }: DependenciesWidgetProps) {
                             {candidate.name}
                           </span>
                           <span className="font-mono text-xs text-muted-foreground">
-                            {candidate.id}
+                            {TaskHelper.shortId(candidate.id)}
                           </span>
                         </CommandItem>
                       );
@@ -147,7 +127,7 @@ export function DependenciesWidget({ task }: DependenciesWidgetProps) {
         </div>
       </SplitPageLayout.WidgetHeader>
       <SplitPageLayout.WidgetContent>
-        {dependencies.length === 0 && (
+        {dependsOnIds.length === 0 && (
           <SplitPageLayout.WidgetItem>
             <Link2 className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="text-xs text-muted-foreground">
@@ -155,34 +135,33 @@ export function DependenciesWidget({ task }: DependenciesWidgetProps) {
             </span>
           </SplitPageLayout.WidgetItem>
         )}
-        {dependencies.map((dependency) => {
-          const status = TaskHelper.getStatus(dependency.status);
-          const StatusIcon = status.icon;
+        {dependsOnIds.map((id) => {
+          const dependency = byId.get(id);
+          const status = dependency ? TaskHelper.getStatus(dependency.status) : null;
+          const StatusIcon = status?.icon ?? CircleHelp;
           return (
-            <SplitPageLayout.WidgetItem
-              key={dependency.id}
-              className="group pr-2"
-            >
+            <SplitPageLayout.WidgetItem key={id} className="group pr-2">
               <StatusIcon
-                className={cn("size-3.5 shrink-0", status.color)}
+                className={cn("size-3.5 shrink-0", status?.color ?? "text-muted-foreground")}
               />
               <Link
                 to="/tasks/$id"
-                params={{ id: dependency.id }}
+                params={{ id }}
                 className="flex min-w-0 flex-1 flex-col gap-0.5"
               >
                 <span className="line-clamp-1 text-xs leading-snug">
-                  {dependency.name}
+                  {dependency?.name ?? (tasksData ? t("A task that no longer exists") : TaskHelper.shortId(id))}
                 </span>
                 <span className="font-mono text-[10px] leading-none text-muted-foreground">
-                  {dependency.id}
+                  {TaskHelper.shortId(id)}
+                  {blocked.has(id) ? ` · ${t("unfinished")}` : ""}
                 </span>
               </Link>
               <button
-                onClick={() => handleRemove(dependency.id)}
+                onClick={() => void persistDependsOn(dependsOnIds.filter((other) => other !== id))}
                 disabled={isMutating}
-                className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100 disabled:opacity-40"
-                aria-label={`Remove dependency ${dependency.id}`}
+                className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-40"
+                aria-label={t("Remove dependency {{name}}", { name: dependency?.name ?? id })}
               >
                 <X className="size-3" />
               </button>
