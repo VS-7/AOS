@@ -85,7 +85,7 @@ function AgentRow({
 
   const handleViewInSettings = (e: React.MouseEvent) => {
     e.stopPropagation();
-    aos.stores.viewport.actions.openSettings("workspace.agents");
+    aos.stores.viewport.actions.openSettings("workspace.agents", { agent: agent.id });
     setOpen(false);
   };
 
