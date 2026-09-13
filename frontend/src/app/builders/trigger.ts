@@ -1,7 +1,95 @@
 import { DefaultContext, AosAppTriggerOnSearchCallback, AosTriggerDef, IAosTriggerBuilt, IAosTriggerGroupBuilt, AosTriggerAPI, AosAppConfig, AosTriggerHookResult } from "./types";
 import z from "zod";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AosResponse } from "./response";
+
+/**
+ * Triggers whose keybind a mounted component has taken, by how many of them.
+ *
+ * A component that calls `use()` decides for itself when the key is live and
+ * what it does (the browser panel only closes a tab when one is open), so the
+ * application-wide binding below has to stand aside while it is mounted — or
+ * a toggle pressed once would toggle twice. Module scope, not per registry:
+ * `aos.triggers` and `aos.commands` are two `initialize()` calls over the same
+ * groups, and a claim made through one has to be seen by the other.
+ */
+const claimedKeybinds = new Map<string, number>();
+
+const MODIFIERS = ["mod", "ctrl", "alt", "shift"];
+const KEY_ALIASES: Record<string, string> = {
+  left: "arrowleft",
+  right: "arrowright",
+  up: "arrowup",
+  down: "arrowdown",
+  esc: "escape",
+  space: " ",
+};
+
+/**
+ * Whether a key press is exactly this keybind (`mod+shift+g`).
+ *
+ * Exactly: a modifier the keybind does not name must not be held. Matching
+ * only the named ones meant ⌘⇧N — New Chat — also fired ⌘N, New Task,
+ * because nothing checked that Shift was *not* part of it.
+ */
+export function keybindMatches(
+  keybind: string,
+  event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">,
+): boolean {
+  const keys = keybind.toLowerCase().split("+").map((k) => k.trim());
+  const requiresMod = keys.includes("mod");
+  const requiresCtrl = keys.includes("ctrl");
+  const main = keys.find((k) => !MODIFIERS.includes(k));
+  if (!main) return false;
+
+  const commandHeld = event.metaKey || event.ctrlKey;
+  if (requiresMod ? !commandHeld : requiresCtrl ? !event.ctrlKey || event.metaKey : commandHeld) return false;
+  if (keys.includes("alt") !== event.altKey) return false;
+  if (keys.includes("shift") !== event.shiftKey) return false;
+
+  return event.key.toLowerCase() === (KEY_ALIASES[main] ?? main);
+}
+
+/**
+ * Listens for every keybind the palette shows, for the whole application.
+ *
+ * Keybinds used to be attached only while some component called `use()` for
+ * that trigger, and nothing did for ⌘N, ⌘⇧R, ⌘⇧G, ⌘⇧P or ⌘⇧N — so the palette
+ * advertised shortcuts that did nothing. Mounted once, at the layout; `run`
+ * is what executes a trigger there (the palette's own runner, which knows how
+ * to follow a redirect and say when a command fails).
+ *
+ * Left alone: hidden triggers (they are not advertised), triggers a mounted
+ * component has claimed through `use()`, and triggers marked
+ * `globalKeybind: false` because something outside this registry already
+ * answers their key.
+ */
+export function useGlobalKeybindings(
+  registry: { groups?: Record<string, { triggers: Record<string, AosTriggerDef<any, any, any, any, any, any, any>> }> },
+  run: (triggerId: string) => void,
+): void {
+  const runRef = useRef(run);
+  runRef.current = run;
+
+  useEffect(() => {
+    const bound = Object.values(registry.groups ?? {})
+      .flatMap((group) => Object.values(group.triggers))
+      .filter((def) => def.keybind && !def.hidden && def.globalKeybind !== false);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      for (const def of bound) {
+        if (claimedKeybinds.has(def.id)) continue;
+        if (!keybindMatches(def.keybind!, event)) continue;
+        event.preventDefault();
+        runRef.current(def.id);
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [registry]);
+}
 
 export class AosTriggerGroup<
   TMetadataSchema extends z.ZodTypeAny = z.ZodTypeAny,
@@ -100,14 +188,21 @@ export class AosTrigger<
             allTriggers.push(...staticTriggers);
 
             // Dynamic triggers
+            // One group's loader failing costs that group, not the palette:
+            // a single loader reading a store that was never registered used
+            // to reject the whole list, and every command disappeared.
             if (group.loader) {
-              const dynamicTriggers = await group.loader({
-                client: config.client as TClient,
-                context: {} as TContext,
-                stores: config.stores as TStores,
-                query: params.query
-              });
-              allTriggers.push(...dynamicTriggers.map(cmd => ({ ...cmd, group: cmd.group || group.id })));
+              try {
+                const dynamicTriggers = await group.loader({
+                  client: config.client as TClient,
+                  context: {} as TContext,
+                  stores: config.stores as TStores,
+                  query: params.query
+                });
+                allTriggers.push(...dynamicTriggers.map(cmd => ({ ...cmd, group: cmd.group || group.id })));
+              } catch (error) {
+                console.error(`[triggers] the "${group.id}" group could not list its commands`, error);
+              }
             }
           }
 
@@ -187,6 +282,17 @@ export class AosTrigger<
             }
           }, [triggerId, onSuccess, onError]);
 
+          // Taken while mounted, enabled or not: whether the key is live is
+          // this component's call to make, not the global binding's.
+          useEffect(() => {
+            claimedKeybinds.set(triggerId, (claimedKeybinds.get(triggerId) ?? 0) + 1);
+            return () => {
+              const remaining = (claimedKeybinds.get(triggerId) ?? 1) - 1;
+              if (remaining > 0) claimedKeybinds.set(triggerId, remaining);
+              else claimedKeybinds.delete(triggerId);
+            };
+          }, [triggerId]);
+
           useEffect(() => {
             if (!enabled) return;
 
@@ -201,28 +307,7 @@ export class AosTrigger<
             if (!keybind) return;
 
             const handleKeyDown = (e: KeyboardEvent) => {
-              const keys = keybind!.toLowerCase().split('+').map(k => k.trim());
-              const requiresMod = keys.includes('mod');
-              const requiresCtrl = keys.includes('ctrl');
-              const requiresAlt = keys.includes('alt');
-              const requiresShift = keys.includes('shift');
-
-              let mainKey = keys.find(k => !['mod', 'ctrl', 'alt', 'shift'].includes(k));
-              if (mainKey === 'left') mainKey = 'arrowleft';
-              if (mainKey === 'right') mainKey = 'arrowright';
-              if (mainKey === 'up') mainKey = 'arrowup';
-              if (mainKey === 'down') mainKey = 'arrowdown';
-              if (mainKey === 'esc') mainKey = 'escape';
-              if (mainKey === 'space') mainKey = ' ';
-
-              const isModPressed = e.metaKey || e.ctrlKey;
-
-              if (requiresMod && !isModPressed) return;
-              if (requiresCtrl && !e.ctrlKey) return;
-              if (requiresAlt && !e.altKey) return;
-              if (requiresShift && !e.shiftKey) return;
-
-              if (mainKey && e.key.toLowerCase() === mainKey) {
+              if (keybindMatches(keybind!, e)) {
                 e.preventDefault();
                 if (onPressKey) {
                   onPressKey(e);

@@ -5,7 +5,7 @@ import { String } from "@/core/helpers/string";
 export const viewGroup = AosTriggerGroup.create("Views")
   .withOrder(5)
   .withLoader(({ query, stores }) => {
-    const views: ViewSummary[] = stores.views.state.items;
+    const views: ViewSummary[] = stores.view.state.items;
 
     const items = !query
       ? views
