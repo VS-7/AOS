@@ -225,6 +225,8 @@ export interface CommandMap {
     "id"?: string;
     /** Human-readable name. */
     "name": string;
+    /** Password to share a by_password artifact behind, hashed before it is stored. Optional: set-password can set or change it later. */
+    "password"?: string;
     /** Skill that owns this artifact, if any. */
     "skill"?: string;
     /** One of: private, workspace, by_password. Defaults to private. */

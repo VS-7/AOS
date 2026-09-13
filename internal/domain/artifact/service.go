@@ -120,6 +120,11 @@ type CreateInput struct {
 	Visibility  Visibility `json:"visibility,omitempty" jsonschema:"One of: private, workspace, by_password. Defaults to private."`
 	Skill       string     `json:"skill,omitempty" jsonschema:"Skill that owns this artifact, if any."`
 
+	// Password is here so a by_password artifact can be born usable. Created
+	// without one it refuses everybody until set-password runs, and a person
+	// in the New artifact dialog has no second screen to run it from.
+	Password string `json:"password,omitempty" jsonschema:"Password to share a by_password artifact behind, hashed before it is stored. Optional: set-password can set or change it later."`
+
 	command.Reasoning
 }
 
@@ -141,6 +146,16 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Artifact, error)
 	if entrypoint == "" {
 		entrypoint = defaultEntrypoint
 	}
+	// Hashed before anything is written, so a password that cannot be hashed
+	// leaves no artifact behind without the protection it was created with.
+	var passwordHash string
+	if in.Password != "" {
+		hash, herr := s.hasher.Hash(in.Password)
+		if herr != nil {
+			return nil, errHashFailed(id, herr)
+		}
+		passwordHash = hash
+	}
 
 	actual, err := s.files.Ensure(ctx, id, entrypoint)
 	if err != nil {
@@ -149,14 +164,15 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Artifact, error)
 
 	now := s.clock.Now()
 	a := &Artifact{
-		ID:          id,
-		Name:        strings.TrimSpace(in.Name),
-		Description: strings.TrimSpace(in.Description),
-		Entrypoint:  actual,
-		Visibility:  visibility,
-		Skill:       strings.TrimSpace(in.Skill),
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:           id,
+		Name:         strings.TrimSpace(in.Name),
+		Description:  strings.TrimSpace(in.Description),
+		Entrypoint:   actual,
+		Visibility:   visibility,
+		Skill:        strings.TrimSpace(in.Skill),
+		PasswordHash: passwordHash,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 	if err := s.repo.Create(ctx, a); err != nil {
 		return nil, errWriteFailed("Create", err)

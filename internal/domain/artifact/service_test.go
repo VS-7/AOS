@@ -221,6 +221,47 @@ func TestSetPasswordThenAuthorizeAcceptsTheRightPasswordAndRejectsTheWrongOne(t 
 	}
 }
 
+// The New artifact dialog offered "By password — set one after creating", and
+// no screen ever set one, so such an artifact answered PASSWORD_REQUIRED to
+// everybody forever. Taking the password at creation makes the artifact
+// usable in the same call, with no window in which it exists half-configured.
+func TestCreateCanSetThePasswordInTheSameCall(t *testing.T) {
+	svc, _, _ := newService(t)
+	created, err := svc.Create(ctx(), artifact.CreateInput{
+		Name: "Shared at birth", Visibility: artifact.ByPassword, Password: "open-sesame",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := svc.Get(ctx(), artifact.GetInput{ID: created.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Authorize(ctx(), stored, artifact.AccessRequest{Password: "open-sesame"}); err != nil {
+		t.Fatalf("the password given at creation was not set: %v", err)
+	}
+	if err := svc.Authorize(ctx(), stored, artifact.AccessRequest{Password: "wrong"}); err == nil {
+		t.Fatal("the wrong password was accepted")
+	}
+}
+
+// A creation whose password cannot be hashed stores nothing: an artifact left
+// behind without the password its creator asked for is the trap being fixed.
+func TestCreateWithAPasswordThatCannotBeHashedStoresNothing(t *testing.T) {
+	repo := fakes.NewRepo[artifact.Artifact]("artifacts")
+	svc := artifact.NewService(artifact.Deps{
+		Repo: repo, Files: newFakeFiles(), Hasher: failHasher{err: errors.New("kdf exploded")},
+		Clock: clockx.Fixed{At: at}, IDs: &ids.Sequence{Prefix: "a"},
+	})
+	_, err := svc.Create(ctx(), artifact.CreateInput{Name: "Doomed", Visibility: artifact.ByPassword, Password: "x"})
+	if got, ok := apperr.As(err); !ok || got.Code != apperr.New("ARTIFACT_HASH_FAILED").Code {
+		t.Fatalf("want ARTIFACT_HASH_FAILED, got %v", err)
+	}
+	if all, _ := svc.List(ctx(), artifact.ListInput{}); len(all) != 0 {
+		t.Fatalf("a failed creation left %d artifact(s) behind", len(all))
+	}
+}
+
 // TestPasswordSurvivesAFreshServiceOverTheSameStore is the regression for
 // defect #19: the original derives its by_password secret fresh on every
 // boot and never writes it down, so a link shared before a restart stops

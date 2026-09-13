@@ -18,8 +18,9 @@ else it references, registered in the workspace and served by this daemon at
 - **Publishing something for a person to open in a browser:** a dashboard,
   report or generated page an agent produced — create an artifact rather than
   describing the content in a message
-- **Sharing outside the workspace:** set visibility to by_password and call
-  set-password, then hand out the URL set-password returns
+- **Sharing outside the workspace:** set visibility to by_password and give
+  create a password (or call set-password afterwards), then hand out the
+  artifact's URL
 
 ## When NOT to use
 - Not for anything that should stay inside the conversation — an artifact is
