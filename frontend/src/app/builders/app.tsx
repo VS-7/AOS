@@ -10,6 +10,7 @@ import { useForm as useHookForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { isDeepEqualData } from "ai";
 import { AosStoreBuilt } from "./store";
+import { toSubmitError } from "./form-error";
 
 
 /**
@@ -372,7 +373,7 @@ export class AosApp<
               }
 
               if (onResponse) {
-                onResponse({ error: err instanceof Error ? err : new Error(String(err)) });
+                onResponse({ error: toSubmitError(err) });
               }
             } finally {
               setIsLoading(false);
