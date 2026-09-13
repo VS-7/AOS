@@ -420,6 +420,14 @@ func (s *service) Download(ctx context.Context, in DownloadInput) (DownloadOutpu
 	if err := s.authorize(ctx, "update.Service.Download"); err != nil {
 		return DownloadOutput{}, err
 	}
+	// Once allowed, a download is not abandoned because its caller stopped
+	// waiting. The window's bridge and `aos update download` give up on a
+	// call after 30 seconds, and a release takes longer than that on a slow
+	// link: the request was cancelled with them, and every download on such
+	// a link stopped partway. It finishes and is staged instead, the lock
+	// keeps a second one from starting beside it, and the source gives up on
+	// a transfer that stops making progress.
+	ctx = context.WithoutCancel(ctx)
 	unlock, err := s.exclusive(ctx, "update.Service.Download")
 	if err != nil {
 		return DownloadOutput{}, err

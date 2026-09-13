@@ -46,6 +46,8 @@ type fakeSource struct {
 	latestErr    error
 	files        map[string][]byte
 	fetchErr     error
+	// beforeFetch runs as every fetch starts.
+	beforeFetch func()
 }
 
 func (f *fakeSource) Configured() bool { return !f.unconfigured }
@@ -57,7 +59,14 @@ func (f *fakeSource) Latest(context.Context, update.Channel) (*update.Release, e
 	return f.release, nil
 }
 
-func (f *fakeSource) Fetch(_ context.Context, url string) ([]byte, error) {
+func (f *fakeSource) Fetch(ctx context.Context, url string) ([]byte, error) {
+	if f.beforeFetch != nil {
+		f.beforeFetch()
+	}
+	// A real transfer stops when its context does.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if f.fetchErr != nil {
 		return nil, f.fetchErr
 	}
@@ -1018,6 +1027,35 @@ func TestApplyRecordsThatItIsInstallingUntilItEnds(t *testing.T) {
 				t.Fatalf("afterwards the record says %q, want %q", store.record.Installing, c.after)
 			}
 		})
+	}
+}
+
+// The window reaches the daemon over a bridge that gives up on a call after
+// 30 seconds, and so does `aos update download`. A 70 MB release takes longer
+// than that on a slow link. The request was cancelled with the caller, and the
+// daemon abandoned the download partway. Once started, a download finishes and
+// is staged, ready for the next look at Settings › Updates, and the lock keeps
+// a second click from starting another one beside it.
+func TestADownloadFinishesAfterTheCallerStopsWaiting(t *testing.T) {
+	h := newHarness(t)
+	release := h.signedRelease(t, "v0.10.0", "aos", "aosd")
+	ctx, cancel := context.WithCancel(context.Background())
+	fetches := 0
+	h.source.beforeFetch = func() {
+		fetches++
+		if fetches == 2 {
+			cancel()
+		}
+	}
+
+	_, _ = h.svc.Download(ctx, update.DownloadInput{Release: release})
+
+	st, err := h.svc.Status(context.Background(), update.StatusInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Staged == nil || st.Staged.Version != "v0.10.0" || len(h.machine.staged) != 2 {
+		t.Fatalf("the download should have finished and staged the release, status %+v", st.Staged)
 	}
 }
 
