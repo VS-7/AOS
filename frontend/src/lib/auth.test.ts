@@ -6,7 +6,7 @@ vi.mock("@wailsio/runtime", () => ({
   Call: { ByName: () => Promise.reject(new Error("no wails host")) },
 }));
 
-import { changePassword, updateProfile, session, PublicUser } from "./auth";
+import { apiToken, changePassword, regenerateApiToken, updateProfile, session, PublicUser } from "./auth";
 
 type Recorded = { url: string; init: RequestInit | undefined };
 
@@ -113,5 +113,21 @@ describe("session", () => {
 
     expect(user.name).toBe("Vitor");
     expect(user.role).toBe("super");
+  });
+});
+
+// Settings > Developers: "Generate API Token" answered "isn't wired up in this
+// build yet" because nothing reached the daemon's token issuance.
+describe("API token", () => {
+  it("asks which token is configured, and issues a new one", async () => {
+    stubFetch({ data: { token: { prefix: "aos_abcd", createdAt: "2026-09-13T00:00:00Z" } } });
+    expect(await apiToken()).toEqual({ token: { prefix: "aos_abcd", createdAt: "2026-09-13T00:00:00Z" } });
+    expect(calls[0].url).toContain("/api/auth/api-token");
+    expect(calls[0].init?.method ?? "GET").toBe("GET");
+
+    stubFetch({ data: { token: "aos_abcdsecret", prefix: "aos_abcd", createdAt: "2026-09-13T00:00:00Z" } });
+    expect((await regenerateApiToken()).token).toBe("aos_abcdsecret");
+    expect(calls[1].url).toContain("/api/auth/api-token");
+    expect(calls[1].init?.method).toBe("POST");
   });
 });

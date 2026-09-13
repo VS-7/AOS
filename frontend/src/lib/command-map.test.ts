@@ -74,15 +74,16 @@ describe("COMMAND_MAP", () => {
     expect(COMMAND_MAP["model.set"]).toBeNull();
   });
 
-  it("recognizes the 2 domains without a Go backend", () => {
+  it("recognizes the 1 domain without a Go backend", () => {
     // task-10 moved collection/view/toolset/skill out (14 -> 10); the
     // Phase 8 domain pass moved artifact/goal/instruction/marketplace/
     // project/template/tunnel out in turn (10 -> 3), and the `models`
     // group moved `model` out after it (3 -> 2) — every path they had is
     // now a real mapping or an individually `null` one, not whole-domain
-    // dormancy. `token` and `user` remain: no command group exists for
-    // either yet.
-    expect(DORMANT_DOMAINS.size).toBe(2);
+    // dormancy. `token` moved out once the identity surface issued API
+    // tokens; `user` remains, its writes unpublished.
+    expect(DORMANT_DOMAINS.size).toBe(1);
+    expect(isDormant("token")).toBe(false);
     expect(isDormant("model")).toBe(false);
     expect(isDormant("goal")).toBe(false);
     expect(isDormant("collection")).toBe(false);

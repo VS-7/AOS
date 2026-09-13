@@ -1,6 +1,7 @@
 import * as React from "react";
 
-import { aos } from "@/app/aos";
+import { api } from "@/lib/aos-facade";
+import type { ApiTokenInfo } from "@/lib/auth";
 import { SettingsSectionShell } from "../../../section-shell";
 import { DevelopersCliSection } from "./components/cli-section";
 import { DevelopersRestApiSection } from "./components/rest-api-section";
@@ -10,18 +11,22 @@ import { DevelopersSkillMcpSection } from "./components/skill-mcp-section";
  * UserDevelopersSection — consolidated CLI, REST API, and MCP settings.
  */
 export function UserDevelopersSection() {
-  const authUser = aos.stores.auth.useState((state) => state.user);
+  // The account's API token as the daemon describes it — a prefix, never the
+  // value. This read `hasToken`/`tokenMasked` off the account, which no
+  // account carries, so the page always said "No token configured".
+  const tokenQuery = api.token.get.useQuery();
+  const current = (tokenQuery.data as { token?: ApiTokenInfo | null } | undefined)?.token ?? null;
   const [apiToken, setApiToken] = React.useState<string | null>(null);
 
-  const maskedToken = authUser?.tokenMasked ?? null;
-  const hasToken = authUser?.hasToken ?? false;
+  const maskedToken = current ? `${current.prefix}…` : null;
+  const hasToken = current !== null || apiToken !== null;
 
   const handleTokenRevealed = React.useCallback(
-    (full: string, _masked?: string) => {
+    (full: string) => {
       setApiToken(full);
-      void aos.stores.auth.actions.refreshUser();
+      void tokenQuery.refetch();
     },
-    [],
+    [tokenQuery],
   );
 
   return (

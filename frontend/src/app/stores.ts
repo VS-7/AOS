@@ -10,6 +10,7 @@ import {
   logout,
   updateProfile,
   changePassword,
+  regenerateApiToken,
 } from "@/lib/auth";
 import type {
   WorkspaceDirectoryAgent,
@@ -571,12 +572,19 @@ const authStore = AosStore.create("auth")
   .addAction(
     "regenerateToken",
     () =>
-      /** Disclosed stub — same reasoning as `updateProfile` above. */
-      async () => ({
-        success: false,
-        token: undefined as string | undefined,
-        error: new Error("API token regeneration isn't wired up in this build yet."),
-      }),
+      /**
+       * Replaces the account's API token. It was a disclosed stub that
+       * answered "isn't wired up in this build yet" behind a dialog promising
+       * a new token; `/api/auth/api-token` issues one now.
+       */
+      async () => {
+        try {
+          const issued = await regenerateApiToken();
+          return { success: true, token: issued.token as string | undefined, prefix: issued.prefix, error: undefined as Error | undefined };
+        } catch (err) {
+          return { success: false, token: undefined as string | undefined, prefix: undefined as string | undefined, error: asError(err, "Could not generate an API token.") };
+        }
+      },
   )
   .build();
 

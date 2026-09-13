@@ -194,6 +194,35 @@ export function updateProfile(name: string, email: string, image?: string): Prom
   );
 }
 
+/** What the Developers page is told about an account's API credential. */
+export interface ApiTokenInfo {
+  prefix: string;
+  createdAt: string;
+  lastUsedAt?: string;
+}
+
+/**
+ * Which API token the account has, if any — its prefix, never its value.
+ *
+ * Desktop method `null`: a route AuthService does not bind, reached over the
+ * bridge's Fetch inside the window (see `changePassword`).
+ */
+export function apiToken(): Promise<{ token: ApiTokenInfo | null }> {
+  return call<{ token: ApiTokenInfo | null }>(null, [], "/api/auth/api-token", { method: "GET" });
+}
+
+/**
+ * Replaces the account's API token and returns the new value — the only time
+ * the daemon ever answers it. The previous one stops working at once.
+ */
+export function regenerateApiToken(): Promise<ApiTokenInfo & { token: string }> {
+  return call<ApiTokenInfo & { token: string }>(null, [], "/api/auth/api-token", {
+    method: "POST",
+    headers: jsonHeaders,
+    body: "{}",
+  });
+}
+
 /**
  * Changes the current session's password.
  *

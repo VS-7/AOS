@@ -972,7 +972,12 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "skill.install": "skills_install",
   "skill.list": "skills_list",
   "skill.update": { key: "skills_update", renameIn: { skill: "id" } },
-  "token.regenerate": null,
+  // The account's API token, through the identity surface for the same reason
+  // as `user.list` below: identity is outside the command registry. `get`
+  // answers `{token: {prefix, createdAt} | null}`; `regenerate` retires the
+  // current one and answers the new value, once.
+  "token.get": () => authApi.apiToken(),
+  "token.regenerate": () => authApi.regenerateApiToken(),
   // task-10: the `toolset` domain is lit — `internal/domain/toolset/
   // commands.go` registers get/get-config/update-config/delete for the UI
   // (list/call are agent/CLI-only, per the closed table).
@@ -1216,7 +1221,7 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
 
 /** The domains the Go backend does not have yet, whole. */
 export const DORMANT_DOMAINS: ReadonlySet<string> = new Set([
-  "token", "user",
+  "user",
 ]);
 
 /** Whether the whole domain is dormant — what the route shows as a panel. */
