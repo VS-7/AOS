@@ -103,11 +103,15 @@ function ChatComposerSurface(props: ChatComposerProps) {
               maxFiles={ATTACHMENTS_REACH_THE_AGENT ? 12 : 0}
               multiple
               onError={(error) =>
-                toast.error(
-                  error.code === "max_files" && !ATTACHMENTS_REACH_THE_AGENT
-                    ? t("Attachments can't be sent to an agent yet. Only text is delivered.")
-                    : error.message,
-                )
+                error.code === "max_files" && !ATTACHMENTS_REACH_THE_AGENT
+                  ? // One toast, not one per open chat tab: every mounted
+                    // composer hears the same drop, and a fixed id collapses
+                    // their refusals into one.
+                    toast.error(
+                      t("Attachments can't be sent to an agent yet. Only text is delivered."),
+                      { id: "chat-attachments-not-delivered" },
+                    )
+                  : toast.error(error.message)
               }
               onSubmit={composer.handleSubmit}
             >
