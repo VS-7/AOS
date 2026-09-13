@@ -2,6 +2,9 @@ import * as React from "react";
 import type { Spec } from "@/features/view/interfaces/collections.interfaces";
 import { Page, PageBody } from "@/components/ui/page";
 import { aos } from "@/app/aos";
+import { toast } from "sonner";
+import { errorMessage } from "@/lib/aos-facade";
+import { t } from "@/lib/i18n";
 import { isDormant } from "@/lib/command-map";
 import { DormantGate } from "@/components/DormantDomain";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
@@ -98,6 +101,13 @@ export const ViewPage = aos
               body: { params },
             });
 
+            // A button in a view that the daemon refused used to do nothing
+            // at all: no result, no updates, and no word of why.
+            if (response.error) {
+              toast.error(t("The action failed"), { description: errorMessage(response.error) });
+              return { success: false, error: errorMessage(response.error) };
+            }
+
             const result = response.data?.result as
               | { success?: boolean; updates?: Record<string, unknown> }
               | undefined;
@@ -137,9 +147,11 @@ export const ViewPage = aos
                 params: { view: viewId, actionId },
                 body: { params },
               });
+              // The daemon's refusal is the reason, when there is one; "No
+              // result" was all a refused action ever said.
               return (response.data?.result ?? {
                 success: false,
-                error: "No result",
+                error: errorMessage(response.error) ?? "No result",
               }) as {
                 success: boolean;
                 data?: unknown;
