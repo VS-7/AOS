@@ -44,6 +44,9 @@ func New(cfg Config) http.Handler {
 	r.Get("/read", s.read)
 	r.Get("/content", s.content)
 	r.Put("/write", s.write)
+	r.Put("/create", s.create)
+	r.Put("/mkdir", s.mkdir)
+	r.Put("/copy", s.copyPath)
 	r.Put("/move", s.move)
 	r.Delete("/delete", s.delete)
 	r.Get("/diff", s.diff)
@@ -111,6 +114,49 @@ func (s *server) write(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, map[string]string{"path": in.Path})
+}
+
+// create is write's refusing twin: the explorer's New File, which must not
+// replace a file that is already there.
+func (s *server) create(w http.ResponseWriter, r *http.Request) {
+	var in file.WriteInput
+	if !s.decode(w, r, &in) {
+		return
+	}
+	if err := s.svc.Create(r.Context(), in); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, map[string]string{"path": in.Path})
+}
+
+func (s *server) mkdir(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Path string `json:"path"`
+	}
+	if !s.decode(w, r, &in) {
+		return
+	}
+	if err := s.svc.Mkdir(r.Context(), in.Path); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, map[string]string{"path": in.Path})
+}
+
+func (s *server) copyPath(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+	}
+	if !s.decode(w, r, &in) {
+		return
+	}
+	if err := s.svc.Copy(r.Context(), in.From, in.To); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, map[string]string{"path": in.To})
 }
 
 func (s *server) move(w http.ResponseWriter, r *http.Request) {

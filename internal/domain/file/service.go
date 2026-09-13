@@ -196,6 +196,9 @@ func (s *Service) Write(ctx context.Context, in WriteInput) error {
 // existing destination — silently replacing a file nobody named "overwrite"
 // is how work goes missing.
 func (s *Service) Move(ctx context.Context, from, to string) error {
+	if err := requirePaths("Move", from, to); err != nil {
+		return err
+	}
 	_, fromReal, err := s.resolve(ctx, from)
 	if err != nil {
 		return err
@@ -210,13 +213,169 @@ func (s *Service) Move(ctx context.Context, from, to string) error {
 		return errFSFailed("stat", to, err)
 	}
 	if exists {
-		return errAlreadyExists(to)
+		return errAlreadyExists("Move", to)
 	}
 	if err := s.fs.MkdirAll(ctx, filepath.Dir(toReal)); err != nil {
 		return errFSFailed("mkdir", to, err)
 	}
 	if err := s.fs.Rename(ctx, fromReal, toReal); err != nil {
 		return errFSFailed("move", from, err)
+	}
+	return nil
+}
+
+// Mkdir creates an empty directory at p, with any missing parents.
+//
+// A path that already holds something is refused rather than reported as
+// done: "New Folder" with a name that is taken is a name the person has to
+// change, and answering success would hide that the folder they meant to make
+// is somebody else's.
+func (s *Service) Mkdir(ctx context.Context, p string) error {
+	if err := requirePaths("Mkdir", p); err != nil {
+		return err
+	}
+	_, real, err := s.resolve(ctx, p)
+	if err != nil {
+		return err
+	}
+	if err := s.refuseExisting(ctx, "Mkdir", p, real); err != nil {
+		return err
+	}
+	if err := s.fs.MkdirAll(ctx, real); err != nil {
+		return errFSFailed("mkdir", p, err)
+	}
+	return nil
+}
+
+// Create writes a new file, parent directories included, and refuses a path
+// that already holds anything.
+//
+// Write is the editor's save and overwrites on purpose. Create is how a file
+// comes to exist from the explorer — "New File", or the paste of a copy — and
+// there overwriting is exactly the failure: a copy pasted beside its original
+// used to replace the original.
+func (s *Service) Create(ctx context.Context, in WriteInput) error {
+	if err := requirePaths("Create", in.Path); err != nil {
+		return err
+	}
+	_, real, err := s.resolve(ctx, in.Path)
+	if err != nil {
+		return err
+	}
+	if err := s.refuseExisting(ctx, "Create", in.Path, real); err != nil {
+		return err
+	}
+	if err := s.fs.MkdirAll(ctx, filepath.Dir(real)); err != nil {
+		return errFSFailed("mkdir", in.Path, err)
+	}
+	if err := s.fs.WriteFile(ctx, real, []byte(in.Content)); err != nil {
+		return errFSFailed("write", in.Path, err)
+	}
+	return nil
+}
+
+// Copy duplicates the file or directory at from to to, refusing a destination
+// that already exists and a directory copied into itself.
+//
+// It is done here, where the bytes are, rather than by the window reading a
+// file and writing it back: that round trip goes through a JSON envelope that
+// carries binaries as Base64 and caps text at maxReadBytes, so a picture, or a
+// large log, could only ever arrive damaged.
+func (s *Service) Copy(ctx context.Context, from, to string) error {
+	if err := requirePaths("Copy", from, to); err != nil {
+		return err
+	}
+	root, fromReal, err := s.resolve(ctx, from)
+	if err != nil {
+		return err
+	}
+	_, toReal, err := s.resolve(ctx, to)
+	if err != nil {
+		return err
+	}
+	info, err := s.fs.Stat(ctx, fromReal)
+	if err != nil {
+		return errFSFailed("stat", from, err)
+	}
+	if err := s.refuseExisting(ctx, "Copy", to, toReal); err != nil {
+		return err
+	}
+	if !info.Dir {
+		if err := s.fs.MkdirAll(ctx, filepath.Dir(toReal)); err != nil {
+			return errFSFailed("mkdir", to, err)
+		}
+		if err := s.fs.CopyFile(ctx, fromReal, toReal); err != nil {
+			return errFSFailed("copy", from, err)
+		}
+		return nil
+	}
+	// Walking a directory into its own subtree would find the copy it is
+	// making and never finish.
+	if toReal == fromReal || strings.HasPrefix(toReal, fromReal+string(filepath.Separator)) {
+		return errCopyIntoItself(from, to)
+	}
+	return s.copyTree(ctx, root, path.Clean("/" + from)[1:], fromReal, toReal)
+}
+
+// copyTree copies the directory fromReal into the new directory toReal.
+//
+// Every child is resolved again through the FS port, from its workspace-
+// relative path, rather than joined onto fromReal: a symbolic link inside the
+// tree can point anywhere, and resolving is what refuses one that leaves the
+// workspace — the same containment every other operation here applies.
+func (s *Service) copyTree(ctx context.Context, root, relDir, fromReal, toReal string) error {
+	if err := s.fs.MkdirAll(ctx, toReal); err != nil {
+		return errFSFailed("mkdir", relDir, err)
+	}
+	entries, err := s.fs.ReadDir(ctx, fromReal)
+	if err != nil {
+		return errFSFailed("readdir", relDir, err)
+	}
+	for _, e := range entries {
+		childRel := path.Join(relDir, e.Name)
+		childReal, err := s.fs.Resolve(ctx, root, childRel)
+		if err != nil {
+			if errors.Is(err, ErrOutside) {
+				return errOutsideWorkspace(childRel)
+			}
+			return errUnreadable(childRel, err)
+		}
+		target := filepath.Join(toReal, e.Name)
+		if e.Dir {
+			if err := s.copyTree(ctx, root, childRel, childReal, target); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := s.fs.CopyFile(ctx, childReal, target); err != nil {
+			return errFSFailed("copy", childRel, err)
+		}
+	}
+	return nil
+}
+
+// refuseExisting answers FILE_ALREADY_EXISTS when real already holds
+// something, and passes any other stat failure on as the I/O failure it is.
+func (s *Service) refuseExisting(ctx context.Context, op, p, real string) error {
+	exists, err := s.exists(ctx, real)
+	if err != nil {
+		return errFSFailed("stat", p, err)
+	}
+	if exists {
+		return errAlreadyExists(op, p)
+	}
+	return nil
+}
+
+// requirePaths refuses a path that names nothing. Every one of them would
+// otherwise resolve to the workspace root, and the refusal that followed —
+// "\"\" already exists", from a rename whose paths never arrived — describes
+// the root rather than the request that was malformed.
+func requirePaths(op string, paths ...string) error {
+	for _, p := range paths {
+		if strings.Trim(strings.TrimSpace(p), "/.") == "" {
+			return errPathRequired(op)
+		}
 	}
 	return nil
 }
