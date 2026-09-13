@@ -8,6 +8,15 @@ permissions:
   # gh release create writes to the repository. Nothing else here needs more.
   contents: write
 
+env:
+  # The update feed installed copies check, compiled into every binary this
+  # run builds (build.UpdateBaseURL) — but only when the release is signed.
+  # A feed whose releases carry no checksums.txt.sig is a feed every Download
+  # refuses, so without the signing secret the binaries keep no feed and say
+  # "automatic updates are not enabled" instead of failing on every attempt.
+  # `latest/download/stable.json` is the manifest the publish job uploads.
+  RELEASE_FEED_URL: ${{ secrets.AOS_RELEASE_SIGNING_KEY != '' && format('https://github.com/{0}/releases/latest/download', github.repository) || '' }}
+
 jobs:
   cli:
     runs-on: ubuntu-latest
@@ -66,6 +75,7 @@ jobs:
           LDFLAGS="$LDFLAGS -X github.com/OWNER/aos/internal/core/build.Version=$VERSION"
           LDFLAGS="$LDFLAGS -X github.com/OWNER/aos/internal/core/build.Commit=$COMMIT"
           LDFLAGS="$LDFLAGS -X github.com/OWNER/aos/internal/core/build.Date=$DATE"
+          LDFLAGS="$LDFLAGS -X github.com/OWNER/aos/internal/core/build.UpdateBaseURL=$RELEASE_FEED_URL"
 
           mkdir -p release
           for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64 windows/arm64; do
@@ -140,7 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           DATE_ISO=$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)
-          LDFLAGS="-s -w -X github.com/OWNER/aos/internal/core/build.Version=${VERSION} -X github.com/OWNER/aos/internal/core/build.Commit=${COMMIT} -X github.com/OWNER/aos/internal/core/build.Date=${DATE_ISO}"
+          LDFLAGS="-s -w -X github.com/OWNER/aos/internal/core/build.Version=${VERSION} -X github.com/OWNER/aos/internal/core/build.Commit=${COMMIT} -X github.com/OWNER/aos/internal/core/build.Date=${DATE_ISO} -X github.com/OWNER/aos/internal/core/build.UpdateBaseURL=${RELEASE_FEED_URL}"
           mkdir -p release
           for goarch in amd64 arm64; do
             stage="stage/${goarch}/AOS"
@@ -265,6 +275,11 @@ jobs:
           mkdir -p stage/AOS
           cp dist/aos-desktop.exe dist/aosd.exe dist/aos.exe stage/AOS/
           (cd stage && 7z a -tzip "../release/AOS-${VERSION}-windows-amd64.zip" AOS >/dev/null)
+          # The window as a raw binary too, named like the cli job's: an
+          # installation from the zip has aos-desktop.exe beside aosd.exe, and
+          # the updater replaces raw binaries only — without this one the
+          # daemon would update and the window would stay behind.
+          cp dist/aos-desktop.exe "release/aos-desktop_${VERSION}_windows_amd64.exe"
           ls -la release/
       - uses: actions/upload-artifact@v4
         with: { name: desktop-windows, path: release/, retention-days: 1 }
@@ -318,6 +333,9 @@ jobs:
           mkdir -p release stage/AOS
           cp dist/aos-desktop dist/aosd dist/aos stage/AOS/
           tar -C stage -czf "release/AOS-${VERSION}-linux-amd64.tar.gz" AOS
+          # The same reason as the Windows job's raw aos-desktop: the tarball's
+          # window has to be updatable with the daemon beside it.
+          cp dist/aos-desktop "release/aos-desktop_${VERSION}_linux_amd64"
       - name: the AppImage
         # continue-on-error, and deliberately visible. It no longer guards
         # against linuxdeploy — nothing is bundled now, so this step is an
@@ -351,8 +369,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
       - name: the tag
-        run: echo "VERSION=$(git describe --tags --always)" >> "$GITHUB_ENV"
+        run: |
+          {
+            echo "VERSION=$(git describe --tags --always)"
+            echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)"
+          } >> "$GITHUB_ENV"
 
       - uses: actions/download-artifact@v4
         with:
@@ -368,11 +395,37 @@ jobs:
       - name: checksums
         # "<sha256>  <filename>" per line, which is both what sha256sum -c
         # reads back and the exact format internal/domain/update expects at
-        # a release's ChecksumsURL. The feed can be added later without
-        # touching this file's shape.
+        # a release's ChecksumsURL.
         run: |
           set -euo pipefail
           cd release && sha256sum -- * > checksums.txt && cat checksums.txt
+
+      - name: the update feed
+        # What an installed copy needs to update itself to this release, and
+        # what no release had: checksums.txt.sig (Download refuses a release
+        # without it) and stable.json (the manifest Check reads). Then verify
+        # installs the result the way an installation would — the real
+        # update.Service, the committed public key — so a release no
+        # installation could accept fails here, before it is published.
+        #
+        # Signing needs AOS_RELEASE_SIGNING_KEY, the private half of
+        # internal/app/release-pubkey.pub. Without it the release still ships,
+        # as every release has, with a warning saying it cannot be installed
+        # automatically; with a key that does not match the public key, sign
+        # fails and so does the release.
+        env:
+          AOS_RELEASE_SIGNING_KEY: ${{ secrets.AOS_RELEASE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AOS_RELEASE_SIGNING_KEY}" ]; then
+            echo "::warning title=No update feed::AOS_RELEASE_SIGNING_KEY is not set, so ${VERSION} is published without checksums.txt.sig or stable.json. Installed copies cannot update themselves to it; they update by reinstalling."
+            exit 0
+          fi
+          go run ./tools/releasefeed sign -dir release
+          go run ./tools/releasefeed manifest -dir release -version "${VERSION}" \
+            -base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}" \
+            -page-url "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${VERSION}"
+          go run ./tools/releasefeed verify -dir release
 
       - name: publish
         env:

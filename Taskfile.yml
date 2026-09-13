@@ -30,11 +30,17 @@ vars:
       else
         date -u +%Y-%m-%dT%H:%M:%SZ
       fi
+  # The release feed a build checks for updates. Empty — no feed — unless
+  # the environment names one, which release.yml does only for a release it
+  # signs: see build.UpdateBaseURL for why a feed without signatures is worse
+  # than none.
+  RELEASE_FEED_URL: '{{.RELEASE_FEED_URL | default ""}}'
   LDFLAGS: >-
     -s -w
     -X github.com/OWNER/aos/internal/core/build.Version={{.VERSION}}
     -X github.com/OWNER/aos/internal/core/build.Commit={{.COMMIT}}
     -X github.com/OWNER/aos/internal/core/build.Date={{.DATE}}
+    -X github.com/OWNER/aos/internal/core/build.UpdateBaseURL={{.RELEASE_FEED_URL}}
   # Six platform combinations. "Build e Cross-Compile" tabulates five;
   # windows/arm64 is the sixth, and Go supports it with CGO_ENABLED=0.
   TARGETS: darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64 windows/arm64
