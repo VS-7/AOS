@@ -11,14 +11,13 @@ its own process.
 - **list** — every configured toolset
 - **get** — one toolset's full configuration
 - **get-config** — the same read, plus which of its variables are still missing
-- **tools** — connect and list the tools it publishes, with their arguments
 - **call** — run one of its tools
 - **update-config** — reconfigure it
 - **delete** — remove it
 
 ## When to use
-- **Before calling a tool you have not called yet:** list its tools first —
-  the name and argument schema toolsets_call needs are there
+- **Before calling a tool you have not called yet:** get it first — the
+  configuration and status tell you whether it is even reachable
 - **A capability outside what this system's own domains cover:** call
   toolsets_call rather than assuming a native command exists
 
@@ -36,8 +35,8 @@ The one boundary where this system executes something outside its own
 process: connects, calls one tool, closes, and audits the attempt regardless
 of outcome.
 
-Input and the result are opaque to this service — list the toolset's tools
-with toolsets_tools first if the tool's own argument shape is not already known.
+Input and the result are opaque to this service — call toolsets_get first if
+the tool's own argument shape is not already known.
 
 - call a tool with no arguments
 

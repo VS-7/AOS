@@ -214,7 +214,7 @@ func isNotFound(err error) bool {
 type CallInput struct {
 	ID    string          `json:"id" jsonschema:"Identifier of the toolset to call." validate:"required,notblank"`
 	Tool  string          `json:"tool" jsonschema:"Name of the tool, as published by the connected target." validate:"required,notblank"`
-	Input json.RawMessage `json:"input,omitempty" jsonschema:"Arguments for the tool. Opaque to this service — toolsets_tools answers each tool's argument schema."`
+	Input json.RawMessage `json:"input,omitempty" jsonschema:"Arguments for the tool. Opaque to this service — call toolsets_get with schema:true first."`
 
 	command.Reasoning
 }

@@ -1407,7 +1407,7 @@ export interface CommandMap {
     "_reasoning": string;
     /** Identifier of the toolset to call. */
     "id": string;
-    /** Arguments for the tool. Opaque to this service — toolsets_tools answers each tool's argument schema. */
+    /** Arguments for the tool. Opaque to this service — call toolsets_get with schema:true first. */
     "input"?: unknown;
     /** Name of the tool, as published by the connected target. */
     "tool": string;
