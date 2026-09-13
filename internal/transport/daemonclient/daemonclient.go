@@ -402,48 +402,19 @@ func (c *Client) SetBaseURL(address string) { c.base = strings.TrimSuffix(addres
 
 // Ready reports whether the daemon is answering its health check.
 func (c *Client) Ready(ctx context.Context) (bool, error) {
-	health, err := c.Health(ctx)
-	return health.Ready, err
-}
-
-// Health is what the daemon's health check says about it.
-type Health struct {
-	// Ready is whether it answered the check at all.
-	Ready bool
-	// Version is the build answering, as the daemon stamps it — empty when
-	// the answer did not say.
-	Version string
-}
-
-// Health asks the daemon's health check whether it is answering, and which
-// build is.
-//
-// The version is what lets the window notice that the daemon under it is not
-// the release it was built with: `aosd update apply` from a terminal replaces
-// the daemon and the window's binary on disk, and the window that is already
-// open keeps running the previous release against the new daemon.
-func (c *Client) Health(ctx context.Context) (Health, error) {
 	// /api/health, which is where the daemon answers it (see httpapi.New): the
 	// bare /health this used to ask for reached the not-found handler, so the
 	// answer was always "not ready" no matter what the daemon was doing.
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/api/health", nil)
 	if err != nil {
-		return Health{}, nil //nolint:nilerr // a malformed address is "not ready", not an incident
+		return false, nil //nolint:nilerr // a malformed address is "not ready", not an incident
 	}
 	res, err := c.http.Do(req)
 	if err != nil {
-		return Health{}, nil //nolint:nilerr // the daemon is not up yet, which is what the splash is waiting to stop being true
+		return false, nil //nolint:nilerr // the daemon is not up yet, which is what the splash is waiting to stop being true
 	}
 	defer func() { _ = res.Body.Close() }()
-	if res.StatusCode != http.StatusOK {
-		return Health{}, nil
-	}
-	var body struct {
-		Version string `json:"version"`
-	}
-	// An answer that does not say which build it is still an answer.
-	_ = json.NewDecoder(io.LimitReader(res.Body, 64<<10)).Decode(&body)
-	return Health{Ready: true, Version: body.Version}, nil
+	return res.StatusCode == http.StatusOK, nil
 }
 
 func errUnreachable(base string, cause error) error {

@@ -108,19 +108,3 @@ export interface GatewayState {
   healthy: boolean;
   meta?: GatewayMeta;
 }
-
-/**
- * A daemon answering from a different release than this window —
- * `cmd/aos-desktop`'s `versionSkew`, relayed on the `aos:daemon` event.
- *
- * `windowOlder`: the daemon was updated under this window, which is the one to
- * reopen. Otherwise the daemon is the older one, and restarting it brings it
- * level. `compatible`: the same minor release (`build.Compatible`), so the two
- * still talk in the meantime.
- */
-export interface VersionSkew {
-  window: string;
-  daemon: string;
-  windowOlder: boolean;
-  compatible: boolean;
-}

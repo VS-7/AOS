@@ -151,8 +151,7 @@ ligado, o `.app` do macOS se atualiza reinstalando (trocar um binário dentro
 do bundle quebra o selo da assinatura), e nas outras instalações a troca roda
 de um terminal — `aosd update apply --version <v>` (no Windows, escrito para o
 PowerShell) —, porque o daemon não reinicia a si mesmo. A janela que estava
-aberta continua na versão anterior até ser reaberta, e diz isso numa faixa no
-topo.
+aberta continua na versão anterior até ser reaberta.
 
 **Plataformas.** A janela: macOS Apple Silicon, Windows e Linux x86-64. O
 servidor e o terminal também em `arm64` no Linux.

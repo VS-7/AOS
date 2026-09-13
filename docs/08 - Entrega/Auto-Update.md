@@ -26,11 +26,8 @@ guardada em três pontos: `Download` só aceita um release que traga um asset
 para cada binário instalado na plataforma (`UPDATE_NO_ASSET_FOR_PLATFORM`,
 em vez de atualizar o `aos` e deixar o `aosd` para trás); `Apply` confere de
 novo que o que está staged ainda cobre o que está instalado
-(`UPDATE_STAGED_INCOMPLETE`); e a janela compara a própria versão com a do
-daemon a cada verificação de saúde (`cmd/aos-desktop`, sobre
-`build.Compatible`) e, enquanto forem releases diferentes, mostra uma faixa
-com a saída de cada caso — fechar e abrir o AOS quando a janela é a antiga,
-reiniciar o daemon quando é ele.
+(`UPDATE_STAGED_INCOMPLETE`). A comparação entre a versão da janela e a do
+daemon que ela adota é do próprio `cmd/aos-desktop`, não do atualizador.
 
 **Não entregue:** coordenação com `~/.mcp.json` (`aos self mcp doctor`) —
 feature própria, de escopo comparável, não construída nesta rodada. A chave

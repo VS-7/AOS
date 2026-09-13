@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/domain/gateway"
 	"github.com/OWNER/aos/internal/transport/daemonclient"
 	"github.com/OWNER/aos/internal/transport/wailsvc"
@@ -47,11 +46,6 @@ const daemonFailuresBeforeRestart = 3
 // immediately (so the interface can say so) and only tries to start a daemon
 // after several consecutive misses, because a restart while one is already
 // coming back is how two daemons end up fighting over one port.
-//
-// Every answer is also compared with the release this window was built from
-// (see skewBetween). An update installed from a terminal restarts the daemon
-// in about a second — often between two polls, so no miss is ever seen — and
-// leaves this window running the previous release against it.
 func watchDaemon(
 	ctx context.Context,
 	supervisor *gateway.Service,
@@ -63,7 +57,6 @@ func watchDaemon(
 ) {
 	misses := 0
 	healthy := true
-	reported := ""
 
 	for {
 		select {
@@ -73,10 +66,10 @@ func watchDaemon(
 		}
 
 		probe, cancel := context.WithTimeout(ctx, 3*time.Second)
-		health, err := client.Health(probe)
+		ready, err := client.Ready(probe)
 		cancel()
 
-		if err == nil && health.Ready {
+		if err == nil && ready {
 			if !healthy {
 				log.Info("the daemon is answering again")
 				// The workspace, the file root and the event relay all
@@ -85,14 +78,7 @@ func watchDaemon(
 				reopen(ctx, client, root, adopt, log)
 			}
 			misses, healthy = 0, true
-			skew := skewBetween(build.Current().Version, health.Version)
-			if skew == nil {
-				reported = ""
-			} else if health.Version != reported {
-				log.Warn("the daemon is a different release from this window", "window", skew.Window, "daemon", skew.Daemon, "compatible", skew.Compatible)
-				reported = health.Version
-			}
-			emitDaemonState(emit, true, skew)
+			emitDaemonState(emit, true)
 			continue
 		}
 
@@ -101,7 +87,7 @@ func watchDaemon(
 			log.Warn("the daemon stopped answering", "err", err)
 		}
 		healthy = false
-		emitDaemonState(emit, false, nil)
+		emitDaemonState(emit, false)
 
 		if misses < daemonFailuresBeforeRestart {
 			continue
@@ -116,54 +102,12 @@ func watchDaemon(
 	}
 }
 
-// emitDaemonState tells the interface, when there is a window to tell. The
-// skew rides along only while the daemon is answering: an event without one
-// is what takes the interface's banner down.
-func emitDaemonState(emit func(event any), healthy bool, skew *versionSkew) {
+// emitDaemonState tells the interface, when there is a window to tell.
+func emitDaemonState(emit func(event any), healthy bool) {
 	if emit == nil {
 		return
 	}
-	event := map[string]any{"healthy": healthy}
-	if healthy && skew != nil {
-		event["skew"] = skew
-	}
-	emit(event)
-}
-
-// versionSkew is a daemon answering from a different release than the one
-// this window was built from.
-type versionSkew struct {
-	Window string `json:"window"`
-	Daemon string `json:"daemon"`
-	// WindowOlder: the daemon was updated under this window, and the window
-	// is the one to restart. Otherwise the daemon is older — a new window
-	// adopted the daemon a previous install left running — and restarting
-	// the daemon is what brings it level.
-	WindowOlder bool `json:"windowOlder"`
-	// Compatible is build.Compatible's answer: same minor release, so the
-	// two can still talk until one of them is restarted. Different minors
-	// cannot, and the interface says so more loudly.
-	Compatible bool `json:"compatible"`
-}
-
-// skewBetween compares the window's release with the daemon's.
-//
-// Nil when they are one release — suffixes aside, as build.SemVer.Compare
-// has it, so a locally packaged -dirty tree matches its tag — and when either
-// carries no release to compare ("dev", or a daemon that did not say), which
-// is build.Compatible's own stance on development builds.
-func skewBetween(window, daemon string) *versionSkew {
-	w, wok := build.ParseVersion(window)
-	d, dok := build.ParseVersion(daemon)
-	if !wok || !dok || w.Compare(d) == 0 {
-		return nil
-	}
-	return &versionSkew{
-		Window:      window,
-		Daemon:      daemon,
-		WindowOlder: w.Compare(d) < 0,
-		Compatible:  build.Compatible(window, daemon) == nil,
-	}
+	emit(map[string]any{"healthy": healthy})
 }
 
 // reopen re-adopts the workspace after a daemon came back.
