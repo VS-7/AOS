@@ -150,6 +150,31 @@ export class ChatThreadHelper {
     }).format(value)
   }
 
+  /**
+   * Whether a newly appended message should pull the thread to the bottom.
+   *
+   * Always while the reader is already there. Otherwise only for the reader's
+   * own message that the daemon has not confirmed yet — the echo of what they
+   * just sent. Following only at the bottom meant a send from a scrolled-up
+   * thread added the message below the fold and nothing visibly happened;
+   * following everything would yank somebody reading history down whenever an
+   * agent spoke.
+   */
+  public static shouldFollowNewest(options: {
+    atBottom: boolean
+    newest: UIMessage<ChatMessageMetadata> | undefined
+    persistedIds: ReadonlySet<string>
+    selfUserId?: string
+  }): boolean {
+    if (options.atBottom) return true
+    const newest = options.newest
+    if (!newest || newest.role !== "user" || options.persistedIds.has(newest.id)) {
+      return false
+    }
+    const author = newest.metadata?.type === "user" ? newest.metadata.data?.id : undefined
+    return Boolean(options.selfUserId) && author === options.selfUserId
+  }
+
   public static isSameDay(left: Date | null, right: Date | null) {
     if (!left || !right) {
       return false
