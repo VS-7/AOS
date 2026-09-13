@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sort"
 	"sync"
@@ -85,9 +86,11 @@ func (s *Service) ask(ctx context.Context, id string) Provider {
 		// the log is where somebody looks when a provider has been quietly
 		// failing for a week.
 		reason, because, actions := explain(err)
-		// The error itself, not its rendering: the log's secret filter reads
-		// an AOS_ code in a string as an aos_ token and masks it.
-		s.log.Warn("could not read a provider's model catalogue", "provider", id, "err", err, "because", because)
+		if !errors.Is(err, ErrRepeated) {
+			// The error itself, not its rendering: the log's secret filter
+			// reads an AOS_ code in a string as an aos_ token and masks it.
+			s.log.Warn("could not read a provider's model catalogue", "provider", id, "err", err, "because", because)
+		}
 		return Provider{ID: id, Models: []Model{}, Error: reason, Actions: actions}
 	}
 	if models == nil {

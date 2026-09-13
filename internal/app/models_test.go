@@ -11,6 +11,7 @@ import (
 	"github.com/OWNER/aos/internal/adapters/fsconfig"
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/domain/config"
+	"github.com/OWNER/aos/internal/domain/model"
 	"github.com/OWNER/aos/internal/runtime/agentloop"
 	"github.com/OWNER/aos/internal/runtime/providers"
 	"github.com/OWNER/aos/internal/runtime/providers/fake"
@@ -50,9 +51,14 @@ func TestAFailedCatalogueIsNotAskedAgainOnEveryRender(t *testing.T) {
 	catalog := newModelCatalog(cfg, t.TempDir(), clock)
 	refusingAsked.Store(0)
 
-	for range 3 {
-		if _, err := catalog.Models(ctx, "refusingcatalogue"); err == nil {
+	for i := range 3 {
+		_, err := catalog.Models(ctx, "refusingcatalogue")
+		if err == nil {
 			t.Fatal("a failed catalogue answered as if it had succeeded")
+		}
+		// The first answer is news; the ones served from memory say so.
+		if repeated := errors.Is(err, model.ErrRepeated); repeated != (i > 0) {
+			t.Fatalf("call %d: repeated = %v", i, repeated)
 		}
 	}
 	if got := refusingAsked.Load(); got != 1 {

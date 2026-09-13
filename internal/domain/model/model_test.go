@@ -236,3 +236,34 @@ func TestAFailedCatalogueCarriesTheInnermostReasonAndItsCallToAction(t *testing.
 		t.Errorf("actions = %+v, want the innermost call to action first", got.Actions)
 	}
 }
+
+// A failure the catalogue kept rather than asked about again is still the
+// answer, and is not news: logging it on every render of the settings screen
+// buried the one warning that mattered under copies of itself.
+func TestARepeatedFailureIsAnsweredButNotLoggedAgain(t *testing.T) {
+	var logged strings.Builder
+	svc := model.NewService(model.Deps{
+		Catalog: &fakeCatalog{
+			connected: []string{"antigravity"},
+			fails:     map[string]error{"antigravity": repeatedFailure{errors.New("the credential could not be renewed")}},
+		},
+		Log: slog.New(slog.NewTextHandler(&logged, nil)),
+	})
+
+	out, err := svc.List(context.Background(), model.ListInput{Reasoning: reason()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.Providers[0].Error, "could not be renewed") {
+		t.Errorf("error = %q, want the failure still reported", out.Providers[0].Error)
+	}
+	if logged.Len() != 0 {
+		t.Errorf("logged %q, want nothing for a failure already reported", logged.String())
+	}
+}
+
+// repeatedFailure is how a catalogue marks an answer it did not ask again for.
+type repeatedFailure struct{ error }
+
+func (r repeatedFailure) Is(target error) bool { return target == model.ErrRepeated }
+func (r repeatedFailure) Unwrap() error        { return r.error }

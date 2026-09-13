@@ -112,7 +112,10 @@ func (c *modelCatalog) Models(ctx context.Context, provider string) ([]model.Mod
 	fingerprint := fingerprintOf(key)
 
 	if hit, ok := c.fresh(provider, fingerprint); ok {
-		return hit.models, hit.err
+		if hit.err != nil {
+			return nil, repeatedFailure{hit.err}
+		}
+		return hit.models, nil
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, catalogTimeout)
@@ -164,6 +167,13 @@ func (c *modelCatalog) fresh(provider, fingerprint string) (catalogEntry, bool) 
 	}
 	return entry, true
 }
+
+// repeatedFailure is a failure answered from the cache: the same error, marked
+// so the model service reports it without logging it again.
+type repeatedFailure struct{ error }
+
+func (r repeatedFailure) Is(target error) bool { return target == model.ErrRepeated }
+func (r repeatedFailure) Unwrap() error        { return r.error }
 
 // fingerprintOf hashes a credential so the cache can tell one from another
 // without holding it.
