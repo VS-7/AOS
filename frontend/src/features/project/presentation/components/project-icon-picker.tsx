@@ -24,12 +24,17 @@ import { cn } from "@/lib/utils";
 import { ProjectHelper } from "@/features/project/presentation/helpers/project.helper";
 import { t } from "@/lib/i18n";
 
-/** Curated icons shown before the user searches. */
+/**
+ * Curated icons shown before the user searches. Every name must be a key of
+ * lucide's `icons` map, which is what `Icon` resolves through: "Code2" is
+ * only an export alias and "DashboardSquare01Icon" is not lucide at all, so
+ * both rendered, and saved, as the fallback folder.
+ */
 const FEATURED_ICONS = [
   "Folder",
   "FolderKanban",
   "Rocket",
-  "Code2",
+  "CodeXml",
   "Boxes",
   "Globe",
   "Smartphone",
@@ -43,7 +48,7 @@ const FEATURED_ICONS = [
   "Cpu",
   "Cloud",
   "GitBranch",
-  "DashboardSquare01Icon",
+  "LayoutDashboard",
   "Briefcase",
   "Target",
   "Zap",
@@ -118,7 +123,7 @@ export function ProjectIconPicker({
       setQuery("");
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to process image.";
+        error instanceof Error ? error.message : t("Failed to process image.");
       toast.error(message);
     } finally {
       setBusy(false);
@@ -200,7 +205,7 @@ export function ProjectIconPicker({
             onClick={handlePickPhoto}
           >
             <ImagePlus className="size-3.5 text-muted-foreground" />
-            {busy ? "Processing…" : "Choose photo"}
+            {busy ? t("Processing…") : t("Choose photo")}
           </Button>
           <input
             ref={fileRef}

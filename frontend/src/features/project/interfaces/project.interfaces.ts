@@ -3,6 +3,15 @@ import type { ResponseWithCTA } from "@/core/interfaces/response.interfaces";
 import { Schema } from "@/core/helpers/schema.helper";
 
 /**
+ * Where a project sits: Go's `project.Status` (`internal/domain/project/
+ * entity.go`). Not a lifecycle on rails the way a task's is — any of the
+ * four can follow any other.
+ */
+export const ProjectStatusSchema = z.enum(["active", "paused", "done", "archived"]);
+
+export type ProjectStatus = z.infer<typeof ProjectStatusSchema>;
+
+/**
  * Zod schema for a AOS Project.
  *
  * Projects represent top-level workspaces that can be linked to external directories
@@ -31,6 +40,8 @@ export const ProjectSchema = z.object({
    * source directory (workspace-relative, unlike `path` above).
    */
   source: z.string().optional(),
+  /** Where the project sits. Every project the daemon returns carries one. */
+  status: ProjectStatusSchema.optional(),
   /** ISO timestamp of when the project was created. Auto-generated. */
   createdAt: z.string(),
   /** ISO timestamp of when the project was last updated. Auto-generated. */

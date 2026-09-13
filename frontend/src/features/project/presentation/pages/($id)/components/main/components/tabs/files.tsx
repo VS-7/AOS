@@ -16,7 +16,7 @@ import { aos } from "@/app/aos";
 import type { WorkspaceFile } from "@/features/file/interfaces/file.interfaces";
 import type { Project } from "@/features/project/interfaces/project.interfaces";
 import type { ViewportTabState } from "@/features/workspace/presentation/stores/viewport.store";
-import { t } from "@/lib/i18n";
+import { getLocale, t } from "@/lib/i18n";
 import {
   filterFiles,
   formatFileSize,
@@ -80,12 +80,15 @@ export function ProjectFilesTab({ project }: ProjectFilesTabProps) {
 
   const canList = projectFilesRoot !== null;
 
+  // Only when there is something to list: for a source outside the
+  // workspace this listed the workspace root, for nothing.
   const fileQuery = aos.client.file.list.useQuery({
     query: {
       includeIgnored: false,
       path: currentPath || projectFilesRoot || ".",
       recursive: false,
     },
+    enabled: canList,
   });
 
   const entries = React.useMemo(() => {
@@ -264,6 +267,7 @@ export function ProjectFilesTab({ project }: ProjectFilesTabProps) {
       {/* Toolbar */}
       <div className="flex items-center gap-2 border-b px-5.5 py-3">
         <Button
+          type="button"
           variant="outline"
           size="icon-sm"
           className="rounded-full"
@@ -277,9 +281,10 @@ export function ProjectFilesTab({ project }: ProjectFilesTabProps) {
             <React.Fragment key={index}>
               {index > 0 && <span className="text-muted-foreground">/</span>}
               <Button
+                type="button"
                 variant="ghost"
                 size="sm"
-                className="h-6 px-1 text-sm font-medium lowercase"
+                className="h-6 px-1 text-sm font-medium"
                 onClick={() => navigateToSegment(index)}
                 disabled={index === breadcrumbSegments.length - 1}
               >
@@ -298,6 +303,7 @@ export function ProjectFilesTab({ project }: ProjectFilesTabProps) {
           />
         </div>
         <Button
+          type="button"
           variant="ghost"
           size="icon"
           className="size-8"
@@ -379,7 +385,7 @@ export function ProjectFilesTab({ project }: ProjectFilesTabProps) {
                       : formatFileSize(entry.size)}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {new Date(entry.updatedAt).toLocaleDateString(undefined, {
+                    {new Date(entry.updatedAt).toLocaleDateString(getLocale(), {
                       year: "numeric",
                       month: "short",
                       day: "numeric",
