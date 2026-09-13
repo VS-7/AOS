@@ -161,6 +161,9 @@ func (c *Client) currentToken() string {
 // SetToken exists: that answer is not known at construction time.
 func (c *Client) SetWorkspace(id string) { c.workspace.Store(&id) }
 
+// Workspace is the workspace id later calls are scoped to, or "".
+func (c *Client) Workspace() string { return c.currentWorkspace() }
+
 func (c *Client) currentWorkspace() string {
 	if v := c.workspace.Load(); v != nil {
 		return *v
@@ -769,6 +772,13 @@ func (c *Client) Token() string { return c.currentToken() }
 //
 // The caller closes the body.
 func (c *Client) Stream(ctx context.Context, path string, header http.Header) (*http.Response, error) {
+	return c.StreamIn(ctx, c.currentWorkspace(), path, header)
+}
+
+// StreamIn is Stream scoped to workspace rather than to the one this client
+// holds now — for an answer that is only right in the workspace it was asked
+// for, whatever the client has been re-pointed at since.
+func (c *Client) StreamIn(ctx context.Context, workspace, path string, header http.Header) (*http.Response, error) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	waiting := time.AfterFunc(c.timeout, func() { cancel(errNoAnswerInTime) })
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
@@ -787,7 +797,7 @@ func (c *Client) Stream(ctx context.Context, path string, header http.Header) (*
 	if token := c.currentToken(); token != "" {
 		req.Header.Set("authorization", "Bearer "+token)
 	}
-	if workspace := c.currentWorkspace(); workspace != "" {
+	if workspace != "" {
 		req.Header.Set("x-workspace-id", workspace)
 	}
 	if agent := c.currentAgent(); agent != "" {

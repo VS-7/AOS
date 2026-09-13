@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -68,7 +69,7 @@ const runtimeRoute = "/wails/runtime"
 // own bundle, and a proxy that forwarded anything would be a hole in the
 // boundary `DomainService.Fetch`'s own allowlist exists to keep.
 func bridgeDaemon(daemon *daemonclient.Client, log *slog.Logger) func(http.Handler) http.Handler {
-	frames := newArtifactFrames()
+	frames := newArtifactFrames(daemon.Workspace)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if refusedRuntimeCall(r) {
@@ -90,14 +91,14 @@ func bridgeDaemon(daemon *daemonclient.Client, log *slog.Logger) func(http.Handl
 			case path == frameAddressRoute:
 				frames.answerAddress(w, r)
 			case strings.HasPrefix(path, artifactFrameRoute):
-				daemonPath, frame, ok := frames.opened(r.URL.EscapedPath())
+				daemonPath, frame, workspace, ok := frames.opened(r.URL.EscapedPath())
 				if !ok {
 					http.NotFound(w, r)
 					return
 				}
-				forward(w, r, daemon, log, daemonPath, frames.connectTo(frame))
+				forward(w, r, daemon, log, workspace, daemonPath, frames.connectTo(frame))
 			case strings.HasPrefix(path, contentRoute), strings.HasPrefix(path, artifactsRoute):
-				forward(w, r, daemon, log, r.URL.EscapedPath(), nil)
+				forward(w, r, daemon, log, daemon.Workspace(), r.URL.EscapedPath(), nil)
 			default:
 				next.ServeHTTP(w, r)
 			}
@@ -123,8 +124,13 @@ func bridgeDaemon(daemon *daemonclient.Client, log *slog.Logger) func(http.Handl
 // caller-chosen names like "sales-dashboard" as often as they are random.
 //
 // So the window frames an artifact at /v/frame/{grant}/{id}/, where the grant
-// is an HMAC of the id under a key this process draws at start and never
-// shares. The artifact's own relative references resolve under that address,
+// is an HMAC of the workspace the window addresses and the id, under a key
+// this process draws at start and never shares. The workspace is in it because
+// an id is a name the caller chose — "sales-dashboard" in two workspaces is two
+// artifacts — and a frame still mounted after the window switched workspace
+// served the other one's artifact of that name: an address opens only while
+// the window addresses the workspace it was handed out in, and is forwarded
+// under that workspace. The artifact's own relative references resolve under that address,
 // and only that address answers cross-origin (a resource policy of
 // cross-origin, and Access-Control-Allow-Origin: * with no credentials — the
 // grant is the credential); the plain /v/artifacts/ path, and file content,
@@ -143,20 +149,27 @@ func bridgeDaemon(daemon *daemonclient.Client, log *slog.Logger) func(http.Handl
 // the page states its own scheme and host when it asks for the address.
 type artifactFrames struct {
 	key []byte
+	// workspace is the workspace the window addresses now.
+	workspace func() string
 
 	mu   sync.Mutex
 	base string // the page's own scheme://host, as it stated it
 }
 
-func newArtifactFrames() *artifactFrames {
+func newArtifactFrames(workspace func() string) *artifactFrames {
 	key := make([]byte, 32)
 	// crypto/rand.Read does not fail; it aborts the process instead.
 	_, _ = rand.Read(key)
-	return &artifactFrames{key: key}
+	return &artifactFrames{key: key, workspace: workspace}
 }
 
-func (f *artifactFrames) grant(id string) string {
+// grant is the capability for one artifact in one workspace. The workspace
+// goes in with its length first, so no pair of workspace and id can be read
+// as another.
+func (f *artifactFrames) grant(workspace, id string) string {
 	mac := hmac.New(sha256.New, f.key)
+	_, _ = mac.Write(binary.BigEndian.AppendUint64(nil, uint64(len(workspace))))
+	_, _ = mac.Write([]byte(workspace))
 	_, _ = mac.Write([]byte(id))
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
@@ -185,7 +198,7 @@ func (f *artifactFrames) answerAddress(w http.ResponseWriter, r *http.Request) {
 		f.base = base
 		f.mu.Unlock()
 	}
-	address := artifactFrameRoute + f.grant(id) + "/" + url.PathEscape(id) + "/" + rest
+	address := artifactFrameRoute + f.grant(f.workspace(), id) + "/" + url.PathEscape(id) + "/" + rest
 	if target.RawQuery != "" {
 		address += "?" + target.RawQuery
 	}
@@ -200,19 +213,21 @@ func (f *artifactFrames) answerAddress(w http.ResponseWriter, r *http.Request) {
 // would read as another source or directive.
 var pageBase = regexp.MustCompile(`^[a-z][a-z0-9+.-]*://[A-Za-z0-9.-]+(:[0-9]{1,5})?$`)
 
-// opened checks an escaped /v/frame/{grant}/{id}/{file} path and answers the
-// daemon path it stands for and the artifact's own frame address.
-func (f *artifactFrames) opened(escaped string) (daemonPath, frame string, ok bool) {
+// opened checks an escaped /v/frame/{grant}/{id}/{file} path against the
+// workspace the window addresses now, and answers the daemon path it stands
+// for, the artifact's own frame address, and the workspace to ask it in.
+func (f *artifactFrames) opened(escaped string) (daemonPath, frame, workspace string, ok bool) {
 	grant, tail, found := strings.Cut(strings.TrimPrefix(escaped, artifactFrameRoute), "/")
 	if !found {
-		return "", "", false
+		return "", "", "", false
 	}
 	id, rest, ok := artifactSegment(artifactsRoute + tail)
-	if !ok || !hmac.Equal([]byte(grant), []byte(f.grant(id))) {
-		return "", "", false
+	workspace = f.workspace()
+	if !ok || !hmac.Equal([]byte(grant), []byte(f.grant(workspace, id))) {
+		return "", "", "", false
 	}
 	frame = artifactFrameRoute + grant + "/" + url.PathEscape(id) + "/"
-	return artifactsRoute + url.PathEscape(id) + "/" + rest, frame, true
+	return artifactsRoute + url.PathEscape(id) + "/" + rest, frame, workspace, true
 }
 
 // connectTo is how an answer served at frame rewrites the daemon's CSP: its
@@ -289,15 +304,15 @@ var responseHeaders = []string{
 	"content-disposition",
 }
 
-// forward sends a GET for daemonPath (escaped) to the daemon with the window's
-// credential and relays the answer. An opened artifact's answer (see
-// artifactFrames) goes to any origin, with its CSP rewritten by opened; every
-// other answer goes to the window's own origin only.
-func forward(w http.ResponseWriter, r *http.Request, daemon *daemonclient.Client, log *slog.Logger, daemonPath string, opened func(csp string) string) {
+// forward sends a GET for daemonPath (escaped) to the daemon, in workspace,
+// with the window's credential and relays the answer. An opened artifact's
+// answer (see artifactFrames) goes to any origin, with its CSP rewritten by
+// opened; every other answer goes to the window's own origin only.
+func forward(w http.ResponseWriter, r *http.Request, daemon *daemonclient.Client, log *slog.Logger, workspace, daemonPath string, opened func(csp string) string) {
 	if r.URL.RawQuery != "" {
 		daemonPath += "?" + r.URL.RawQuery
 	}
-	res, err := daemon.Stream(r.Context(), daemonPath, r.Header)
+	res, err := daemon.StreamIn(r.Context(), workspace, daemonPath, r.Header)
 	if err != nil {
 		log.Warn("a file could not be read from the daemon", "path", r.URL.Path, "err", err)
 		http.Error(w, "the daemon did not answer", http.StatusBadGateway)
