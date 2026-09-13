@@ -133,6 +133,9 @@ export async function openAgentDmTab(params: {
   const listResponse = await aos.client.chat.list.query({
     query: { kind: "dm" },
   });
+  // A list that could not be read is not an empty list: treating it as one
+  // went on to create a second DM with someone who already had one.
+  if (listResponse.error) throw listResponse.error;
   const chats = (listResponse?.data?.chats ?? []) as Chat[];
   const existingId = findAgentDmChatId(chats, params.agentId);
   if (existingId) {
@@ -153,7 +156,10 @@ export async function openAgentDmTab(params: {
   const chat = (
     createResponse as { data?: { chat?: Chat }; error?: unknown } | null | undefined
   )?.data?.chat;
-  if ((createResponse as { error?: unknown } | null)?.error || !chat?.id) {
+  // The refusal itself, when there is one: callers toast `error.message`,
+  // and a fixed "Unable to open …" told the person nothing about why.
+  if (createResponse.error) throw createResponse.error;
+  if (!chat?.id) {
     throw new Error("Unable to open agent DM.");
   }
   return openChatTab({
@@ -217,6 +223,9 @@ export async function openUserDmTab(params: {
   const listResponse = await aos.client.chat.list.query({
     query: { kind: "dm" },
   });
+  // A list that could not be read is not an empty list: treating it as one
+  // went on to create a second DM with someone who already had one.
+  if (listResponse.error) throw listResponse.error;
   const chats = (listResponse?.data?.chats ?? []) as Chat[];
   const selfUserId = aos.stores.auth.state.user?.id;
   const existingId = selfUserId
@@ -246,7 +255,10 @@ export async function openUserDmTab(params: {
   const chat = (
     createResponse as { data?: { chat?: Chat }; error?: unknown } | null | undefined
   )?.data?.chat;
-  if ((createResponse as { error?: unknown } | null)?.error || !chat?.id) {
+  // The refusal itself, when there is one: callers toast `error.message`,
+  // and a fixed "Unable to open …" told the person nothing about why.
+  if (createResponse.error) throw createResponse.error;
+  if (!chat?.id) {
     throw new Error("Unable to open user DM.");
   }
   return openChatTab({
