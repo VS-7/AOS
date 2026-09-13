@@ -152,6 +152,17 @@ func TestOnlyTheWindowCanOpenAnArtifactAndOnlyThatOne(t *testing.T) {
 		}
 	}
 
+	// The preflight a CORS request with the header needs is refused here, not
+	// left to whatever serves the assets (the development server answers
+	// preflights itself).
+	for _, method := range []string{http.MethodOptions, http.MethodPost, http.MethodHead} {
+		preflight := httptest.NewRequestWithContext(t.Context(), method, frameAddressRoute+"?url=%2Fv%2Fartifacts%2Fsales%2F", nil)
+		preflight.Header.Set("Access-Control-Request-Headers", frameAddressHeader)
+		if rec, reached := serveWith(proxy, preflight); reached || rec.Code != http.StatusForbidden {
+			t.Errorf("%s to the frame address: status %d, reached assets %v", method, rec.Code, reached)
+		}
+	}
+
 	// Asked without the header: a no-cors request cannot set it, and a CORS
 	// request that asks to is preflighted and refused.
 	bare := httptest.NewRequestWithContext(t.Context(), http.MethodGet, frameAddressRoute+"?url=%2Fv%2Fartifacts%2Fsales%2F", nil)

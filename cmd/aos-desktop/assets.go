@@ -75,6 +75,12 @@ func bridgeDaemon(daemon *daemonclient.Client, log *slog.Logger) func(http.Handl
 				http.Error(w, "not a call from this window's runtime", http.StatusForbidden)
 				return
 			}
+			// Refused here rather than left to the asset handler, which in
+			// development is a dev server that answers CORS preflights itself.
+			if r.URL.Path == frameAddressRoute && r.Method != http.MethodGet {
+				http.Error(w, "the frame address is only ever read", http.StatusForbidden)
+				return
+			}
 			if r.Method != http.MethodGet {
 				next.ServeHTTP(w, r)
 				return
