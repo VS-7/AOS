@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/identity"
 	"github.com/OWNER/aos/internal/core/safe"
@@ -271,16 +272,42 @@ func (s *Service) Fire(ctx context.Context, in FireInput) (*Run, error) {
 
 // FireWebhook authenticates a token and fires the routine it belongs to.
 func (s *Service) FireWebhook(ctx context.Context, in WebhookInput) (*Run, error) {
-	current, err := s.load(ctx, in.Agent, in.ID)
+	current, err := s.authenticateWebhook(ctx, in)
 	if err != nil {
 		return nil, err
 	}
+	return s.fire(ctx, current, Webhook, in.Payload, false)
+}
+
+// VerifyWebhook answers whether a token fires a routine, without firing it.
+//
+// The HTTP route answers a caller as soon as its token is good and runs the
+// routine afterwards: a run is a whole model turn, and a sender that waits
+// that long for its answer gives up and delivers again.
+func (s *Service) VerifyWebhook(ctx context.Context, in WebhookInput) error {
+	_, err := s.authenticateWebhook(ctx, in)
+	return err
+}
+
+// authenticateWebhook finds the routine a token fires.
+//
+// A routine that is not there is refused exactly like a wrong token. This is
+// the one surface a stranger reaches, and "no such routine" would tell them
+// which identifiers exist.
+func (s *Service) authenticateWebhook(ctx context.Context, in WebhookInput) (*Routine, error) {
 	if s.tokens == nil {
 		return nil, errTokensUnavailable()
 	}
+	current, err := s.load(ctx, in.Agent, in.ID)
+	if err != nil {
+		if errors.Is(err, apperr.ErrNotFound) {
+			return nil, errInvalidToken(in.ID)
+		}
+		return nil, err
+	}
 	for _, t := range current.Triggers {
 		if t.Type == Webhook && s.tokens.Verify(in.Token, t.Config.TokenHash) {
-			return s.fire(ctx, current, Webhook, in.Payload, false)
+			return current, nil
 		}
 	}
 	return nil, errInvalidToken(current.ID)

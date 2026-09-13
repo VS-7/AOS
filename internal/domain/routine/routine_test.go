@@ -603,3 +603,44 @@ func TestSavingARoutineKeepsItsWebhookToken(t *testing.T) {
 		t.Fatalf("the token from creation stopped working after a save: %v", err)
 	}
 }
+
+// TestAWebhookForARoutineThatIsNotThereIsRefusedLikeAWrongToken. The webhook
+// route is the one surface a stranger can reach with a token, and a refusal
+// that says "no such routine" tells them which identifiers exist.
+func TestAWebhookForARoutineThatIsNotThereIsRefusedLikeAWrongToken(t *testing.T) {
+	h := newHarness(t)
+	h.create(t, CreateInput{Name: "Hooked", Triggers: []TriggerInput{{Type: Webhook}}})
+
+	for _, check := range []func() error{
+		func() error {
+			return h.svc.VerifyWebhook(context.Background(), WebhookInput{ID: "nope", Token: "tok-1"})
+		},
+		func() error {
+			_, err := h.svc.FireWebhook(context.Background(), WebhookInput{ID: "nope", Token: "tok-1"})
+			return err
+		},
+	} {
+		err := check()
+		got, ok := apperr.As(err)
+		if !ok || !strings.HasSuffix(got.Code, "ROUTINE_FIRE_INVALID_TOKEN") {
+			t.Fatalf("error = %v", err)
+		}
+	}
+}
+
+// TestVerifyingAWebhookFiresNothing. The route answers as soon as the token is
+// good and runs the routine afterwards, so checking has to be its own step.
+func TestVerifyingAWebhookFiresNothing(t *testing.T) {
+	h := newHarness(t)
+	out := h.create(t, CreateInput{Name: "Hooked", Triggers: []TriggerInput{{Type: Webhook}}})
+
+	if err := h.svc.VerifyWebhook(context.Background(), WebhookInput{ID: out.Routine.ID, Token: out.Token}); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.svc.VerifyWebhook(context.Background(), WebhookInput{ID: out.Routine.ID, Token: "guessed"}); err == nil {
+		t.Fatal("a wrong token verified")
+	}
+	if h.executor.count() != 0 {
+		t.Fatal("verifying a token ran the routine")
+	}
+}

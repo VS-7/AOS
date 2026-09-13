@@ -138,6 +138,7 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 		}),
 		SecurityEnabled: securityEnabled,
 		DocsEnabled:     !resolver.IsProduction(),
+		RoutineWebhooks: routineWebhooks{app: a},
 		// The window's own origins belong here as much as they do on the
 		// event channel. The interface reaches two surfaces by plain fetch
 		// rather than through the Wails bridge — the file explorer and the
