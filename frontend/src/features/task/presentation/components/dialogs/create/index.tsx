@@ -44,8 +44,9 @@ import { SetPriorityDropdown } from "@/features/task/presentation/components/dro
 import { SetAssigneeDropdown } from "@/features/task/presentation/components/dropdowns/set-assignee.dropdown"
 import { SetTypeDropdown } from "@/features/task/presentation/components/dropdowns/set-type.dropdown"
 import { SetStatusDropdown } from "@/features/task/presentation/components/dropdowns/set-status.dropdown"
-import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG } from "@/features/task/presentation/consts/task"
+import { TASK_ENTRY_STATUSES, TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG } from "@/features/task/presentation/consts/task"
 import { assigneeInitials, resolveAssignee } from "@/features/task/presentation/helpers/assignee.helper"
+import { useAssigneeDirectory } from "@/features/task/presentation/hooks/assignee-directory.hook"
 import { aos } from "@/app/aos"
 import { cn } from "@/lib/utils"
 import type { TaskPriority, TaskStatus } from "@/features/task/interfaces/task.interfaces"
@@ -56,53 +57,40 @@ const worktreeSchema = z.object({
   branch: z.string().optional(),
 })
 
-const formSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  summary: z.string().optional(),
-  type: z.string().default("task"),
-  priority: z.enum(["no_priority", "urgent", "high", "medium", "low"]).default("no_priority"),
-  status: z.enum([
-    "suggestion",
-    "backlog",
-    "planning",
-    "todo",
-    "in_progress",
-    "stopped",
-    "in_review",
-    "finished",
-  ]).default("backlog"),
-  assigned: z.string().optional(),
-  worktree: worktreeSchema.default({ enabled: false }),
-})
-
-function generateSlug(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^\w-]+/g, "")
-    .replace(/--+/g, "-")
-    .replace(/^-+/, "")
-    .replace(/-+$/, "");
-}
-
 export function TaskDialog() {
   const router = useRouter();
   const open = aos.stores.viewport.useState(state => state.tasks.dialog.visible);
-  const directory = aos.stores.workspace.useState((state) => state.directory);
-  const self = aos.stores.auth.useState((state) => state.user);
+  const directory = useAssigneeDirectory();
+  const workspaceTypes = aos.stores.workspace.useState((state) => state.current?.tasks) ?? [];
   const [worktreeOpen, setWorktreeOpen] = React.useState(false)
+
+  // Built in the component so the "required" message is in the interface's
+  // language, and so the status can only be one tasks_create accepts: the
+  // picker offered all eight, and the four that are not entry points were
+  // refused as AOS_TASK_NOT_AN_ENTRY_POINT.
+  const formSchema = React.useMemo(() => z.object({
+    name: z.string().trim().min(1, t("Name is required")),
+    summary: z.string().optional(),
+    type: z.string().default(""),
+    priority: z.enum(["no_priority", "urgent", "high", "medium", "low"]).default("no_priority"),
+    status: z.enum(["suggestion", "backlog", "planning", "todo"]).default("backlog"),
+    assigned: z.string().optional(),
+    worktree: worktreeSchema.default({ enabled: false }),
+  }), [])
+
+  // The type defaulted to "task", which no workspace declares, so every
+  // create that kept the default was refused as AOS_TASK_UNKNOWN_TYPE. It is
+  // the workspace's first type now, or none when the workspace declares none.
+  const defaultType = workspaceTypes[0]?.id ?? ""
   const initialValues = React.useMemo(() => ({
     name: "",
     summary: "",
-    type: "task",
+    type: defaultType,
     priority: "no_priority" as const,
     status: "backlog" as const,
     assigned: undefined as string | undefined,
     worktree: { enabled: false, base: "", branch: "" },
-  }), [])
+  }), [defaultType])
 
   const form = aos.useForm({
     schema: formSchema,
@@ -111,7 +99,6 @@ export function TaskDialog() {
     onSubmit: (values) => ({
       body: {
         name: values.name,
-        slug: generateSlug(values.name),
         summary: values.summary,
         type: values.type,
         priority: values.priority,
@@ -130,7 +117,7 @@ export function TaskDialog() {
       // Said nothing while Create never submitted; now that it does, a
       // refusal from the daemon has to reach the person, not just the log.
       if (error) {
-        toast.error(error.message || t("Could not create the task."));
+        toast.error(t("Could not create the task."), { description: error.message });
         return;
       }
       // Was `'tasks.dialog'` (flat) — but the read above (`state.tasks.
@@ -154,9 +141,10 @@ export function TaskDialog() {
   const selectedAssignee = form.watch("assigned")
   const priorityCfg = TASK_PRIORITY_CONFIG[selectedPriority]
   const PriorityIcon = priorityCfg.icon
-  const assignee = resolveAssignee({ ...directory, self }, selectedAssignee)
+  const assignee = resolveAssignee(directory, selectedAssignee)
   const isAgent = assignee?.type === "agent"
-  const assigneeLabel = assignee?.name || "Unassigned"
+  const assigneeLabel = assignee?.name || t("Unassigned")
+  const selectedTypeLabel = workspaceTypes.find((type) => type.id === selectedType)?.label || selectedType || t("No type")
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -194,6 +182,7 @@ export function TaskDialog() {
                           <DropdownMenuContent align="start">
                             <SetStatusDropdown
                               currentStatus={field.value}
+                              statuses={TASK_ENTRY_STATUSES}
                               onStatusChange={(status) => field.onChange(status as TaskStatus)}
                             />
                           </DropdownMenuContent>
@@ -267,10 +256,10 @@ export function TaskDialog() {
                     variant="ghost"
                     size="sm"
                     type="button"
-                    className="h-8 gap-2 px-2 text-muted-foreground hover:text-foreground capitalize"
+                    className="h-8 gap-2 px-2 text-muted-foreground hover:text-foreground"
                   >
                     <TagIcon data-icon="inline-start" className="size-4" />
-                    <span>{selectedType}</span>
+                    <span>{selectedTypeLabel}</span>
                     <ChevronDown data-icon="inline-end" className="size-3" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -398,9 +387,12 @@ export function TaskDialog() {
                             </Field>
                           )}
                         />
+                        {/* It said the checkout "will be created when task
+                            starts"; nothing does that. The agent working on
+                            the task, or the task's menu, cuts it. */}
                         <div className="text-xs text-muted-foreground">
                           <Check className="inline-block size-3 mr-1" />
-                          {t("Worktree will be created when task starts")}
+                          {t("The checkout is cut when the task is branched, from its menu or by the agent working on it.")}
                         </div>
                       </>
                     )}
