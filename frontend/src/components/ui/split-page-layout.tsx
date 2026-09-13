@@ -455,6 +455,7 @@ function ContentHeader({ children, className }: ContentHeaderProps) {
           size="icon"
           onClick={navigation.onBack}
           className="h-8 px-2 text-xs font-medium text-muted-foreground"
+          aria-label={t("Back")}
         >
           <ArrowLeft className="size-4" />
         </Button>

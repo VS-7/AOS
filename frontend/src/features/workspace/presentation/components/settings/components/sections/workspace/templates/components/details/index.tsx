@@ -29,29 +29,44 @@ export function SelectedTemplateDetail() {
             </SplitPageLayout.WidgetTitle>
           </SplitPageLayout.WidgetHeader>
           <SplitPageLayout.WidgetContent>
-            <FormField
-              control={form.control}
-              name="skill"
-              render={({ field }) => (
-                <FormItem className="w-full space-y-2">
-                  <SplitPageLayout.WidgetItem>
-                    <Puzzle className="size-3.5 shrink-0 text-muted-foreground" />
-                    <span className="w-14 shrink-0 text-xs text-muted-foreground">
-                      {t("Skill")}
-                    </span>
-                    <FormControl>
-                      <Input
-                        placeholder="global"
-                        className="h-7 border-0 bg-transparent px-0 py-0 text-xs shadow-none focus-visible:ring-0"
-                        {...field}
-                        value={field.value ?? ""}
-                      />
-                    </FormControl>
-                  </SplitPageLayout.WidgetItem>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Editable only while creating: templates_update takes no skill,
+                so an edit here used to be silently dropped by the save. */}
+            {isCreateMode ? (
+              <FormField
+                control={form.control}
+                name="skill"
+                render={({ field }) => (
+                  <FormItem className="w-full space-y-2">
+                    <SplitPageLayout.WidgetItem>
+                      <Puzzle className="size-3.5 shrink-0 text-muted-foreground" />
+                      <span className="w-14 shrink-0 text-xs text-muted-foreground">
+                        {t("Skill")}
+                      </span>
+                      <FormControl>
+                        <Input
+                          placeholder={t("global")}
+                          aria-label={t("Skill")}
+                          className="h-7 border-0 bg-transparent px-0 py-0 text-xs shadow-none focus-visible:ring-0"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                    </SplitPageLayout.WidgetItem>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ) : (
+              <SplitPageLayout.WidgetItem>
+                <Puzzle className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="w-14 shrink-0 text-xs text-muted-foreground">
+                  {t("Skill")}
+                </span>
+                <span className="text-xs text-foreground">
+                  {selectedTemplate?.skill || t("global")}
+                </span>
+              </SplitPageLayout.WidgetItem>
+            )}
 
             <FormField
               control={form.control}
@@ -100,7 +115,9 @@ export function SelectedTemplateDetail() {
               control={form.control}
               name="variablesText"
               render={({ field }) => (
-                <FormItem className="w-full space-y-2">
+                // Padded like every other widget row: straight in the unpadded
+                // widget body, the label sat on the card's border.
+                <FormItem className="w-full space-y-2 p-3">
                   <FormLabel className="text-xs text-muted-foreground">
                     {t("The variables this template declares, as JSON")}
                   </FormLabel>

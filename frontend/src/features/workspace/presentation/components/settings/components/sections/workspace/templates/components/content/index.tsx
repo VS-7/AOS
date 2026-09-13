@@ -21,6 +21,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { SettingsContentContainer } from "../../../../../content-container";
@@ -69,7 +70,12 @@ export function SelectedTemplateContent() {
 
   async function handleCopyId() {
     if (!selectedTemplate?.id) return;
-    await navigator.clipboard.writeText(selectedTemplate.id);
+    try {
+      await navigator.clipboard.writeText(selectedTemplate.id);
+      toast.success(t("Copied"));
+    } catch {
+      toast.error(t("Failed to copy"));
+    }
   }
 
   return (
@@ -78,7 +84,7 @@ export function SelectedTemplateContent() {
         <SplitPageLayout.ContentHeaderMain>
           <SplitPageLayout.ContentTitle>
             {title?.trim() ||
-              (isCreateMode ? "New Template" : selectedTemplate?.name)}
+              (isCreateMode ? t("New Template") : selectedTemplate?.name)}
           </SplitPageLayout.ContentTitle>
         </SplitPageLayout.ContentHeaderMain>
 
@@ -114,8 +120,7 @@ export function SelectedTemplateContent() {
                     <AlertDialogHeader>
                       <AlertDialogTitle>{t("Delete this template?")}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        {t("This action removes")}{" "}
-                        <strong>{selectedTemplate.name}</strong> permanently.
+                        {t("This action removes {{name}} permanently.", { name: selectedTemplate.name })}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -127,7 +132,7 @@ export function SelectedTemplateContent() {
                         disabled={isDeleting}
                         onClick={deleteSelectedTemplate}
                       >
-                        {isDeleting ? "Deleting..." : "Delete template"}
+                        {isDeleting ? t("Deleting...") : t("Delete template")}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -144,10 +149,10 @@ export function SelectedTemplateContent() {
             >
               <Save />
               {form.isLoading
-                ? "Saving..."
+                ? t("Saving...")
                 : isCreateMode
-                  ? "Create template"
-                  : "Save changes"}
+                  ? t("Create template")
+                  : t("Save changes")}
             </Button>
           </div>
         </SplitPageLayout.ContentHeaderActions>
