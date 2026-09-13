@@ -337,11 +337,13 @@ func main() {
 
 	// The daemon is asked to be running, not started blindly. Two things
 	// supervising one process is how you end up with two of it.
-	go ensureDaemon(supervisor, daemon, root, chosen, adopt, log)
+	// The daemon has to be this window's version — see versionGuard.
+	versions := newVersionGuard(build.Version)
+	go ensureDaemon(supervisor, daemon, root, chosen, versions, adopt, log)
 	// And then kept running. Supervision used to stop after that one call, so
 	// a daemon that crashed left the window answering every action with a
 	// failure and no way back short of relaunching — see watchDaemon.
-	go watchDaemon(realtimeCtx, supervisor, daemon, adopt, root, chosen, func(event any) {
+	go watchDaemon(realtimeCtx, supervisor, daemon, adopt, root, chosen, versions, func(event any) {
 		if emitDaemon != nil {
 			emitDaemon(event)
 		}
@@ -379,6 +381,13 @@ func localToken(resolver *env.Resolver, paths corecfg.Paths) string {
 	return strings.TrimSpace(string(raw))
 }
 
+// daemonStarter is the slice of the gateway service the window's startup
+// needs: start a daemon, and replace one from another version.
+type daemonStarter interface {
+	supervision
+	Start(ctx context.Context, in gateway.StartInput) (gateway.State, error)
+}
+
 // daemonSupervisor adapts the gateway service to the narrow slice the window's
 // bridge needs: bring the daemon back.
 type daemonSupervisor struct{ svc *gateway.Service }
@@ -400,19 +409,20 @@ func (d daemonSupervisor) Restart(ctx context.Context) error {
 // A failure here does not stop the window from opening: an interface that says
 // it cannot reach the daemon is more useful than an application that refuses to
 // start and does not say why.
-func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, root string, chosen *chosenWorkspace, adopt func(workspaceRef), log *slog.Logger) {
+func ensureDaemon(supervisor daemonStarter, client *daemonclient.Client, root string, chosen *chosenWorkspace, versions *versionGuard, adopt func(workspaceRef), log *slog.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	healthy := false
-	if state, err := supervisor.Status(ctx, gateway.StatusInput{}); err == nil && state.Healthy {
-		healthy = true
+	// Asked of the port, not of the supervisor's record. The record only knows
+	// the daemons this supervisor started, and a daemon started any other way
+	// — `aosd serve` in a terminal, `task dev`, a lost gateway.json — read as
+	// stopped: a second one was spawned beside it, died on "cannot listen",
+	// and its dead pid was recorded as the daemon.
+	if info, err := client.Health(ctx); err == nil {
+		// Serving, but perhaps from a previous install: see versionGuard.
+		versions.check(ctx, supervisor, info.Version, log)
 	} else if _, err := supervisor.Start(ctx, gateway.StartInput{}); err != nil {
 		log.Error("the daemon is not running and could not be started", "err", err)
-	} else {
-		healthy = true
-	}
-	if !healthy {
 		return
 	}
 

@@ -198,6 +198,34 @@ func TestReadyIsWhatTheSplashWaitsOn(t *testing.T) {
 	}
 }
 
+// The window compares the daemon's own version with its own: an install
+// replaces the bundle under a daemon that keeps running, and the new window
+// used to adopt the old daemon — with every bug the update fixed — without a
+// word.
+func TestHealthReportsTheDaemonsOwnVersion(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/health" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"name":"aos","status":"ok","version":"v0.15.0"}`))
+	}))
+	defer server.Close()
+
+	got, err := daemonclient.New(daemonclient.Options{BaseURL: server.URL}).Health(ctx())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Version != "v0.15.0" {
+		t.Errorf("version = %q, want the daemon's", got.Version)
+	}
+
+	down := daemonclient.New(daemonclient.Options{BaseURL: "http://127.0.0.1:1", Timeout: 2 * time.Second})
+	if _, err := down.Health(ctx()); err == nil {
+		t.Error("nothing answered and Health reported a daemon")
+	}
+}
+
 // TestATrailingSlashInTheAddressDoesNotDoubleUp.
 func TestATrailingSlashInTheAddressDoesNotDoubleUp(t *testing.T) {
 	var path string

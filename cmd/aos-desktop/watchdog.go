@@ -48,11 +48,12 @@ const daemonFailuresBeforeRestart = 3
 // coming back is how two daemons end up fighting over one port.
 func watchDaemon(
 	ctx context.Context,
-	supervisor *gateway.Service,
+	supervisor daemonStarter,
 	client *daemonclient.Client,
 	adopt func(workspaceRef),
 	root string,
 	chosen *chosenWorkspace,
+	versions *versionGuard,
 	emit func(event any),
 	log *slog.Logger,
 ) {
@@ -67,12 +68,18 @@ func watchDaemon(
 		}
 
 		probe, cancel := context.WithTimeout(ctx, 3*time.Second)
-		ready, err := client.Ready(probe)
+		info, err := client.Health(probe)
 		cancel()
 
-		if err == nil && ready {
+		if err == nil {
 			if !healthy {
-				log.Info("the daemon is answering again")
+				log.Info("the daemon is answering again", "version", info.Version)
+				// Whatever brought it back may not have been this window: a
+				// daemon started from another install is replaced first, so
+				// what is re-adopted below is the one that stays.
+				if versions.check(ctx, supervisor, info.Version, log) {
+					log.Info("replaced the daemon that came back with this window's version")
+				}
 				// The workspace, the file root and the event relay all
 				// followed the daemon that went away; a new one has none of
 				// them until it is adopted again.

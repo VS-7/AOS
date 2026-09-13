@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -311,7 +312,7 @@ func (e *apiError) asError(status int) error {
 		Status(status).
 		CTA(e.Actions...)
 	for k, v := range e.Issues {
-		err.Issue(k, v)
+		err = err.Issue(k, v)
 	}
 	return err
 }
@@ -432,6 +433,40 @@ func (c *Client) Ready(ctx context.Context) (bool, error) {
 	}
 	defer func() { _ = res.Body.Close() }()
 	return res.StatusCode == http.StatusOK, nil
+}
+
+// HealthInfo is what the daemon says about itself on /api/health.
+type HealthInfo struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Version string `json:"version"`
+}
+
+// Health reads the daemon's own account of itself — above all its version,
+// which is the running binary's and not whatever started it.
+//
+// Ready answers whether something is serving; this answers what. The window
+// needs the second: an install replaces the application bundle while the
+// daemon it started keeps running, and a new window that only asked "is it
+// up" adopted the old daemon, with every defect the update had fixed.
+func (c *Client) Health(ctx context.Context) (HealthInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/api/health", nil)
+	if err != nil {
+		return HealthInfo{}, errUnreachable(c.base, err)
+	}
+	res, err := c.http.Do(req)
+	if err != nil {
+		return HealthInfo{}, errUnreachable(c.base, err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusOK {
+		return HealthInfo{}, errUnreadable(c.base, fmt.Errorf("health answered %d", res.StatusCode))
+	}
+	var info HealthInfo
+	if err := json.NewDecoder(res.Body).Decode(&info); err != nil {
+		return HealthInfo{}, errUnreadable(c.base, err)
+	}
+	return info, nil
 }
 
 func errUnreachable(base string, cause error) error {
