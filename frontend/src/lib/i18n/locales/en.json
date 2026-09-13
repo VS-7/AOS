@@ -277,6 +277,8 @@
   "Could not create the workspace.": "Could not create the workspace.",
   "Could not install the skill for {{agent}}": "Could not install the skill for {{agent}}",
   "Could not load files for this directory.": "Could not load files for this directory.",
+  "Could not load this agent's routines.": "Could not load this agent's routines.",
+  "Could not load this agent's tasks.": "Could not load this agent's tasks.",
   "Could not save the todo.": "Could not save the todo.",
   "Country": "Country",
   "cp ../../../.env . && bun install": "cp ../../../.env . && bun install",

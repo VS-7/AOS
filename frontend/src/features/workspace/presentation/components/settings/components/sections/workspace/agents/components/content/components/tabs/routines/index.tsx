@@ -20,15 +20,26 @@ export function AgentRoutinesTab({ agent }: AgentRoutinesTabProps) {
   const navigate = useNavigate();
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
+    setLoadError(null);
 
+    // Every routine this agent has: `routines_list` filters by agent itself.
+    // This sent `limit: "200"`, a string the decoder refuses for an int, so
+    // every open of the tab was AOS_COMMAND_INVALID_INPUT — and, with the
+    // error ignored, read as "This agent does not have routines yet.".
     aos.client.routine.list
-      .query({ query: { agent: agent.id, limit: "200" } })
+      .query({ query: { agent: agent.id } })
       .then((response) => {
         if (!isMounted) return;
+        if (response.error) {
+          setLoadError(response.error.message ?? t("Could not load this agent's routines."));
+          setRoutines([]);
+          return;
+        }
         setRoutines(response.data?.routines ?? []);
       })
       .finally(() => {
@@ -48,7 +59,9 @@ export function AgentRoutinesTab({ agent }: AgentRoutinesTabProps) {
       <div className="flex items-center justify-between gap-3">
         <div className="space-y-0.5">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("Agent routines")}</p>
-          <p className="text-xs text-muted-foreground">{routines.length} total</p>
+          <p className="text-xs text-muted-foreground">
+            {t("{{count}} total", { count: routines.length })}
+          </p>
         </div>
 
         <Button type="button" size="sm" onClick={() => navigate({ to: "/routines/$id", params: { id: "new" } })}>
@@ -65,7 +78,13 @@ export function AgentRoutinesTab({ agent }: AgentRoutinesTabProps) {
         </div>
       )}
 
-      {!isLoading && routines.length === 0 && (
+      {!isLoading && loadError ? (
+        <p className="text-sm text-destructive" role="alert">
+          {loadError}
+        </p>
+      ) : null}
+
+      {!isLoading && !loadError && routines.length === 0 && (
         <AnimatedEmptyState className="border-none shadow-none py-12">
           <AnimatedEmptyState.Carousel>
             <div className="flex items-center gap-3">
