@@ -155,3 +155,23 @@ func TestDeleteLeavesACheckoutTheWorkspaceDidNotPlace(t *testing.T) {
 		t.Fatalf("removed = %v, want nothing outside the workspace's root", h.worktrees.removed)
 	}
 }
+
+// Under the root by its spelling is not enough either. A link placed there
+// that leads to somebody's own checkout reads as one of the workspace's, and
+// `git worktree remove --force` follows it and deletes the checkout it leads
+// to. Delete removes only a checkout the adapter vouches for: registered, on
+// disk, and under the root once links are resolved.
+func TestDeleteLeavesAPathUnderTheRootThatIsNotOneOfItsCheckouts(t *testing.T) {
+	h := newHarness(t)
+	task := h.create(t, CreateInput{Name: "Land the queue", Status: Todo, Worktree: true})
+	link := "/tmp/wt/" + task.ID
+	h.worktrees.existing = nil // the adapter does not vouch for it
+	h.record(t, task.ID, link)
+
+	if _, err := h.svc.Delete(ctx(), DeleteInput{ID: task.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.worktrees.removed) != 0 {
+		t.Fatalf("removed = %v, want nothing the adapter did not vouch for", h.worktrees.removed)
+	}
+}

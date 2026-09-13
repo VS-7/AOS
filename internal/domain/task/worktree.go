@@ -161,7 +161,7 @@ func (s *Service) ownCheckout(ctx context.Context, policy WorktreePolicy, path s
 	if root == "" || !filepath.IsAbs(path) || !underRoot(root, path) {
 		return false
 	}
-	return s.worktrees.Exists(ctx, path)
+	return s.worktrees.Exists(ctx, root, path)
 }
 
 // BranchNameFor builds the branch of a task from the workspace prefix and the

@@ -479,14 +479,18 @@ func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, err
 	return DeleteOutput{ID: current.ID}, nil
 }
 
-// placedHere reports whether a recorded checkout sits under the directory this
-// workspace puts its own checkouts in. Delete removes a checkout with --force,
-// and the recorded path is read back from a file anybody can edit: one that
-// names somebody's own worktree is not the task's to take with it.
+// placedHere reports whether a recorded checkout is one this workspace placed
+// and is still there. Delete removes a checkout with --force, and the recorded
+// path is read back from a file anybody can edit: one that names somebody's
+// own worktree is not the task's to take with it — and neither is a link under
+// the worktree root that leads to one, which git follows when it removes.
+//
+// A checkout that is already gone is left to git's own record of it, which
+// cutting one again at that path or on that branch forgets.
 func (s *Service) placedHere(ctx context.Context, path string) bool {
 	policy, err := s.worktreePolicy(ctx)
-	if err != nil || strings.TrimSpace(policy.Root) == "" || !underRoot(policy.Root, path) {
-		s.log.Warn("a deleted task's recorded checkout is not under the workspace's worktree root, so it was left alone",
+	if err != nil || !s.ownCheckout(ctx, policy, path) {
+		s.log.Warn("a deleted task's recorded checkout is not one of this workspace's checkouts, so it was left alone",
 			"path", path, "worktreeRoot", policy.Root)
 		return false
 	}

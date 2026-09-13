@@ -91,7 +91,7 @@ func (w *worktrees) List(context.Context) ([]string, error) {
 	return append([]string(nil), w.existing...), nil
 }
 
-func (w *worktrees) Exists(_ context.Context, path string) bool {
+func (w *worktrees) Exists(_ context.Context, _, path string) bool {
 	for _, p := range w.existing {
 		if p == path {
 			return true

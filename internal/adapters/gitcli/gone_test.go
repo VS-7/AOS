@@ -19,32 +19,42 @@ import (
 func TestOnlyACheckoutOfThisRepositoryThatIsOnDiskExists(t *testing.T) {
 	repo := repository(t)
 	trees := gitcli.NewWorktrees(gitcli.New(), repo)
-	where := filepath.Join(t.TempDir(), "wt", "t-1")
+	// t.TempDir is itself reached through a link on macOS (/var is
+	// /private/var), which is how a real root often arrives: a checkout under it
+	// is still under it.
+	root := filepath.Join(t.TempDir(), "wt")
+	where := filepath.Join(root, "t-1")
 	if _, err := trees.Create(ctx(), task.WorktreeSpec{
 		TaskID: "t-1", Branch: "aos/fix-it", Base: "main", Path: where,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	if !trees.Exists(ctx(), where) {
+	if !trees.Exists(ctx(), root, where) {
 		t.Fatal("a checkout that is there does not exist")
 	}
-	plain := t.TempDir()
-	if trees.Exists(ctx(), plain) {
+	plain := filepath.Join(root, "plain")
+	if err := os.MkdirAll(plain, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if trees.Exists(ctx(), root, plain) {
 		t.Error("a plain directory counts as a checkout")
 	}
-	if trees.Exists(ctx(), repo) {
+	if trees.Exists(ctx(), filepath.Dir(repo), repo) {
 		t.Error("the main working tree counts as a task's checkout")
 	}
 	other := repository(t)
-	if trees.Exists(ctx(), other) {
+	if trees.Exists(ctx(), filepath.Dir(other), other) {
 		t.Error("another repository counts as a checkout of this one")
+	}
+	if trees.Exists(ctx(), filepath.Join(t.TempDir(), "elsewhere"), where) {
+		t.Error("a checkout counts under a root it is not in")
 	}
 
 	if err := os.RemoveAll(where); err != nil {
 		t.Fatal(err)
 	}
-	if trees.Exists(ctx(), where) {
+	if trees.Exists(ctx(), root, where) {
 		t.Error("a checkout deleted from disk still exists")
 	}
 	// Nor is it a checkout to count against the limit or to offer the prune.
@@ -54,6 +64,32 @@ func TestOnlyACheckoutOfThisRepositoryThatIsOnDiskExists(t *testing.T) {
 	}
 	if len(listed) != 0 {
 		t.Errorf("list reports %v, a checkout that is not on disk", listed)
+	}
+}
+
+// A recorded path is judged where it leads, not by how it is spelled: a link
+// placed under the worktree root that leads to a checkout somewhere else would
+// otherwise pass as one of the workspace's own, and the sandbox — which
+// resolves links too — would be rooted wherever it points.
+func TestACheckoutReachedThroughALinkUnderTheRootIsNotUnderIt(t *testing.T) {
+	repo := repository(t)
+	trees := gitcli.NewWorktrees(gitcli.New(), repo)
+	mine := filepath.Join(t.TempDir(), "mine")
+	git(t, repo, "worktree", "add", "-b", "mine", mine)
+	root := filepath.Join(t.TempDir(), "wt")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "t-1")
+	if err := os.Symlink(mine, link); err != nil {
+		t.Fatal(err)
+	}
+
+	if trees.Exists(ctx(), root, link) {
+		t.Fatal("a link under the worktree root counts as a checkout placed there")
+	}
+	if !trees.Exists(ctx(), filepath.Dir(mine), mine) {
+		t.Fatal("the checkout the link leads to is not one under its own directory")
 	}
 }
 

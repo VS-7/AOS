@@ -25,7 +25,6 @@ import (
 	"github.com/OWNER/aos/internal/domain/agent"
 	"github.com/OWNER/aos/internal/domain/chat"
 	"github.com/OWNER/aos/internal/domain/event"
-	"github.com/OWNER/aos/internal/domain/task"
 	"github.com/OWNER/aos/internal/runtime/agentloop"
 	"github.com/OWNER/aos/internal/runtime/execguard"
 	"github.com/OWNER/aos/internal/runtime/prompt"
@@ -56,7 +55,11 @@ type Chats interface {
 // Tasks is what a turn needs from the task aggregate: where a task's isolated
 // checkout is, when the conversation belongs to one.
 type Tasks interface {
-	Get(ctx context.Context, in task.GetInput) (*task.View, error)
+	// Checkout is the checkout a turn on the task is confined to, or "" when
+	// it has none that can be used. The task service checks the recorded path
+	// before answering; the runner never reads it off the task itself, because
+	// TASK.md is a workspace file any workspace-rooted turn can rewrite.
+	Checkout(ctx context.Context, id string) (string, error)
 }
 
 // Models resolves an agent to a provider, so the composition root owns the
@@ -509,10 +512,14 @@ func (r *Runner) observe(ctx context.Context, worker *agent.Agent, sessionID, wo
 // The checkout was recorded and never used: tasks_branch, the task's own
 // documentation and the agent's instructions all say the sandbox root becomes
 // that path, and every turn was confined to the workspace root regardless — so
-// an agent "working on its own branch" edited the main working tree. A task
-// that no longer exists has no checkout to confine to, and runs where any
-// other turn does; a checkout that is recorded but gone fails the turn rather
-// than quietly handing the agent the main tree instead.
+// an agent "working on its own branch" edited the main working tree.
+//
+// The root is the checkout the task service vouches for, not the path TASK.md
+// records: the file sits in the workspace, and a recorded path taken as
+// written let an edited one root the next task turn in the installation's own
+// directory, beside its credentials. A task that no longer exists, or whose
+// checkout is gone or not one of this workspace's, runs where any other turn
+// does — which is no more than the turn that could have edited the file.
 func (r *Runner) sandboxFor(ctx context.Context, a *agent.Agent, taskID string) (*sandbox.Sandbox, error) {
 	opts := sandbox.Options{
 		WorkspacePath: r.deps.WorkspaceRoot,
@@ -521,13 +528,13 @@ func (r *Runner) sandboxFor(ctx context.Context, a *agent.Agent, taskID string) 
 		Exec:          sandbox.DefaultExecPolicy(),
 	}
 	if taskID != "" && r.deps.Tasks != nil {
-		found, err := r.deps.Tasks.Get(ctx, task.GetInput{ID: taskID})
+		checkout, err := r.deps.Tasks.Checkout(ctx, taskID)
 		switch {
 		case errors.Is(err, apperr.ErrNotFound):
 		case err != nil:
 			return nil, err
-		case found != nil:
-			opts.WorktreePath = found.Worktree.Path
+		default:
+			opts.WorktreePath = checkout
 		}
 	}
 	if a.Sandbox != nil {

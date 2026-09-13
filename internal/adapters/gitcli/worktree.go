@@ -126,9 +126,16 @@ func (w *Worktrees) List(ctx context.Context) ([]string, error) {
 }
 
 // Exists reports whether path is one of this repository's checkouts, other
-// than the main working tree, and is on disk.
-func (w *Worktrees) Exists(ctx context.Context, path string) bool {
+// than the main working tree, is on disk, and sits under root.
+//
+// Both are compared once links are resolved, the way git reports the checkout
+// and the way the sandbox roots itself: a link placed under root that leads to
+// a checkout somewhere else is where it leads, not where it is spelled.
+func (w *Worktrees) Exists(ctx context.Context, root, path string) bool {
 	want := resolve(path)
+	if !inside(resolve(root), want) {
+		return false
+	}
 	listed, err := w.listed(ctx)
 	if err != nil {
 		return false
@@ -197,6 +204,16 @@ func (w *Worktrees) listed(ctx context.Context) ([]worktreeEntry, error) {
 		}
 	}
 	return entries, nil
+}
+
+// inside reports whether path is strictly below dir, as a relative path rather
+// than a string prefix, so "/w/trees-of-mine" is not inside "/w/trees".
+func inside(dir, path string) bool {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil {
+		return false
+	}
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func isDir(path string) bool {

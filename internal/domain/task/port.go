@@ -49,11 +49,12 @@ type Worktrees interface {
 	// List reports the checkouts that exist, so the prune can see what it has.
 	List(ctx context.Context) ([]string, error)
 
-	// Exists reports whether path is one of this repository's checkouts and is
-	// still on disk. A task's recorded path is read back from a file that is
-	// copied, restored and edited, and it becomes a sandbox root: it is asked
-	// about rather than believed.
-	Exists(ctx context.Context, path string) bool
+	// Exists reports whether path is one of this repository's checkouts, is
+	// still on disk, and — once links are resolved — sits under root. A task's
+	// recorded path is read back from a file that is copied, restored and
+	// edited, and it becomes a sandbox root: it is asked about rather than
+	// believed.
+	Exists(ctx context.Context, root, path string) bool
 
 	// Source reports what a checkout for spec would be cut from, before
 	// anything is created or pruned — so a workspace with nothing to cut from
