@@ -9,12 +9,41 @@
  * the two drift without anything failing.
  */
 
-/** Which version this installation runs, and against which channel. */
+/**
+ * What a check found, as one word — `internal/domain/update`'s CheckState.
+ *
+ * `upToDate` alone could not say it: "this build has no release feed" and
+ * "a development build cannot be compared with a release" both used to come
+ * back as `upToDate: true`, and this screen answered them with a green "You
+ * are on the newest release." while a newer release was published.
+ */
+export type CheckState = "up-to-date" | "available" | "not-configured" | "developer-build";
+
+/**
+ * How a newer release reaches this installation.
+ *
+ * `here`: Download and Install work from this screen. `terminal`: the
+ * binaries can be replaced, but the daemon answering this screen cannot
+ * restart itself onto them — `command` installs the staged release from a
+ * terminal. `reinstall`: a signed application bundle, installed whole.
+ */
+export interface UpdateInstall {
+  method: "here" | "terminal" | "reinstall";
+  command?: string;
+}
+
+/** Which version this installation runs, and what the last check found. */
 export interface UpdateStatus {
   current: string;
   channel: string;
+  /** False when this build has no release feed at all. */
+  configured?: boolean;
+  install?: UpdateInstall;
   latestKnown?: string;
   checkedAt?: string;
+  lastState?: CheckState;
+  /** A verified release waiting to be installed. */
+  staged?: Staged;
 }
 
 /**
@@ -34,6 +63,8 @@ export interface Release {
   publishedAt: string;
   assets: unknown;
   notes?: string;
+  /** Where a person downloads this release by hand. */
+  pageUrl?: string;
 }
 
 /** What `update_download` staged, handed straight back to `update_apply`. */
@@ -45,10 +76,14 @@ export interface Staged {
 
 /** What the release channel had to say. */
 export interface CheckResult {
+  state: CheckState;
   upToDate: boolean;
   current: string;
   channel: string;
   release?: Release;
+  /** Set when `state` is `available`. */
+  install?: UpdateInstall;
+  checkedAt?: string;
 }
 
 /** Where the daemon is listening, and as which process. */
