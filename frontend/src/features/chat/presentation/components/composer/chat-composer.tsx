@@ -20,6 +20,18 @@ import {
 import { ChatProcessingIndicator } from "../chat-processing-indicator";
 import { t } from "@/lib/i18n";
 
+/**
+ * Whether a file attached to a message reaches the agent.
+ *
+ * It does not: `chats_send` takes text and nothing else (see `chat.send` in
+ * lib/command-map.ts), so the composer used to accept uploads, drops and
+ * voice notes, show the chip, and discard the file on send — warning only
+ * after the fact. Until the daemon can carry one, the composer does not offer
+ * what it cannot deliver: no upload entry, no microphone, and a drop or paste
+ * is refused on the spot with the reason.
+ */
+const ATTACHMENTS_REACH_THE_AGENT = false;
+
 /** What the empty composer invites, for the surface it is on. */
 function composerPlaceholder({
   isDirectMessage,
@@ -77,13 +89,26 @@ function ChatComposerSurface(props: ChatComposerProps) {
         <PopoverAnchor asChild>
           <div className="pointer-events-auto px-6">
             <PromptInput
-              accept="image/*,audio/*,video/*,application/pdf,text/plain,.md,.txt,.json,.csv,.ts,.tsx,.js,.jsx,.yml,.yaml"
-            className="overflow-hidden rounded-md border bg-popover"
+              accept={
+                ATTACHMENTS_REACH_THE_AGENT
+                  ? "image/*,audio/*,video/*,application/pdf,text/plain,.md,.txt,.json,.csv,.ts,.tsx,.js,.jsx,.yml,.yaml"
+                  : undefined
+              }
+              className="overflow-hidden rounded-md border bg-popover"
               globalDrop
               inputGroupClassName="flex-col gap-0 border-0 bg-transparent shadow-none"
-              maxFiles={12}
+              // Zero while attachments cannot be delivered: every way a file
+              // arrives (drop, paste, the native drop) goes through the same
+              // capacity check, and a refused one says why right then.
+              maxFiles={ATTACHMENTS_REACH_THE_AGENT ? 12 : 0}
               multiple
-              onError={(error) => toast.error(error.message)}
+              onError={(error) =>
+                toast.error(
+                  error.code === "max_files" && !ATTACHMENTS_REACH_THE_AGENT
+                    ? t("Attachments can't be sent to an agent yet. Only text is delivered.")
+                    : error.message,
+                )
+              }
               onSubmit={composer.handleSubmit}
             >
               {hasAttachments ? <ChatComposerHeader /> : null}
@@ -114,7 +139,9 @@ function ChatComposerSurface(props: ChatComposerProps) {
                 isStoppingChat={composer.isStoppingChat}
                 onOpenCommand={composer.openCommand}
                 onStop={composer.handleStop}
-                onToggleRecording={composer.toggleRecording}
+                onToggleRecording={
+                  ATTACHMENTS_REACH_THE_AGENT ? composer.toggleRecording : undefined
+                }
               />
             </PromptInput>
           </div>
@@ -141,7 +168,9 @@ function ChatComposerSurface(props: ChatComposerProps) {
             onMentionSelect={composer.handleMentionSelect}
             onQueryChange={composer.setCommandQuery}
             onReferenceSelect={composer.handleReferenceSelect}
-            onUploadSelect={composer.handleUploadSelect}
+            onUploadSelect={
+              ATTACHMENTS_REACH_THE_AGENT ? composer.handleUploadSelect : undefined
+            }
             selectableFiles={composer.selectableFiles}
           />
         )}
