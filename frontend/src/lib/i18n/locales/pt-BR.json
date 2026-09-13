@@ -1014,6 +1014,7 @@
   "The switch is visible now to establish the workflow, but it remains disabled until the GitHub automation is wired.": "O controle está visível para estabelecer o fluxo, mas continua desativado até a automação do GitHub ser ligada.",
   "The update could not be applied.": "Não foi possível aplicar a atualização.",
   "The variables this template declares, as JSON": "As variáveis que este template declara, em JSON",
+  "The workspace needs a name.": "O workspace precisa de um nome.",
   "The workspace was created but the daemon did not say which one.": "O workspace foi criado, mas o daemon não disse qual.",
   "Theme": "Tema",
   "Theme mode": "Modo do tema",

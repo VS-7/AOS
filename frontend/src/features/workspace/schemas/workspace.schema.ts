@@ -276,6 +276,13 @@ export const WorkspaceOrchestratorSchema = Schema.object({
 // ============================================================================
 
 /**
+ * The message a blank workspace name is refused with. A catalogue key, not
+ * translated here: a schema is built once, at import, before the locale is
+ * known — the field renders it through `t()`.
+ */
+export const WORKSPACE_NAME_REQUIRED = "The workspace needs a name.";
+
+/**
  * Complete AOS workspace — master shape for persistence and derived DTOs.
  *
  * @example
@@ -446,7 +453,21 @@ export const WorkspaceUpdateInputSchema = WorkspaceSchema.omit({
   createdAt: true,
   updatedAt: true,
   archived: true,
-}).partial();
+})
+  .partial()
+  // A patch may leave the name out; it may not blank it. The profile form
+  // autosaves whatever this accepts, and an empty name saved "updated
+  // successfully" and left the switcher reading "No Workspace". The daemon
+  // refuses it too (WORKSPACE_INVALID_VALUE); this is what keeps the form from
+  // sending it, and what puts the reason under the field.
+  .extend({
+    name: z
+      .string()
+      .trim()
+      .min(1, WORKSPACE_NAME_REQUIRED)
+      .optional()
+      .describe('The name of the workspace. Example: "Project Alpha".'),
+  });
 
 // ============================================================================
 // Add Member

@@ -151,13 +151,21 @@ export function WorkspaceProfileSection() {
             <FormField
               control={form.control}
               name="name"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                   <div className="flex-1 space-y-0.5">
                     <FormLabel>{t("Name")}</FormLabel>
                     <FormDescription>
                       {t("How this workspace is named.")}
                     </FormDescription>
+                    {/* The reason the autosave did not happen. Rendered here
+                        rather than through FormMessage, which shows the
+                        schema's message untranslated. */}
+                    {fieldState.error ? (
+                      <p role="alert" className="text-sm text-destructive">
+                        {t("The workspace needs a name.")}
+                      </p>
+                    ) : null}
                   </div>
                   <FormControl>
                     <Input

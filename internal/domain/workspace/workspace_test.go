@@ -669,3 +669,50 @@ func TestRegisterPublishesTheWholeGroup(t *testing.T) {
 		}
 	}
 }
+
+// Update applied the patch and saved it with no check at all. Clearing the name
+// in Settings autosaved "Workspace profile updated successfully!" and the
+// switcher then read "No Workspace"; a direct call stored a name of spaces, a
+// colour of "notacolor" and a worktree limit of zero.
+func TestUpdateRefusesAWorkspaceItCouldNotShow(t *testing.T) {
+	for name, set := range map[string]map[string]any{
+		"an empty name":        {"name": ""},
+		"a name of spaces":     {"name": "   "},
+		"a colour that is not": {"color": "notacolor"},
+		"no worktrees at all":  {"worktrees.worktreeLimit": 0},
+		"too many worktrees":   {"worktrees.worktreeLimit": 51},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t)
+			h.create(t, workspace.CreateInput{Name: "Project Alpha", Path: repoRoot})
+
+			_, err := h.svc.Update(ctx(), workspace.UpdateInput{Workspace: "project-alpha", Set: set})
+			app, ok := apperr.As(err)
+			if !ok || app.Code != "AOS_WORKSPACE_INVALID_VALUE" || app.HTTPStatus != apperr.StatusBadRequest || len(app.Actions) == 0 {
+				t.Fatalf("err = %v, want AOS_WORKSPACE_INVALID_VALUE with a next step", err)
+			}
+			stored, err := h.svc.Get(ctx(), workspace.GetInput{Workspace: "project-alpha"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stored.Name != "Project Alpha" || stored.Color != workspace.DefaultColor || stored.Worktrees.WorktreeLimit != workspace.DefaultWorktrees().WorktreeLimit {
+				t.Errorf("the refused patch was stored: %+v", stored)
+			}
+		})
+	}
+}
+
+// A name is kept as the person means it, without the spaces around it, and a
+// record that predates a rule is not refused an unrelated change.
+func TestUpdateTrimsTheNameAndJudgesOnlyWhatChanged(t *testing.T) {
+	h := newHarness(t)
+	h.create(t, workspace.CreateInput{Name: "Project Alpha", Path: repoRoot})
+
+	got, err := h.svc.Update(ctx(), workspace.UpdateInput{Workspace: "project-alpha", Set: map[string]any{"name": "  Project Beta  ", "color": "#5ed296"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "Project Beta" || got.Color != "#5ed296" {
+		t.Fatalf("update = %q / %q", got.Name, got.Color)
+	}
+}

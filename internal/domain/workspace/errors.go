@@ -115,6 +115,20 @@ func errUnknownField(path string) error {
 		})
 }
 
+func errInvalidValue(field string, value any, want string, example map[string]any) error {
+	return apperr.New("WORKSPACE_INVALID_VALUE").
+		Causer("workspace.Service.Update").
+		Msgf("%s cannot be %v: it takes %s", field, value, want).
+		Issue("field", field).
+		Issue("value", value).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{
+			Label: "set " + field + " to " + want,
+			Tool:  "workspace_update",
+			Input: map[string]any{"set": example},
+		})
+}
+
 func errAccessDenied(workspaceID, userID string) error {
 	return apperr.New("WORKSPACE_ACCESS_DENIED").
 		Causer("workspace.Service.AuthorizeWorkspace").

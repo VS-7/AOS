@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -212,10 +213,42 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Workspace, error
 	next.CreatedAt = current.CreatedAt
 	next.UpdatedAt = s.clock.Now()
 
+	if err := validateChanges(*current, &next); err != nil {
+		return nil, err
+	}
+
 	if err := s.store.Save(ctx, &next); err != nil {
 		return nil, errStoreFailed("written", err)
 	}
 	return &next, nil
+}
+
+// hexColour is the accent a workspace is drawn with: #rgb, #rrggbb or
+// #rrggbbaa.
+var hexColour = regexp.MustCompile(`^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$`)
+
+// validateChanges refuses a patch that leaves the workspace unusable.
+//
+// Create validates its input and Update validated nothing: clearing the name
+// in Settings autosaved, and the switcher then showed "No Workspace" as if
+// none were selected; a colour of "notacolor" and a worktree limit of zero were
+// stored as sent. Only what the patch changed is judged, so a record written
+// before a rule existed is not refused an unrelated edit.
+func validateChanges(before Workspace, next *Workspace) error {
+	if next.Name != before.Name {
+		next.Name = strings.TrimSpace(next.Name)
+		if next.Name == "" || slug.Generate(next.Name) == "" {
+			return errInvalidValue("name", next.Name, "a name with at least one letter or digit", map[string]any{"name": before.Name})
+		}
+	}
+	// Empty is allowed: the colour is optional, and none means the default.
+	if next.Color != before.Color && next.Color != "" && !hexColour.MatchString(next.Color) {
+		return errInvalidValue("color", next.Color, "a hex colour such as "+DefaultColor, map[string]any{"color": DefaultColor})
+	}
+	if limit := next.Worktrees.WorktreeLimit; limit != before.Worktrees.WorktreeLimit && (limit < 1 || limit > 50) {
+		return errInvalidValue("worktrees.worktreeLimit", limit, "a number of worktrees between 1 and 50", map[string]any{"worktrees.worktreeLimit": DefaultWorktrees().WorktreeLimit})
+	}
+	return nil
 }
 
 // Delete unregisters a workspace.
