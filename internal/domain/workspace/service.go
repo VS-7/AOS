@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -247,6 +248,37 @@ func validateChanges(before Workspace, next *Workspace) error {
 	}
 	if limit := next.Worktrees.WorktreeLimit; limit != before.Worktrees.WorktreeLimit && (limit < 1 || limit > 50) {
 		return errInvalidValue("worktrees.worktreeLimit", limit, "a number of worktrees between 1 and 50", map[string]any{"worktrees.worktreeLimit": DefaultWorktrees().WorktreeLimit})
+	}
+	if !slices.Equal(next.Tasks, before.Tasks) {
+		return validateTaskTypes(next.Tasks)
+	}
+	return nil
+}
+
+// validateTaskTypes refuses a taxonomy a task could not be filed under.
+//
+// A task names its type by id, and that id is what selects the instructions
+// injected into its prompt: a type with no id cannot be named, one with no
+// label cannot be shown, and two sharing an id make every task of that id
+// ambiguous. Spaces around either are trimmed rather than refused — they are
+// never part of what the person meant.
+func validateTaskTypes(tasks []TaskType) error {
+	if len(tasks) == 0 {
+		return errInvalidTaskType(-1, "tasks", "", "at least one task type")
+	}
+	seen := make(map[string]bool, len(tasks))
+	for i := range tasks {
+		tasks[i].ID = strings.TrimSpace(tasks[i].ID)
+		tasks[i].Label = strings.TrimSpace(tasks[i].Label)
+		switch {
+		case tasks[i].ID == "":
+			return errInvalidTaskType(i, "id", tasks[i].Label, "an id, such as \"bug\"")
+		case tasks[i].Label == "":
+			return errInvalidTaskType(i, "label", tasks[i].ID, "a label, such as \"Bug\"")
+		case seen[tasks[i].ID]:
+			return errInvalidTaskType(i, "id", tasks[i].ID, "an id no other task type already uses")
+		}
+		seen[tasks[i].ID] = true
 	}
 	return nil
 }
