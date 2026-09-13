@@ -133,3 +133,24 @@ export function offerLine(offer: Offer): string {
         : t("Nothing is installed until you download it and the signature checks out.");
   }
 }
+
+/**
+ * The release's page, when it is a web page: https, or http on this machine
+ * (a feed served locally). Anything else is null.
+ *
+ * The address comes from the release manifest, which is not signed, and it is
+ * handed to the operating system's browser. The daemon already drops a page
+ * that is not a web page; this screen checks again rather than trust whatever
+ * answered it.
+ */
+export function releasePage(release: Release): string | null {
+  let url: URL;
+  try {
+    url = new URL(release.pageUrl ?? "");
+  } catch {
+    return null;
+  }
+  if (url.protocol === "https:") return url.href;
+  const loopback = url.hostname === "localhost" || url.hostname === "[::1]" || /^127\./.test(url.hostname);
+  return url.protocol === "http:" && loopback ? url.href : null;
+}

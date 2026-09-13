@@ -8,6 +8,7 @@ import {
   offerLine,
   offerOf,
   refusalOf,
+  releasePage,
   statusLine,
 } from "./updates.helper";
 
@@ -122,5 +123,24 @@ describe("an offered release", () => {
     expect(offerLine(offer("terminal", true))).toContain("from a terminal");
     expect(offerLine(offer("terminal", false))).toContain("Nothing is installed");
     expect(offerLine(offer("here", true))).toContain("Installing restarts the daemon");
+  });
+});
+
+// The manifest is not signed, and the page is opened in the person's browser.
+// The daemon drops a page that is not a web page; the screen does not take
+// that on trust from whatever answered it.
+describe("a release's page", () => {
+  it("is opened only when it is a web page", () => {
+    expect(releasePage({ ...release, pageUrl: "https://github.com/VS-7/AOS/releases/tag/v0.16.0" })).toBe(
+      "https://github.com/VS-7/AOS/releases/tag/v0.16.0",
+    );
+    expect(releasePage({ ...release, pageUrl: "http://127.0.0.1:7498/releases" })).toBe("http://127.0.0.1:7498/releases");
+    expect(releasePage({ ...release, pageUrl: "http://localhost/releases" })).toBe("http://localhost/releases");
+  });
+
+  it("is nothing when it is anything else", () => {
+    for (const pageUrl of ["file:///etc/passwd", "javascript:alert(1)", "http://example.com/x", "not a url", "", undefined]) {
+      expect(releasePage({ ...release, pageUrl }), String(pageUrl)).toBeNull();
+    }
   });
 });

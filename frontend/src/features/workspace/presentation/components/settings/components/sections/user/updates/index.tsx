@@ -31,6 +31,7 @@ import {
   offerLine,
   offerOf,
   refusalOf,
+  releasePage,
   statusLine,
 } from "./updates.helper";
 
@@ -123,6 +124,7 @@ function UpdatesPanel(): React.JSX.Element {
   const busy = isChecking || isDownloading || isApplying;
   const answer = checkLine(check, status);
   const offer = offerOf(check, downloaded, status);
+  const page = offer ? releasePage(offer.release) : null;
   const waiting = !check && status?.staged ? status.staged : null;
 
   return (
@@ -207,13 +209,8 @@ function UpdatesPanel(): React.JSX.Element {
 
           <FormSectionFooter className="flex justify-end gap-2">
             {offer.install.method === "reinstall" ? (
-              offer.release.pageUrl ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => void openExternal(offer.release.pageUrl!)}
-                >
+              page ? (
+                <Button type="button" size="sm" variant="secondary" onClick={() => void openExternal(page)}>
                   {t("Open the release page")}
                 </Button>
               ) : null
