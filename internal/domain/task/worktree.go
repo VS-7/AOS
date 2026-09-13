@@ -39,7 +39,7 @@ func (s *Service) Branch(ctx context.Context, in BranchInput) (*Worktree, error)
 	// bring a lost one back, and the task's conversation had no way out.
 	recorded := current.Worktree.Path
 	if recorded != "" {
-		if s.ownCheckout(ctx, policy, recorded) {
+		if s.ownCheckout(ctx, policy, current.ID, recorded) {
 			return &current.Worktree, nil
 		}
 		s.log.Warn("a task's recorded checkout is not there; cutting it again",
@@ -128,10 +128,10 @@ func (s *Service) Branch(ctx context.Context, in BranchInput) (*Worktree, error)
 //
 // The recorded path is read back from TASK.md, which lives in a workspace that
 // is versioned, copied and edited, and it becomes a sandbox root. So it counts
-// only when it is a checkout this installation placed under its own worktree
-// root and it is still there. A path edited to point anywhere else used to
-// become the root as written, and a checkout that had gone failed every turn
-// in the task's conversation for good.
+// only when it is the checkout this installation placed for this task and it
+// is still there. A path edited to point anywhere else used to become the root
+// as written, and a checkout that had gone failed every turn in the task's
+// conversation for good.
 func (s *Service) Checkout(ctx context.Context, id string) (string, error) {
 	current, err := s.load(ctx, id)
 	if err != nil {
@@ -145,7 +145,7 @@ func (s *Service) Checkout(ctx context.Context, id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if !s.ownCheckout(ctx, policy, recorded) {
+	if !s.ownCheckout(ctx, policy, current.ID, recorded) {
 		s.log.Warn("a task's recorded checkout is not one of this workspace's; its turn runs in the workspace",
 			"task", current.ID, "path", recorded, "worktreeRoot", policy.Root)
 		return "", nil
@@ -153,15 +153,26 @@ func (s *Service) Checkout(ctx context.Context, id string) (string, error) {
 	return recorded, nil
 }
 
-// ownCheckout reports whether a recorded path is a checkout this workspace
-// placed — under its worktree root, where nothing else is put — and git still
-// has it on disk.
-func (s *Service) ownCheckout(ctx context.Context, policy WorktreePolicy, path string) bool {
+// ownCheckout reports whether a recorded path is the checkout this workspace
+// placed for the task — the one place Branch puts it, the task's id under the
+// worktree root — and git still has it on disk.
+//
+// Under the root is not enough. Every task's checkout is under it, and TASK.md
+// is a file any agent that can write in the workspace can edit: a task given
+// another task's checkout took it as its own, rooted its turns in that task's
+// branch, and Delete removed it with --force, uncommitted work and all.
+func (s *Service) ownCheckout(ctx context.Context, policy WorktreePolicy, taskID, path string) bool {
+	return checkoutOf(policy, taskID) == filepath.Clean(path) && s.worktrees.Exists(ctx, policy.Root, path)
+}
+
+// checkoutOf is where Branch places a task's checkout, or "" when the
+// workspace says nowhere.
+func checkoutOf(policy WorktreePolicy, taskID string) string {
 	root := strings.TrimSpace(policy.Root)
-	if root == "" || !filepath.IsAbs(path) || !underRoot(root, path) {
-		return false
+	if root == "" || !filepath.IsAbs(root) || taskID == "" || !filepath.IsLocal(taskID) || filepath.Base(taskID) != taskID {
+		return ""
 	}
-	return s.worktrees.Exists(ctx, root, path)
+	return filepath.Join(root, taskID)
 }
 
 // BranchNameFor builds the branch of a task from the workspace prefix and the
@@ -217,10 +228,19 @@ func (s *Service) pruneToLimit(ctx context.Context, policy WorktreePolicy) error
 	if err != nil {
 		return errReadFailed("pruneToLimit", err)
 	}
-	held := map[string]*Task{}
+	// A checkout belongs to the task whose id it is named after, which is
+	// where Branch put it — not to whichever task records its path. A
+	// finished task whose TASK.md was edited to name an unfinished task's
+	// checkout made that checkout look like finished work, and it was
+	// pruned out from under the task still working in it.
+	byID := map[string]*Task{}
 	for i := range all {
-		if all[i].Worktree.Path != "" {
-			held[all[i].Worktree.Path] = &all[i]
+		byID[all[i].ID] = &all[i]
+	}
+	held := map[string]*Task{}
+	for _, path := range existing {
+		if owner, ok := byID[filepath.Base(path)]; ok && filepath.Dir(path) == filepath.Clean(root) {
+			held[path] = owner
 		}
 	}
 
@@ -264,7 +284,9 @@ func (s *Service) pruneToLimit(ctx context.Context, policy WorktreePolicy) error
 			continue
 		}
 		need--
-		if c.task == nil {
+		// Only a task recording its own checkout loses the record: one that
+		// names some other path was never pointing at what was removed.
+		if c.task == nil || filepath.Clean(c.task.Worktree.Path) != checkoutOf(policy, c.task.ID) {
 			continue
 		}
 		c.task.Worktree.Path = ""

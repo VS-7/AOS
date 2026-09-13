@@ -93,6 +93,33 @@ func TestACheckoutReachedThroughALinkUnderTheRootIsNotUnderIt(t *testing.T) {
 	}
 }
 
+// Nor is a link under the root that leads to another checkout under the same
+// root: the task named by the link would be handed the checkout of the task
+// named by its target, and `git worktree remove --force` on the link removes
+// the target.
+func TestALinkToAnotherCheckoutUnderTheRootIsNotACheckout(t *testing.T) {
+	repo := repository(t)
+	trees := gitcli.NewWorktrees(gitcli.New(), repo)
+	root := filepath.Join(t.TempDir(), "wt")
+	theirs := filepath.Join(root, "t-2")
+	if _, err := trees.Create(ctx(), task.WorktreeSpec{
+		TaskID: "t-2", Branch: "aos/theirs", Base: "main", Path: theirs,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "t-1")
+	if err := os.Symlink(theirs, link); err != nil {
+		t.Fatal(err)
+	}
+
+	if trees.Exists(ctx(), root, link) {
+		t.Fatal("a link to another checkout under the root counts as a checkout at the link")
+	}
+	if !trees.Exists(ctx(), root, theirs) {
+		t.Fatal("the checkout the link leads to no longer exists at its own path")
+	}
+}
+
 // Git refuses to add a checkout where it still has a record of one, and refuses
 // to check out a branch it believes is checked out somewhere that is gone. Both
 // are what cutting a lost checkout again runs into.

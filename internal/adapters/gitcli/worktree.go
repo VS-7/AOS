@@ -130,10 +130,18 @@ func (w *Worktrees) List(ctx context.Context) ([]string, error) {
 //
 // Both are compared once links are resolved, the way git reports the checkout
 // and the way the sandbox roots itself: a link placed under root that leads to
-// a checkout somewhere else is where it leads, not where it is spelled.
+// a checkout somewhere else is where it leads, not where it is spelled. And a
+// link below root is not the checkout it leads to even when that checkout is
+// under root too — root/t-1 leading to root/t-2 would hand task t-1 the
+// checkout of t-2 — so the path has to be the checkout where it is spelled,
+// below root, as well as where it leads.
 func (w *Worktrees) Exists(ctx context.Context, root, path string) bool {
 	want := resolve(path)
-	if !inside(resolve(root), want) {
+	realRoot := resolve(root)
+	if !inside(realRoot, want) {
+		return false
+	}
+	if rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path)); err != nil || filepath.Join(realRoot, rel) != want {
 		return false
 	}
 	listed, err := w.listed(ctx)

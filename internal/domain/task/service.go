@@ -463,7 +463,7 @@ func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, err
 	if err != nil {
 		return DeleteOutput{}, err
 	}
-	if current.Worktree.Path != "" && s.worktrees != nil && s.placedHere(ctx, current.Worktree.Path) {
+	if current.Worktree.Path != "" && s.worktrees != nil && s.placedHere(ctx, current.ID, current.Worktree.Path) {
 		if err := s.worktrees.Remove(ctx, current.Worktree.Path); err != nil {
 			// The checkout is outside the task directory, so removing the task
 			// cannot take it with it. Reported rather than hidden: a leftover
@@ -479,17 +479,18 @@ func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, err
 	return DeleteOutput{ID: current.ID}, nil
 }
 
-// placedHere reports whether a recorded checkout is one this workspace placed
-// and is still there. Delete removes a checkout with --force, and the recorded
-// path is read back from a file anybody can edit: one that names somebody's
-// own worktree is not the task's to take with it — and neither is a link under
-// the worktree root that leads to one, which git follows when it removes.
+// placedHere reports whether a recorded checkout is the one this workspace
+// placed for the task and is still there. Delete removes a checkout with
+// --force, and the recorded path is read back from a file anybody can edit:
+// one that names somebody's own worktree, or another task's checkout, is not
+// the task's to take with it — and neither is a link under the worktree root
+// that leads to one, which git follows when it removes.
 //
 // A checkout that is already gone is left to git's own record of it, which
 // cutting one again at that path or on that branch forgets.
-func (s *Service) placedHere(ctx context.Context, path string) bool {
+func (s *Service) placedHere(ctx context.Context, taskID, path string) bool {
 	policy, err := s.worktreePolicy(ctx)
-	if err != nil || !s.ownCheckout(ctx, policy, path) {
+	if err != nil || !s.ownCheckout(ctx, policy, taskID, path) {
 		s.log.Warn("a deleted task's recorded checkout is not one of this workspace's checkouts, so it was left alone",
 			"path", path, "worktreeRoot", policy.Root)
 		return false
