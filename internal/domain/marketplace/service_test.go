@@ -3,6 +3,7 @@ package marketplace_test
 import (
 	"context"
 	"errors"
+	"github.com/OWNER/aos/internal/core/apperr"
 	"testing"
 
 	"github.com/OWNER/aos/internal/core/command"
@@ -106,6 +107,18 @@ func TestDiscoveryWithNoRegistriesConfiguredIsRefused(t *testing.T) {
 	svc := marketplace.NewService(marketplace.Deps{Installer: &fakeInstaller{}})
 	if _, err := svc.Discovery(context.Background(), marketplace.DiscoveryInput{Reasoning: reasoning()}); err == nil {
 		t.Fatal("Discovery with nothing configured succeeded, want a clear error naming the missing config")
+	}
+}
+
+// With nothing configured, Get said the listing was not found — as though a
+// registry had been asked and did not have it — and the plugin page showed
+// "Page not found" instead of the reason: there is no registry to ask.
+func TestGetWithNoRegistriesConfiguredSaysSo(t *testing.T) {
+	svc := marketplace.NewService(marketplace.Deps{Installer: &fakeInstaller{}})
+	_, err := svc.Get(context.Background(), marketplace.GetInput{Source: "acme/crm", Reasoning: reasoning()})
+	e, ok := apperr.As(err)
+	if !ok || e.Code != "AOS_MARKETPLACE_NO_REGISTRIES_CONFIGURED" {
+		t.Fatalf("err = %v, want AOS_MARKETPLACE_NO_REGISTRIES_CONFIGURED", err)
 	}
 }
 

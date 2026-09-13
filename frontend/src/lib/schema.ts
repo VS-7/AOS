@@ -1407,7 +1407,7 @@ export interface CommandMap {
     "_reasoning": string;
     /** Identifier of the toolset to call. */
     "id": string;
-    /** Arguments for the tool. Opaque to this service — call toolsets_get with schema:true first. */
+    /** Arguments for the tool. Opaque to this service — toolsets_tools answers each tool's argument schema. */
     "input"?: unknown;
     /** Name of the tool, as published by the connected target. */
     "tool": string;
@@ -1437,6 +1437,13 @@ export interface CommandMap {
   "toolsets_list": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
+  }; output: unknown };
+  /** List the tools a toolset publishes. */
+  "toolsets_tools": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the toolset. */
+    "id": string;
   }; output: unknown };
   /** Reconfigure a toolset. */
   "toolsets_update-config": { input: {
@@ -1814,6 +1821,7 @@ export const COMMAND_KEYS = [
   "toolsets_get",
   "toolsets_get-config",
   "toolsets_list",
+  "toolsets_tools",
   "toolsets_update-config",
   "tunnel_start",
   "tunnel_status",

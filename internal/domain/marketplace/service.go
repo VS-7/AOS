@@ -132,6 +132,13 @@ func (s *Service) Get(ctx context.Context, in GetInput) (*Listing, error) {
 		return nil, errSourceRequired()
 	}
 
+	// The same refusal Discovery and Install give. Without it an empty
+	// configuration fell through the loop below and answered "listing not
+	// found", which reads as a registry that was asked and did not have it.
+	if len(s.registries) == 0 {
+		return nil, errNoRegistriesConfigured()
+	}
+
 	ids := s.order
 	if in.Registry != "" {
 		if _, ok := s.registries[in.Registry]; !ok {

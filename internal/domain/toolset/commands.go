@@ -20,13 +20,14 @@ its own process.
 - **list** — every configured toolset
 - **get** — one toolset's full configuration
 - **get-config** — the same read, plus which of its variables are still missing
+- **tools** — connect and list the tools it publishes, with their arguments
 - **call** — run one of its tools
 - **update-config** — reconfigure it
 - **delete** — remove it
 
 ## When to use
-- **Before calling a tool you have not called yet:** get it first — the
-  configuration and status tell you whether it is even reachable
+- **Before calling a tool you have not called yet:** list its tools first —
+  the name and argument schema toolsets_call needs are there
 - **A capability outside what this system's own domains cover:** call
   toolsets_call rather than assuming a native command exists
 
@@ -99,6 +100,26 @@ read the error, one variable at a time.`,
 		Handler:     svc.GetConfig,
 	})
 
+	command.MustRegister(reg, command.Command[GetInput, ToolsOutput]{
+		Group:   "toolsets",
+		Name:    "tools",
+		Summary: "List the tools a toolset publishes.",
+		Doc: `Connects to the toolset, asks what it publishes, and closes: each tool's name,
+description and argument schema — what toolsets_call needs to be called right.
+
+It reaches the target exactly as toolsets_call does — a disabled toolset
+refuses, variables are resolved, a skill's network allowlist applies — but runs
+no tool, so it records no activity.`,
+		Examples: []command.Example{
+			{Description: "see what a toolset offers before calling it", Input: GetInput{ID: "gh"}},
+		},
+		Registry: true,
+		Annotations: command.Annotations{
+			Title: "List a toolset's tools", ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: true,
+		},
+		Handler: svc.Tools,
+	})
+
 	command.MustRegister(reg, command.Command[CallInput, CallOutput]{
 		Group:   "toolsets",
 		Name:    "call",
@@ -107,8 +128,8 @@ read the error, one variable at a time.`,
 process: connects, calls one tool, closes, and audits the attempt regardless
 of outcome.
 
-Input and the result are opaque to this service — call toolsets_get first if
-the tool's own argument shape is not already known.`,
+Input and the result are opaque to this service — list the toolset's tools
+with toolsets_tools first if the tool's own argument shape is not already known.`,
 		Examples: []command.Example{
 			{Description: "call a tool with no arguments", Input: CallInput{ID: "gh", Tool: "whoami"}},
 		},
@@ -153,6 +174,7 @@ func statusPtr(s Status) *Status { return &s }
 // compile-time proof that the handlers match the command signature.
 var (
 	_ func(context.Context, GetInput) (*Toolset, error)          = (*Service)(nil).Get
+	_ func(context.Context, GetInput) (ToolsOutput, error)       = (*Service)(nil).Tools
 	_ func(context.Context, CallInput) (CallOutput, error)       = (*Service)(nil).Call
 	_ func(context.Context, UpdateConfigInput) (*Toolset, error) = (*Service)(nil).UpdateConfig
 	_ func(context.Context, DeleteInput) (DeleteOutput, error)   = (*Service)(nil).Delete
