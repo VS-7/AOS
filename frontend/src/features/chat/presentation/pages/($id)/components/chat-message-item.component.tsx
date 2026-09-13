@@ -17,7 +17,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { EmojiPicker } from "frimousse";
 import {
   AudioLines,
   CheckIcon,
@@ -35,6 +34,7 @@ import type { AgentThinkingSummary } from "@/features/agent/presentation/helpers
 import type { Chat, ChatMessage } from "@/features/chat/interfaces/chat.interfaces";
 import type { WorkspaceDirectoryUser } from "@/features/workspace/interfaces/directory.interfaces";
 import { ToolBlock } from "@/features/chat/presentation/components/message/tool-part";
+import { ChatEmojiPicker } from "@/features/chat/presentation/components/message/emoji-picker";
 import { ChatThreadHelper } from "@/features/chat/presentation/helpers/chat-thread.helper";
 import { ChatInlineMarkupHelper } from "@/features/chat/presentation/helpers/chat-inline-markup.helper";
 import { toast } from "sonner";
@@ -727,7 +727,7 @@ function ChatMessageCompactActions({
           className="w-[23rem] p-0"
           sideOffset={8}
         >
-          <ChatMessageEmojiPicker onSelectEmoji={onSelectEmoji} />
+          <ChatEmojiPicker onSelectEmoji={onSelectEmoji} />
         </PopoverContent>
       </Popover>
 
@@ -746,63 +746,5 @@ function ChatMessageCompactActions({
         )}
       </MessageAction>
     </MessageActions>
-  );
-}
-
-function ChatMessageEmojiPicker({
-  onSelectEmoji,
-}: {
-  onSelectEmoji: (emoji: string) => void;
-}) {
-  return (
-    <EmojiPicker.Root
-      className="isolate flex h-[25rem] w-full flex-col bg-popover text-popover-foreground"
-      onEmojiSelect={({ emoji }: { emoji: string }) => onSelectEmoji(emoji)}
-    >
-      <div className="border-b border-border/70 p-3">
-        <EmojiPicker.Search
-          className="h-9 w-full rounded-lg border border-border/70 bg-background px-3 text-sm outline-hidden transition-colors placeholder:text-muted-foreground focus:border-ring"
-          placeholder={t("Search emoji")}
-        />
-      </div>
-
-      <EmojiPicker.Viewport className="relative flex-1 outline-hidden">
-        <EmojiPicker.Loading className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-          {t("Loading emojis...")}
-        </EmojiPicker.Loading>
-        <EmojiPicker.Empty className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-          {({ search }: { search: string }) => t("No emoji found for “{{search}}”", { search })}
-        </EmojiPicker.Empty>
-        <EmojiPicker.List
-          className="pb-3"
-          components={{
-            CategoryHeader: ({ category, ...props }: any) => (
-              <div
-                className="bg-popover/95 px-3 py-2 text-[10px] font-semibold tracking-[0.2em] text-muted-foreground uppercase backdrop-blur-sm"
-                {...props}
-              >
-                {category.label}
-              </div>
-            ),
-            Row: ({ children, ...props }: any) => (
-              <div className="grid grid-cols-8 gap-1 px-2 py-0.5" {...props}>
-                {children}
-              </div>
-            ),
-            Emoji: ({ emoji, ...props }: any) => (
-              <button
-                className={cn(
-                  "flex size-9 items-center justify-center rounded-lg text-lg transition-colors outline-hidden",
-                  emoji.isActive ? "bg-muted" : "hover:bg-muted/70",
-                )}
-                {...props}
-              >
-                {emoji.emoji}
-              </button>
-            ),
-          }}
-        />
-      </EmojiPicker.Viewport>
-    </EmojiPicker.Root>
   );
 }

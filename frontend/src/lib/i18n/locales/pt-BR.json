@@ -1116,6 +1116,7 @@
   "The daemon will not expose an API that asks for no credential. Turn authentication on and set an API token first (security.enabled and security.apiToken).": "O daemon não expõe uma API que não pede credencial. Ative a autenticação e defina um token de API primeiro (security.enabled e security.apiToken).",
   "The decision could not be sent.": "Não foi possível enviar a decisão.",
   "The download could not be verified.": "Não foi possível verificar o download.",
+  "The emoji list could not be loaded.": "Não foi possível carregar a lista de emojis.",
   "The jobs could not be recovered.": "Não foi possível recuperar os jobs.",
   "The language the interface is shown in.": "O idioma em que a interface é exibida.",
   "The memories could not be read.": "Não foi possível ler as memórias.",
