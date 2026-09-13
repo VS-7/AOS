@@ -54,6 +54,18 @@ type Config struct {
 	Artifacts Artifacts
 	Files     Files
 
+	// Scope, when set, resolves the Artifacts and Files a request reaches from
+	// the workspace it names (httpapi's ambientIdentity has already read the
+	// X-Workspace-ID header or cookie into the context); Artifacts and Files
+	// above serve only when it is nil. A Scope that fails is the answer — it
+	// never falls back to another workspace's artifacts.
+	//
+	// Without it the route served only the workspace the daemon started in,
+	// while artifacts_create and artifacts_list route per workspace: an
+	// artifact made in any other workspace had a URL and answered
+	// AOS_ARTIFACT_NOT_FOUND.
+	Scope func(ctx context.Context) (Artifacts, Files, error)
+
 	// Auth resolves a presented bearer credential. Nil means every request is
 	// treated as unauthenticated for Private/Workspace visibility — by_password
 	// artifacts are unaffected, since they never consult this at all.
@@ -88,8 +100,18 @@ func New(cfg Config) http.Handler {
 type server struct{ cfg Config }
 
 func (s *server) serve(w http.ResponseWriter, r *http.Request) {
+	artifacts, files := s.cfg.Artifacts, s.cfg.Files
+	if s.cfg.Scope != nil {
+		scoped, scopedFiles, err := s.cfg.Scope(r.Context())
+		if err != nil {
+			writeError(w, s.cfg.Log, err)
+			return
+		}
+		artifacts, files = scoped, scopedFiles
+	}
+
 	id := chi.URLParam(r, "id")
-	a, err := s.cfg.Artifacts.Get(r.Context(), artifact.GetInput{ID: id})
+	a, err := artifacts.Get(r.Context(), artifact.GetInput{ID: id})
 	if err != nil {
 		writeError(w, s.cfg.Log, err)
 		return
@@ -99,7 +121,7 @@ func (s *server) serve(w http.ResponseWriter, r *http.Request) {
 		Authenticated: s.authenticated(r),
 		Password:      r.URL.Query().Get("password"),
 	}
-	if err := s.cfg.Artifacts.Authorize(r.Context(), a, req); err != nil {
+	if err := artifacts.Authorize(r.Context(), a, req); err != nil {
 		writeError(w, s.cfg.Log, err)
 		return
 	}
@@ -108,7 +130,7 @@ func (s *server) serve(w http.ResponseWriter, r *http.Request) {
 	if rel == "" {
 		rel = a.Entrypoint
 	}
-	target, err := s.cfg.Files.Resolve(id, rel)
+	target, err := files.Resolve(id, rel)
 	if err != nil {
 		// A path outside the artifact's own directory reads the same as one
 		// that does not exist — naming the reason would confirm to a prober
