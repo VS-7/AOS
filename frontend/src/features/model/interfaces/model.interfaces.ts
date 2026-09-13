@@ -66,6 +66,8 @@ export interface ModelProvider {
   modelsError?: string;
   /** What to do about `modelsError`, most specific first. */
   modelsErrorActions?: string[];
+  /** No longer usable; listed so an existing connection can be removed. */
+  retired?: boolean;
 }
 
 export interface ModelProviderAuth {
@@ -76,6 +78,8 @@ export interface ModelProviderAuth {
   description: string;
   required: boolean;
   masked?: boolean;
+  /** For `oauth-file`: the tool whose login file this reads, and where. */
+  login?: { tool: string; path: string };
 }
 
 export interface IModelProviderAdapter {
