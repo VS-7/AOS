@@ -314,10 +314,17 @@ func main() {
 	window := desktop.Window.NewWithOptions(windowOptions(address))
 	platform.window = window
 	// The menu's Reload goes through the page, which keeps the parameters the
-	// window was opened with — see applicationMenu, and hasMenuBar for why
-	// only macOS has one.
+	// window was opened with, and falls back to the window's own reload at
+	// its original URL for a page that never answers — see applicationMenu
+	// and pageReload, and hasMenuBar for why only macOS has one.
 	if hasMenuBar(runtime.GOOS) {
-		desktop.Menu.Set(applicationMenu(func() { window.EmitEvent(ReloadEventName) }))
+		reloads := &pageReload{
+			emit:     func() { window.EmitEvent(ReloadEventName) },
+			fallback: func() { window.SetURL(windowOptions(address).URL) },
+			wait:     reloadAckWait,
+		}
+		desktop.Event.On(ReloadAckEventName, func(*application.CustomEvent) { reloads.acknowledged() })
+		desktop.Menu.Set(applicationMenu(reloads.reload))
 	}
 	emitRealtime = func(event any) { window.EmitEvent(RealtimeEventName, event) }
 	emitDaemon = func(event any) { window.EmitEvent(DaemonEventName, event) }

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -13,6 +15,67 @@ import (
 // answers it with its own reload (lib/native.ts), which keeps the parameters
 // the window was opened with.
 const ReloadEventName = "aos:reload"
+
+// ReloadAckEventName is what the interface sends back, before it reloads, to
+// say it heard — see pageReload.
+const ReloadAckEventName = "aos:reload-ack"
+
+// reloadAckWait is how long the menu's Reload waits for the page to answer
+// before the window reloads itself. The answer is a call to this same process,
+// so a page that is running at all answers in milliseconds.
+const reloadAckWait = 2 * time.Second
+
+// pageReload is the menu's Reload: the page's own reload when the page is
+// there to do it, the window's otherwise.
+//
+// Handing the reload to the page is what keeps the route and the window's
+// parameters (see applicationMenu), and it depended on the page entirely. A
+// bundle that failed before installing its listener — a module error, a white
+// window — left Cmd+R doing nothing, and the application had to be restarted.
+// So the page says it heard, and when it does not within wait, the window
+// loads the URL it was opened with, which carries the daemon's address itself.
+type pageReload struct {
+	emit     func() // asks the page to reload
+	fallback func() // reloads the window at the URL it was opened with
+	wait     time.Duration
+
+	mu      sync.Mutex
+	pending chan struct{} // the Reload still waiting for the page, if any
+}
+
+func (p *pageReload) reload() {
+	heard := make(chan struct{})
+	p.mu.Lock()
+	p.pending = heard
+	p.mu.Unlock()
+
+	p.emit()
+	go func() {
+		select {
+		case <-heard:
+		case <-time.After(p.wait):
+			p.mu.Lock()
+			unanswered := p.pending == heard
+			if unanswered {
+				p.pending = nil
+			}
+			p.mu.Unlock()
+			if unanswered {
+				p.fallback()
+			}
+		}
+	}()
+}
+
+// acknowledged is the page's answer to the Reload in flight.
+func (p *pageReload) acknowledged() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.pending != nil {
+		close(p.pending)
+		p.pending = nil
+	}
+}
 
 // applicationMenu is the menu bar this application installs in place of the
 // one Wails would.
