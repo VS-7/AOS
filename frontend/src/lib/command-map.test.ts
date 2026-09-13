@@ -188,8 +188,20 @@ describe("marketplace descriptors", () => {
     expect(entry.wrapOut).toBe("items");
   });
 
-  it("nests the detail under skill", () => {
-    const entry = COMMAND_MAP["marketplace.getByName"] as { wrapOut: string };
+  // The detail is a Listing, not a skill manifest: nested under `skill`, the
+  // page looked for an inventory that is not there and 404'd every time.
+  it("nests the detail under listing, looked up by source", () => {
+    const entry = COMMAND_MAP["marketplace.getByName"] as { key: string; renameIn: Record<string, string>; wrapOut: string };
+    expect(entry.key).toBe("marketplace_get");
+    expect(entry.renameIn).toEqual({ name: "source" });
+    expect(entry.wrapOut).toBe("listing");
+  });
+
+  // Install goes through the marketplace, which fetches the package from a
+  // registry; skills_install with a made-up source always failed.
+  it("installs through marketplace_install", () => {
+    const entry = COMMAND_MAP["marketplace.install"] as { key: string; wrapOut: string };
+    expect(entry.key).toBe("marketplace_install");
     expect(entry.wrapOut).toBe("skill");
   });
 });

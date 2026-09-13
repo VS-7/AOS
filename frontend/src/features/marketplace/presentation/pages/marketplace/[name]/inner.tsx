@@ -10,10 +10,8 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { toast } from "sonner";
 
 import type {
-  MarketplaceInstalledSkill,
-  MarketplaceSkill,
+  MarketplacePluginDetail,
   MarketplaceSkillComponentItem,
-  MarketplaceSkillInventory,
   MarketplaceSkillListing,
 } from "@/features/marketplace/interfaces/marketplace.interfaces";
 import { MarketplaceInstallButton } from "@/features/marketplace/presentation/components/marketplace-install-button.component";
@@ -26,13 +24,9 @@ import {
   PluginLogo,
 } from "@/features/marketplace/presentation/components/plugin-card.component";
 import { PluginDetailSection } from "@/features/marketplace/presentation/components/plugin-detail-section.component";
-import { PluginDefaultPrompts } from "@/features/marketplace/presentation/components/plugin-default-prompts.component";
 import { PluginInventoryItemSheet } from "@/features/marketplace/presentation/components/inventory/plugin-inventory-item-sheet.component";
-import {
-  MARKETPLACE_INVENTORY_FOLDERS,
-  MARKETPLACE_INVENTORY_ORDER,
-} from "@/features/marketplace/presentation/consts/marketplace";
-import { buildGithubFolderUrl } from "@/features/marketplace/presentation/helpers/marketplace.helper";
+import { MarketplaceUnavailable } from "@/features/marketplace/presentation/components/marketplace-unavailable.component";
+import { MARKETPLACE_INVENTORY_ORDER } from "@/features/marketplace/presentation/consts/marketplace";
 import { openWorkspaceFileTab } from "@/features/file/presentation/helpers/open-file-tab.helper";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,27 +43,62 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { aos } from "@/app/aos";
-import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
+import { useTranslation } from "@/lib/i18n";
 
 interface MarketplaceDetailsPageInnerProps {
-  plugin: MarketplaceSkill;
-  inventory: MarketplaceSkillInventory;
-  sourceUrl: string;
-  isInstalled: boolean;
-  installedSkill?: MarketplaceInstalledSkill;
+  detail: MarketplacePluginDetail | null;
+  loadError: { code: string; message: string } | null;
   related: MarketplaceSkillListing[];
   installedNames: string[];
 }
 
+/** The permission lists a manifest declares, in the order a reader weighs them. */
+const PERMISSION_KEYS = ["network", "exec", "toolsets", "hooks", "agents", "collections", "routines"] as const;
+
+function permissionLabel(key: (typeof PERMISSION_KEYS)[number], t: (key: string) => string): string {
+  switch (key) {
+    case "network":
+      return t("Network");
+    case "exec":
+      return t("Programs");
+    case "toolsets":
+      return t("Toolsets");
+    case "hooks":
+      return t("Hooks");
+    case "agents":
+      return t("Agents");
+    case "collections":
+      return t("Collections");
+    case "routines":
+      return t("Routines");
+  }
+}
+
+function permissionValues(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((entry) =>
+      typeof entry === "string"
+        ? entry
+        : entry && typeof entry === "object"
+          ? String((entry as { command?: string; baseUrl?: string; type?: string }).command ??
+              (entry as { baseUrl?: string }).baseUrl ??
+              (entry as { type?: string }).type ??
+              "")
+          : String(entry),
+    ).filter(Boolean);
+  }
+  if (typeof value === "number" && value > 0) return [String(value)];
+  return [];
+}
+
 export function MarketplaceDetailsPageInner({
-  plugin,
-  inventory,
-  sourceUrl,
-  isInstalled,
-  installedSkill,
+  detail,
+  loadError,
   related,
   installedNames,
 }: MarketplaceDetailsPageInnerProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const navigate = useNavigate();
   const [selectedItem, setSelectedItem] =
@@ -80,23 +109,20 @@ export function MarketplaceDetailsPageInner({
     () => new Set(installedNames),
     [installedNames],
   );
-  const description =
-    plugin.interface.longDescription ??
-    plugin.description ??
-    plugin.interface.shortDescription;
 
+  const installedSkill = detail?.installedSkill;
   const isActive = installedSkill?.active !== false;
 
+  // `mutateOrThrow`-backed hooks reach onError on a refusal; the toasts say
+  // what the daemon said, under a sentence of our own.
   const { mutate: updatePlugin, loading: isUpdating } =
     aos.client.skill.update.useMutation({
       onSuccess: async () => {
-        toast.success(isActive ? "Plugin disabled" : "Plugin enabled");
+        toast.success(isActive ? t("Plugin disabled") : t("Plugin enabled"));
         await router.invalidate();
       },
       onError: (error: unknown) => {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to update plugin",
-        );
+        toast.error(t("Failed to update plugin"), { description: errorMessage(error) });
       },
     });
 
@@ -107,9 +133,7 @@ export function MarketplaceDetailsPageInner({
         await navigate({ to: "/marketplace" });
       },
       onError: (error: unknown) => {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to uninstall plugin",
-        );
+        toast.error(t("Failed to uninstall plugin"), { description: errorMessage(error) });
       },
     });
 
@@ -118,6 +142,31 @@ export function MarketplaceDetailsPageInner({
     setSelectedItem(item);
     setSheetOpen(true);
   }
+
+  const backLink = (
+    <Link
+      to="/marketplace"
+      className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <HugeiconsIcon icon={ArrowLeft01Icon} className="size-4" />
+      {t("Back")}
+    </Link>
+  );
+
+  if (!detail) {
+    return (
+      <MarketplaceShell rail={<MarketplaceRail>{null}</MarketplaceRail>}>
+        {backLink}
+        <MarketplaceUnavailable code={loadError?.code ?? ""} message={loadError?.message ?? ""} />
+      </MarketplaceShell>
+    );
+  }
+
+  const { plugin, inventory, isInstalled } = detail;
+  const permissions = PERMISSION_KEYS.map((key) => ({
+    key,
+    values: permissionValues(plugin.permissions?.[key]),
+  })).filter((entry) => entry.values.length > 0);
 
   return (
     <MarketplaceShell
@@ -135,32 +184,27 @@ export function MarketplaceDetailsPageInner({
                 {t("Marketplace")}
               </Link>
               <span aria-hidden>/</span>
-              <span className="text-foreground">
-                {plugin.interface.category}
-              </span>
+              <span className="text-foreground">{t(plugin.category)}</span>
             </nav>
 
             <div className="flex flex-col gap-2 text-muted-foreground">
-              <p>
-                {t("Created by")}{" "}
-                <span className="font-medium text-foreground">
-                  {plugin.author.name}
-                </span>
-              </p>
-              <p>
-                {t("Verified by")}{" "}
-                <span className="font-medium text-foreground">AOS</span>
-              </p>
-              {sourceUrl ? (
-                <a
-                  href={sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 font-medium text-foreground transition-colors hover:text-foreground/80"
-                >
-                  {t("View Source")}
-                  <HugeiconsIcon icon={ArrowUpRight01Icon} className="size-3.5" />
-                </a>
+              {plugin.author ? (
+                <p>
+                  {t("Created by")}{" "}
+                  <span className="font-medium text-foreground">{plugin.author}</span>
+                </p>
+              ) : null}
+              {plugin.version ? (
+                <p>
+                  {t("Version")}{" "}
+                  <span className="font-medium text-foreground">{plugin.version}</span>
+                </p>
+              ) : null}
+              {plugin.source ? (
+                <p className="break-all">
+                  {t("Source")}{" "}
+                  <span className="font-mono text-[12px] text-foreground">{plugin.source}</span>
+                </p>
               ) : null}
               {isInstalled && installedSkill?.skillMdPath ? (
                 <button
@@ -176,47 +220,27 @@ export function MarketplaceDetailsPageInner({
                   <HugeiconsIcon icon={ArrowUpRight01Icon} className="size-3.5" />
                 </button>
               ) : null}
-              {isInstalled && installedSkill?.manifestPath ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    openWorkspaceFileTab(installedSkill.manifestPath!, {
-                      title: "manifest.json",
-                    })
-                  }
-                  className="inline-flex items-center gap-1 font-medium text-foreground transition-colors hover:text-foreground/80"
-                >
-                  {t("Manifest")}
-                  <HugeiconsIcon icon={ArrowUpRight01Icon} className="size-3.5" />
-                </button>
-              ) : null}
             </div>
           </div>
         </MarketplaceRail>
       }
     >
-      <Link
-        to="/marketplace"
-        className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <HugeiconsIcon icon={ArrowLeft01Icon} className="size-4" />
-        {t("Back")}
-      </Link>
+      {backLink}
 
       <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <PluginLogo
             listing={{
               name: plugin.name,
-              displayName: plugin.interface.displayName,
-              logo: plugin.interface.logo ?? null,
-              brandColor: plugin.interface.brandColor ?? null,
+              displayName: plugin.displayName,
+              logo: null,
+              brandColor: null,
             }}
             size={56}
           />
           <div className="min-w-0">
             <h1 className="text-3xl font-medium tracking-tight text-foreground md:text-[2rem] md:leading-none">
-              {plugin.interface.displayName}
+              {plugin.displayName}
             </h1>
           </div>
         </div>
@@ -232,7 +256,7 @@ export function MarketplaceDetailsPageInner({
                 htmlFor="plugin-active"
                 className="text-[12px] text-muted-foreground"
               >
-                {isActive ? "Enabled" : "Disabled"}
+                {isActive ? t("Enabled") : t("Disabled")}
               </Label>
               <Switch
                 id="plugin-active"
@@ -263,8 +287,7 @@ export function MarketplaceDetailsPageInner({
                 <AlertDialogHeader>
                   <AlertDialogTitle>{t("Uninstall this plugin?")}</AlertDialogTitle>
                   <AlertDialogDescription>
-                    {t("Removes")}{" "}
-                    <strong>{plugin.interface.displayName}</strong> {t("and its local files from this workspace.")}
+                    {t("Removes {{name}} and its local files from this workspace.", { name: plugin.displayName })}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -281,51 +304,51 @@ export function MarketplaceDetailsPageInner({
               </AlertDialogContent>
             </AlertDialog>
           </div>
-        ) : (
+        ) : plugin.source ? (
           <MarketplaceInstallButton
-            pluginName={plugin.name}
-            isInstalled={isInstalled}
+            source={plugin.source}
+            registry={plugin.registry}
+            pluginName={plugin.displayName}
             className="h-10 shrink-0 rounded-md px-5 text-[13px] font-medium"
           />
-        )}
-      </div>
-
-      <div className="flex flex-col gap-6">
-        {plugin.interface.defaultPrompt &&
-        plugin.interface.defaultPrompt.length > 0 ? (
-          <PluginDefaultPrompts
-            pluginName={plugin.name}
-            displayName={plugin.interface.displayName}
-            prompts={plugin.interface.defaultPrompt}
-            logo={plugin.interface.logo}
-            brandColor={plugin.interface.brandColor}
-          />
         ) : null}
+      </div>
 
+      {plugin.description ? (
         <p className="max-w-3xl text-[15px] leading-7 text-muted-foreground">
-          {description}
+          {plugin.description}
         </p>
-      </div>
+      ) : null}
 
-      <div className="flex flex-col gap-8">
-        {MARKETPLACE_INVENTORY_ORDER.map((kind) => (
-          <PluginDetailSection
-            key={kind}
-            kind={kind}
-            items={inventory[kind] ?? []}
-            folderUrl={
-              isInstalled
-                ? undefined
-                : buildGithubFolderUrl(
-                    plugin.name,
-                    MARKETPLACE_INVENTORY_FOLDERS[kind],
-                  )
-            }
-            interactive={isInstalled}
-            onToolsetClick={isInstalled ? handleToolsetClick : undefined}
-          />
-        ))}
-      </div>
+      {/* What installing it would allow, before any of it is fetched
+          (ADR-0015) — the one thing a listing can say about its contents. */}
+      {!isInstalled && permissions.length > 0 ? (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-lg font-medium tracking-tight text-foreground">{t("Permissions it asks for")}</h2>
+          <dl className="grid gap-2 text-[13px]">
+            {permissions.map((entry) => (
+              <div key={entry.key} className="flex flex-wrap gap-2">
+                <dt className="w-24 shrink-0 text-muted-foreground">{permissionLabel(entry.key, t)}</dt>
+                <dd className="font-mono text-[12px] text-foreground">{entry.values.join(", ")}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ) : null}
+
+      {isInstalled ? (
+        <div className="flex flex-col gap-8">
+          {MARKETPLACE_INVENTORY_ORDER.map((kind) => (
+            <PluginDetailSection
+              key={kind}
+              kind={kind}
+              items={inventory[kind] ?? []}
+              interactive
+              onToolsetClick={handleToolsetClick}
+            />
+          ))}
+        </div>
+      ) : null}
 
       {related.length > 0 ? (
         <section className="flex flex-col gap-5 pt-4">
