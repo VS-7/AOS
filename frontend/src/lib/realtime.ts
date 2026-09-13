@@ -139,10 +139,9 @@ export function useRealtime(queryClient: QueryClient): ConnectionState {
       // failed call cannot tell "gone" from "refused"). Without it the
       // indicator read "open" from the moment the page loaded, whatever the
       // relay was actually doing.
+      const followHealth = daemonHealthFollower(queryClient, setState);
       const offDaemon = Events.On("aos:daemon", (event: { data?: unknown }) => {
-        const payload = event?.data as { healthy?: boolean } | Array<{ healthy?: boolean }> | undefined;
-        const one = Array.isArray(payload) ? payload[0] : payload;
-        setState(one?.healthy === false ? "reconnecting" : "open");
+        followHealth(event?.data);
       });
       const off = Events.On("aos:realtime", (event: { data?: unknown }) => {
         const payload = event?.data as RealtimeEvent | RealtimeEvent[] | undefined;
@@ -202,6 +201,9 @@ export function useRealtime(queryClient: QueryClient): ConnectionState {
       socket.current = ws;
 
       ws.onopen = () => {
+        // A reconnect, not the first open: events were missed while the
+        // socket was down, so what the screens hold may be stale.
+        if (attempt > 0) void queryClient.invalidateQueries();
         attempt = 0;
         setState("open");
       };
@@ -234,6 +236,33 @@ export function useRealtime(queryClient: QueryClient): ConnectionState {
   }, [queryClient]);
 
   return state;
+}
+
+/**
+ * Follows the daemon's health as the desktop process relays it, and refetches
+ * everything when it comes back.
+ *
+ * While the daemon was down every screen that asked got a failure — or, from a
+ * surface that swallowed it, an empty answer — and nothing asked again when it
+ * returned: the banner cleared and Files went on saying there were no files
+ * until somebody clicked something. The transition from unhealthy to healthy
+ * is the one moment every cached read is known to be suspect.
+ *
+ * Accepts the payload bare or as a one-element array, as Wails delivers it in
+ * different versions.
+ */
+export function daemonHealthFollower(
+  queryClient: Pick<QueryClient, "invalidateQueries">,
+  setState: (state: ConnectionState) => void,
+): (payload: unknown) => void {
+  let healthy = true;
+  return (payload) => {
+    const one = (Array.isArray(payload) ? payload[0] : payload) as { healthy?: boolean } | undefined;
+    const now = one?.healthy !== false;
+    if (now && !healthy) void queryClient.invalidateQueries();
+    healthy = now;
+    setState(now ? "open" : "reconnecting");
+  };
 }
 
 /**

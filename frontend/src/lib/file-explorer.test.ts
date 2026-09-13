@@ -116,6 +116,20 @@ describe("explorer()", () => {
     });
   });
 
+  // The daemon going down used to read as "No files available — This
+  // explorer context is empty right now": the tree's failure was swallowed
+  // into an empty snapshot, so the explorer's own error branch ("Unable to
+  // load files") could never render, and React Query had nothing to retry —
+  // the empty answer stayed on screen after the daemon came back.
+  it("fails when the tree cannot be read, instead of answering an empty workspace", async () => {
+    mockTree.mockRejectedValue(Object.assign(new Error("the daemon is not answering"), { code: "AOS_DAEMON_UNREACHABLE" }));
+    mockRawChanges.mockResolvedValue({ files: [], total: 0 });
+
+    await expect(explorer({ includeContexts: false })).rejects.toMatchObject({
+      code: "AOS_DAEMON_UNREACHABLE",
+    });
+  });
+
   it("still answers a summary when the changes call fails outright", async () => {
     mockRawChanges.mockRejectedValue(new Error("not a git repository"));
 

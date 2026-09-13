@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { deliver, onRealtimeEvent, type RealtimeEvent } from "./realtime";
+import { daemonHealthFollower, deliver, onRealtimeEvent, type RealtimeEvent } from "./realtime";
 
 /** Just enough of `QueryClient` for `deliver`/`dispatch` to call — no React needed. */
 function fakeQueryClient() {
@@ -133,5 +133,28 @@ describe("onRealtimeEvent (B1(b): the one shared subscription point)", () => {
     expect(a).toEqual([event]);
     expect(b).toEqual([event, event]);
     unsubB();
+  });
+});
+
+// While the daemon was down every screen read an error — or, worse, an empty
+// answer — and nothing asked again once it came back: the banner cleared and
+// Files still said there were no files twelve seconds later, until somebody
+// clicked something.
+describe("the daemon coming back", () => {
+  it("refetches what was read while it was gone, once", () => {
+    const qc = fakeQueryClient();
+    const states: string[] = [];
+    const follow = daemonHealthFollower(qc as any, (state) => states.push(state));
+
+    follow({ healthy: true });
+    follow({ healthy: false });
+    follow({ healthy: false });
+    expect(qc.invalidateQueries).not.toHaveBeenCalled();
+
+    follow([{ healthy: true }]);
+    follow({ healthy: true });
+
+    expect(qc.invalidateQueries).toHaveBeenCalledTimes(1);
+    expect(states).toEqual(["open", "reconnecting", "reconnecting", "open", "open"]);
   });
 });
