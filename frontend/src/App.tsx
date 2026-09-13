@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { JSX } from "react";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
@@ -7,6 +8,7 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthGate } from "@/features/auth/AuthGate";
+import { AUTHENTICATED_EVENT } from "@/lib/auth";
 import { WorkspaceGate } from "@/features/workspace/WorkspaceGate";
 import { useRealtime } from "@/lib/realtime";
 import { t } from "@/lib/i18n";
@@ -102,7 +104,30 @@ function Localized({ children }: { children: JSX.Element }): JSX.Element {
   return <div key={locale} className="contents">{children}</div>;
 }
 
+/**
+ * Re-runs the router's loaders when somebody signs in again through AuthGate.
+ *
+ * The router is one object for the life of the page, and it went on holding
+ * whatever it matched while signed out — the account menu navigates to /login
+ * on the way out, and that route's middleware let it through because nobody
+ * was signed in. Mounted again under the gate, it showed its own login page a
+ * second time rather than asking the middleware, which by then says / .
+ *
+ * After the auth store has heard the same event (app/stores.ts registers its
+ * listener at import, before this one), so the middleware reads the new state.
+ */
+function useRouterFollowsSignIn(): void {
+  useEffect(() => {
+    const onAuthenticated = () => {
+      queueMicrotask(() => void router.invalidate());
+    };
+    window.addEventListener(AUTHENTICATED_EVENT, onAuthenticated);
+    return () => window.removeEventListener(AUTHENTICATED_EVENT, onAuthenticated);
+  }, []);
+}
+
 export function App(): JSX.Element {
+  useRouterFollowsSignIn();
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>

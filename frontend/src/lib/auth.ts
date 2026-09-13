@@ -23,6 +23,26 @@ export interface AuthStatus {
   authenticated: boolean;
 }
 
+/**
+ * The page's own "somebody just signed out", fired by the logout action.
+ *
+ * Distinct from lib/client.ts's UNAUTHENTICATED_EVENT, which is a *suspicion*
+ * a failed call raises and AuthGate checks before acting on. This one is a
+ * fact the page established itself, so the gate shows Login at once — before
+ * the router can react to the navigation the account menu makes next.
+ */
+export const SIGNED_OUT_EVENT = "aos:signed-out";
+
+/**
+ * AuthGate's "the daemon says somebody is signed in again", after it had
+ * shown Login or Onboarding.
+ *
+ * The auth store the router reads is not the gate's, and nothing else tells it:
+ * after signing in through the gate it went on saying "signed out", and the
+ * router sent the person to its own login page a second time.
+ */
+export const AUTHENTICATED_EVENT = "aos:authenticated";
+
 const WAILSVC_PKG = "github.com/OWNER/aos/internal/transport/wailsvc";
 const AUTH_SERVICE = `${WAILSVC_PKG}.AuthService`;
 
