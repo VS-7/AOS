@@ -567,3 +567,39 @@ func TestDeletingARoutineTakesItsRuns(t *testing.T) {
 		t.Fatal("the deleted routine is still readable")
 	}
 }
+
+// TestSavingARoutineKeepsItsWebhookToken. Triggers are replaced whole, and the
+// interface sends them on every save — so minting on every webhook it was
+// handed rotated the secret on a rename, and whatever held the old token
+// stopped working with nobody told.
+func TestSavingARoutineKeepsItsWebhookToken(t *testing.T) {
+	h := newHarness(t)
+	out := h.create(t, CreateInput{Name: "Hooked", Triggers: []TriggerInput{{Type: Webhook}}})
+	before := out.Routine.Triggers[0].Config.TokenHash
+
+	saved, err := h.svc.Update(asAgent("atlas"), UpdateInput{
+		ID:       out.Routine.ID,
+		Name:     ptr("Renamed"),
+		Triggers: &[]TriggerInput{{Type: Scheduled, Cron: "0 9 * * *"}, {Type: Webhook}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Token != "" {
+		t.Fatalf("a save handed out a new token %q", saved.Token)
+	}
+	var after string
+	for _, tr := range saved.Routine.Triggers {
+		if tr.Type == Webhook {
+			after = tr.Config.TokenHash
+		}
+	}
+	if after != before {
+		t.Fatalf("the stored hash changed from %q to %q", before, after)
+	}
+	if _, err := h.svc.FireWebhook(context.Background(), WebhookInput{
+		ID: out.Routine.ID, Token: out.Token,
+	}); err != nil {
+		t.Fatalf("the token from creation stopped working after a save: %v", err)
+	}
+}

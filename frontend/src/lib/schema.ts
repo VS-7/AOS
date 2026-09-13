@@ -1045,7 +1045,7 @@ export interface CommandMap {
   };
     /** enabled or disabled. */
     "status"?: unknown;
-    /** New triggers. Replaces the old ones whole; a webhook among them mints a new token. */
+    /** New triggers. Replaces the old ones whole. A webhook keeps the token it already has; one added where there was none mints a token, returned once. */
     "triggers"?: unknown;
   }; output: unknown };
   /** Install a skill package, from a script or an agent assembling one. */

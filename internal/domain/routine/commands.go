@@ -136,7 +136,8 @@ A webhook trigger mints a token, returned once. Store it now.`,
 
 Triggers are replaced whole rather than merged, because a partial update of a
 discriminated union is how you end up with a scheduled trigger holding a stale
-webhook hash. A webhook among the new triggers mints a new token.`,
+webhook hash. A webhook the routine already had keeps its token; one added
+where there was none mints a token, returned once. Rotate replaces a token.`,
 		Examples: []command.Example{
 			{Description: "switch one off without deleting it", Input: UpdateInput{
 				ID: "r-1", Status: ptr(Disabled),

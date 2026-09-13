@@ -93,7 +93,7 @@ type UpdateInput struct {
 
 	Name     *string         `json:"name,omitempty" cli:"flag" jsonschema:"New name."`
 	Status   *Status         `json:"status,omitempty" cli:"flag" jsonschema:"enabled or disabled."`
-	Triggers *[]TriggerInput `json:"triggers,omitempty" jsonschema:"New triggers. Replaces the old ones whole; a webhook among them mints a new token."`
+	Triggers *[]TriggerInput `json:"triggers,omitempty" jsonschema:"New triggers. Replaces the old ones whole. A webhook keeps the token it already has; one added where there was none mints a token, returned once."`
 	Scope    *Scope          `json:"scope,omitempty" jsonschema:"New scope."`
 	Content  *string         `json:"content,omitempty" jsonschema:"New prompt."`
 

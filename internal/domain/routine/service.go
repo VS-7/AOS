@@ -150,7 +150,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (CreateOutput, err
 		return CreateOutput{}, errInvalidStatus(string(status))
 	}
 
-	triggers, token, err := s.buildTriggers(in.Triggers)
+	triggers, token, err := s.buildTriggers(in.Triggers, "")
 	if err != nil {
 		return CreateOutput{}, err
 	}
@@ -201,7 +201,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (CreateOutput, err
 		current.Content = strings.TrimLeft(*in.Content, " \t\n\r")
 	}
 	if in.Triggers != nil {
-		built, minted, err := s.buildTriggers(*in.Triggers)
+		built, minted, err := s.buildTriggers(*in.Triggers, webhookHash(current.Triggers))
 		if err != nil {
 			return CreateOutput{}, err
 		}
@@ -519,7 +519,13 @@ func (s *Service) Runs(ctx context.Context, in RunsInput) (RunsOutput, error) {
 
 // buildTriggers validates the union and mints a webhook token when one is
 // declared. It returns the token exactly once, to be shown and then forgotten.
-func (s *Service) buildTriggers(in []TriggerInput) ([]Trigger, string, error) {
+//
+// keep is the hash of the webhook the routine already has, if any. Triggers
+// are replaced whole and an editor resends them on every save, so a webhook
+// among them is the same webhook, not a request for a new secret: minting
+// there rotated the token on a rename, and whatever held the old one stopped
+// working with nobody told. Rotate is the way to ask for a new one.
+func (s *Service) buildTriggers(in []TriggerInput, keep string) ([]Trigger, string, error) {
 	out := make([]Trigger, 0, len(in))
 	var token string
 
@@ -540,6 +546,13 @@ func (s *Service) buildTriggers(in []TriggerInput) ([]Trigger, string, error) {
 				return nil, "", errFiltersNotApplicable(string(t.Type))
 			}
 		case Webhook:
+			if len(t.Filters) > 0 {
+				return nil, "", errFiltersNotApplicable(string(t.Type))
+			}
+			if keep != "" {
+				built.Config.TokenHash = keep
+				break
+			}
 			if s.tokens == nil {
 				return nil, "", errTokensUnavailable()
 			}
@@ -549,9 +562,6 @@ func (s *Service) buildTriggers(in []TriggerInput) ([]Trigger, string, error) {
 			}
 			built.Config.TokenHash = hash
 			token = minted
-			if len(t.Filters) > 0 {
-				return nil, "", errFiltersNotApplicable(string(t.Type))
-			}
 		case Activity:
 			if strings.TrimSpace(t.Namespace) == "" {
 				return nil, "", errActivityNamespaceRequired()
@@ -571,6 +581,16 @@ func (s *Service) buildTriggers(in []TriggerInput) ([]Trigger, string, error) {
 		out = append(out, built)
 	}
 	return out, token, nil
+}
+
+// webhookHash is the stored hash of a routine's webhook trigger, or "".
+func webhookHash(triggers []Trigger) string {
+	for _, t := range triggers {
+		if t.Type == Webhook && t.Config.TokenHash != "" {
+			return t.Config.TokenHash
+		}
+	}
+	return ""
 }
 
 // view adds what the file does not hold: the effective resolution of each
