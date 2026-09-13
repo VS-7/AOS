@@ -1216,9 +1216,9 @@ export interface CommandMap {
     "content": string;
     /** What this template produces and when to use it. */
     "description"?: string;
-    /** Identifier for the template. Also its file name: lowercase, digits, hyphen and underscore only. */
-    "id": string;
-    /** Human name of the template. */
+    /** Identifier for the template. Also its file name: lowercase, digits, hyphen and underscore only. Derived from Name when omitted. */
+    "id"?: string;
+    /** Human name of the template. The id is derived from it when none is given. */
     "name": string;
     /** Suggested relative output path for a render of this template. */
     "output"?: string;
