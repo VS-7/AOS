@@ -48,7 +48,7 @@ vi.mock("./client", async (importOriginal) => ({
   client: { invoke: (...a: unknown[]) => invoke(...a) },
 }));
 
-const { flattenArgs, call, api, DORMANT_CODE } = await import("./aos-facade");
+const { flattenArgs, call, api, errorMessage, DORMANT_CODE } = await import("./aos-facade");
 
 beforeEach(() => invoke.mockReset());
 
@@ -355,6 +355,88 @@ describe("useQuery's queryFn", () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
 
     expect(result.current.error).toMatchObject({ code: "AOS_TASK_BLOCKED" });
+  });
+});
+
+describe("useMutation", () => {
+  // `call()` resolves every failure as a value, so a mutationFn that handed
+  // that value straight to react-query settled every refusal as a success:
+  // `onError` ran at none of the call sites that registered one, and each
+  // `onSuccess` announced a delete, a rename or a run the daemon had refused.
+
+  it("runs onError, never onSuccess, when the daemon refuses", async () => {
+    invoke.mockRejectedValueOnce(Object.assign(new Error("the record is gone"), { code: "AOS_COLLECTION_RECORD_NOT_FOUND" }));
+    const onSuccess = vi.fn();
+    const onError = vi.fn();
+    const { wrapper } = withQueryClient();
+    const { result } = renderHook(() => api.collection!.deleteRecord!.useMutation({ onSuccess, onError }), { wrapper });
+
+    result.current.mutate({ params: { collection: "contacts", record: "r-1" } });
+
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+    expect(onSuccess).not.toHaveBeenCalled();
+    const error = onError.mock.calls[0]![0];
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({ code: "AOS_COLLECTION_RECORD_NOT_FOUND", message: "the record is gone" });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+  });
+
+  it("still hands onSuccess the envelope, so `response.data` reads keep working", async () => {
+    invoke.mockResolvedValueOnce({ stopped: true, message: "stopped" });
+    const onSuccess = vi.fn();
+    const onError = vi.fn();
+    const { wrapper } = withQueryClient();
+    const { result } = renderHook(() => api.chat!.stop!.useMutation({ onSuccess, onError }), { wrapper });
+
+    result.current.mutate({ params: { chat: "c-1" } });
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    expect(onSuccess.mock.calls[0]![0]).toEqual({ data: { stopped: true, message: "stopped" }, error: undefined });
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("treats a dormant path as a refusal, not as a success with nothing in it", async () => {
+    const onSuccess = vi.fn();
+    const onError = vi.fn();
+    const { wrapper } = withQueryClient();
+    const { result } = renderHook(() => api.user!.create!.useMutation({ onSuccess, onError }), { wrapper });
+
+    result.current.mutate({ body: { name: "Ada" } });
+
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(onError.mock.calls[0]![0]).toMatchObject({ code: DORMANT_CODE });
+  });
+
+  it("rejects mutateAsync with the refusal", async () => {
+    invoke.mockRejectedValueOnce(Object.assign(new Error("disabled"), { code: "AOS_ROUTINE_DISABLED" }));
+    const { wrapper } = withQueryClient();
+    const { result } = renderHook(() => api.routine!.fire!.useMutation(), { wrapper });
+
+    await expect(result.current.mutateAsync({ params: { routine: "r-1" } })).rejects.toMatchObject({
+      code: "AOS_ROUTINE_DISABLED",
+    });
+  });
+});
+
+describe("errorMessage", () => {
+  it("reads the sentence off an Error", () => {
+    expect(errorMessage(new Error("an account needs a name"))).toBe("an account needs a name");
+  });
+
+  it("reads the sentence off the plain `{message}` objects the stores return", () => {
+    expect(errorMessage({ message: "an account needs a name" })).toBe("an account needs a name");
+  });
+
+  it("has nothing to say about a value that carries no sentence", () => {
+    expect(errorMessage(undefined)).toBeUndefined();
+    expect(errorMessage({})).toBeUndefined();
+    expect(errorMessage(new Error(""))).toBeUndefined();
+    expect(errorMessage("   ")).toBeUndefined();
+  });
+
+  it("takes a bare string as the sentence", () => {
+    expect(errorMessage("refused")).toBe("refused");
   });
 });
 

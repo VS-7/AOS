@@ -59,15 +59,20 @@ export const ActivityStore = AosStore.create("activities")
       unreadCount: output?.unread ?? 0,
     };
   })
-  .addAction("markAsRead", (ctx) => async (activityId: string) => {
-    await api.activity.markAsRead.mutate({
+  // `mutateOrThrow`: `mutate` resolves a refusal as a value, and these
+  // awaited it and carried on — so a daemon that refused, or was not there
+  // at all, still zeroed the unread badge and let the caller announce
+  // "All activities marked as read". The state changes only after the daemon
+  // has said yes, and a refusal reaches the caller as the rejection it is.
+  .addAction("markAsRead", () => async (activityId: string) => {
+    await api.activity.markAsRead.mutateOrThrow({
       params: {
         activity: activityId
       }
     })
   })
   .addAction("markAllAsRead", (ctx) => async () => {
-    await api.activity.markAllAsRead.mutate();
+    await api.activity.markAllAsRead.mutateOrThrow();
     return ctx.state.set((prev) => ({
       ...prev,
       unreadCount: 0,

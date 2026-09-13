@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { MoreHorizontal, Trash2, Copy, Folder } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
 
 interface ProjectListRowProps {
   project: Project;
@@ -32,8 +33,8 @@ export function ProjectListRow({ project }: ProjectListRowProps) {
       });
       toast.success(`Project ${project.id} deleted`);
       router.invalidate();
-    } catch {
-      toast.error(t("Failed to delete project"));
+    } catch (error) {
+      toast.error(t("Failed to delete project"), { description: errorMessage(error) });
     }
   };
 

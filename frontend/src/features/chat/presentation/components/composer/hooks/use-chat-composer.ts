@@ -47,6 +47,11 @@ export function useChatComposer({
   const attachments = usePromptInputAttachments();
   const audio = useChatComposerAudio();
   const pendingMessageIdRef = React.useRef<string | null>(null);
+  // What was in the composer when the pending message left it. The composer
+  // empties on send, which reads as "delivered"; a refused send puts the
+  // words back rather than losing them along with the echo.
+  const unsentTextRef = React.useRef("");
+  const [refusedText, setRefusedText] = React.useState<string | null>(null);
   const latestSyncedValueRef = React.useRef<string>("");
 
   const [commandOpen, setCommandOpen] = React.useState(false);
@@ -98,6 +103,7 @@ export function useChatComposer({
         }
 
         pendingMessageIdRef.current = null;
+        unsentTextRef.current = "";
         setMentionState(null);
         setCommandOpen(false);
         setCommandQuery("");
@@ -110,6 +116,9 @@ export function useChatComposer({
           onFailed?.(pendingMessageIdRef.current);
           pendingMessageIdRef.current = null;
         }
+
+        setRefusedText(unsentTextRef.current || null);
+        unsentTextRef.current = "";
 
         toast.error(
           error?.error?.message || error?.message || "Unable to send message.",
@@ -341,6 +350,20 @@ export function useChatComposer({
   }, []);
 
   const isBusy = isSending || audio.isRecording;
+
+  // Put a refused message back once the send has settled, not from inside
+  // `onError`: that runs while the editor is still disabled for the send, and
+  // re-enabling it re-reads the (empty) document and writes that back over
+  // anything restored a moment earlier. Only into an empty composer —
+  // anything typed since is newer.
+  React.useEffect(() => {
+    if (isSending || refusedText === null) return;
+    if (!latestSyncedValueRef.current.trim()) {
+      latestSyncedValueRef.current = refusedText;
+      controller.textInput.setInput(refusedText);
+    }
+    setRefusedText(null);
+  }, [controller.textInput, isSending, refusedText]);
   const hasContent =
     latestSyncedValueRef.current.trim().length > 0 ||
     attachments.files.length > 0;
@@ -562,6 +585,7 @@ export function useChatComposer({
       };
 
       pendingMessageIdRef.current = nextMessage.id;
+      unsentTextRef.current = latestSyncedValueRef.current || controller.textInput.value;
       onSent?.(nextMessage);
 
       // C5 of the final review ("honest empty state" policy, R26):

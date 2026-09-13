@@ -26,6 +26,8 @@ import {
 } from "@/features/routine/presentation/components/dropdowns";
 import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
+import { describeFireFailure } from "@/features/routine/presentation/helpers/routine-fire.helper";
 
 interface RoutineListRowProps {
   routine: Routine;
@@ -57,8 +59,8 @@ export const RoutineListRow = React.memo(function RoutineListRow({
           `Status updated to ${RoutineHelper.getStatus(nextStatus).label}`,
         );
         router.invalidate();
-      } catch {
-        toast.error(t("Failed to update status"));
+      } catch (error) {
+        toast.error(t("Failed to update status"), { description: errorMessage(error) });
       }
     },
     [routine.id, router],
@@ -75,8 +77,8 @@ export const RoutineListRow = React.memo(function RoutineListRow({
           `Assigned to ${RoutineHelper.getAgentLabel(agent, agents)}`,
         );
         router.invalidate();
-      } catch {
-        toast.error(t("Failed to update agent"));
+      } catch (error) {
+        toast.error(t("Failed to update agent"), { description: errorMessage(error) });
       }
     },
     [agents, routine.id, router],
@@ -84,26 +86,17 @@ export const RoutineListRow = React.memo(function RoutineListRow({
 
   const handleFire = useCallback(async () => {
     try {
-      const result = await aos.client.routine.fire.mutateOrThrow({
+      await aos.client.routine.fire.mutateOrThrow({
         params: { routine: routine.id },
         query: {},
         body: {},
       });
-
-      if (result?.error) {
-        toast.error(t("Failed to start routine"));
-        return;
-      }
-
-      const executionCount = result.data?.executions?.length ?? 1;
-      toast.success(
-        executionCount > 1
-          ? `Routine started for ${executionCount} agents`
-          : "Routine started",
-      );
+      toast.success(t("Routine started."));
       router.invalidate();
-    } catch {
-      toast.error(t("Failed to start routine"));
+    } catch (error) {
+      const failure = await describeFireFailure(routine.id, error);
+      toast.error(failure.title, { description: failure.description });
+      router.invalidate();
     }
   }, [routine.id, router]);
 
@@ -129,8 +122,8 @@ export const RoutineListRow = React.memo(function RoutineListRow({
       });
       toast.success(`Routine ${routine.id} deleted`);
       router.invalidate();
-    } catch {
-      toast.error(t("Failed to delete routine"));
+    } catch (error) {
+      toast.error(t("Failed to delete routine"), { description: errorMessage(error) });
     }
   }, [confirm, routine.id, routine.name, router]);
 

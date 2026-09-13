@@ -42,6 +42,7 @@ import { TaskComments } from "../comments";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import type { UseChatResult } from "@/features/chat/presentation/hooks/use-chat";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
 
 interface TaskDetailsMainProps {
   task: TaskWithContext;
@@ -94,23 +95,18 @@ export function TaskDetailsMain({
   const router = useRouter();
   const finishTransition = useTasksStatusTransition();
   const stopChat = client.chat.stop.useMutation({
-    // `chat.stop` is dormant (`command-map.ts`: `"chat.stop": null`) —
-    // the facade resolves a dormant call through `onSuccess`, not
-    // `onError` (see `lib/aos-facade.ts`'s `call()`: dormant returns an
-    // `{ data: undefined, error }` value, it never rejects), and the
-    // envelope has no `.message` field the source assumed.
+    // `chats_stop` answers `{stopped, message}`: asking to stop a chat with
+    // nothing running is not a refusal, but it is not "Chat stopped." either.
     onSuccess: (result) => {
-      if (result?.error) {
-        toast.error(result.error.message || "Failed to stop chat");
+      if (!result?.data?.stopped) {
+        toast.info(result?.data?.message ?? t("No active run was found to stop."));
         return;
       }
       toast.success(t("Chat stopped."));
       router.invalidate();
     },
-    onError: (error: any) => {
-      toast.error(
-        error?.error?.message || error?.message || "Failed to stop chat",
-      );
+    onError: (error) => {
+      toast.error(t("Failed to stop chat"), { description: errorMessage(error) });
     },
   });
   const todoStats = task.stats.todos;
@@ -250,67 +246,71 @@ export function TaskDetailsMain({
     router.invalidate();
   }
 
+  // `mutateOrThrow`, not `mutate`: these are written as try/catch, and
+  // `mutate` resolves a refusal as a value, so the catch never ran and a
+  // task the daemon refused to change (or had already lost) was reported as
+  // updated — or as deleted, with a navigation away from it.
   async function handlePriorityChange(
     priority: TaskWithContext["priority"],
   ) {
     try {
-      await client.task.update.mutate({
+      await client.task.update.mutateOrThrow({
         params: { task: task.id },
         body: { priority },
       });
       toast.success(t("Priority updated"));
       router.invalidate();
     } catch (error) {
-      toast.error(t("Failed to update priority"));
+      toast.error(t("Failed to update priority"), { description: errorMessage(error) });
     }
   }
 
   async function handleAssigneeChange(assignee: string | undefined) {
     try {
-      await client.task.update.mutate({
+      await client.task.update.mutateOrThrow({
         params: { task: task.id },
         body: { assigned: assignee },
       });
       toast.success(assignee ? "Assigned" : "Unassigned");
       router.invalidate();
     } catch (error) {
-      toast.error(t("Failed to update assignee"));
+      toast.error(t("Failed to update assignee"), { description: errorMessage(error) });
     }
   }
 
   async function handleTypeChange(type: string) {
     try {
-      await client.task.update.mutate({
+      await client.task.update.mutateOrThrow({
         params: { task: task.id },
         body: { type },
       });
       toast.success(t("Type updated"));
       router.invalidate();
     } catch (error) {
-      toast.error(t("Failed to update type"));
+      toast.error(t("Failed to update type"), { description: errorMessage(error) });
     }
   }
 
   async function handleDueDateChange(dueAt: string | undefined) {
     try {
-      await client.task.update.mutate({
+      await client.task.update.mutateOrThrow({
         params: { task: task.id },
         body: { dueAt },
       });
       toast.success(dueAt ? "Due date set" : "Due date removed");
       router.invalidate();
     } catch (error) {
-      toast.error(t("Failed to update due date"));
+      toast.error(t("Failed to update due date"), { description: errorMessage(error) });
     }
   }
 
   async function handleDelete() {
     try {
-      await client.task.delete.mutate({ params: { task: task.id } });
+      await client.task.delete.mutateOrThrow({ params: { task: task.id } });
       toast.success(`Task ${task.id} deleted`);
       navigate({ to: "/tasks" });
     } catch (error) {
-      toast.error(t("Failed to delete task"));
+      toast.error(t("Failed to delete task"), { description: errorMessage(error) });
     }
   }
 
@@ -520,7 +520,9 @@ export function TaskDetailsMain({
             });
 
             if (error) {
-              console.error(error);
+              // The dialog stays open on a refusal; without a toast it just
+              // sat there looking like the click had not registered.
+              toast.error(t("Failed to finish task"), { description: errorMessage(error) });
               return;
             }
 

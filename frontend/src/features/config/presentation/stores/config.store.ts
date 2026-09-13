@@ -47,8 +47,10 @@ export const ConfigStore = AosStore.create("config")
     return ctx.state.get();
   })
   .addAction("update", (ctx) => async (params: ConfigUpdateInput) => {
-    const response = await api.config.update.mutate({ body: params });
-    const data = unwrapConfig(response.data);
+    // A refusal used to fall through to "return the current state", which
+    // the caller (the model-slot picker) cannot tell from a save: the slot
+    // it had already shown as chosen stayed on screen, unsaved, in silence.
+    const data = unwrapConfig(await api.config.update.mutateOrThrow({ body: params }));
     if (data) {
       ctx.state.set(data);
       return data;

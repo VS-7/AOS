@@ -64,6 +64,7 @@ import {
 import { RoutineTriggersField } from "@/features/routine/presentation/components/triggers";
 import { ROUTINE_STATUS_CONFIG } from "@/features/routine/presentation/consts/routine";
 import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
+import { describeFireFailure } from "@/features/routine/presentation/helpers/routine-fire.helper";
 import { t } from "@/lib/i18n";
 import {
   RoutineTriggerFormSchema,
@@ -236,37 +237,26 @@ export const RoutineUpsertPage = aos
 
     const { mutate: fireRoutine, loading: isFiring } =
       aos.client.routine.fire.useMutation({
-        onSuccess: async (result) => {
-          // `onSuccess` receives the full `Envelope` — see `aos-facade.ts`'s
-          // `useMutation` doc comment.
-          //
-          // task-12 (round 2): Go's `routines_fire`
-          // (`internal/domain/routine/commands.go`) returns one bare `*Run`
-          // — never `{ executions: [...] }`. This UI was written against a
-          // backend whose `fire` could fan a routine out to several agents
-          // in one call and return the list; this Go port always fires
-          // exactly one. `wrapOut` (`command-map.ts`) can only nest a
-          // value, not change its cardinality, so this is a call-site
-          // adaptation: wrap the single `Run` Go actually returned in a
-          // one-element array, so `executionCount` reflects what really
-          // happened (one run, or zero if the call returned nothing) —
-          // reading `.executions` off a bare `Run` was always `undefined`,
-          // silently defaulting to "1" via `?? 1` whether the call
-          // succeeded or not.
-          const executions = result?.data ? [result.data] : [];
-          const executionCount = executions.length;
-          toast.success(
-            executionCount > 1
-              ? `Routine started for ${executionCount} agents.`
-              : "Routine started.",
-          );
+        onSuccess: async () => {
+          // Go's `routines_fire` fires exactly one run and answers that bare
+          // `Run`; there is no fan-out to several agents to count here.
+          toast.success(t("Routine started."));
           await router.invalidate();
           setContentTab(1);
         },
-        onError: (error) => {
-          toast.error(getErrorMessage(error));
+        onError: async (error) => {
+          // A failed run is still a run: refresh so the history shows it.
+          const failure = await describeFireFailure(routineId, error);
+          toast.error(failure.title, { description: failure.description });
+          await router.invalidate();
         },
       });
+
+    // Go fires only an enabled routine unless it is told to force it, and
+    // refuses otherwise. Offering the same "Run now" on a disabled routine
+    // promised a run that could only be refused, so the button says what it
+    // will do instead, and does it.
+    const runsDespiteStatus = isEditMode && routine?.status !== "enabled";
 
     const runs = routine?.runs ?? [];
 
@@ -374,22 +364,35 @@ export const RoutineUpsertPage = aos
                         ) : null}
 
                         {isEditMode ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={isFiring}
-                            onClick={() =>
-                              fireRoutine({
-                                params: { routine: routine!.id },
-                                query: {},
-                                body: {},
-                              })
-                            }
-                          >
-                            <PlayIcon />
-                            {isFiring ? "Running..." : "Run now"}
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={isFiring}
+                                onClick={() =>
+                                  fireRoutine({
+                                    params: { routine: routine!.id },
+                                    query: {},
+                                    body: runsDespiteStatus ? { force: true } : {},
+                                  })
+                                }
+                              >
+                                <PlayIcon />
+                                {isFiring
+                                  ? t("Running...")
+                                  : runsDespiteStatus
+                                    ? t("Run once anyway")
+                                    : t("Run now")}
+                              </Button>
+                            </TooltipTrigger>
+                            {runsDespiteStatus ? (
+                              <TooltipContent sideOffset={8}>
+                                {t("This routine is not enabled. This runs it once without enabling it.")}
+                              </TooltipContent>
+                            ) : null}
+                          </Tooltip>
                         ) : null}
 
                         <Button

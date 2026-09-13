@@ -33,6 +33,7 @@ import { aos } from "@/app/aos";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
 
 interface TaskListRowProps {
   task: Task;
@@ -85,7 +86,7 @@ export const TaskListRow = React.memo(function TaskListRow({
         );
         router.invalidate();
       } catch (error) {
-        toast.error(t("Failed to update priority"));
+        toast.error(t("Failed to update priority"), { description: errorMessage(error) });
       }
     },
     [task.id, router],
@@ -109,7 +110,7 @@ export const TaskListRow = React.memo(function TaskListRow({
         );
         router.invalidate();
       } catch (error) {
-        toast.error(t("Failed to update assignee"));
+        toast.error(t("Failed to update assignee"), { description: errorMessage(error) });
       }
     },
     [task.id, router, directory, self],
@@ -130,7 +131,7 @@ export const TaskListRow = React.memo(function TaskListRow({
         toast.success(`Moved to ${TaskHelper.getStatus(status).label}`);
         router.invalidate();
       } catch (error) {
-        toast.error(t("Failed to update status"));
+        toast.error(t("Failed to update status"), { description: errorMessage(error) });
       }
     },
     [task.id, router],
@@ -146,7 +147,7 @@ export const TaskListRow = React.memo(function TaskListRow({
         toast.success(dueAt ? `Due date set` : "Due date removed");
         router.invalidate();
       } catch (error) {
-        toast.error(t("Failed to update due date"));
+        toast.error(t("Failed to update due date"), { description: errorMessage(error) });
       }
     },
     [task.id, router],
@@ -158,7 +159,7 @@ export const TaskListRow = React.memo(function TaskListRow({
       toast.success(`Task ${task.id} deleted`);
       router.invalidate();
     } catch (error) {
-      toast.error(t("Failed to delete task"));
+      toast.error(t("Failed to delete task"), { description: errorMessage(error) });
     }
   }, [task.id, router]);
 
@@ -193,7 +194,7 @@ export const TaskListRow = React.memo(function TaskListRow({
         toast.success(`Type updated`);
         router.invalidate();
       } catch (error) {
-        toast.error(t("Failed to update type"));
+        toast.error(t("Failed to update type"), { description: errorMessage(error) });
       }
     },
     [task.id, router],
@@ -209,7 +210,7 @@ export const TaskListRow = React.memo(function TaskListRow({
         toast.success(project ? `Project updated` : "Project removed");
         router.invalidate();
       } catch (error) {
-        toast.error(t("Failed to update project"));
+        toast.error(t("Failed to update project"), { description: errorMessage(error) });
       }
     },
     [task.id, router],

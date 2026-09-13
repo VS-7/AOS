@@ -82,6 +82,26 @@ export function flattenArgs(opts?: CallOpts): Record<string, unknown> {
   return { ...opts?.params, ...opts?.query, ...opts?.body };
 }
 
+/**
+ * The sentence a failure carries, or `undefined` when it carries none.
+ *
+ * A refusal reaches a call site in three shapes: an `Error` (the facade's
+ * own, a `DomainError`, anything thrown), a plain `{message}` object (what
+ * the stores in `app/stores.ts` return), or a string. Sites that show a fixed
+ * "Failed to …" put this under it, so the person reads *why* — "the routine
+ * is disabled", "the record could not be removed" — instead of only that
+ * something went wrong.
+ */
+export function errorMessage(error: unknown): string | undefined {
+  const raw =
+    typeof error === "string"
+      ? error
+      : error && typeof error === "object" && "message" in error
+        ? (error as { message?: unknown }).message
+        : undefined;
+  return typeof raw === "string" && raw.trim() !== "" ? raw : undefined;
+}
+
 function toEnvelopeError(err: unknown): EnvelopeError {
   if (err && typeof err === "object" && "code" in err) {
     const e = err as { code?: unknown; message?: unknown };
@@ -282,8 +302,10 @@ interface ActionNode {
   /**
    * `options` accepts the same `onSuccess`/`onError`/`onSettled` callbacks
    * `@tanstack/react-query`'s own `useMutation` does — `mutationFn` is
-   * fixed (it's always `call(feature, action, opts)`), everything else
-   * passes through. Originally this took no parameter at all; the first
+   * fixed (it's always `call(feature, action, opts)`, thrown on refusal the
+   * way `mutateOrThrow` throws), everything else passes through. `onError`
+   * receives the `EnvelopeError`; `onSuccess` receives the envelope, whose
+   * `error` is therefore always empty. Originally this took no parameter at all; the first
    * real ported call site (`task`'s `client.chat.stop.useMutation({
    * onSuccess, onError})`) called it with options and failed to compile
    * ("Expected 0 arguments, but got 1") — a common enough React Query
@@ -417,7 +439,19 @@ function actionNode(feature: string, action: string): ActionNode {
     useMutation: (options): any => {
       const mutation = useMutation({
         ...options,
-        mutationFn: (opts?: CallOpts) => call(feature, action, opts) as any,
+        // React Query decides between `onSuccess` and `onError` by whether
+        // this promise rejects, and `call()` never rejects. Handing it the
+        // envelope as it came back settled every refusal as a success: all
+        // thirty-nine `onError` handlers were unreachable, and each
+        // `onSuccess` announced a delete, a rename or a run that the daemon
+        // had refused. A dormant path is a refusal too — nothing happened.
+        // Success still receives the whole envelope, which is what every
+        // `response.data` read in those handlers was written against.
+        mutationFn: async (opts?: CallOpts) => {
+          const answer = await call(feature, action, opts);
+          if (answer.error) throw answer.error;
+          return answer as any;
+        },
       });
       // See the `.loading` doc comment on `ActionNode.useMutation` above.
       return { ...mutation, loading: mutation.isPending };

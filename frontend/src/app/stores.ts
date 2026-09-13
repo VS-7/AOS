@@ -200,6 +200,20 @@ async function resolveWorkspaces(
   };
 }
 
+/**
+ * The failure a store action hands back, as a real `Error`.
+ *
+ * These actions return their failure rather than throw it, and they used to
+ * return it as a plain `{message}` object. Callers that throw it on — the
+ * account settings forms do, to reach `useForm`'s error path — then handed
+ * `useForm` something that is not an `Error`, which it turns into one with
+ * `String(err)`: the toast read "[object Object]" instead of "an account
+ * needs a name". Keeping the original `Error` also keeps its `code`.
+ */
+function asError(err: unknown, fallback: string): Error {
+  return err instanceof Error ? err : new Error(fallback);
+}
+
 const workspaceStore = AosStore.create("workspace")
   .withState({
     directory: {
@@ -294,7 +308,7 @@ const workspaceStore = AosStore.create("workspace")
       async (workspaceId: string) => {
         const known = ctx.state.get().options.find((w) => w.id === workspaceId);
         if (!known) {
-          return { error: { message: `No workspace ${workspaceId}.` } };
+          return { error: new Error(`No workspace ${workspaceId}.`) };
         }
         setWorkspace(workspaceId);
         if (typeof document !== "undefined") {
@@ -309,11 +323,9 @@ const workspaceStore = AosStore.create("workspace")
               options: resolved.options,
             }));
           }
-          return { error: undefined as { message: string } | undefined };
+          return { error: undefined as Error | undefined };
         } catch (err) {
-          return {
-            error: { message: err instanceof Error ? err.message : "Could not switch workspace." },
-          };
+          return { error: asError(err, "Could not switch workspace.") };
         }
       },
   )
@@ -339,9 +351,7 @@ const workspaceStore = AosStore.create("workspace")
             _reasoning: "the person asked to remove this workspace from the installation",
           });
         } catch (err) {
-          return {
-            error: { message: err instanceof Error ? err.message : "Could not delete workspace." },
-          };
+          return { error: asError(err, "Could not delete workspace.") };
         }
         try {
           const resolved = await resolveWorkspaces(
@@ -356,7 +366,7 @@ const workspaceStore = AosStore.create("workspace")
           // The delete landed; a failed re-read is a stale list, not a
           // failed operation.
         }
-        return { error: undefined as { message: string } | undefined };
+        return { error: undefined as Error | undefined };
       },
   )
   .build();
@@ -413,9 +423,9 @@ const authStore = AosStore.create("auth")
             // preload above.
             user: { ...user, hasToken: true, tokenMasked: null } as unknown as AuthSelfProfile,
           }));
-          return { error: undefined as { message: string } | undefined };
+          return { error: undefined as Error | undefined };
         } catch (err) {
-          return { error: { message: err instanceof Error ? err.message : "Login failed." } };
+          return { error: asError(err, "Login failed.") };
         }
       },
   )
@@ -443,11 +453,9 @@ const authStore = AosStore.create("auth")
             ...state,
             user: { ...(state.user ?? {}), ...user } as unknown as AuthSelfProfile,
           }));
-          return { error: undefined as { message: string } | undefined };
+          return { error: undefined as Error | undefined };
         } catch (err) {
-          return {
-            error: { message: err instanceof Error ? err.message : "Could not save the profile." },
-          };
+          return { error: asError(err, "Could not save the profile.") };
         }
       },
   )
@@ -458,11 +466,9 @@ const authStore = AosStore.create("auth")
       async (params: { currentPassword: string; newPassword: string }) => {
         try {
           await changePassword(params.currentPassword, params.newPassword);
-          return { error: undefined as { message: string } | undefined };
+          return { error: undefined as Error | undefined };
         } catch (err) {
-          return {
-            error: { message: err instanceof Error ? err.message : "Could not change the password." },
-          };
+          return { error: asError(err, "Could not change the password.") };
         }
       },
   )
@@ -486,7 +492,7 @@ const authStore = AosStore.create("auth")
       async () => ({
         success: false,
         token: undefined as string | undefined,
-        error: { message: "API token regeneration isn't wired up in this build yet." },
+        error: new Error("API token regeneration isn't wired up in this build yet."),
       }),
   )
   .build();

@@ -13,6 +13,7 @@ import { TasksFinishWorkflowDialog } from "@/features/task/presentation/componen
 import { useEffect } from "react";
 import { useChat } from "@/features/chat/presentation/hooks/use-chat";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
 
 export const TaskDetailsPage = aos.page("/tasks/$id")
   .withMetadata({
@@ -57,8 +58,10 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
         body: { status },
       });
       if (error) {
-        // @ts-expect-error - Expected
-        toast.error(error.error?.message || "Failed to update status");
+        // The envelope's error is the message itself; `error.error` was the
+        // generated client's shape and is always empty here, so the daemon's
+        // reason never reached the toast.
+        toast.error(t("Failed to update status"), { description: errorMessage(error) });
         return;
       }
       toast.success(`Moved to ${TaskHelper.getStatus(status).label}`);
@@ -70,8 +73,8 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
         await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { priority } });
         toast.success(t("Priority updated"));
         router.invalidate();
-      } catch {
-        toast.error(t("Failed to update priority"));
+      } catch (error) {
+        toast.error(t("Failed to update priority"), { description: errorMessage(error) });
       }
     }
 
@@ -80,8 +83,8 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
         await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { assigned: assignee } });
         toast.success(assignee ? "Assigned" : "Unassigned");
         router.invalidate();
-      } catch {
-        toast.error(t("Failed to update assignee"));
+      } catch (error) {
+        toast.error(t("Failed to update assignee"), { description: errorMessage(error) });
       }
     }
 
@@ -90,8 +93,8 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
         await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { type } });
         toast.success(t("Type updated"));
         router.invalidate();
-      } catch {
-        toast.error(t("Failed to update type"));
+      } catch (error) {
+        toast.error(t("Failed to update type"), { description: errorMessage(error) });
       }
     }
 
@@ -100,8 +103,8 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
         await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { dueAt } });
         toast.success(dueAt ? "Due date set" : "Due date removed");
         router.invalidate();
-      } catch {
-        toast.error(t("Failed to update due date"));
+      } catch (error) {
+        toast.error(t("Failed to update due date"), { description: errorMessage(error) });
       }
     }
 
@@ -110,8 +113,8 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
         await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { project } });
         toast.success(project ? "Project updated" : "Project cleared");
         router.invalidate();
-      } catch {
-        toast.error(t("Failed to update project"));
+      } catch (error) {
+        toast.error(t("Failed to update project"), { description: errorMessage(error) });
       }
     }
 
@@ -120,8 +123,8 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
         await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { goal } });
         toast.success(goal ? "Goal updated" : "Goal cleared");
         router.invalidate();
-      } catch {
-        toast.error(t("Failed to update goal"));
+      } catch (error) {
+        toast.error(t("Failed to update goal"), { description: errorMessage(error) });
       }
     }
 
@@ -174,8 +177,7 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
             });
 
             if (error) {
-              // @ts-expect-error - Expected
-              toast.error(error.error?.message || "Failed to finish task");
+              toast.error(t("Failed to finish task"), { description: errorMessage(error) });
               return;
             }
 

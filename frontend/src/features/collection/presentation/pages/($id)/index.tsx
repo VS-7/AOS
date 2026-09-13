@@ -42,6 +42,7 @@ import { useAlert } from "@/components/ui/alert-provider";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
 import {
   DataTable,
   DataTableProvider,
@@ -209,9 +210,6 @@ export const CollectionPage = aos
         },
       });
 
-    const { mutate: deleteRecordAsync } =
-      client.collection.deleteRecord.useMutation();
-
     const columns = React.useMemo(() => getRecordColumns(allRecords), [allRecords]);
 
     const tableColumns = React.useMemo(() => {
@@ -317,7 +315,6 @@ export const CollectionPage = aos
             collectionId={collectionId}
             allRecords={allRecords}
             deleteRecord={deleteRecord}
-            deleteRecordAsync={deleteRecordAsync}
           />
         </DataTableProvider>
       </DormantGate>
@@ -330,13 +327,11 @@ function CollectionPageContent({
   collectionId,
   allRecords,
   deleteRecord,
-  deleteRecordAsync,
 }: {
   collection: any;
   collectionId: string;
   allRecords: any[];
   deleteRecord: any;
-  deleteRecordAsync: any;
 }) {
   const navigate = useNavigate();
   const router = useRouter();
@@ -360,8 +355,12 @@ function CollectionPageContent({
     });
     if (!accepted) return;
 
-    const deletePromises = selectedRows.map((row: any) =>
-      deleteRecordAsync({
+    // `mutateOrThrow`, not the hook's `mutate`: React Query's `mutate`
+    // returns nothing, so this used to hand `Promise.all` an array of
+    // `undefined` that resolved at once — "N record(s) deleted successfully."
+    // before a single delete had even been answered, refused or not.
+    const deletions = selectedRows.map((row: any) =>
+      aos.client.collection.deleteRecord.mutateOrThrow({
         params: {
           collection: collectionId,
           record: row.original.id,
@@ -369,17 +368,30 @@ function CollectionPageContent({
       })
     );
 
-    toast.promise(Promise.all(deletePromises), {
-      loading: `Deleting ${selectedRows.length} record(s)...`,
-      success: () => {
-        table.resetRowSelection();
+    toast.promise(
+      Promise.allSettled(deletions).then((results) => {
+        // Some of them may have landed: the table has to show that either way.
         router.invalidate();
-        return `${selectedRows.length} record(s) deleted successfully.`;
+        const refused = results.filter(
+          (result): result is PromiseRejectedResult => result.status === "rejected",
+        );
+        if (refused.length > 0) {
+          throw new Error(
+            t("{{failed}} of {{count}} record(s) could not be deleted: {{reason}}", {
+              failed: refused.length,
+              count: results.length,
+              reason: errorMessage(refused[0]!.reason) ?? "",
+            }),
+          );
+        }
+        table.resetRowSelection();
+      }),
+      {
+        loading: `Deleting ${selectedRows.length} record(s)...`,
+        success: () => `${selectedRows.length} record(s) deleted successfully.`,
+        error: (err) => errorMessage(err) ?? t("Failed to delete some records."),
       },
-      error: (err) => {
-        return err instanceof Error ? err.message : "Failed to delete some records.";
-      },
-    });
+    );
   };
 
   return (
