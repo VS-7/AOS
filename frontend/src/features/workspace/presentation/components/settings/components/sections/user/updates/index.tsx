@@ -25,8 +25,10 @@ import type {
   UpdateStatus,
 } from "@/features/update/interfaces/update.interfaces";
 import {
+  busyLine,
   canCheck,
   checkLine,
+  followed,
   messageOf,
   offerLine,
   offerOf,
@@ -34,7 +36,17 @@ import {
   releasePage,
   reopenLine,
   statusLine,
+  stillRunning,
+  unsupervisedLine,
+  type Followed,
 } from "./updates.helper";
+
+/**
+ * How often the status is read while a download or install runs that this
+ * screen has no answer from. Short enough that the release shows up about
+ * when it is staged; a status read changes nothing on the daemon.
+ */
+const FOLLOW_EVERY_MS = 1500;
 
 /**
  * Keeping this installation current.
@@ -63,9 +75,14 @@ import {
 function UpdatesPanel(): React.JSX.Element {
   const [check, setCheck] = React.useState<CheckResult | null>(null);
   const [downloaded, setDownloaded] = React.useState<Staged | null>(null);
+  // A download or install whose answer never came back — see `stillRunning`
+  // — and when this screen started following it: only a status read after
+  // that can say how it ended.
+  const [following, setFollowing] = React.useState<(Followed & { since: number }) | null>(null);
 
   const statusQuery = aos.client.update.status.useQuery<UpdateStatus>();
   const status = statusQuery.data ?? null;
+  const follow = (call: Followed) => setFollowing({ ...call, since: Date.now() });
 
   const { mutate: runCheck, loading: isChecking } = aos.client.update.check.useMutation({
     onSuccess: (result: any) => {
@@ -86,30 +103,45 @@ function UpdatesPanel(): React.JSX.Element {
     },
   });
 
+  // A signature or checksum failure is the one message in this screen that
+  // must not be softened. A download the daemon may still be running is not
+  // a failure at all: the screen follows it instead.
+  const downloadRefused = (error: unknown, version: string | undefined) => {
+    if (version && stillRunning(error)) {
+      follow({ kind: "download", version });
+      return;
+    }
+    toast.error(messageOf(error, t("The download could not be verified.")));
+  };
+
   const { mutate: runDownload, loading: isDownloading } = aos.client.update.download.useMutation({
-    onSuccess: (result: any) => {
-      // A signature or checksum failure lands here too, and it is the one
-      // message in this screen that must not be softened.
+    onSuccess: (result: any, variables) => {
       const refused = refusalOf(result);
       if (refused) {
-        toast.error(messageOf(refused, t("The download could not be verified.")));
+        downloadRefused(refused, versionOf(variables));
         return;
       }
       setDownloaded((result?.data?.staged as Staged | undefined) ?? null);
       toast.success(t("Downloaded and verified."));
       void statusQuery.refetch();
     },
-    onError: (error: unknown) => {
-      toast.error(messageOf(error, t("The download could not be verified.")));
-    },
+    onError: (error: unknown, variables) => downloadRefused(error, versionOf(variables)),
   });
 
+  const applyRefused = (error: unknown, version: string | undefined) => {
+    if (version && stillRunning(error)) {
+      follow({ kind: "install", version });
+      return;
+    }
+    toast.error(messageOf(error, t("The update could not be applied.")));
+    void statusQuery.refetch();
+  };
+
   const { mutate: runApply, loading: isApplying } = aos.client.update.apply.useMutation({
-    onSuccess: (result: any) => {
+    onSuccess: (result: any, variables) => {
       const refused = refusalOf(result);
       if (refused) {
-        toast.error(messageOf(refused, t("The update could not be applied.")));
-        void statusQuery.refetch();
+        applyRefused(refused, variables?.body?.version as string | undefined);
         return;
       }
       toast.success(t("Installed. The daemon restarted on the new version."));
@@ -117,17 +149,54 @@ function UpdatesPanel(): React.JSX.Element {
       setDownloaded(null);
       void statusQuery.refetch();
     },
-    onError: (error: unknown) => {
-      toast.error(messageOf(error, t("The update could not be applied.")));
-    },
+    onError: (error: unknown, variables) => applyRefused(error, variables?.body?.version as string | undefined),
   });
 
-  const busy = isChecking || isDownloading || isApplying;
+  // Read the status again and again while something runs that this screen
+  // has no answer from: its own lost call, or one it opened on.
+  const running = Boolean(following) || Boolean(status?.busy);
+  const { refetch } = statusQuery;
+  React.useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => void refetch(), FOLLOW_EVERY_MS);
+    return () => window.clearInterval(timer);
+  }, [running, refetch]);
+
+  // A followed call ends when a status read after it began shows nothing
+  // running, and it ends as whatever that status shows.
+  React.useEffect(() => {
+    if (!following || statusQuery.dataUpdatedAt <= following.since) return;
+    switch (followed(following, status)) {
+      case "running":
+        return;
+      case "staged":
+        setDownloaded(status?.staged ?? null);
+        toast.success(t("Downloaded and verified."));
+        break;
+      case "installed":
+        toast.success(t("{{version}} is installed.", { version: following.version }));
+        setCheck(null);
+        setDownloaded(null);
+        break;
+      case "ended":
+        toast.error(
+          following.kind === "download"
+            ? t("The download ended without a verified release staged. Download it again to see why.")
+            : t("The install ended without {{version}} running. Install it again to see why.", { version: following.version }),
+        );
+        break;
+    }
+    setFollowing(null);
+  }, [following, status, statusQuery.dataUpdatedAt]);
+
+  const busy = isChecking || isDownloading || isApplying || running;
   const answer = checkLine(check, status);
   const offer = offerOf(check, downloaded, status);
   const page = offer ? releasePage(offer.release) : null;
   const reopen = offer ? reopenLine(offer) : null;
+  const stopFirst = offer ? unsupervisedLine(offer) : null;
   const waiting = !check && status?.staged ? status.staged : null;
+  const elsewhere = busyLine(status, Boolean(following));
 
   return (
     <>
@@ -163,6 +232,12 @@ function UpdatesPanel(): React.JSX.Element {
             </FormSectionItem>
           ) : null}
 
+          {elsewhere ? (
+            <FormSectionItem>
+              <p className="text-sm text-muted-foreground">{elsewhere}</p>
+            </FormSectionItem>
+          ) : null}
+
           {waiting ? (
             <FormSectionItem>
               <p className="text-sm text-muted-foreground">
@@ -188,6 +263,7 @@ function UpdatesPanel(): React.JSX.Element {
             {offer.install.method === "terminal" && offer.staged && offer.install.command ? (
               <FormSectionItem>
                 <div className="min-w-0 space-y-2">
+                  {stopFirst ? <p className="text-sm text-muted-foreground">{stopFirst}</p> : null}
                   <code className="block select-all break-all rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
                     {offer.install.command}
                   </code>
@@ -228,7 +304,7 @@ function UpdatesPanel(): React.JSX.Element {
                   disabled={busy || Boolean(offer.staged)}
                   onClick={() => void runDownload({ body: { release: offer.release } })}
                 >
-                  {isDownloading ? t("Downloading…") : t("Download and verify")}
+                  {isDownloading || following?.kind === "download" ? t("Downloading…") : t("Download and verify")}
                 </Button>
                 {offer.install.method === "here" ? (
                   <Button
@@ -237,7 +313,7 @@ function UpdatesPanel(): React.JSX.Element {
                     disabled={busy || !offer.staged}
                     onClick={() => void runApply({ body: { version: offer.staged?.version } })}
                   >
-                    {isApplying ? t("Installing…") : t("Install and restart")}
+                    {isApplying || following?.kind === "install" ? t("Installing…") : t("Install and restart")}
                   </Button>
                 ) : null}
               </>
@@ -247,6 +323,12 @@ function UpdatesPanel(): React.JSX.Element {
       ) : null}
     </>
   );
+}
+
+/** The release a download was asked for, from the call's own arguments. */
+function versionOf(variables: { body?: Record<string, unknown> } | undefined): string | undefined {
+  const release = variables?.body?.release as { version?: unknown } | undefined;
+  return typeof release?.version === "string" ? release.version : undefined;
 }
 
 /**

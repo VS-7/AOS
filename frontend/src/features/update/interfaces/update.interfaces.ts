@@ -39,6 +39,12 @@ export interface UpdateInstall {
   command?: string;
   /** The window is among the binaries an install replaces here. */
   reopen?: boolean;
+  /**
+   * The daemon answering was started by hand or by a service manager, not by
+   * the application or `aos gateway`: `command` cannot restart it, so it is
+   * stopped where it was started first.
+   */
+  unsupervised?: boolean;
 }
 
 /** Which version this installation runs, and what the last check found. */
@@ -53,6 +59,8 @@ export interface UpdateStatus {
   lastState?: CheckState;
   /** A verified release waiting to be installed. */
   staged?: Staged;
+  /** A download or install is running on this installation right now. */
+  busy?: boolean;
 }
 
 /**

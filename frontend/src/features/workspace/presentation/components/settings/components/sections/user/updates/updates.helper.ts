@@ -164,6 +164,68 @@ export function reopenLine(offer: Offer): string | null {
 }
 
 /**
+ * What to do before the terminal command, when the daemon answering is one
+ * the command cannot restart — started by hand or by a service manager. The
+ * command refuses beside it (AOS_UPDATE_DAEMON_NOT_SUPERVISED), and the screen
+ * used to offer it as though it would work.
+ */
+export function unsupervisedLine(offer: Offer): string | null {
+  if (offer.install.method !== "terminal" || !offer.staged || !offer.install.command || !offer.install.unsupervised) {
+    return null;
+  }
+  return t("This daemon was started by hand or by a service manager, not by AOS, so the command cannot restart it: stop it where it was started first — the terminal running `aosd serve`, or its service. The command then starts the new version itself.");
+}
+
+/**
+ * The refusals that mean the call may well be running still, rather than
+ * that it failed.
+ *
+ * A release takes longer than the window's bridge waits on a slow link. The
+ * bridge gave up and sent the download again, and the daemon answered the
+ * second call AOS_UPDATE_IN_PROGRESS — about the first one, still running —
+ * which this screen toasted as a failure. A bridge that stops waiting and
+ * does not send again says so with AOS_DAEMON_TIMEOUT or
+ * AOS_DAEMON_ANSWER_LOST. None of the three is an answer about the download.
+ */
+const STILL_RUNNING = new Set(["AOS_UPDATE_IN_PROGRESS", "AOS_DAEMON_TIMEOUT", "AOS_DAEMON_ANSWER_LOST"]);
+
+export function stillRunning(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && STILL_RUNNING.has(code);
+}
+
+/** A download or install this screen asked for and lost the answer to. */
+export interface Followed {
+  kind: "download" | "install";
+  version: string;
+}
+
+/**
+ * Where a followed call stands, by what the daemon's status shows. Until a
+ * status arrives, and while a download or install holds the installation,
+ * it is running; after, it is whatever it left behind.
+ */
+export function followed(
+  call: Followed,
+  status: UpdateStatus | null,
+): "running" | "staged" | "installed" | "ended" {
+  if (!status || status.busy) return "running";
+  if (status.current === call.version) return "installed";
+  if (call.kind === "download" && status.staged?.version === call.version) return "staged";
+  return "ended";
+}
+
+/**
+ * Said when the screen opens on a download or install it did not start —
+ * another window's, a terminal's, or its own before a reload.
+ */
+export function busyLine(status: UpdateStatus | null, following: boolean): string | null {
+  if (!status?.busy || following) return null;
+  return t("A download or install of an update is running on this installation. This screen shows what it leaves when it ends.");
+}
+
+/**
  * The release's page, when it is a web page: https, or http on this machine
  * (a feed served locally). Anything else is null.
  *
