@@ -91,6 +91,15 @@ func (w *worktrees) List(context.Context) ([]string, error) {
 	return append([]string(nil), w.existing...), nil
 }
 
+func (w *worktrees) Exists(_ context.Context, path string) bool {
+	for _, p := range w.existing {
+		if p == path {
+			return true
+		}
+	}
+	return false
+}
+
 func (w *worktrees) Source(context.Context, WorktreeSpec) (WorktreeSource, error) {
 	if w.source != nil {
 		return *w.source, nil

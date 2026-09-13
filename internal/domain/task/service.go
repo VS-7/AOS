@@ -463,7 +463,7 @@ func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, err
 	if err != nil {
 		return DeleteOutput{}, err
 	}
-	if current.Worktree.Path != "" && s.worktrees != nil {
+	if current.Worktree.Path != "" && s.worktrees != nil && s.placedHere(ctx, current.Worktree.Path) {
 		if err := s.worktrees.Remove(ctx, current.Worktree.Path); err != nil {
 			// The checkout is outside the task directory, so removing the task
 			// cannot take it with it. Reported rather than hidden: a leftover
@@ -477,6 +477,20 @@ func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, err
 	}
 	s.notify(ctx, "deleted", current, nil)
 	return DeleteOutput{ID: current.ID}, nil
+}
+
+// placedHere reports whether a recorded checkout sits under the directory this
+// workspace puts its own checkouts in. Delete removes a checkout with --force,
+// and the recorded path is read back from a file anybody can edit: one that
+// names somebody's own worktree is not the task's to take with it.
+func (s *Service) placedHere(ctx context.Context, path string) bool {
+	policy, err := s.worktreePolicy(ctx)
+	if err != nil || strings.TrimSpace(policy.Root) == "" || !underRoot(policy.Root, path) {
+		s.log.Warn("a deleted task's recorded checkout is not under the workspace's worktree root, so it was left alone",
+			"path", path, "worktreeRoot", policy.Root)
+		return false
+	}
+	return true
 }
 
 // view builds the projections a reader needs and the file does not hold.
