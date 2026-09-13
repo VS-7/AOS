@@ -16,12 +16,14 @@ import {
   Field,
   FieldGroup,
   Form,
+  FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { aos } from "@/app/aos"
+import { toast } from "sonner"
 import type { Todo } from "@/features/task/interfaces/todo.interfaces"
 
 const formSchema = z.object({
@@ -78,11 +80,14 @@ export function TodoDialogUpsert({ taskId, todo, onCreated, children }: TodoDial
       }
     },
     onResponse: ({ error }) => {
-      if (!error) {
-        ref.current?.click()
-        form.reset()
-        onCreated?.()
+      // Create/Update never submitted before, so a refusal had nowhere to go.
+      if (error) {
+        toast.error(error.message || t("Could not save the todo."))
+        return
       }
+      ref.current?.click()
+      form.reset()
+      onCreated?.()
     },
   })
 
@@ -113,6 +118,7 @@ export function TodoDialogUpsert({ taskId, todo, onCreated, children }: TodoDial
                       className="min-h-20 resize-none"
                     />
                   </FormControl>
+                  <FormMessage />
                 </Field>
               )}
             />
@@ -161,7 +167,7 @@ export function TodoDialogUpsert({ taskId, todo, onCreated, children }: TodoDial
               {t("Cancel")}
             </Button>
             <Button type="submit" disabled={form.isLoading}>
-              {form.isLoading ? "Saving..." : isEdit ? "Update" : "Create"}
+              {form.isLoading ? t("Saving...") : isEdit ? t("Update") : t("Create")}
             </Button>
           </DialogFooter>
         </Form>
