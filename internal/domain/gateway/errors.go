@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/OWNER/aos/internal/core/apperr"
@@ -43,6 +44,27 @@ func errSpawnFailed(path string, cause error) error {
 		Issue("command", path).
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)
+}
+
+// errNotOurs is a daemon answering on the port that this supervisor did not
+// start — so it has no record of it, cannot stop it, and must not start a
+// second one beside it.
+func errNotOurs(host string, port int) error {
+	return apperr.New("GATEWAY_NOT_OURS").
+		Causer("gateway.Service.Start").
+		Msgf("a daemon this supervisor did not start is already serving on %s:%d", host, port).
+		Issue("host", host).
+		Issue("port", port).
+		Status(apperr.StatusConflict).
+		CTA(
+			apperr.CallToAction{
+				Label: "use the daemon that is serving, or stop it where it was started (the terminal running `aosd serve`) and start again",
+			},
+			apperr.CallToAction{
+				Label:   "see which process holds the port",
+				Command: fmt.Sprintf("lsof -nP -iTCP:%d -sTCP:LISTEN", port),
+			},
+		)
 }
 
 // errDaemonExited is the case the health check exists to distinguish from a
