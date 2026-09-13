@@ -48,17 +48,19 @@ export const MarketplaceDetailsPage = aos
     let loadError: { code: string; message: string } | null = null;
     let related: MarketplaceSkillListing[] = [];
     if (source) {
-      const [detailRes, listRes] = await Promise.all([
-        client.marketplace.getByName.query({ params: { name: source } }),
-        client.marketplace.list.query({ query: {} }),
-      ]);
+      const detailRes = await client.marketplace.getByName.query({ params: { name: source } });
       const found = detailRes.data?.listing as MarketplaceRegistryListing | undefined;
       listing = found ? toMarketplaceListing(found) : undefined;
       if (detailRes.error && detailRes.error.code !== LISTING_NOT_FOUND) {
         loadError = { code: detailRes.error.code ?? "", message: detailRes.error.message ?? "" };
       }
-      const all: MarketplaceRegistryListing[] = Array.isArray(listRes.data?.items) ? listRes.data.items : [];
-      if (listing) related = getRelatedListings(all.map(toMarketplaceListing), listing);
+      // Related listings only once there is a listing to relate to: with no
+      // registry the search would only repeat the refusal just received.
+      if (listing) {
+        const listRes = await client.marketplace.list.query({ query: {} });
+        const all: MarketplaceRegistryListing[] = Array.isArray(listRes.data?.items) ? listRes.data.items : [];
+        related = getRelatedListings(all.map(toMarketplaceListing), listing);
+      }
     }
 
     if (!installedSkill && !listing) {
