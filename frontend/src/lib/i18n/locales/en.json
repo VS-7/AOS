@@ -525,6 +525,7 @@
   "Irreversible actions. Proceed with caution.": "Irreversible actions. Proceed with caution.",
   "Label is required": "Label is required",
   "Learning": "Learning",
+  "Name is required": "Name is required",
   "Observation": "Observation",
   "Preference": "Preference",
   "Recorded as {{agent}}, alongside everything else it remembers.": "Recorded as {{agent}}, alongside everything else it remembers.",
