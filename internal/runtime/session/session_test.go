@@ -77,7 +77,7 @@ func TestAnAssistantTurnWithNothingInItIsDropped(t *testing.T) {
 func TestAnAgentWithNoPolicyGetsTheStrictOne(t *testing.T) {
 	r := &Runner{deps: Deps{WorkspaceRoot: t.TempDir()}}
 
-	box, err := r.sandboxFor(&agent.Agent{ID: "atlas"})
+	box, err := r.sandboxFor(context.Background(), &agent.Agent{ID: "atlas"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestAnAgentWithNoPolicyGetsTheStrictOne(t *testing.T) {
 func TestTheAgentsFileDecidesWhatItMayReach(t *testing.T) {
 	r := &Runner{deps: Deps{WorkspaceRoot: t.TempDir()}}
 
-	box, err := r.sandboxFor(&agent.Agent{
+	box, err := r.sandboxFor(context.Background(), &agent.Agent{
 		ID: "builder",
 		Sandbox: &agent.Sandbox{
 			Permissions: []string{"read", "write", "execute"},
@@ -106,7 +106,7 @@ func TestTheAgentsFileDecidesWhatItMayReach(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

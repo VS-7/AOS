@@ -781,8 +781,10 @@ func New(opts Options) (*App, error) {
 		Log: logger,
 	})
 	runtime := session.New(session.Deps{
-		Agents:   agentSvc,
-		Chats:    chatSvc,
+		Agents: agentSvc,
+		Chats:  chatSvc,
+		// A turn on a task that has an isolated checkout is confined to it.
+		Tasks:    taskSvc,
 		Models:   models{config: configSvc, home: filepath.Dir(paths.Root)},
 		Registry: reg,
 		Bus:      hookBus,

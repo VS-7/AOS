@@ -24,6 +24,7 @@ import (
 	"github.com/OWNER/aos/internal/domain/agent"
 	"github.com/OWNER/aos/internal/domain/chat"
 	"github.com/OWNER/aos/internal/domain/event"
+	"github.com/OWNER/aos/internal/domain/task"
 	"github.com/OWNER/aos/internal/runtime/agentloop"
 	"github.com/OWNER/aos/internal/runtime/execguard"
 	"github.com/OWNER/aos/internal/runtime/prompt"
@@ -51,6 +52,12 @@ type Chats interface {
 	MarkRun(ctx context.Context, in chat.MarkRunInput) error
 }
 
+// Tasks is what a turn needs from the task aggregate: where a task's isolated
+// checkout is, when the conversation belongs to one.
+type Tasks interface {
+	Get(ctx context.Context, in task.GetInput) (*task.View, error)
+}
+
 // Models resolves an agent to a provider, so the composition root owns the
 // configuration and this package owns nothing.
 type Models interface {
@@ -69,6 +76,7 @@ type Bots interface {
 type Deps struct {
 	Agents   Agents
 	Chats    Chats
+	Tasks    Tasks
 	Models   Models
 	Registry *command.Registry
 	Bus      *event.Service
@@ -350,7 +358,7 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 		RequestID:   identity.From(ctx).RequestID,
 	})
 
-	box, err := r.sandboxFor(worker)
+	box, err := r.sandboxFor(ctx, worker, in.Task)
 	if err != nil {
 		return nil, err
 	}
@@ -493,13 +501,33 @@ func (r *Runner) observe(ctx context.Context, worker *agent.Agent, sessionID, wo
 	})
 }
 
-// sandboxFor builds the confinement from the agent's own file.
-func (r *Runner) sandboxFor(a *agent.Agent) (*sandbox.Sandbox, error) {
+// sandboxFor builds the confinement from the agent's own file, rooted in the
+// task's isolated checkout when the conversation belongs to a task that has
+// one.
+//
+// The checkout was recorded and never used: tasks_branch, the task's own
+// documentation and the agent's instructions all say the sandbox root becomes
+// that path, and every turn was confined to the workspace root regardless — so
+// an agent "working on its own branch" edited the main working tree. A task
+// that no longer exists has no checkout to confine to, and runs where any
+// other turn does; a checkout that is recorded but gone fails the turn rather
+// than quietly handing the agent the main tree instead.
+func (r *Runner) sandboxFor(ctx context.Context, a *agent.Agent, taskID string) (*sandbox.Sandbox, error) {
 	opts := sandbox.Options{
 		WorkspacePath: r.deps.WorkspaceRoot,
 		TmpDir:        r.deps.TmpDir,
 		Permissions:   sandbox.DefaultPermissions(),
 		Exec:          sandbox.DefaultExecPolicy(),
+	}
+	if taskID != "" && r.deps.Tasks != nil {
+		found, err := r.deps.Tasks.Get(ctx, task.GetInput{ID: taskID})
+		switch {
+		case errors.Is(err, apperr.ErrNotFound):
+		case err != nil:
+			return nil, err
+		case found != nil:
+			opts.WorktreePath = found.Worktree.Path
+		}
 	}
 	if a.Sandbox != nil {
 		if len(a.Sandbox.Permissions) > 0 {
