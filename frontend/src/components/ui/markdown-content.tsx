@@ -3131,7 +3131,12 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = React.memo(
               key={key}
               className={cn(
                 'my-6 space-y-3 text-foreground',
-                ordered ? 'pl-8' : 'pl-8 list-disc marker:text-primary/70',
+                // Both kinds need their marker back: Tailwind's preflight
+                // strips `list-style` from every list, and an ordered one
+                // without numbers loses what "option 1" refers to.
+                ordered
+                  ? 'pl-8 list-decimal marker:text-primary/70'
+                  : 'pl-8 list-disc marker:text-primary/70',
               )}
             >
               {children}
