@@ -1,4 +1,5 @@
 import { AosStore } from "./builders/store";
+import { replacing } from "./builders/replace-state";
 import { client, rememberedWorkspace, setWorkspace } from "@/lib/client";
 import {
   AUTHENTICATED_EVENT,
@@ -283,12 +284,35 @@ const workspaceStore = AosStore.create("workspace")
           if (!resolved) return;
           ctx.state.set((state) => ({
             ...state,
-            current: resolved.current,
+            current: replacing(state.current, resolved.current),
             options: resolved.options,
           }));
         } catch {
           // Keep the last known snapshot on a transient failure.
         }
+      },
+  )
+  .addAction(
+    "adopt",
+    (ctx) =>
+      /**
+       * Takes the workspace a `workspace_update` answered with as the
+       * snapshot, without asking again.
+       *
+       * The Git, Worktrees and Tasks settings read this snapshot and saved
+       * without ever writing back to it, so leaving a section and returning
+       * showed the values from before the save — and the next autosave sent
+       * them, undoing it. `replacing`, because the answer omits a field that
+       * was emptied, and a merge would have kept the old text.
+       */
+      (workspace: CurrentWorkspaceState | null | undefined) => {
+        if (!workspace?.id) return;
+        const next: CurrentWorkspaceState = { ...workspace, tasks: workspace.tasks ?? [] };
+        ctx.state.set((state) => ({
+          ...state,
+          current: state.current?.id === next.id ? replacing(state.current, next) : state.current,
+          options: state.options.map((option) => (option.id === next.id ? next : option)),
+        }));
       },
   )
   .addAction(
