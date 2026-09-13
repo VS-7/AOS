@@ -210,7 +210,7 @@ func (c *Client) Status(ctx context.Context) (wailsvc.AuthStatus, error) {
 		return wailsvc.AuthStatus{}, errUnreadable(c.base, err)
 	}
 	if envelope.Error != nil {
-		return wailsvc.AuthStatus{}, envelope.Error.asError()
+		return wailsvc.AuthStatus{}, envelope.Error.asError(res.StatusCode)
 	}
 	return envelope.Data, nil
 }
@@ -281,22 +281,39 @@ func (c *Client) Session(ctx context.Context) (wailsvc.PublicUser, error) {
 		return wailsvc.PublicUser{}, errUnreadable(c.base, err)
 	}
 	if envelope.Error != nil {
-		return wailsvc.PublicUser{}, envelope.Error.asError()
+		return wailsvc.PublicUser{}, envelope.Error.asError(res.StatusCode)
 	}
 	return envelope.Data.User, nil
 }
 
+// apiError is the daemon's error envelope, as the auth routes answer it.
 type apiError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Status  int    `json:"-"`
+	Code    string                `json:"code"`
+	Message string                `json:"message"`
+	Issues  map[string]any        `json:"issue,omitempty"`
+	Actions []apperr.CallToAction `json:"cta,omitempty"`
 }
 
-func (e *apiError) asError() error {
-	return apperr.New(strings.TrimPrefix(e.Code, "AOS_")).
+// asError rebuilds the daemon's refusal, with the status it was answered with.
+//
+// The window reads this on the other side of the Wails bridge — the error is
+// marshalled into the call's rejection — so what it carries is what the page
+// can act on. It used to be a 401 with no issue and no call to action whatever
+// the daemon had said, which made a wrong password (422) read as a missing
+// credential to anything that looked at the status.
+func (e *apiError) asError(status int) error {
+	if status < 400 {
+		status = apperr.StatusInternalServerError
+	}
+	err := apperr.New(e.Code).
 		Causer("daemonclient").
 		Msgf("%s", e.Message).
-		Status(apperr.StatusUnauthorized)
+		Status(status).
+		CTA(e.Actions...)
+	for k, v := range e.Issues {
+		err.Issue(k, v)
+	}
+	return err
 }
 
 // authRequest is Login and Onboarding's shared body: POST JSON, decode the
@@ -331,7 +348,7 @@ func (c *Client) authRequest(ctx context.Context, path string, body map[string]s
 		return wailsvc.AuthResult{}, errUnreadable(c.base, err)
 	}
 	if envelope.Error != nil {
-		return wailsvc.AuthResult{}, envelope.Error.asError()
+		return wailsvc.AuthResult{}, envelope.Error.asError(res.StatusCode)
 	}
 	c.SetToken(envelope.Data.Token)
 	return wailsvc.AuthResult{User: envelope.Data.User, ExpiresAt: envelope.Data.ExpiresAt.Format(time.RFC3339)}, nil
@@ -389,7 +406,7 @@ func (c *Client) Manifest(ctx context.Context) (command.Manifest, error) {
 		return command.Manifest{}, errUnreadable(c.base, err)
 	}
 	if envelope.Error != nil {
-		return command.Manifest{}, envelope.Error.asError()
+		return command.Manifest{}, envelope.Error.asError(res.StatusCode)
 	}
 	return envelope.Data, nil
 }

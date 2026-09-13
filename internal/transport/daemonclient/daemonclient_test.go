@@ -402,6 +402,34 @@ func TestARefusedLoginKeepsTheDaemonsOwnCode(t *testing.T) {
 	}
 }
 
+// The refusal crosses the Wails bridge as this error marshalled, and the
+// window reads its code, status and call to action from there. It used to be
+// rebuilt as a 401 with no call to action whatever the daemon had said — a
+// wrong password (422) read as "unauthenticated" to anything that looked at
+// the status, and the daemon's own next step was dropped on the floor.
+func TestARefusalKeepsTheDaemonsStatusAndCallToAction(t *testing.T) {
+	server := newAuthServer(t, map[string]string{
+		"/api/auth/login": `{"error":{"code":"AOS_AUTH_INVALID_CREDENTIALS","message":"no match","issue":{"identifier":"vitor"},"cta":[{"label":"check the password"}]}}`,
+	})
+	server.status["/api/auth/login"] = http.StatusUnprocessableEntity
+	client := daemonclient.New(daemonclient.Options{BaseURL: server.URL})
+
+	_, err := client.Login(ctx(), "vitor", "wrong")
+	app, ok := apperr.As(err)
+	if !ok {
+		t.Fatalf("err is %T, not an apperr: %v", err, err)
+	}
+	if app.HTTPStatus != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want the daemon's 422", app.HTTPStatus)
+	}
+	if len(app.Actions) != 1 || app.Actions[0].Label != "check the password" {
+		t.Errorf("actions = %+v, want the daemon's call to action", app.Actions)
+	}
+	if app.Issues["identifier"] != "vitor" {
+		t.Errorf("issues = %+v, want the daemon's", app.Issues)
+	}
+}
+
 func TestSessionReportsWhoTheHeldTokenBelongsTo(t *testing.T) {
 	server := newAuthServer(t, map[string]string{
 		"/api/auth/session": `{"data":{"user":{"id":"u1","name":"Vitor","role":"owner"}}}`,
