@@ -569,34 +569,37 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // worktree options as one editable `{enabled, base, branch}` object —
   // that grouping is the form's own UI decision and is untouched here.
   // What changes is purely the *wire* shape: `CreateInput.Worktree` is a
-  // bare `bool`, `Base` is a separate top-level field, and there is no
-  // `branch` field on create at all (branching is the separate
-  // `task.branch` command) — so `branch` has nowhere to go and is
-  // dropped, same as any other field Go's decoder doesn't recognize.
+  // bare `bool`, and `Base` and `Branch` are separate top-level fields.
+  // `branch` used to be dropped here because create had no field for it,
+  // so the name typed in the dialog never reached the checkout.
   "task.create": {
     key: "tasks_create",
     coerceIn: {
       worktree: (value) => {
-        const w = value as { enabled?: boolean; base?: string } | undefined;
-        return w?.enabled ? { worktree: true, ...(w.base ? { base: w.base } : {}) } : { worktree: false };
+        const w = value as { enabled?: boolean; base?: string; branch?: string } | undefined;
+        return w?.enabled
+          ? { worktree: true, ...(w.base ? { base: w.base } : {}), ...(w.branch ? { branch: w.branch } : {}) }
+          : { worktree: false };
       },
     },
     wrapOut: "task",
   },
+  // Cuts the task's checkout. Answers the bare `Worktree`.
+  "task.branch": { key: "tasks_branch", renameIn: { task: "id" } },
   "task.delete": { key: "tasks_delete", renameIn: { task: "id" } },
   "task.getById": { key: "tasks_get", renameIn: { task: "id" }, wrapOut: "task", mapOut: withTaskStats },
-  // `coerceIn` on `task.list`: `(main)/index.tsx`'s filter bar is a
-  // genuine multi-select — that UI decision is untouched. What Go's
-  // `ListInput` actually accepts for `type`/`project`/`goal` is one
-  // scalar `string` each (`internal/domain/task/schema.go`), not a list —
-  // an array into a string field is a hard 400 — so only the first
-  // selection reaches Go; the rest of the UI's selection state is
-  // unaffected, it just doesn't all filter server-side yet. `limit` is
-  // `int`; the quoted-string form some call sites send fails Go's strict
-  // unmarshal the same way.
+  // `coerceIn` on `task.list`: Go's `ListInput` takes one scalar each for
+  // `priority`/`type`/`project`/`goal` (`internal/domain/task/schema.go`),
+  // and an array into a scalar field is a hard refusal. The task list page
+  // no longer sends these (it filters what it loaded, as "any of"); other
+  // callers that pass a list get its first value. `priority` was missing
+  // here, and a priority filter emptied the list. `limit` is `int`; the
+  // quoted-string form some call sites send fails Go's strict unmarshal the
+  // same way.
   "task.list": {
     key: "tasks_list",
     coerceIn: {
+      priority: (value) => (Array.isArray(value) ? value[0] : value),
       type: (value) => (Array.isArray(value) ? value[0] : value),
       project: (value) => (Array.isArray(value) ? value[0] : value),
       goal: (value) => (Array.isArray(value) ? value[0] : value),
@@ -854,10 +857,9 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // something the caller sent, it is the whole meaning of this mapping, and
   // `coerceIn` only fires on keys the payload already has.
   //
-  // The caller also sends `delegate: true`, which `tasks_set-status` has no
-  // field for and the daemon ignores. Starting the task is what the button
-  // says it does; delegating it is a separate capability that does not exist
-  // yet, and is listed as such rather than half-sent here.
+  // Starting the task is what the name says it does; delegating it to a
+  // background run is a separate capability the daemon does not have, and the
+  // `delegate: true` callers used to send is no longer sent.
   "task.start": {
     key: "tasks_set-status",
     renameIn: { task: "id" },

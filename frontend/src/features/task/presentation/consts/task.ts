@@ -1,4 +1,4 @@
-import { CircleDashed, CheckCircle2, SignalZero, SignalLow, SignalMedium, SignalHigh, FlagIcon, CirclePauseIcon, CirclePlayIcon, CircleDotDashedIcon, CircleDashedIcon, CircleFadingPlusIcon } from "lucide-react";
+import { CircleDashed, CheckCircle2, MinusIcon, SignalLow, SignalMedium, SignalHigh, FlagIcon, CircleEllipsisIcon, CirclePlayIcon, CircleDotDashedIcon, CircleDashedIcon, CircleFadingPlusIcon, CircleStopIcon } from "lucide-react";
 import type { Task, TaskPriority } from "@/features/task/interfaces/task.interfaces";
 import { t } from "@/lib/i18n";
 
@@ -8,13 +8,15 @@ export const TASK_STATUS_CONFIG: Record<Task["status"], { label: string; icon: a
   planning: { get label() { return t("Planning"); }, icon: CircleDotDashedIcon, color: "text-primary" },
   todo: { get label() { return t("Todo"); }, icon: CircleDashed, color: "text-muted-foreground" },
   in_progress: { get label() { return t("In Progress"); }, icon: CirclePlayIcon, color: "text-primary" },
-  stopped: { get label() { return t("Stopped"); }, icon: CircleFadingPlusIcon, color: "text-warning" },
-  in_review: { get label() { return t("In Review"); }, icon: CirclePauseIcon, color: "text-warning" },
+  // Stopped shared Suggestion's icon, so a stopped task read as a new idea.
+  stopped: { get label() { return t("Stopped"); }, icon: CircleStopIcon, color: "text-warning" },
+  in_review: { get label() { return t("In Review"); }, icon: CircleEllipsisIcon, color: "text-warning" },
   finished: { get label() { return t("Finished"); }, icon: CheckCircle2, color: "text-success", defaultOpen: false },
 };
 
 export const TASK_PRIORITY_CONFIG: Record<TaskPriority, { label: string; icon: any; colorClass: string }> = {
-  no_priority: { get label() { return t("No Priority"); }, icon: SignalZero, colorClass: "text-muted-foreground/70" },
+  // A dash, not SignalZero: at row size the empty signal icon is a stray dot.
+  no_priority: { get label() { return t("No Priority"); }, icon: MinusIcon, colorClass: "text-muted-foreground/70" },
   low: { get label() { return t("Low"); }, icon: SignalLow, colorClass: "text-muted-foreground/70" },
   medium: { get label() { return t("Medium"); }, icon: SignalMedium, colorClass: "text-muted-foreground/70" },
   high: { get label() { return t("High"); }, icon: SignalHigh, colorClass: "text-yellow-500" },
@@ -23,3 +25,10 @@ export const TASK_PRIORITY_CONFIG: Record<TaskPriority, { label: string; icon: a
 
 export const TASK_STATUS_ORDER: Task["status"][] = ["suggestion", "backlog", "planning", "todo", "in_progress", "stopped", "in_review", "finished"];
 export const TASK_PRIORITY_ORDER: TaskPriority[] = ["no_priority", "urgent", "high", "medium", "low"];
+
+/**
+ * The statuses a task can be created in. tasks_create refuses the others
+ * (AOS_TASK_NOT_AN_ENTRY_POINT): a task that starts in progress or in review
+ * has skipped the guards on the way there.
+ */
+export const TASK_ENTRY_STATUSES: Task["status"][] = ["suggestion", "backlog", "planning", "todo"];
