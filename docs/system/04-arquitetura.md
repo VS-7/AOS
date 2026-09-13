@@ -133,6 +133,7 @@ actions}}` — com o *call to action* que diz qual comando ou tool resolve.
 | `/api/auth/*` | Onboarding, login, sessão, logout, contas, senha | Cada rota decide |
 | `/api/file/*` | Explorador de arquivos (fora do registro por decisão) | Autenticada |
 | `/api/bot/{provider}/webhook/{agente}` | Webhook do Telegram | Segredo do próprio webhook |
+| `POST /api/hooks/routines/{id}?workspace=` | Gatilho webhook de uma rotina; responde 202 e roda em segundo plano | Token da própria rotina (`Authorization: Bearer`), mostrado uma vez |
 | `/ws` | Canal de eventos em tempo real | Bearer / cookie **e** autorização por workspace |
 | `/mcp` | MCP streamable HTTP | Mesmo middleware do `/api` |
 | `/v/artifacts/{id}/*` | Apps estáticos publicados | Por artefato (privado/workspace/senha) |
