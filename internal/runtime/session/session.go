@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/OWNER/aos/internal/core/apperr"
+	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/core/identity"
@@ -433,7 +434,7 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 	if err != nil {
 		// Recorded by the deferred handler at the top, along with every
 		// other way this turn can fail.
-		return nil, err
+		return nil, adviseModel(err, worker)
 	}
 	// Priced here, not inside agentloop: the loop talks to LLMProvider, not to
 	// the pricing table, and internal/runtime/providers already imports
@@ -863,9 +864,10 @@ func (r *Runner) recordFailure(ctx context.Context, in chat.Turn, agentID string
 	}
 
 	code, message := "AOS_AGENT_TURN_FAILED", cause.Error()
+	var actions []apperr.CallToAction
 	var app *apperr.Error
 	if errors.As(cause, &app) {
-		code, message = app.Code, app.Message
+		code, message, actions = app.Code, app.Message, app.Actions
 		// The outermost message names which layer gave up — "the google
 		// provider did not answer" — and says nothing about why. The reason
 		// is in the cause, which is exactly what AGENT_PROVIDER_FAILED's own
@@ -881,11 +883,42 @@ func (r *Runner) recordFailure(ctx context.Context, in chat.Turn, agentID string
 	if _, err := r.deps.Chats.Reply(ctx, chat.ReplyInput{
 		Chat: in.ChatID, ReplyTo: in.MessageID, AgentID: agentID,
 		StartedAt: started,
-		Failure:   &chat.RunError{Code: code, Message: message},
+		Failure:   &chat.RunError{Code: code, Message: message, Actions: actions},
 	}); err != nil {
 		r.log.Error("the failure of a turn could not be recorded",
 			"chat", in.ChatID, "err", err)
 	}
+}
+
+// adviseModel says which setting a refused model came from, so the way out of
+// the failure names the thing to change.
+//
+// The loop knows the provider refused the model; only the turn knows why that
+// model was asked for. An agent that names no model resolves to the Default
+// slot, which is what put every such agent — Luara, the orchestrator — on a
+// model the provider had stopped serving, and nothing on the failure pointed
+// at Settings. An agent that names its own model is changed in its own file.
+func adviseModel(err error, worker *agent.Agent) error {
+	app, ok := apperr.As(err)
+	if !ok || app.Code != build.ErrorPrefix+"_AGENT_MODEL_UNAVAILABLE" || worker == nil {
+		return err
+	}
+	advice := apperr.CallToAction{
+		Label: "choose another model for the Default slot in Settings › AI Providers › Models",
+		Tool:  "config_update",
+	}
+	setting := "default slot"
+	if strings.TrimSpace(worker.Model) != "" {
+		setting = "agent"
+		advice = apperr.CallToAction{
+			Label: "choose another model in " + worker.DisplayName() + "'s own settings",
+			Tool:  "agents_update",
+			Input: map[string]any{"id": worker.ID},
+		}
+	}
+	_ = app.Issue("setting", setting)
+	app.Actions = append([]apperr.CallToAction{advice}, app.Actions...)
+	return err
 }
 
 // deepestMessage returns the innermost apperr's message in a chain — the one

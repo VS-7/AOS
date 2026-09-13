@@ -697,3 +697,58 @@ func TestACompactedTurnStillReportsEveryCallItMade(t *testing.T) {
 		}
 	}
 }
+
+// refused is the error providers.Client makes of a non-2xx answer.
+func refused(status int, body string) error {
+	return apperr.New("PROVIDER_REFUSED").
+		Msgf("the codex provider answered %d: %s", status, body).
+		Issue("provider", "codex").
+		Issue("status", status).
+		Status(apperr.StatusBadGateway)
+}
+
+// The Codex backend stopped serving gpt-5.4-mini to ChatGPT logins, and every
+// agent without a model of its own failed every turn with
+// AGENT_PROVIDER_FAILED — the code for an outage or a rate limit, with a call
+// to action about credentials. A refusal of the model is its own failure, and
+// it has to say so, because the fix is choosing another model.
+func TestARefusedModelIsReportedAsTheModel(t *testing.T) {
+	s := state()
+	s.Model = "gpt-5.4-mini"
+	p := &fake.Provider{ProviderName: "codex", Script: []fake.Step{{
+		Err: refused(400, `{"detail":"The 'gpt-5.4-mini' model is not supported when using Codex with a ChatGPT account."}`),
+	}}}
+
+	_, err := loop(t, p, toolexec.NewRegistry(), agentloop.NoHooks{}).Run(context.Background(), s)
+	app, ok := apperr.As(err)
+	if !ok || app.Code != "AOS_AGENT_MODEL_UNAVAILABLE" {
+		t.Fatalf("err = %v, want AOS_AGENT_MODEL_UNAVAILABLE", err)
+	}
+	if app.Issues["model"] != "gpt-5.4-mini" || app.Issues["provider"] != "codex" || len(app.Actions) == 0 {
+		t.Errorf("error = %+v, want the provider, the model and a next step", app)
+	}
+	if !strings.Contains(err.Error(), "gpt-5.4-mini") {
+		t.Errorf("message = %q, want the model named", err.Error())
+	}
+}
+
+// Only a refusal that is about the model. A bad request that merely mentions
+// the word — or a rate limit — stays what it was.
+func TestOtherRefusalsAreNotBlamedOnTheModel(t *testing.T) {
+	for name, cause := range map[string]error{
+		"context length": refused(400, `{"error":{"message":"This model's maximum context length is 128000 tokens."}}`),
+		"orphan output":  refused(400, `{"error":{"message":"No tool call found for function call output with call_id call_1."}}`),
+		"rate limit":     refused(429, `{"error":{"message":"Rate limit reached for gpt-5.4-mini: model is not available right now."}}`),
+		"not an apperr":  errors.New("connection reset"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := state()
+			s.Model = "gpt-5.4-mini"
+			p := &fake.Provider{Script: []fake.Step{{Err: cause}}}
+			_, err := loop(t, p, toolexec.NewRegistry(), agentloop.NoHooks{}).Run(context.Background(), s)
+			if app, ok := apperr.As(err); !ok || app.Code != "AOS_AGENT_PROVIDER_FAILED" {
+				t.Fatalf("err = %v, want AOS_AGENT_PROVIDER_FAILED", err)
+			}
+		})
+	}
+}
