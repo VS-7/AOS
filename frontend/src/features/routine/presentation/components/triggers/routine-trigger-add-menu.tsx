@@ -12,7 +12,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { ActivityEventDefinition } from "@/features/activity/interfaces/activity.interfaces";
-import { ActivityEventHelper } from "@/features/activity/presentation/helpers/activity-event.helper";
 import {
   ROUTINE_SCHEDULED_PRESET_OPTIONS,
   ROUTINE_TRIGGER_TYPE_ORDER,
@@ -50,7 +49,6 @@ export function RoutineTriggerAddMenu({
     const definition = ROUTINE_TRIGGER_TYPE_REGISTRY[type];
     const haystack = [
       definition.label,
-      definition.addLabel,
       definition.description,
       ...definition.searchableTerms,
     ]
@@ -72,7 +70,8 @@ export function RoutineTriggerAddMenu({
     const haystack = [
       item.namespace,
       item.event,
-      ActivityEventHelper.getDisplayLabel(item),
+      RoutineTriggersHelper.eventTitle(item, item.namespace, item.event),
+      RoutineTriggersHelper.eventDescription(item),
       item.description,
       item.title,
     ]
@@ -133,7 +132,7 @@ export function RoutineTriggerAddMenu({
                 <DropdownMenuSub key={type}>
                   <DropdownMenuSubTrigger className="gap-2">
                     <Icon className="size-4 text-muted-foreground" />
-                    <span>{definition.addLabel}</span>
+                    <span>{definition.label}</span>
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-44">
                     {ROUTINE_SCHEDULED_PRESET_OPTIONS.map((preset) => (
@@ -154,9 +153,9 @@ export function RoutineTriggerAddMenu({
                 <DropdownMenuSub key={type}>
                   <DropdownMenuSubTrigger className="gap-2">
                     <Icon className="size-4 text-muted-foreground" />
-                    <span>{definition.addLabel}</span>
+                    <span>{definition.label}</span>
                   </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-72">
+                  <DropdownMenuSubContent className="max-h-80 w-80 overflow-y-auto">
                     {filteredActivityEvents.length === 0 ? (
                       <p className="px-2 py-1.5 text-xs text-muted-foreground">
                         {t("No activity events available")}
@@ -165,14 +164,22 @@ export function RoutineTriggerAddMenu({
                       filteredActivityEvents.map((item) => (
                         <DropdownMenuItem
                           key={`${item.namespace}.${item.event}`}
-                          className=""
+                          className="flex flex-col items-start gap-0.5"
                           onClick={() =>
                             handleAddActivity(item.namespace, item.event)
                           }
                         >
-                          <span className="text-sm font-medium line-clamp-1">
-                            {ActivityEventHelper.getDisplayLabel(item)}
+                          {/* The title names the event; the description,
+                              clamped to one line, used to stand in for it and
+                              was cut off mid-sentence. */}
+                          <span className="text-sm font-medium">
+                            {RoutineTriggersHelper.eventTitle(item, item.namespace, item.event)}
                           </span>
+                          {item.description ? (
+                            <span className="text-xs text-muted-foreground">
+                              {RoutineTriggersHelper.eventDescription(item)}
+                            </span>
+                          ) : null}
                         </DropdownMenuItem>
                       ))
                     )}
@@ -188,13 +195,13 @@ export function RoutineTriggerAddMenu({
                 onClick={handleAddWebhook}
               >
                 <Icon className="size-4 text-muted-foreground" />
-                <span>{definition.addLabel}</span>
+                <span>{definition.label}</span>
                 <ChevronRightIcon className="ml-auto size-3.5 opacity-0" />
               </DropdownMenuItem>
             );
           })}
         </div>
-      </DropdownMenuContent >
-    </DropdownMenu >
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

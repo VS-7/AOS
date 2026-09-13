@@ -555,6 +555,9 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // `routine.View` has never carried — the history panel was empty for every
   // routine — while `routines_runs` was a live command nothing called.
   "routine.runs": { key: "routines_runs", renameIn: { routine: "id" } },
+  // A webhook's token is shown once; this is the only way to get another.
+  // Unmapped, a routine whose token was lost had a webhook nobody could call.
+  "routine.rotate": { key: "routines_rotate", renameIn: { routine: "id" } },
 
   // Every `tasks_*` command that names one task takes `id`
   // (`internal/domain/task/schema.go`'s `GetInput`/`UpdateInput`/

@@ -18,28 +18,30 @@ import {
   RoutineTriggersHelper,
 } from "@/features/routine/presentation/helpers/routine-triggers.helper";
 
-const TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
-  const hour = Math.floor(index / 2)
-    .toString()
-    .padStart(2, "0");
-  const minute = index % 2 === 0 ? "00" : "30";
-  return `${hour}:${minute}`;
-});
-
 interface ScheduledTriggerRowProps {
   value: Extract<RoutineTriggerFormValue, { type: "scheduled" }>;
   onChange: (
     next: Extract<RoutineTriggerFormValue, { type: "scheduled" }>,
   ) => void;
   onRemove: () => void;
+  /**
+   * When the daemon says the saved schedule fires next — passed only while
+   * the cron on screen is still the saved one.
+   */
+  savedNextRun?: string;
 }
 
 export function ScheduledTriggerRow({
   value,
   onChange,
   onRemove,
+  savedNextRun,
 }: ScheduledTriggerRowProps) {
-  const nextRunLabel = RoutineTriggersHelper.getNextRunLabel(value.config.cron);
+  const nextRunLabel = RoutineTriggersHelper.getNextRunLabel(value.config.cron, savedNextRun);
+  const timeOptions = RoutineTriggersHelper.timeOptions(value.config.time).map((time) => ({
+    value: time,
+    label: time,
+  }));
 
   function updateConfig(
     patch: Partial<Extract<RoutineTriggerFormValue, { type: "scheduled" }>["config"]>,
@@ -80,7 +82,7 @@ export function ScheduledTriggerRow({
               <span>{t("Every day at")}</span>
               <InlineSelect
                 value={value.config.time}
-                options={TIME_OPTIONS.map((time) => ({ value: time, label: time }))}
+                options={timeOptions}
                 onValueChange={(time) => updateConfig({ time })}
               />
             </>
@@ -97,10 +99,10 @@ export function ScheduledTriggerRow({
                 }))}
                 onValueChange={(day) => updateConfig({ day })}
               />
-              <span>at</span>
+              <span>{t("at")}</span>
               <InlineSelect
                 value={value.config.time}
-                options={TIME_OPTIONS.map((time) => ({ value: time, label: time }))}
+                options={timeOptions}
                 onValueChange={(time) => updateConfig({ time })}
               />
             </>
@@ -114,8 +116,9 @@ export function ScheduledTriggerRow({
                 onChange={(event) =>
                   updateConfig({ cron: event.target.value, preset: "custom" })
                 }
-                className="h-7 w-[9.5rem] rounded-md border-border/70 bg-background/70 px-2 text-xs"
+                className="h-7 w-[9.5rem] rounded-md border-border/70 bg-background/70 px-2 font-mono text-xs"
                 placeholder="0 9 * * *"
+                aria-label={t("Cron expression")}
               />
             </>
           ) : null}
@@ -130,7 +133,7 @@ export function ScheduledTriggerRow({
         type="button"
         variant="ghost"
         size="icon"
-        className="size-7 shrink-0 self-center opacity-0 transition-opacity group-hover:opacity-100"
+        className="size-7 shrink-0 self-center opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
         onClick={onRemove}
       >
         <Trash2Icon className="size-3.5" />

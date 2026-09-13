@@ -39,7 +39,7 @@ export function RoutineActionsDropdown({
         <button
           type="button"
           className="flex items-center justify-center rounded p-1 hover:bg-accent"
-          aria-label={`Actions for ${routine.name}`}
+          aria-label={t("Actions for {{name}}", { name: routine.name })}
         >
           <MoreHorizontalIcon className="size-4 text-muted-foreground hover:text-foreground" />
         </button>
@@ -53,7 +53,7 @@ export function RoutineActionsDropdown({
             className="flex items-center gap-2"
           >
             <PlayIcon className="size-4" />
-            <span>{isFiring ? "Starting…" : "Fire now"}</span>
+            <span>{isFiring ? t("Running...") : t("Run now")}</span>
           </DropdownMenuItem>
         )}
 

@@ -30,11 +30,15 @@ import {
 import { cn } from "@/lib/utils";
 import { springs } from "@/lib/springs";
 import { openChatTab } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
-import type { Run } from "@/features/routine/interfaces/routine.interfaces";
+import type { Run, RunTrigger } from "@/features/routine/interfaces/routine.interfaces";
+import {
+  RoutineRunHelper,
+  type RunOutcome,
+} from "@/features/routine/presentation/helpers/routine-run.helper";
 import { t } from "@/lib/i18n";
 
-type RunTriggerFilter = NonNullable<Run["trigger"]>;
-type RunStatusFilter = Run["status"];
+type RunTriggerFilter = RunTrigger;
+type RunStatusFilter = RunOutcome;
 
 export interface RoutineRunHistoryFilters {
   searchOpen: boolean;
@@ -59,103 +63,54 @@ interface RoutineRunHistoryProps {
   isFiring?: boolean;
 }
 
-const TRIGGER_FILTER_OPTIONS: Array<{
-  value: RunTriggerFilter;
-  label: string;
-}> = [
-  { value: "manual", label: "Manual" },
-  { value: "scheduled", label: "Schedule" },
-  { value: "webhook", label: "Webhook" },
-  { value: "activity", label: "Activity" },
+const TRIGGER_FILTER_OPTIONS: RunTriggerFilter[] = [
+  "manual",
+  "scheduled",
+  "webhook",
+  "activity",
 ];
 
-const STATUS_FILTER_OPTIONS: Array<{
-  value: RunStatusFilter;
-  label: string;
-}> = [
-  { value: "pending", label: "Pending" },
-  { value: "running", label: "Running" },
-  { value: "completed", label: "Succeeded" },
-  { value: "error", label: "Failed" },
+const STATUS_FILTER_OPTIONS: RunStatusFilter[] = [
+  "running",
+  "succeeded",
+  "failed",
+  "skipped",
 ];
-
-function formatTriggeredAt(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function formatDuration(run: Run) {
-  if (!run.finishedAt) return "—";
-
-  const ms =
-    new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return "—";
-  if (ms < 60_000) return "< 1m";
-
-  const minutes = Math.round(ms / 60_000);
-  if (minutes < 60) return `${minutes}m`;
-
-  const hours = Math.floor(minutes / 60);
-  const rem = minutes % 60;
-  return rem === 0 ? `${hours}h` : `${hours}h ${rem}m`;
-}
-
-function triggerLabel(run: Run) {
-  switch (run.trigger) {
-    case "manual":
-      return "Manual";
-    case "scheduled":
-      return "Schedule";
-    case "webhook":
-      return "Webhook";
-    case "activity":
-      return "Activity";
-    default:
-      return "Run";
-  }
-}
-
-function countRunsInWindow(
-  runs: Run[],
-  status: Run["status"],
-  windowMs: number,
-) {
-  const cutoff = Date.now() - windowMs;
-  return runs.filter(
-    (run) =>
-      run.status === status &&
-      new Date(run.finishedAt ?? run.startedAt).getTime() >= cutoff,
-  ).length;
-}
 
 function RunStatusBadge({ status }: { status: Run["status"] }) {
-  if (status === "running" || status === "pending") {
+  const outcome = RoutineRunHelper.outcome(status);
+
+  if (outcome === "running") {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
         <DotmSquare4 size={14} className="text-foreground" />
-        {status === "pending" ? "Pending" : "Running"}
+        {RoutineRunHelper.outcomeLabel(outcome)}
       </span>
     );
   }
 
-  if (status === "completed") {
+  if (outcome === "succeeded") {
     return (
       <Badge
         variant="secondary"
         className="border-transparent bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
       >
-        {t("Succeeded")}
+        {RoutineRunHelper.outcomeLabel(outcome)}
+      </Badge>
+    );
+  }
+
+  if (outcome === "skipped") {
+    return (
+      <Badge variant="secondary" className="border-transparent">
+        {RoutineRunHelper.outcomeLabel(outcome)}
       </Badge>
     );
   }
 
   return (
     <Badge variant="destructive" className="border-transparent">
-      {t("Failed")}
+      {status === "timed_out" ? t("Timed out") : RoutineRunHelper.outcomeLabel(outcome)}
     </Badge>
   );
 }
@@ -196,7 +151,7 @@ function RunHistoryEmptyState({
             onClick={onRunNow}
           >
             <PlayIcon data-icon="inline-start" />
-            {isFiring ? "Running..." : "Run now"}
+            {isFiring ? t("Running...") : t("Run now")}
           </AnimatedEmptyState.Action>
         </AnimatedEmptyState.Actions>
       ) : null}
@@ -367,22 +322,22 @@ export function RoutineRunHistoryToolbar({
           <DropdownMenuLabel>{t("Trigger")}</DropdownMenuLabel>
           {TRIGGER_FILTER_OPTIONS.map((option) => (
             <DropdownMenuCheckboxItem
-              key={option.value}
-              checked={selectedTriggers.includes(option.value)}
-              onCheckedChange={() => toggleTrigger(option.value)}
+              key={option}
+              checked={selectedTriggers.includes(option)}
+              onCheckedChange={() => toggleTrigger(option)}
             >
-              {option.label}
+              {RoutineRunHelper.triggerLabel(option)}
             </DropdownMenuCheckboxItem>
           ))}
           <DropdownMenuSeparator />
           <DropdownMenuLabel>{t("Status")}</DropdownMenuLabel>
           {STATUS_FILTER_OPTIONS.map((option) => (
             <DropdownMenuCheckboxItem
-              key={option.value}
-              checked={selectedStatuses.includes(option.value)}
-              onCheckedChange={() => toggleStatus(option.value)}
+              key={option}
+              checked={selectedStatuses.includes(option)}
+              onCheckedChange={() => toggleStatus(option)}
             >
-              {option.label}
+              {RoutineRunHelper.outcomeLabel(option)}
             </DropdownMenuCheckboxItem>
           ))}
           {activeFilterCount > 0 ? (
@@ -411,52 +366,67 @@ export function RoutineRunHistory({
 
   const stats = [
     {
-      label: "Successful · 24h",
-      value: countRunsInWindow(runs, "completed", dayMs),
+      label: t("Successful · 24h"),
+      value: RoutineRunHelper.countInWindow(runs, "succeeded", dayMs),
     },
     {
-      label: "Failed · 24h",
-      value: countRunsInWindow(runs, "error", dayMs),
+      label: t("Failed · 24h"),
+      value: RoutineRunHelper.countInWindow(runs, "failed", dayMs),
     },
     {
-      label: "Successful · 7d",
-      value: countRunsInWindow(runs, "completed", weekMs),
+      label: t("Successful · 7d"),
+      value: RoutineRunHelper.countInWindow(runs, "succeeded", weekMs),
     },
     {
-      label: "Failed · 7d",
-      value: countRunsInWindow(runs, "error", weekMs),
+      label: t("Failed · 7d"),
+      value: RoutineRunHelper.countInWindow(runs, "failed", weekMs),
     },
   ];
 
   const filteredRuns = runs.filter((run) => {
     if (
       filters.selectedStatuses.length > 0 &&
-      !filters.selectedStatuses.includes(run.status)
+      !filters.selectedStatuses.includes(RoutineRunHelper.outcome(run.status))
     ) {
       return false;
     }
 
-    if (filters.selectedTriggers.length > 0) {
-      if (!run.trigger || !filters.selectedTriggers.includes(run.trigger)) {
-        return false;
-      }
+    if (
+      filters.selectedTriggers.length > 0 &&
+      !filters.selectedTriggers.includes(run.trigger as RunTrigger)
+    ) {
+      return false;
     }
 
     const query = filters.searchQuery.trim().toLowerCase();
     if (!query) return true;
 
-    return (
-      run.id.toLowerCase().includes(query) ||
-      triggerLabel(run).toLowerCase().includes(query) ||
-      run.status.toLowerCase().includes(query)
-    );
+    return [
+      run.id,
+      RoutineRunHelper.triggerLabel(run.trigger),
+      RoutineRunHelper.outcomeLabel(RoutineRunHelper.outcome(run.status)),
+      run.error ?? "",
+    ].some((text) => text.toLowerCase().includes(query));
   });
 
   function handleOpenRun(run: Run) {
+    // The run's own conversation. A run that never started one — skipped, or
+    // refused before a turn — has nothing to open.
+    if (!run.chatId) return;
     openChatTab({
-      chatId: run.id,
-      title: routineName ? `${routineName} · run` : `Run ${run.id.slice(0, 8)}`,
+      chatId: run.chatId,
+      title: routineName
+        ? t("{{name}} · run", { name: routineName })
+        : t("Run {{id}}", { id: run.id.slice(0, 8) }),
     });
+  }
+
+  async function handleCopyRunId(run: Run) {
+    try {
+      await navigator.clipboard.writeText(run.id);
+    } catch {
+      // Clipboard access can be refused; nothing else depends on it.
+    }
   }
 
   return (
@@ -492,52 +462,82 @@ export function RoutineRunHistory({
           </div>
         ) : (
           <div className="divide-y">
-            {filteredRuns.map((run) => (
-              <button
-                key={run.id}
-                type="button"
-                onClick={() => handleOpenRun(run)}
-                className={cn(
-                  "grid w-full grid-cols-[minmax(0,1.4fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,0.6fr)_auto] gap-2 px-3 py-2.5 text-left text-sm transition-colors",
-                  "hover:bg-muted/40",
-                )}
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  {run.status === "running" || run.status === "pending" ? (
-                    <DotmSquare4
-                      size={14}
-                      className="shrink-0 text-foreground"
-                    />
-                  ) : (
-                    <Clock className="size-3.5 shrink-0 text-muted-foreground" />
-                  )}
-                  <span className="truncate">{triggerLabel(run)}</span>
-                </span>
-                <span className="truncate text-muted-foreground">
-                  {formatTriggeredAt(run.startedAt)}
-                </span>
-                <span className="flex items-center">
-                  <RunStatusBadge status={run.status} />
-                </span>
-                <span className="tabular-nums text-muted-foreground">
-                  {formatDuration(run)}
-                </span>
-                <span
-                  className="flex w-8 items-center justify-end"
-                  onClick={(event) => event.stopPropagation()}
+            {filteredRuns.map((run) => {
+              const outcome = RoutineRunHelper.outcome(run.status);
+              const openable = Boolean(run.chatId);
+              return (
+                // The run's cells are one button and the actions menu sits
+                // beside it, not inside: a <button> cannot hold another, and a
+                // menu inside a clickable row opened the conversation instead.
+                <div
+                  key={run.id}
+                  className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,0.6fr)_auto] items-center gap-x-2 px-3 py-2.5 text-sm transition-colors hover:bg-muted/40"
                 >
-                  <Button
+                  <button
                     type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-muted-foreground"
-                    aria-label={t("Run actions")}
+                    disabled={!openable}
+                    onClick={() => handleOpenRun(run)}
+                    className="col-span-4 grid grid-cols-subgrid items-center text-left disabled:cursor-default enabled:cursor-pointer"
                   >
-                    <Ellipsis className="size-4" />
-                  </Button>
-                </span>
-              </button>
-            ))}
+                    <span className="flex min-w-0 items-center gap-2">
+                      {outcome === "running" ? (
+                        <DotmSquare4 size={14} className="shrink-0 text-foreground" />
+                      ) : (
+                        <Clock className="size-3.5 shrink-0 text-muted-foreground" />
+                      )}
+                      <span className="truncate">
+                        {RoutineRunHelper.triggerLabel(run.trigger)}
+                      </span>
+                    </span>
+                    <span className="truncate text-muted-foreground">
+                      {RoutineRunHelper.formatStartedAt(run.startedAt)}
+                    </span>
+                    <span className="flex items-center">
+                      <RunStatusBadge status={run.status} />
+                    </span>
+                    <span className="tabular-nums text-muted-foreground">
+                      {RoutineRunHelper.duration(run)}
+                    </span>
+                  </button>
+                  <span className="flex w-8 items-center justify-end">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-muted-foreground"
+                          aria-label={t("Run actions")}
+                        >
+                          <Ellipsis className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem
+                          disabled={!openable}
+                          onClick={() => handleOpenRun(run)}
+                        >
+                          {t("Open conversation")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => void handleCopyRunId(run)}>
+                          {t("Copy run ID")}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </span>
+                  {run.error ? (
+                    <p
+                      className={cn(
+                        "col-span-5 mt-1 line-clamp-2 pl-5.5 text-xs",
+                        outcome === "skipped" ? "text-muted-foreground" : "text-destructive",
+                      )}
+                    >
+                      {run.error}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

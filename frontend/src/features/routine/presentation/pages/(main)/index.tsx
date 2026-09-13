@@ -3,6 +3,7 @@ import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middl
 import { Schema } from "@/core/helpers/schema.helper";
 import { z } from "zod";
 
+import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
 import { RoutinesProvider } from "./context";
 import { RoutinesPageInner } from "./inner";
 
@@ -13,6 +14,9 @@ const RoutinesPageSearchSchema = Schema.object({
   type: z.string().optional(),
 });
 
+/** More than any workspace keeps; the page has no pagination to offer. */
+const LIST_LIMIT = 300;
+
 export const RoutinesPage = aos
   .page("/routines")
   .withMetadata({
@@ -21,25 +25,27 @@ export const RoutinesPage = aos
   })
   .withQuery(RoutinesPageSearchSchema)
   .use(WorkspacePageMiddleware())
-  .withLoader(async ({ client, request }) => {
-    const query = request.query || {};
+  .withLoader(async ({ client }) => {
+    // Every routine, filtered on this side. Search and status used to be
+    // forwarded: `limit` went as the string "300" and Go refused the whole
+    // list, a multi-status filter reached Go as "enabled,disabled" and matched
+    // nothing, and each keystroke re-ran this loader.
+    const [response, events] = await Promise.all([
+      client.routine.list.query({ query: { limit: LIST_LIMIT } }),
+      client.activity.listEvents.query({}),
+    ]);
 
-    const response = await client.routine.list.query({
-      query: {
-        query: query.query?.trim() || undefined,
-        status: query.status || undefined,
-        limit: "300",
-      },
-    });
-
-    return { routines: response.data?.routines || [] };
+    return {
+      routines: (response.data?.routines || []) as Routine[],
+      activityEvents: events.data ?? [],
+    };
   })
   .withComponent(({ route }) => {
-    const { routines } = route.useLoaderData();
+    const { routines, activityEvents } = route.useLoaderData();
     const search = route.useSearch();
 
     return (
-      <RoutinesProvider routines={routines} search={search}>
+      <RoutinesProvider routines={routines} activityEvents={activityEvents} search={search}>
         <RoutinesPageInner />
       </RoutinesProvider>
     );
