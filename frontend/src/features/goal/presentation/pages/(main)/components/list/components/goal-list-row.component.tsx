@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SetPriorityDropdown } from "@/features/task/presentation/components/dropdowns/set-priority.dropdown";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
 
 interface GoalListRowProps {
   goal: Goal;
@@ -46,8 +47,8 @@ export function GoalListRow({ goal }: GoalListRowProps) {
         `Priority updated to ${goalPriorityConfig(priority).label}`,
       );
       router.invalidate();
-    } catch {
-      toast.error(t("Failed to update priority"));
+    } catch (error) {
+      toast.error(t("Failed to update priority"), { description: errorMessage(error) });
     }
   };
 
@@ -59,8 +60,8 @@ export function GoalListRow({ goal }: GoalListRowProps) {
       });
       toast.success(`Moved to ${GoalHelper.getStatus(status).label}`);
       router.invalidate();
-    } catch {
-      toast.error(t("Failed to update status"));
+    } catch (error) {
+      toast.error(t("Failed to update status"), { description: errorMessage(error) });
     }
   };
 
@@ -69,8 +70,8 @@ export function GoalListRow({ goal }: GoalListRowProps) {
       await aos.client.goal.delete.mutateOrThrow({ params: { goal: goal.id } });
       toast.success(`Goal ${goal.id} deleted`);
       router.invalidate();
-    } catch {
-      toast.error(t("Failed to delete goal"));
+    } catch (error) {
+      toast.error(t("Failed to delete goal"), { description: errorMessage(error) });
     }
   };
 

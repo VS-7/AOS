@@ -9,6 +9,9 @@ import React, {
   startTransition,
 } from "react";
 import { useNavigate, useRouter } from "@tanstack/react-router";
+import { toast } from "sonner";
+import { errorMessage } from "@/lib/aos-facade";
+import { t } from "@/lib/i18n";
 import type {
   Task,
   TaskPriority,
@@ -411,7 +414,13 @@ export function TasksProvider({
         body: { status: resolvedOverStatus },
       });
 
-      if (!error) router.invalidate();
+      // The card snaps back to its column on a refusal; without this the
+      // drop just looked like it had not taken.
+      if (error) {
+        toast.error(t("Failed to update status"), { description: errorMessage(error) });
+        return;
+      }
+      router.invalidate();
     },
     [resolveStatusFromId, client, router, finishTransition],
   );
