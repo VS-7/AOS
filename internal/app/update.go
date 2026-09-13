@@ -5,6 +5,8 @@ import (
 	_ "embed"
 	"strings"
 
+	"github.com/OWNER/aos/internal/core/build"
+	"github.com/OWNER/aos/internal/core/env"
 	"github.com/OWNER/aos/internal/core/identity"
 	"github.com/OWNER/aos/internal/domain/auth"
 	"github.com/OWNER/aos/internal/domain/gateway"
@@ -20,6 +22,19 @@ import (
 var releasePubKeyRaw string
 
 func releasePublicKey() string { return strings.TrimSpace(releasePubKeyRaw) }
+
+// updateFeed is the release feed this installation checks, and whether it was
+// set on this machine (AOS_UPDATE_BASE_URL) rather than compiled into the
+// build (build.UpdateBaseURL). The update service needs the difference only
+// to say something useful when the feed is empty: a wrong address somebody
+// set can be fixed, and a release published without a feed cannot be, from
+// here.
+func updateFeed(resolver *env.Resolver) (feed string, custom bool) {
+	if feed := strings.TrimSpace(resolver.String(env.KeyUpdateBaseURL, "")); feed != "" {
+		return feed, true
+	}
+	return build.UpdateBaseURL, false
+}
 
 // updateSupervisor adapts gateway.Service to update.DaemonSupervisor — the
 // narrow slice update.Apply needs (restart, health), not the whole

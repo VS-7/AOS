@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +21,11 @@ func exe(name string) string {
 		return name + ".exe"
 	}
 	return name
+}
+
+func digestOf(data string) string {
+	sum := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(sum[:])
 }
 
 func read(t *testing.T, path string) string {
@@ -96,7 +103,7 @@ func TestSwapInReplacesRollbackRestoresAndCommitCleansUp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := i.SwapIn(ctx, "aos"); err != nil {
+	if err := i.SwapIn(ctx, "aos", digestOf("new version")); err != nil {
 		t.Fatal(err)
 	}
 	if read(t, target) != "new version" {
@@ -115,7 +122,7 @@ func TestSwapInReplacesRollbackRestoresAndCommitCleansUp(t *testing.T) {
 		t.Fatal("Rollback did not restore the old version")
 	}
 
-	if err := i.SwapIn(ctx, "aos"); err != nil {
+	if err := i.SwapIn(ctx, "aos", digestOf("new version")); err != nil {
 		t.Fatal(err)
 	}
 	if err := i.Commit(ctx, "aos"); err != nil {
@@ -132,6 +139,49 @@ func TestSwapInReplacesRollbackRestoresAndCommitCleansUp(t *testing.T) {
 	}
 }
 
+// Apply verifies the staged copy and then waits — for work in flight, for
+// minutes — before it swaps. SwapIn hashes the bytes it actually copies, and
+// a copy that is not the verified one replaces nothing.
+func TestSwapInRefusesAStagedCopyThatIsNotTheVerifiedOne(t *testing.T) {
+	stageDir, binDir := t.TempDir(), t.TempDir()
+	i := updateinstall.New(stageDir, binDir)
+	ctx := context.Background()
+
+	target := filepath.Join(binDir, exe("aosd"))
+	if err := os.WriteFile(target, []byte("old version"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := i.Stage(ctx, "aosd", []byte("verified version")); err != nil {
+		t.Fatal(err)
+	}
+	verified := digestOf("verified version")
+	if _, err := i.Stage(ctx, "aosd", []byte("replaced after verification")); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, digest := range []string{verified, ""} {
+		err := i.SwapIn(ctx, "aosd", digest)
+		if err == nil {
+			t.Fatalf("SwapIn with digest %q should refuse a copy that does not match it", digest)
+		}
+		if digest != "" && !errors.Is(err, update.ErrStagedChanged) {
+			t.Fatalf("the refusal should say the staged copy changed, got %v", err)
+		}
+		if read(t, target) != "old version" {
+			t.Fatal("the live binary must be untouched")
+		}
+		for _, leftover := range []string{target + ".new", target + ".prev"} {
+			if _, err := os.Stat(leftover); !os.IsNotExist(err) {
+				t.Fatalf("%s should not be left behind", leftover)
+			}
+		}
+	}
+
+	if err := i.SwapIn(ctx, "aosd", strings.ToUpper(digestOf("replaced after verification"))); err != nil {
+		t.Fatalf("a digest is a digest in either case, got %v", err)
+	}
+}
+
 // An update replaces what is installed and adds nothing. Creating an aos
 // inside a bundle that never carried one is what broke the bundle's seal.
 func TestSwapInDoesNotAddABinaryThatIsNotInstalled(t *testing.T) {
@@ -142,7 +192,7 @@ func TestSwapInDoesNotAddABinaryThatIsNotInstalled(t *testing.T) {
 	if _, err := i.Stage(ctx, "aos", []byte("first install")); err != nil {
 		t.Fatal(err)
 	}
-	if err := i.SwapIn(ctx, "aos"); err == nil {
+	if err := i.SwapIn(ctx, "aos", digestOf("first install")); err == nil {
 		t.Fatal("expected SwapIn to refuse a binary that is not installed")
 	}
 	if _, err := os.Stat(filepath.Join(binDir, exe("aos"))); !os.IsNotExist(err) {
@@ -157,7 +207,7 @@ func TestSwapInWithNothingStagedLeavesTheBinaryAlone(t *testing.T) {
 	if err := os.WriteFile(target, []byte("old"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := i.SwapIn(context.Background(), "aosd"); err == nil {
+	if err := i.SwapIn(context.Background(), "aosd", digestOf("")); err == nil {
 		t.Fatal("expected a failure with nothing staged")
 	}
 	if read(t, target) != "old" {
@@ -205,7 +255,7 @@ func TestEveryMethodRefusesANameThatIsNotAManagedBinary(t *testing.T) {
 		if _, _, err := i.Target(ctx, name); err == nil {
 			t.Errorf("Target(%q) should be refused", name)
 		}
-		if err := i.SwapIn(ctx, name); err == nil {
+		if err := i.SwapIn(ctx, name, digestOf("unsigned")); err == nil {
 			t.Errorf("SwapIn(%q) should be refused", name)
 		}
 		if err := i.Rollback(ctx, name); err == nil {

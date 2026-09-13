@@ -44,6 +44,13 @@ var (
 	ErrUnreachable = errors.New("update: the release channel could not be reached")
 )
 
+// ErrStagedChanged is what an Installer wraps when the staged copy it was
+// about to put in place is not the one Apply verified. Apply proves the
+// staged files and then waits — for work in flight, up to minutes — before
+// it swaps, so the bytes are proven once more by the Installer as it copies
+// them rather than taken as unchanged since.
+var ErrStagedChanged = errors.New("update: the staged copy changed after it was verified")
+
 // ReleaseSource is the one network-facing port: read a channel's manifest,
 // fetch bytes. "Distribuição por releases assinados, agnóstica de forja" —
 // the design's own decision — is why this is generic operations and not
@@ -89,7 +96,11 @@ type Installer interface {
 	// SwapIn puts binary's staged copy in place, keeping the binary it
 	// replaces so Rollback can undo exactly this swap. The staged copy stays
 	// where it is until Discard, so a rolled-back update can be retried.
-	SwapIn(ctx context.Context, binary string) error
+	//
+	// digest is the hex SHA-256 Apply verified the staged copy against. The
+	// bytes SwapIn actually puts in place must hash to it; when they do not,
+	// nothing is replaced and the error wraps ErrStagedChanged.
+	SwapIn(ctx context.Context, binary, digest string) error
 	// Rollback restores binary from the copy SwapIn kept. Calling it without a
 	// prior SwapIn is a no-op, not an error.
 	Rollback(ctx context.Context, binary string) error

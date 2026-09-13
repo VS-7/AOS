@@ -239,10 +239,21 @@ func stageFor(ctx context.Context, source dirSource, release *update.Release, pu
 	if err := os.MkdirAll(bin, 0o755); err != nil {
 		return update.Staged{}, err
 	}
-	// Every binary "installed", so every asset for the platform is staged —
-	// under both spellings, because the installer names files for the
-	// machine running this, not for the platform being verified.
-	for _, b := range update.Binaries() {
+	// "Installed" is what this release publishes for the platform — the
+	// installation its own packages make — so every one of those assets is
+	// staged. Not all three binaries: Download refuses a release that leaves
+	// out a binary installed here, and no platform package carries a window
+	// the release does not also publish raw. Written under both spellings,
+	// because the installer names files for the machine running this, not for
+	// the platform being verified.
+	for _, a := range release.Assets {
+		if a.Platform != platform {
+			continue
+		}
+		b := a.Binary
+		if !update.IsBinary(b) {
+			continue
+		}
 		for _, name := range []string{b, b + ".exe"} {
 			if err := os.WriteFile(filepath.Join(bin, name), nil, 0o755); err != nil {
 				return update.Staged{}, err

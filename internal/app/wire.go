@@ -893,11 +893,13 @@ func New(opts Options) (*App, error) {
 	// terminal restarts the daemon with. See updateSupervisor.
 	outsideDeps := gatewayDeps
 	outsideDeps.Inside = false
+	feed, customFeed := updateFeed(resolver)
 	updateSvc := update.NewService(update.Deps{
-		Source:    releasesource.New(resolver.String(env.KeyUpdateBaseURL, build.UpdateBaseURL)),
-		Stager:    installer,
-		Installer: installer,
-		Store:     updateinstall.NewStore(filepath.Join(paths.UpdateDir(), "state.json")),
+		Source:     releasesource.New(feed),
+		CustomFeed: customFeed,
+		Stager:     installer,
+		Installer:  installer,
+		Store:      updateinstall.NewStore(filepath.Join(paths.UpdateDir(), "state.json")),
 		Supervisor: updateSupervisor{
 			inside:  gatewaySvc,
 			outside: gateway.NewService(outsideDeps),

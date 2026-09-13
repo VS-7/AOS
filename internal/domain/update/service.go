@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/url"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -59,6 +61,8 @@ type service struct {
 	// default; overridable because every test binary is "dev".
 	version string
 
+	customFeed bool
+
 	activeWorkGrace time.Duration
 	healthTimeout   time.Duration
 }
@@ -86,6 +90,12 @@ type Deps struct {
 	Platform string
 	Version  string
 
+	// CustomFeed is true when the release feed's address was set on this
+	// machine (AOS_UPDATE_BASE_URL) rather than compiled into the build. An
+	// empty feed means something different in each case: a wrong address
+	// somebody can fix, or a release published without a feed.
+	CustomFeed bool
+
 	ActiveWorkGrace time.Duration
 	HealthTimeout   time.Duration
 }
@@ -103,7 +113,7 @@ func NewService(d Deps) Service {
 		source: d.Source, stager: d.Stager, installer: d.Installer, store: d.Store,
 		supervisor: d.Supervisor, operators: d.Operators,
 		activeWork: d.ActiveWork, clock: d.Clock, sleeper: d.Sleeper, log: d.Log,
-		publicKey: d.PublicKey, platform: d.Platform, version: d.Version,
+		publicKey: d.PublicKey, platform: d.Platform, version: d.Version, customFeed: d.CustomFeed,
 		activeWorkGrace: d.ActiveWorkGrace, healthTimeout: d.HealthTimeout,
 	}
 	if s.log == nil {
@@ -149,39 +159,79 @@ func (s *service) Check(ctx context.Context, in CheckInput) (CheckOutput, error)
 	release, err := s.source.Latest(ctx, channel)
 	switch {
 	case errors.Is(err, ErrNotPublished):
-		return CheckOutput{}, errChannelEmpty(channel, err)
+		return CheckOutput{}, errChannelEmpty(channel, s.customFeed, err)
 	case errors.Is(err, ErrUnreachable):
 		return CheckOutput{}, errSourceUnreachable("update.Service.Check", err)
 	case err != nil:
 		return CheckOutput{}, errSourceFailed("update.Service.Check", err)
 	case release == nil:
-		return CheckOutput{}, errChannelEmpty(channel, ErrNotPublished)
+		return CheckOutput{}, errChannelEmpty(channel, s.customFeed, ErrNotPublished)
 	}
-	latest, ok := build.ParseVersion(release.Version)
+	state, ok := s.stateAgainst(release.Version)
 	if !ok {
 		return CheckOutput{}, errReleaseVersionInvalid(release.Version)
 	}
+	if page := webPage(release.PageURL); page != release.PageURL {
+		s.log.Warn("the release manifest's page is not a web page; it is not offered", "pageUrl", release.PageURL)
+		release.PageURL = page
+	}
 
-	current, ok := build.ParseVersion(s.version)
-	switch {
-	case !ok:
-		out.State = StateDeveloperBuild
+	out.State = state
+	switch state {
+	case StateDeveloperBuild:
 		out.Release = release
-	case latest.Compare(current) > 0:
-		out.State = StateAvailable
+	case StateAvailable:
 		out.Release = release
 		install := s.install(ctx, release.Version)
 		out.Install = &install
-	default:
-		// Equal, or older: a lagging mirror, or a beta ahead of this
-		// channel. A release is offered only when it is newer, which is also
-		// what keeps a locally packaged v0.15.2-dirty from being offered
-		// v0.15.2 forever.
-		out.State = StateUpToDate
 	}
 	out.UpToDate = out.State == StateUpToDate
 	s.remember(ctx, LastCheck{At: now, Channel: channel, State: out.State, Latest: release.Version})
 	return out, nil
+}
+
+// stateAgainst is what a release at latest means for this installation. ok is
+// false when latest is not a version at all.
+//
+// Equal or older is up to date: a lagging mirror, or a beta ahead of this
+// channel. A release is offered only when it is newer, which is also what
+// keeps a locally packaged v0.15.2-dirty from being offered v0.15.2 forever.
+func (s *service) stateAgainst(latest string) (CheckState, bool) {
+	target, ok := build.ParseVersion(latest)
+	if !ok {
+		return "", false
+	}
+	current, ok := build.ParseVersion(s.version)
+	switch {
+	case !ok:
+		return StateDeveloperBuild, true
+	case target.Compare(current) > 0:
+		return StateAvailable, true
+	default:
+		return StateUpToDate, true
+	}
+}
+
+// webPage keeps a release page only when it is one: https, or http on this
+// machine (a feed served locally). The manifest is not signed and the
+// address is opened in the person's browser, so a file:// path, a script
+// URL or a plain-http page anybody on the network path could rewrite is
+// dropped rather than offered.
+func webPage(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	switch u.Scheme {
+	case "https":
+		return u.String()
+	case "http":
+		host := u.Hostname()
+		if ip := net.ParseIP(host); host == "localhost" || (ip != nil && ip.IsLoopback()) {
+			return u.String()
+		}
+	}
+	return ""
 }
 
 // remember records a check's outcome. A record that cannot be written costs
@@ -208,15 +258,17 @@ func (s *service) Status(ctx context.Context, _ StatusInput) (Status, error) {
 		st.Install = s.install(ctx, "")
 		return st, nil
 	}
-	// A check made by the binary this one replaced, or before a feed was
-	// configured, can be out of date without anybody checking again: an
-	// "available" release this installation has since reached is not
-	// available any more.
+	// A check made by another binary — the one this replaced, a development
+	// build sharing the state directory — or before a feed was configured,
+	// can be out of date without anybody checking again. What it found is
+	// re-read against the binary answering now: a release this installation
+	// has since reached is not available any more, and a development build
+	// is not up to date with any release.
 	if c := record.LastCheck; c != nil && (c.State != StateNotConfigured || !st.Configured) {
 		at := c.At
 		st.CheckedAt, st.LatestKnown, st.LastState = &at, c.Latest, c.State
-		if c.State == StateAvailable && s.newer("update.Service.Status", c.Latest) != nil {
-			st.LastState = StateUpToDate
+		if state, ok := s.stateAgainst(c.Latest); ok {
+			st.LastState = state
 		}
 		if c.Channel != "" {
 			st.Channel = c.Channel
@@ -250,8 +302,13 @@ func (s *service) install(ctx context.Context, version string) Install {
 	if err != nil || !installed {
 		path = daemonBinary
 	}
-	out.Command = shellQuote(path) + " update apply --version " + shellQuote(version)
+	out.Command = installCommand(s.goos(), path, version)
 	return out
+}
+
+func (s *service) goos() string {
+	goos, _, _ := strings.Cut(s.platform, "/")
+	return goos
 }
 
 // newer checks that version is a release this installation may move to:
@@ -355,8 +412,17 @@ func (s *service) Download(ctx context.Context, in DownloadInput) (DownloadOutpu
 }
 
 // plan picks the assets to download: this platform's, for binaries installed
-// here, each one's manifest entry agreeing with its signed file name.
+// here, each one's manifest entry agreeing with its signed file name — and one
+// for every binary installed here, or none at all.
+//
+// A release that covered only some of them used to be staged as far as it
+// went: a manifest listing aos and not aosd updated the terminal and left the
+// daemon behind, and nothing afterwards noticed the two disagreed.
 func (s *service) plan(ctx context.Context, release *Release, checksums map[string]string) ([]Asset, error) {
+	installed, err := s.installedBinaries(ctx, "update.Service.Download")
+	if err != nil {
+		return nil, err
+	}
 	var out []Asset
 	seen := map[string]bool{}
 	for _, asset := range release.Assets {
@@ -384,16 +450,32 @@ func (s *service) plan(ctx context.Context, release *Release, checksums map[stri
 		}
 		seen[asset.Binary] = true
 
-		_, installed, err := s.installer.Target(ctx, asset.Binary)
-		if err != nil {
-			return nil, errStageFailed(err)
-		}
-		if installed {
+		if installed[asset.Binary] {
 			out = append(out, asset)
 		}
 	}
-	if len(out) == 0 {
+	if len(installed) == 0 {
 		return nil, errNoAssetForPlatform("installed binary", s.platform)
+	}
+	for _, binary := range Binaries() {
+		if installed[binary] && !seen[binary] {
+			return nil, errNoAssetForPlatform(binary, s.platform)
+		}
+	}
+	return out, nil
+}
+
+// installedBinaries is the set of managed binaries installed here.
+func (s *service) installedBinaries(ctx context.Context, causer string) (map[string]bool, error) {
+	out := map[string]bool{}
+	for _, binary := range Binaries() {
+		_, installed, err := s.installer.Target(ctx, binary)
+		if err != nil {
+			return nil, errInstallationUnreadable(causer, err)
+		}
+		if installed {
+			out[binary] = true
+		}
 	}
 	return out, nil
 }
@@ -450,9 +532,11 @@ func (s *service) discard(ctx context.Context) error {
 //  0. refuse up front what cannot finish: nothing staged under this version,
 //     a release not newer than this one, a bundle, a process that cannot
 //     restart the daemon — before a single file moves
-//  1. prove the staged files against the signed checksums again
+//  1. prove the staged files against the signed checksums again, and that
+//     they still cover every binary installed here
 //  2. wait for in-flight turns to finish, bounded by ActiveWorkGrace
-//  3. swap each binary, keeping the previous one as a rollback target
+//  3. swap each binary, keeping the previous one as a rollback target — the
+//     Installer proves each file's digest once more as it copies it
 //  4. restart the daemon, and verify health within HealthTimeout; on
 //     failure, roll every swap back and restart again on the previous binaries
 func (s *service) Apply(ctx context.Context, in ApplyInput) (ApplyOutput, error) {
@@ -476,7 +560,11 @@ func (s *service) Apply(ctx context.Context, in ApplyInput) (ApplyOutput, error)
 	if !s.supervisor.CanRestart(ctx) {
 		return ApplyOutput{}, errRestartUnavailable(s.install(ctx, staged.Version).Command)
 	}
-	binaries, err := s.verifyStaged(ctx, staged)
+	installed, err := s.installedBinaries(ctx, "update.Service.Apply")
+	if err != nil {
+		return ApplyOutput{}, err
+	}
+	digests, err := s.verifyStaged(ctx, staged, installed)
 	if err != nil {
 		if derr := s.discard(ctx); derr != nil {
 			s.log.Error("could not discard a staged release that failed verification", "err", derr)
@@ -488,11 +576,23 @@ func (s *service) Apply(ctx context.Context, in ApplyInput) (ApplyOutput, error)
 		return ApplyOutput{}, err
 	}
 
+	binaries := make([]string, 0, len(digests))
+	for binary := range digests {
+		binaries = append(binaries, binary)
+	}
+	sort.Strings(binaries)
+
 	swapped := make([]string, 0, len(binaries))
 	for _, binary := range binaries {
-		if err := s.installer.SwapIn(ctx, binary); err != nil {
+		if err := s.installer.SwapIn(ctx, binary, digests[binary]); err != nil {
 			if rerr := s.rollbackAll(ctx, swapped); rerr != nil {
 				return ApplyOutput{}, errRollbackFailed(err, rerr)
+			}
+			if errors.Is(err, ErrStagedChanged) {
+				if derr := s.discard(ctx); derr != nil {
+					s.log.Error("could not discard a staged release that changed after it was verified", "err", derr)
+				}
+				return ApplyOutput{}, errStagedTampered(binary, err)
 			}
 			return ApplyOutput{}, errApplyFailed(err)
 		}
@@ -519,10 +619,14 @@ func (s *service) Apply(ctx context.Context, in ApplyInput) (ApplyOutput, error)
 }
 
 // verifyStaged proves, again, what Download proved: the checksums file's
-// signature, every file name's binary, version and platform, and every
-// staged file's digest. The staged record and files live on disk between the
-// two calls, and nothing that happened to them in between is taken on trust.
-func (s *service) verifyStaged(ctx context.Context, staged *StagedRelease) ([]string, error) {
+// signature, every file name's binary, version and platform, every staged
+// file's digest, and that the staged set still covers every binary installed
+// here. The staged record and files live on disk between the two calls, and
+// nothing that happened to them in between is taken on trust.
+//
+// It returns each staged binary's verified digest, which travels on to the
+// swap — see Installer.SwapIn.
+func (s *service) verifyStaged(ctx context.Context, staged *StagedRelease, installed map[string]bool) (map[string]string, error) {
 	if err := relsig.Verify(s.publicKey, []byte(staged.Checksums), staged.Signature); err != nil {
 		return nil, errStagedTampered("checksums", err)
 	}
@@ -533,6 +637,13 @@ func (s *service) verifyStaged(ctx context.Context, staged *StagedRelease) ([]st
 	}
 	sort.Strings(binaries)
 
+	for _, binary := range Binaries() {
+		if _, ok := staged.Files[binary]; installed[binary] && !ok {
+			return nil, errStagedIncomplete(binary)
+		}
+	}
+
+	digests := make(map[string]string, len(binaries))
 	for _, binary := range binaries {
 		filename := staged.Files[binary]
 		name, ok := parseAssetName(filename)
@@ -548,8 +659,9 @@ func (s *service) verifyStaged(ctx context.Context, staged *StagedRelease) ([]st
 		if !strings.EqualFold(want, got) {
 			return nil, errStagedTampered(binary, errors.New("its digest changed since it was downloaded"))
 		}
+		digests[binary] = strings.ToLower(want)
 	}
-	return binaries, nil
+	return digests, nil
 }
 
 func (s *service) rollbackAll(ctx context.Context, binaries []string) error {
@@ -645,14 +757,42 @@ func sha256Hex(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// shellQuote makes a path or version safe to paste into a POSIX shell. The
-// command it builds is shown to a person to copy, so it has to survive a
-// directory with a space in its name.
+// installCommand is the command that installs version with the daemon binary
+// at path, written for the terminal goos has. It is shown to a person to
+// copy, so it has to survive a directory with a space in its name — and a
+// Windows one.
+//
+// On Windows that terminal is PowerShell, where a quoted path is a string
+// until & runs it; a POSIX-quoted 'C:\...\aosd.exe' ran nothing in either
+// PowerShell or cmd.exe. A path that needs no quoting is left bare, which is
+// the one spelling both of them accept.
+func installCommand(goos, path, version string) string {
+	if goos == "windows" {
+		command := powershellQuote(path) + " update apply --version " + powershellQuote(version)
+		if strings.HasPrefix(command, "'") {
+			command = "& " + command
+		}
+		return command
+	}
+	return shellQuote(path) + " update apply --version " + shellQuote(version)
+}
+
+// shellQuote makes a path or version safe to paste into a POSIX shell.
 func shellQuote(s string) string {
 	if s != "" && !strings.ContainsAny(s, " \t\n'\"\\$`!*?[](){}<>|&;#~") {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// powershellQuote makes a path or version safe to paste into PowerShell: a
+// single-quoted string is literal there, with a quote written twice.
+// Backslashes and drive colons need nothing.
+func powershellQuote(s string) string {
+	if s != "" && !strings.ContainsAny(s, " \t\n'\"`$&|;,(){}<>@#") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
 // memoryStore is the Store a service gets when it is built without one: the

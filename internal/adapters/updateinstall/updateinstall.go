@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -130,10 +131,18 @@ func (i *Installer) Target(_ context.Context, binary string) (string, bool, erro
 // not there — an aos inside a macOS bundle that never carried one — changes
 // the installation's layout, which is the installer's decision, not an
 // update's.
-func (i *Installer) SwapIn(ctx context.Context, binary string) error {
+//
+// The copy is hashed as it is written, and it replaces the target only when
+// it hashes to digest, the value Apply verified the staged copy against.
+// Apply verifies and then waits for work in flight before it swaps; without
+// this, a staged file changed during that wait was put in place unchecked.
+func (i *Installer) SwapIn(ctx context.Context, binary, digest string) error {
 	staged, err := i.staged(binary)
 	if err != nil {
 		return err
+	}
+	if digest == "" {
+		return errSwapFailed(staged, errors.New("no verified digest to check the staged copy against"))
 	}
 	target, installed, err := i.Target(ctx, binary)
 	if err != nil {
@@ -144,9 +153,14 @@ func (i *Installer) SwapIn(ctx context.Context, binary string) error {
 	}
 
 	incoming := target + ".new"
-	if err := copyFile(staged, incoming); err != nil {
+	got, err := copyFile(staged, incoming)
+	if err != nil {
 		_ = os.Remove(incoming)
 		return errSwapFailed(target, err)
+	}
+	if !strings.EqualFold(got, digest) {
+		_ = os.Remove(incoming)
+		return errSwapFailed(target, fmt.Errorf("%w: %s hashes to %s, not the verified %s", update.ErrStagedChanged, staged, got, digest))
 	}
 	backup := target + backupSuffix
 	if err := renameOver(target, backup); err != nil {
@@ -242,26 +256,33 @@ func filename(binary string) (string, error) {
 	return binary, nil
 }
 
-func copyFile(src, dst string) error {
+// copyFile copies src to dst and returns the hex SHA-256 of the bytes it
+// wrote — the bytes dst now holds, not whatever src holds by the time anybody
+// asks again.
+func copyFile(src, dst string) (string, error) {
 	in, err := os.Open(src)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer func() { _ = in.Close() }()
 
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
 	if err != nil {
-		return err
+		return "", err
 	}
-	if _, err := io.Copy(out, in); err != nil {
+	h := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(out, h), in); err != nil {
 		_ = out.Close()
-		return err
+		return "", err
 	}
 	if err := out.Sync(); err != nil {
 		_ = out.Close()
-		return err
+		return "", err
 	}
-	return out.Close()
+	if err := out.Close(); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // renameOver renames src to dst, removing dst first: os.Rename overwrites

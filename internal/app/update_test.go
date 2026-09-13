@@ -17,7 +17,9 @@ import (
 	"github.com/OWNER/aos/internal/adapters/supervise"
 	"github.com/OWNER/aos/internal/adapters/updateinstall"
 	"github.com/OWNER/aos/internal/core/apperr"
+	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/clockx"
+	"github.com/OWNER/aos/internal/core/env"
 	"github.com/OWNER/aos/internal/core/identity"
 	"github.com/OWNER/aos/internal/core/relsig"
 	"github.com/OWNER/aos/internal/domain/auth"
@@ -228,5 +230,22 @@ func TestOnlyAnAdministratorMayInstallUpdates(t *testing.T) {
 	broken := updateOperators{auth: auth.NewService(auth.Deps{Store: brokenUsers{}, Clock: clockx.Fixed{At: now}})}
 	if ok, err := broken.MayInstall(identity.With(context.Background(), identity.Identity{UserID: "u-super"})); err == nil || ok {
 		t.Error("unreadable accounts must not grant anything")
+	}
+}
+
+// A feed set on this machine and the feed a build carries fail differently
+// when they are empty, so which one this is travels to the update service.
+func TestUpdateFeedSaysWhetherItWasSetHere(t *testing.T) {
+	saved := build.UpdateBaseURL
+	t.Cleanup(func() { build.UpdateBaseURL = saved })
+	build.UpdateBaseURL = "https://releases.example.test/latest/download"
+
+	feed, custom := updateFeed(env.New(env.Map(map[string]string{})))
+	if feed != build.UpdateBaseURL || custom {
+		t.Fatalf("with nothing set: feed %q, custom %v", feed, custom)
+	}
+	feed, custom = updateFeed(env.New(env.Map(map[string]string{env.KeyUpdateBaseURL: " http://127.0.0.1:7498/feed "})))
+	if feed != "http://127.0.0.1:7498/feed" || !custom {
+		t.Fatalf("with %s set: feed %q, custom %v", env.KeyUpdateBaseURL, feed, custom)
 	}
 }

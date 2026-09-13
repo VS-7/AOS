@@ -70,19 +70,22 @@ func (f *fakeSource) Fetch(_ context.Context, url string) ([]byte, error) {
 // and the backups a swap keeps. It is both the Stager and the Installer,
 // because on a real machine those are one directory tree.
 type fakeMachine struct {
-	mu        sync.Mutex
+	mu sync.Mutex
+	// dir is where Target says the live binaries are.
+	dir       string
 	live      map[string]string
 	staged    map[string]string
 	prev      map[string]string
 	bundle    bool
 	failSwap  string
 	failUndo  string
+	targetErr error
 	commits   []string
 	discarded int
 }
 
 func newFakeMachine(installed ...string) *fakeMachine {
-	m := &fakeMachine{live: map[string]string{}, staged: map[string]string{}, prev: map[string]string{}}
+	m := &fakeMachine{dir: "/opt/aos bin/", live: map[string]string{}, staged: map[string]string{}, prev: map[string]string{}}
 	for _, b := range installed {
 		m.live[b] = "old " + b
 	}
@@ -117,15 +120,23 @@ func (m *fakeMachine) Discard(context.Context) error {
 func (m *fakeMachine) Target(_ context.Context, binary string) (string, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.targetErr != nil {
+		return "", false, m.targetErr
+	}
 	_, ok := m.live[binary]
-	return "/opt/aos bin/" + binary, ok, nil
+	return m.dir + binary, ok, nil
 }
 
-func (m *fakeMachine) SwapIn(_ context.Context, binary string) error {
+// SwapIn refuses a staged copy whose digest is not the one it is handed,
+// the way the filesystem Installer does with the bytes it copies.
+func (m *fakeMachine) SwapIn(_ context.Context, binary, digest string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.failSwap == binary {
 		return errors.New("fakeMachine: swap refused for " + binary)
+	}
+	if sha256Hex([]byte(m.staged[binary])) != digest {
+		return fmt.Errorf("%w: %s", update.ErrStagedChanged, binary)
 	}
 	m.prev[binary] = m.live[binary]
 	m.live[binary] = m.staged[binary]
@@ -194,11 +205,16 @@ type fakeActiveWork struct {
 	counts []int
 	calls  int
 	err    error
+	// during runs on every read: something happening while Apply waits.
+	during func()
 }
 
 func (f *fakeActiveWork) Count(context.Context) (int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.during != nil {
+		f.during()
+	}
 	if f.err != nil {
 		return 0, f.err
 	}
@@ -239,15 +255,23 @@ type harness struct {
 	store      update.Store
 	clock      *steppingClock
 	version    string
+	platform   string
+	customFeed bool
 	pub, priv  string
+	// chosenInstall is set by installed(): the test decided what is on this
+	// machine, and signedRelease leaves it alone. Otherwise a release
+	// covers exactly what is installed, which is what a real one does.
+	chosenInstall bool
 }
 
 type option func(*harness)
 
 func running(version string) option { return func(h *harness) { h.version = version } }
 func installed(binaries ...string) option {
-	return func(h *harness) { h.machine = newFakeMachine(binaries...) }
+	return func(h *harness) { h.machine, h.chosenInstall = newFakeMachine(binaries...), true }
 }
+func onPlatform(platform string) option    { return func(h *harness) { h.platform = platform } }
+func withCustomFeed() option               { return func(h *harness) { h.customFeed = true } }
 func withStore(store update.Store) option  { return func(h *harness) { h.store = store } }
 func withOperators(o fakeOperators) option { return func(h *harness) { h.operators = o } }
 
@@ -264,6 +288,7 @@ func newHarness(t *testing.T, opts ...option) *harness {
 		activeWork: &fakeActiveWork{},
 		clock:      &steppingClock{at: time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)},
 		version:    "v0.9.0",
+		platform:   "linux/amd64",
 		pub:        pub, priv: priv,
 	}
 	for _, o := range opts {
@@ -273,7 +298,7 @@ func newHarness(t *testing.T, opts ...option) *harness {
 		Source: h.source, Stager: h.machine, Installer: h.machine, Store: h.store,
 		Supervisor: h.supervisor, Operators: h.operators, ActiveWork: h.activeWork,
 		Clock: h.clock, Sleeper: h.clock,
-		PublicKey: pub, Platform: "linux/amd64", Version: h.version,
+		PublicKey: pub, Platform: h.platform, Version: h.version, CustomFeed: h.customFeed,
 	})
 	return h
 }
@@ -289,6 +314,14 @@ func (h *harness) signedRelease(t *testing.T, version string, binaries ...string
 		Channel:      update.ChannelStable,
 		ChecksumsURL: "https://example.test/checksums.txt",
 		SignatureURL: "https://example.test/checksums.txt.sig",
+	}
+	if !h.chosenInstall {
+		h.machine.mu.Lock()
+		h.machine.live = map[string]string{}
+		for _, b := range binaries {
+			h.machine.live[b] = "old " + b
+		}
+		h.machine.mu.Unlock()
 	}
 	var checksums strings.Builder
 	for _, b := range binaries {
@@ -427,6 +460,39 @@ func TestStatusDoesNotOfferWhatThisInstallationAlreadyReached(t *testing.T) {
 	}
 }
 
+// The record outlives the binary that wrote it. What it says is re-read
+// against the binary reading it: a development build is not "up to date"
+// with a release, and a release build behind the newest release known is
+// behind it, whoever made the check.
+func TestStatusReadsTheLastCheckAgainstTheBinaryReadingIt(t *testing.T) {
+	cases := []struct {
+		wrote, reads string
+		want         update.CheckState
+	}{
+		{"v0.9.0", "dev", update.StateDeveloperBuild},
+		{"v0.9.0", "v0.10.0", update.StateUpToDate},
+		{"dev", "v0.9.0", update.StateAvailable},
+		{"v0.10.0", "v0.9.0", update.StateAvailable},
+	}
+	for _, c := range cases {
+		store := &sharedStore{}
+		writer := newHarness(t, withStore(store), running(c.wrote))
+		writer.source.release = &update.Release{Version: "v0.10.0"}
+		if _, err := writer.svc.Check(context.Background(), update.CheckInput{}); err != nil {
+			t.Fatal(err)
+		}
+
+		reader := newHarness(t, withStore(store), running(c.reads))
+		st, err := reader.svc.Status(context.Background(), update.StatusInput{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st.LastState != c.want {
+			t.Errorf("checked by %s, read by %s: lastState = %q, want %q", c.wrote, c.reads, st.LastState, c.want)
+		}
+	}
+}
+
 // Ordering, not equality: a lagging mirror's older release is not an
 // update, and a locally packaged -dirty build of the same release is that
 // release.
@@ -503,6 +569,82 @@ func TestCheckNamesTheTerminalCommandWhenThisProcessCannotRestart(t *testing.T) 
 	}
 	if want := "'/opt/aos bin/aosd' update apply --version v0.10.0"; out.Install.Command != want {
 		t.Fatalf("command = %q, want %q", out.Install.Command, want)
+	}
+}
+
+// The command is pasted into whatever terminal the platform has. On Windows
+// that is PowerShell, where a quoted path is a string rather than a command
+// until & runs it — and POSIX single quotes around C:\... run nothing at all.
+func TestCheckNamesATerminalCommandThatRunsOnThisPlatform(t *testing.T) {
+	cases := []struct {
+		platform, dir, want string
+	}{
+		{"linux/amd64", "/opt/aos/", "/opt/aos/aosd update apply --version v0.10.0"},
+		{"darwin/arm64", "/Users/me/My Apps/", "'/Users/me/My Apps/aosd' update apply --version v0.10.0"},
+		{"windows/amd64", `C:\Users\me\AOS\`, `C:\Users\me\AOS\aosd update apply --version v0.10.0`},
+		{"windows/amd64", `C:\Program Files\AOS\`, `& 'C:\Program Files\AOS\aosd' update apply --version v0.10.0`},
+		{"windows/arm64", `C:\Users\O'Neil\AOS\`, `& 'C:\Users\O''Neil\AOS\aosd' update apply --version v0.10.0`},
+	}
+	for _, c := range cases {
+		h := newHarness(t, onPlatform(c.platform))
+		h.machine.dir = c.dir
+		h.supervisor.cannot = true
+		h.source.release = &update.Release{Version: "v0.10.0"}
+
+		out, err := h.svc.Check(context.Background(), update.CheckInput{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out.Install == nil || out.Install.Command != c.want {
+			t.Errorf("%s in %s: command = %+v, want %q", c.platform, c.dir, out.Install, c.want)
+		}
+	}
+}
+
+// The manifest is not signed, and its page address is opened in the
+// person's browser. Only a web page is kept.
+func TestCheckKeepsOnlyAWebPageAsTheReleasePage(t *testing.T) {
+	cases := map[string]string{
+		"https://github.com/VS-7/AOS/releases/tag/v0.10.0": "https://github.com/VS-7/AOS/releases/tag/v0.10.0",
+		"http://127.0.0.1:7498/releases/v0.10.0":           "http://127.0.0.1:7498/releases/v0.10.0",
+		"http://localhost/releases":                        "http://localhost/releases",
+		"http://example.com/releases":                      "",
+		"file:///etc/passwd":                               "",
+		"javascript:alert(1)":                              "",
+		"https:///no-host":                                 "",
+		"  ":                                               "",
+	}
+	for page, want := range cases {
+		h := newHarness(t)
+		h.source.release = &update.Release{Version: "v0.10.0", PageURL: page}
+		out, err := h.svc.Check(context.Background(), update.CheckInput{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out.Release == nil || out.Release.PageURL != want {
+			t.Errorf("pageUrl %q: kept %+v, want %q", page, out.Release, want)
+		}
+	}
+}
+
+// The feed a build carries is not something the person set, so an empty one
+// cannot be answered with "check AOS_UPDATE_BASE_URL".
+func TestCheckOnAnEmptyFeedSaysWhoseFeedItIs(t *testing.T) {
+	builtIn := newHarness(t)
+	builtIn.source.latestErr = fmt.Errorf("%w: stable.json answered 404", update.ErrNotPublished)
+	_, err := builtIn.svc.Check(context.Background(), update.CheckInput{})
+	e := wantCode(t, err, "UPDATE_CHANNEL_EMPTY")
+	if len(e.Actions) == 0 || strings.Contains(e.Actions[0].Label, "AOS_UPDATE_BASE_URL") ||
+		!strings.Contains(e.Actions[0].Label, "installer") {
+		t.Fatalf("a build's own feed should send the person to the installer, got %+v", e.Actions)
+	}
+
+	custom := newHarness(t, withCustomFeed())
+	custom.source.latestErr = builtIn.source.latestErr
+	_, err = custom.svc.Check(context.Background(), update.CheckInput{})
+	e = wantCode(t, err, "UPDATE_CHANNEL_EMPTY")
+	if len(e.Actions) == 0 || !strings.Contains(e.Actions[0].Label, "AOS_UPDATE_BASE_URL") {
+		t.Fatalf("a feed set on this machine should be named, got %+v", e.Actions)
 	}
 }
 
@@ -669,6 +811,33 @@ func TestDownloadStagesOnlyBinariesInstalledHere(t *testing.T) {
 	release = none.signedRelease(t, "v0.10.0", "aos")
 	_, err := none.svc.Download(context.Background(), update.DownloadInput{Release: release})
 	wantCode(t, err, "UPDATE_NO_ASSET_FOR_PLATFORM")
+}
+
+// A release that leaves out one of the binaries installed here would update
+// the rest and leave that one behind: a new aos beside an old aosd, or a new
+// daemon under an old window. It is refused whole, naming what is missing —
+// whether the manifest omits the binary or lists it for another platform.
+func TestDownloadRefusesAReleaseThatLeavesAnInstalledBinaryBehind(t *testing.T) {
+	cases := map[string]func(r *update.Release){
+		"not listed":             func(r *update.Release) { r.Assets = r.Assets[:1] },
+		"listed for another one": func(r *update.Release) { r.Assets[1].Platform = "windows/amd64" },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t, installed("aos", "aosd"))
+			release := h.signedRelease(t, "v0.10.0", "aos", "aosd")
+			mutate(release)
+
+			_, err := h.svc.Download(context.Background(), update.DownloadInput{Release: release})
+			e := wantCode(t, err, "UPDATE_NO_ASSET_FOR_PLATFORM")
+			if !strings.Contains(e.Message, "aosd") {
+				t.Fatalf("the refusal should name the binary left behind, got %q", e.Message)
+			}
+			if len(h.machine.staged) != 0 {
+				t.Fatalf("nothing may be staged from an incomplete release, staged %v", h.machine.staged)
+			}
+		})
+	}
 }
 
 func TestDownloadRefusesWhatIsNotAnUpdate(t *testing.T) {
@@ -851,6 +1020,74 @@ func TestApplyReverifiesTheStagedFiles(t *testing.T) {
 		_, err := h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
 		wantCode(t, err, "UPDATE_STAGED_TAMPERED")
 	})
+}
+
+// What is installed can change between Download and Apply — the window
+// installed beside the daemon, say. A staged release that no longer covers
+// every installed binary is not installed.
+func TestApplyRefusesAStagedReleaseThatNoLongerCoversWhatIsInstalled(t *testing.T) {
+	h := newHarness(t, installed("aosd"))
+	h.download(t, h.signedRelease(t, "v0.10.0", "aosd"))
+	h.machine.mu.Lock()
+	h.machine.live["aos-desktop"] = "old aos-desktop"
+	h.machine.mu.Unlock()
+
+	_, err := h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+	e := wantCode(t, err, "UPDATE_STAGED_INCOMPLETE")
+	if !strings.Contains(e.Message, "aos-desktop") {
+		t.Fatalf("the refusal should name the binary left behind, got %q", e.Message)
+	}
+	if h.machine.liveAt("aosd") != "old aosd" || h.supervisor.restarts != 0 {
+		t.Fatal("nothing may be swapped from an incomplete staged release")
+	}
+	if h.machine.discarded == 0 {
+		t.Fatal("an incomplete staged release should be discarded, so the next download stages all of it")
+	}
+}
+
+// The staged files are verified before Apply waits for work in flight, and
+// the wait can be minutes. The digest travels with the swap, so a file that
+// changes in between is refused by the Installer instead of installed.
+func TestApplyRefusesAStagedFileThatChangesWhileItWaits(t *testing.T) {
+	h := newHarness(t)
+	h.download(t, h.signedRelease(t, "v0.10.0", "aos", "aosd"))
+	h.activeWork.counts = []int{1, 0}
+	h.activeWork.during = func() {
+		h.machine.mu.Lock()
+		h.machine.staged["aosd"] = "swapped after it was verified"
+		h.machine.mu.Unlock()
+	}
+
+	_, err := h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+	wantCode(t, err, "UPDATE_STAGED_TAMPERED")
+	if h.machine.liveAt("aos") != "old aos" || h.machine.liveAt("aosd") != "old aosd" {
+		t.Fatalf("every swap should be undone: aos=%q aosd=%q", h.machine.liveAt("aos"), h.machine.liveAt("aosd"))
+	}
+	if h.supervisor.restarts != 0 {
+		t.Fatal("nothing should restart onto a refused swap")
+	}
+	if h.machine.discarded == 0 {
+		t.Fatal("a staged release that changed should be discarded")
+	}
+}
+
+// An installation whose binaries cannot even be listed cannot be kept on one
+// version, so neither step guesses.
+func TestAnInstallationThatCannotBeReadIsNotUpdated(t *testing.T) {
+	h := newHarness(t)
+	release := h.signedRelease(t, "v0.10.0", "aos")
+	h.machine.targetErr = errors.New("permission denied")
+	_, err := h.svc.Download(context.Background(), update.DownloadInput{Release: release})
+	wantCode(t, err, "UPDATE_INSTALLATION_UNREADABLE")
+
+	h.machine.targetErr = nil
+	h.download(t, release)
+	h.machine.targetErr = errors.New("permission denied")
+	_, err = h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+	wantCode(t, err, "UPDATE_INSTALLATION_UNREADABLE")
+	if _, ok := h.machine.staged["aos"]; !ok {
+		t.Fatal("a verified release should stay staged when only the installation could not be read")
+	}
 }
 
 func TestApplyRefusesWhatIsNoLongerAnUpdate(t *testing.T) {

@@ -35,14 +35,24 @@ func errSourceFailed(causer string, cause error) error {
 // channel. It used to be read as "no release", which the window showed as
 // "You are on the newest release." — the one answer that is certainly wrong
 // for a feed pointed at the wrong address.
-func errChannelEmpty(channel Channel, cause error) error {
+//
+// What to do about it depends on whose feed it is. One set on this machine
+// can be pointed somewhere else. The feed a build carries is the latest
+// release's own, and when it is empty that release was published without
+// one: telling the person to check an environment variable they never set
+// sends them nowhere.
+func errChannelEmpty(channel Channel, customFeed bool, cause error) error {
+	action := "the latest release was published without an update feed; install it with the installer, or from the release page"
+	if customFeed {
+		action = "check that " + envUpdateBaseURL + " points at a feed that publishes " + string(channel) + ".json"
+	}
 	return apperr.New("UPDATE_CHANNEL_EMPTY").
 		Causer("update.Service.Check").
 		Msgf("the release feed publishes nothing on the %s channel: %v", channel, cause).
 		Issue("channel", string(channel)).
 		Status(apperr.StatusBadGateway).
 		Wrap(cause).
-		CTA(apperr.CallToAction{Label: "check that " + envUpdateBaseURL + " points at a feed that publishes " + string(channel) + ".json"})
+		CTA(apperr.CallToAction{Label: action})
 }
 
 // envUpdateBaseURL names the setting in the words a person configures it
@@ -223,6 +233,30 @@ func errStagedTampered(binary string, cause error) error {
 		Issue("binary", binary).
 		Status(apperr.StatusConflict).
 		CTA(apperr.CallToAction{Label: "download the release again; if this repeats, something is changing files in the state directory"})
+}
+
+// errStagedIncomplete fires when the staged release no longer covers every
+// binary installed here — one was installed after the download. Installing
+// the rest would leave that one on the previous version. The staged release
+// is discarded before this is returned.
+func errStagedIncomplete(binary string) error {
+	return apperr.New("UPDATE_STAGED_INCOMPLETE").
+		Causer("update.Service.Apply").
+		Msgf("%s is installed here, and the staged release does not include it, so nothing was installed", binary).
+		Issue("binary", binary).
+		Status(apperr.StatusConflict).
+		CTA(apperr.CallToAction{Label: "download the release again, so every installed binary is updated together"})
+}
+
+// errInstallationUnreadable: which binaries are installed here could not be
+// told, and an update that cannot tell cannot keep them on one version.
+func errInstallationUnreadable(causer string, cause error) error {
+	return apperr.New("UPDATE_INSTALLATION_UNREADABLE").
+		Causer(causer).
+		Msgf("could not tell which binaries are installed here: %v", cause).
+		Status(apperr.StatusInternalServerError).
+		Wrap(cause).
+		CTA(apperr.CallToAction{Label: "nothing was downloaded or installed; check the permissions of the installation directory, then retry"})
 }
 
 // errRestartUnavailable is Apply refusing up front, with nothing touched,
