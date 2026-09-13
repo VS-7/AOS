@@ -173,6 +173,41 @@ export async function write(path: string, content: string): Promise<{ path: stri
   });
 }
 
+/**
+ * A new file, refused (409) when anything is already at `path` — the
+ * explorer's "New File". `write` overwrites on purpose, because it is the
+ * editor's save; creating through it is how a paste used to empty a file.
+ */
+export async function create(path: string, content: string): Promise<{ path: string }> {
+  return request(`/api/file/create`, {
+    method: "PUT",
+    headers: headers({ "content-type": "application/json" }),
+    body: JSON.stringify({ path, content }),
+  });
+}
+
+/** A new, empty directory, refused when `path` is taken. */
+export async function mkdir(path: string): Promise<{ path: string }> {
+  return request(`/api/file/mkdir`, {
+    method: "PUT",
+    headers: headers({ "content-type": "application/json" }),
+    body: JSON.stringify({ path }),
+  });
+}
+
+/**
+ * A copy of a file or a whole directory, made by the daemon and refused when
+ * `to` is taken. Copying here instead of reading and writing back keeps a
+ * binary intact and a large file whole.
+ */
+export async function copy(from: string, to: string): Promise<{ path: string }> {
+  return request(`/api/file/copy`, {
+    method: "PUT",
+    headers: headers({ "content-type": "application/json" }),
+    body: JSON.stringify({ from, to }),
+  });
+}
+
 export async function move(from: string, to: string): Promise<{ path: string }> {
   return request(`/api/file/move`, {
     method: "PUT",

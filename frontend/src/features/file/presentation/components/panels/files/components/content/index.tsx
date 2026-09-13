@@ -5,6 +5,8 @@ import { toast } from "sonner"
 import { aos } from "@/app/aos"
 import { useRealtime } from "@/hooks/use-realtime"
 import { AnimatedEmptyState } from "@/components/ui/animated-empty-state"
+import { errorMessage } from "@/lib/aos-facade"
+import type { EditorRead } from "@/lib/file-explorer"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { SplitPageLayout } from "@/components/ui/split-page-layout"
@@ -90,11 +92,19 @@ export function FilesContent({
   const [draft, setDraft] = React.useState("")
   const [savedContent, setSavedContent] = React.useState("")
 
+  // What was read, in the shape `file.read` maps the daemon's answer to. The
+  // editor used to read `content` and `file` off the bare answer, which has
+  // `text`: every file opened empty, and Save wrote that emptiness over it.
+  const read = readQuery.data as EditorRead | undefined
+  // Saving is allowed only over a buffer that holds the whole file. Before the
+  // read resolves, after it fails, for a truncated read or a binary, the
+  // buffer is not the file, and writing it back would destroy the difference.
+  const canSave = Boolean(read?.editable) && !readQuery.isError
+
   const { mutate: saveFile, loading: isSaving } = aos.client.file.write.useMutation({
-    onSuccess: (response) => {
-      // `onSuccess` receives the full `Envelope` — see `aos-facade.ts`'s
-      // `useMutation` doc comment.
-      const nextContent = response?.data?.content ?? draft
+    onSuccess: () => {
+      // The daemon answers `{path}`; what was saved is the draft.
+      const nextContent = draft
       setDraft(nextContent)
       setSavedContent(nextContent)
       if (activeFilePath) {
@@ -104,7 +114,7 @@ export function FilesContent({
       toast.success(t("File saved."))
     },
     onError: (error: any) => {
-      toast.error(error?.error?.message || error?.message || "Unable to save file.")
+      toast.error(errorMessage(error?.error) ?? errorMessage(error) ?? t("Unable to save file."))
     },
   })
 
@@ -128,16 +138,19 @@ export function FilesContent({
   )
 
   React.useEffect(() => {
-    if (!shouldReadTextContent) return
+    // Seeded only from a read that arrived. A failed or pending one leaves the
+    // buffer alone rather than resetting it to "" — an empty buffer that looks
+    // like the file is exactly what a save should never be able to write.
+    if (!shouldReadTextContent || read === undefined) return
 
-    const content = readQuery.data?.content ?? ""
+    const content = read.content
     setDraft(content)
     setSavedContent(content)
     if (activeFilePath) {
       aos.stores.files.actions.setDraft(activeFilePath, content)
     }
     syncDirty(false)
-  }, [activeFilePath, readQuery.data?.content, shouldReadTextContent, syncDirty])
+  }, [activeFilePath, read, shouldReadTextContent, syncDirty])
 
   const hasDraftChanges = draft !== savedContent
 
@@ -162,7 +175,7 @@ export function FilesContent({
 
       if (hasDraftChanges) {
         toast.message(t("File changed on disk"), {
-          description: "Your local edits were kept. Revert or save to reconcile.",
+          description: t("Your local edits were kept. Revert or save to reconcile."),
         })
         return
       }
@@ -191,11 +204,15 @@ export function FilesContent({
     } satisfies WorkspaceFile
   }, [activeFilePath, activeFileTabMetadata])
 
-  const file = (readQuery.data?.file as WorkspaceFile | undefined) ?? fallbackFile
+  // The tab's own viewer wins: it is what the explorer resolved for this path,
+  // and a read's answer does not know the tab's viewer hint.
+  const file = fallbackFile
+    ? { ...fallbackFile, ...(read ? { size: read.file.size, mimeType: read.file.mimeType } : {}) }
+    : null
   const isLoading = Boolean(activeFilePath) && shouldReadTextContent && readQuery.isLoading
 
   function handleSave() {
-    if (!activeFilePath || isReadOnly) return
+    if (!activeFilePath || isReadOnly || !canSave) return
 
     saveFile({
       body: {
@@ -292,12 +309,20 @@ export function FilesContent({
 
         <SplitPageLayout.ContentHeaderActions>
           {isReadOnly ? <Badge variant="secondary">{t("Read-only")}</Badge> : null}
-          {readQuery.isError ? <Badge variant="destructive">{t("Load failed")}</Badge> : null}
+          {read?.truncated ? (
+            <Badge variant="secondary">{t("Too large to edit — showing the beginning")}</Badge>
+          ) : null}
+          {readQuery.isError ? (
+            <Badge variant="destructive" title={errorMessage(readQuery.error) ?? undefined}>
+              {t("Load failed")}
+            </Badge>
+          ) : null}
 
           <Button
             size="icon"
             variant="ghost"
             onClick={handleDiscard}
+            aria-label={t("Discard changes")}
             disabled={!hasDraftChanges || isSaving || isReadOnly}
           >
             <RotateCcw data-icon="inline-start" />
@@ -306,7 +331,8 @@ export function FilesContent({
             size="icon"
             variant="ghost"
             onClick={handleSave}
-            disabled={!hasDraftChanges || isSaving || isReadOnly}
+            aria-label={t("Save")}
+            disabled={!hasDraftChanges || isSaving || isReadOnly || !canSave}
           >
             {isSaving ? (
               <LoaderCircle data-icon="inline-start" className="animate-spin" />
@@ -324,18 +350,30 @@ export function FilesContent({
             : "min-h-0 overflow-y-auto"
         }
       >
+        {readQuery.isError ? (
+          <div className="flex h-full items-center justify-center p-8">
+            <AnimatedEmptyState className="border-none shadow-none">
+              <AnimatedEmptyState.Content>
+                <AnimatedEmptyState.Title>{t("Unable to open this file")}</AnimatedEmptyState.Title>
+                <AnimatedEmptyState.Description>
+                  {errorMessage(readQuery.error) ?? t("The daemon did not return its content.")}
+                </AnimatedEmptyState.Description>
+              </AnimatedEmptyState.Content>
+            </AnimatedEmptyState>
+          </div>
+        ) : (
         <React.Suspense fallback={<FilesViewerFallback />}>
           {file.viewer === "markdown" ? (
             <FilesMarkdownViewer
               content={draft}
-              readOnly={isReadOnly}
+              readOnly={isReadOnly || !canSave}
               onChange={setDraft}
             />
           ) : file.viewer === "json" ? (
             <FilesJsonViewer
               content={draft}
               file={file}
-              readOnly={isReadOnly}
+              readOnly={isReadOnly || !canSave}
               onChange={setDraft}
             />
           ) : (
@@ -343,11 +381,12 @@ export function FilesContent({
               content={draft}
               file={file}
               isLoading={readQuery.isFetching && !readQuery.data}
-              readOnly={isReadOnly}
+              readOnly={isReadOnly || !canSave}
               onChange={setDraft}
             />
           )}
         </React.Suspense>
+        )}
       </SplitPageLayout.ContentBody>
     </div>
   )

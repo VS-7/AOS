@@ -120,6 +120,19 @@ export type MapEntry = CommandKey | CommandDescriptor | HttpHandler | null;
 const s = (p: Record<string, unknown>, k: string): string => String(p[k] ?? "");
 
 /**
+ * A workspace path out of the first of `keys` that holds one, without the
+ * trailing slash `@pierre/trees` marks a directory with — the daemon's paths
+ * name a directory without it.
+ */
+const pathOf = (p: Record<string, unknown>, ...keys: string[]): string => {
+  for (const key of keys) {
+    const value = s(p, key).replace(/\/+$/, "");
+    if (value) return value;
+  }
+  return "";
+};
+
+/**
  * The marker the composer puts on material it attached rather than the person
  * typed (`COMPOSER_PROMPT_PART_PREFIX` in `composer.helper.ts`, and the same
  * string the message renderer hides on).
@@ -720,9 +733,25 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
     ),
   "session.get": () => authApi.session(),
   "password.change": (p) => authApi.changePassword(s(p, "current"), s(p, "next")),
-  "file.create": (p) => fileApi.write(s(p, "path"), s(p, "content")),
-  "file.delete": (p) => fileApi.remove(s(p, "path")),
-  "file.diff": (p) => fileApi.diff(s(p, "path")),
+  // The explorer's writes. Paths lose the trailing slash the tree puts on a
+  // directory, and the explorer's own names (`fromPath`/`toPath`) are read
+  // before the short ones: every rename, drag and cut used to send the long
+  // names to a map reading the short ones, and asked the daemon to move ""
+  // to "". `context` (a task worktree) is not sent because the daemon cannot
+  // resolve one yet — the explorer hides the switcher until it can.
+  //
+  // `file.create` is the explorer's New File / New Folder, and it never goes
+  // through `write`: a directory went there as a zero-byte file under the
+  // folder's name, and a file created over an existing one replaced it.
+  "file.create": (p) =>
+    s(p, "type") === "directory"
+      ? fileApi.mkdir(pathOf(p, "path"))
+      : fileApi.create(pathOf(p, "path"), s(p, "content")),
+  "file.copy": (p) => fileApi.copy(pathOf(p, "fromPath", "from"), pathOf(p, "toPath", "to")),
+  "file.delete": (p) => fileApi.remove(pathOf(p, "path")),
+  // `{snapshot: {oldFile, newFile}}`, which the Changes panel reads — see
+  // `diffForPanel`.
+  "file.diff": (p) => fileExplorer.diffForPanel(s(p, "path")),
   // The three screens the port left unmapped, assembled from what the daemon
   // publishes — see lib/file-explorer.ts. Until this, the sidebar's file tree,
   // the Changes panel and the composer's @-mention picker all rendered empty,
@@ -735,8 +764,10 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // answers `{path, nodes}` and all three call sites read `.files` off a
   // `WorkspaceFile[]`, so this resolved to `undefined` at every one of them.
   "file.list": (p) => fileExplorer.list(s(p, "path"), p["recursive"] === true),
-  "file.move": (p) => fileApi.move(s(p, "from"), s(p, "to")),
-  "file.read": (p) => fileApi.read(s(p, "path")),
+  "file.move": (p) => fileApi.move(pathOf(p, "fromPath", "from"), pathOf(p, "toPath", "to")),
+  // `{content, file, truncated, editable}`, which the editor reads — see
+  // `readForEditor` for what reading the bare answer used to destroy.
+  "file.read": (p) => fileExplorer.readForEditor(s(p, "path")),
   "file.write": (p) => fileApi.write(s(p, "path"), s(p, "content")),
 
   // The catalogue of what a routine can react to. Go's `activity_events`

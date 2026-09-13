@@ -15,37 +15,15 @@
  * `{path, nodes}` while all three of its call sites read `.files` off a
  * `WorkspaceFile[]`. It goes through the same adapter now.
  */
-import { tree, changes as rawChanges, type FileNode } from "./file";
+import { tree, changes as rawChanges, read as rawRead, diff as rawDiff, type FileNode } from "./file";
 import { client } from "./client";
+import { resolveFileViewer } from "@/features/file/presentation/helpers/file-viewer.helper";
 import type {
   FileChangeEntry,
   FileChangesSummary,
   FileExplorerSnapshot,
   WorkspaceFile,
 } from "@/features/file/interfaces/file.interfaces";
-
-/** Extensions the in-app text editor opens. Everything else gets a viewer. */
-const EDITABLE = new Set([
-  "ts", "tsx", "js", "jsx", "mjs", "cjs", "go", "py", "rb", "rs", "java", "kt",
-  "swift", "c", "h", "cc", "cpp", "hpp", "cs", "php", "sh", "bash", "zsh",
-  "fish", "sql", "html", "css", "scss", "less", "json", "jsonc", "yaml", "yml",
-  "toml", "ini", "cfg", "conf", "env", "md", "mdx", "txt", "csv", "tsv", "xml",
-  "svg", "graphql", "gql", "proto", "dockerfile", "makefile", "gitignore",
-]);
-
-const IMAGE = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico"]);
-const VIDEO = new Set(["mp4", "webm", "mov", "m4v"]);
-const AUDIO = new Set(["mp3", "wav", "ogg", "m4a", "flac"]);
-
-function viewerFor(extension: string, dir: boolean): string {
-  if (dir) return "none";
-  if (IMAGE.has(extension)) return "image";
-  if (VIDEO.has(extension)) return "video";
-  if (AUDIO.has(extension)) return "audio";
-  if (extension === "pdf") return "pdf";
-  if (EDITABLE.has(extension)) return "text";
-  return "binary";
-}
 
 /**
  * One node, in the shape the ported screens read.
@@ -64,6 +42,10 @@ export function toWorkspaceFile(node: FileNode): WorkspaceFile {
     ? node.path.slice(0, node.path.lastIndexOf("/"))
     : "";
 
+  // The viewer comes from the same resolver the panel uses for a path it has
+  // no node for. A second table here answered "text" for Markdown and JSON
+  // and "binary" — not a viewer at all — for anything unlisted, so the same
+  // file opened differently depending on which door it came in by.
   return {
     absolutePath: node.path,
     browserUrl: "",
@@ -77,7 +59,7 @@ export function toWorkspaceFile(node: FileNode): WorkspaceFile {
     size: node.size,
     type: node.dir ? "directory" : "file",
     updatedAt: node.modifiedAt,
-    viewer: viewerFor(extension, node.dir),
+    viewer: node.dir ? "other" : resolveFileViewer(node.name),
   } as WorkspaceFile;
 }
 
@@ -131,6 +113,9 @@ export async function search(
 export async function explorer(
   options: { includeContexts?: boolean } = {},
 ): Promise<{ snapshot: FileExplorerSnapshot }> {
+  // Contexts are opt-in. The switcher that shows them is hidden until the
+  // daemon's file API can resolve a task's worktree, and until then the list
+  // is a request whose answer nothing renders.
   const [walked, changed, tasks] = await Promise.all([
     // Not caught. A tree that cannot be read is a failure the panel has to
     // show ("Unable to load files", with the reason), not an empty workspace:
@@ -148,19 +133,18 @@ export async function explorer(
         summary: summarize([]),
       },
     })),
-    options.includeContexts === false ? Promise.resolve([]) : listTasks(),
+    options.includeContexts === true ? listTasks() : Promise.resolve([]),
   ]);
 
   const nodes = walked.nodes ?? [];
   const paths = nodes.map((node) => node.path);
+  // Each entry is the whole file record, not a summary of one. The tree's
+  // click handler opens whatever it finds here, and an entry with no path is
+  // a tab that says "No file selected" — which is what every click opened
+  // while this held only {type, name, size, editable}.
   const pathIndex: FileExplorerSnapshot["pathIndex"] = {};
   for (const node of nodes) {
-    pathIndex[node.path] = {
-      type: node.dir ? "directory" : "file",
-      name: node.name,
-      size: node.size,
-      editable: node.editable,
-    };
+    pathIndex[node.path] = toWorkspaceFile(node);
   }
 
   const files = changed.snapshot.files ?? [];
@@ -212,23 +196,108 @@ export async function changes(): Promise<{ snapshot: FileExplorerSnapshot }> {
 }
 
 /**
- * The tasks the explorer offers as contexts to switch to.
+ * The tasks the explorer offers as contexts to switch to: the ones that have a
+ * worktree, labelled by name.
+ *
+ * Go's task has `name` and no `title`, so the picker used to fall back to the
+ * id and show UUIDs; and a task without a worktree has no tree of its own to
+ * switch to.
  *
  * A failure here is not a failure of the file tree: the panel opens on the
  * live workspace, and the list of worktrees to switch to is the part that is
  * missing.
  */
-async function listTasks(): Promise<Array<{ id: string; title: string }>> {
+export async function listTasks(): Promise<Array<{ id: string; title: string }>> {
   try {
     const answered = (await client.invoke("tasks_list", {
       _reasoning: "listing the task worktrees the file explorer can switch to",
       limit: 100,
-    })) as { tasks?: Array<{ id?: string; title?: string }> } | undefined;
+    })) as
+      | { tasks?: Array<{ id?: string; name?: string; worktree?: { enabled?: boolean } }> }
+      | undefined;
 
     return (answered?.tasks ?? [])
-      .filter((task) => task.id)
-      .map((task) => ({ id: String(task.id), title: String(task.title ?? task.id) }));
+      .filter((task) => task.id && task.worktree?.enabled === true)
+      .map((task) => ({ id: String(task.id), title: String(task.name || task.id) }));
   } catch {
     return [];
   }
+}
+
+/** What the editor opens a file with. */
+export interface EditorRead {
+  /** The text to edit; empty for a binary, which has no text to show. */
+  content: string;
+  file: WorkspaceFile;
+  truncated: boolean;
+  /**
+   * Whether saving this buffer back is safe. Not for a truncated read — the
+   * save would cut the file at the read limit — and not for a binary, whose
+   * bytes are not in `content` at all.
+   */
+  editable: boolean;
+}
+
+/**
+ * `file.read`, in the shape the editor reads.
+ *
+ * The daemon answers `{path, mediaType, text | base64, size, truncated}`, and
+ * the editor read `content` and `file` — so every file opened as an empty
+ * buffer, and the first keystroke enabled a Save that wrote that emptiness
+ * over the real file.
+ */
+export async function readForEditor(path: string): Promise<EditorRead> {
+  const answered = await rawRead(path);
+  const name = path.split("/").pop() || path;
+  const extension = name.includes(".") ? (name.split(".").pop() ?? "").toLowerCase() : "";
+  const binary = answered.base64 !== undefined && answered.text === undefined;
+  const file = toWorkspaceFile({
+    path: answered.path || path,
+    name,
+    dir: false,
+    size: answered.size,
+    extension,
+    mediaType: answered.mediaType,
+    editable: !binary,
+    modifiedAt: "",
+  });
+  return {
+    content: binary ? "" : (answered.text ?? ""),
+    file,
+    truncated: answered.truncated,
+    editable: !binary && !answered.truncated,
+  };
+}
+
+/** One side of a diff, as `@pierre/diffs` takes it. */
+export interface DiffSide {
+  name: string;
+  contents: string;
+}
+
+/**
+ * `file.diff`, in the shape the Changes panel reads: `snapshot.oldFile` and
+ * `snapshot.newFile`, each present only when that side exists.
+ *
+ * The daemon answers `{status, isBinary, oldText, newText}` beside each other,
+ * and the panel read a `snapshot` that never arrived — so every diff, however
+ * plain the change, said the text diff "could not be rendered".
+ */
+export async function diffForPanel(path: string): Promise<{
+  snapshot: { status: string; isBinary: boolean; oldFile?: DiffSide; newFile?: DiffSide };
+}> {
+  const answered = await rawDiff(path);
+  const name = path.split("/").pop() || path;
+  return {
+    snapshot: {
+      status: answered.status,
+      isBinary: answered.isBinary,
+      ...(answered.oldText !== undefined && answered.oldText !== null
+        ? { oldFile: { name, contents: answered.oldText } }
+        : {}),
+      ...(answered.newText !== undefined && answered.newText !== null
+        ? { newFile: { name, contents: answered.newText } }
+        : {}),
+    },
+  };
 }

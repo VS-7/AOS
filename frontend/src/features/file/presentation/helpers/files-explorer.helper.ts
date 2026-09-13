@@ -104,8 +104,14 @@ export function lookupPathIndex<T>(
 }
 
 /**
- * Resolves where New File / New Folder should land:
- * focused/selected directory → that folder; file → its parent; else workspace root.
+ * Resolves where New File / New Folder should land: a selected directory →
+ * that folder; a selected file → its parent; nothing selected → the root.
+ *
+ * Selection only, never focus. `@pierre/trees` focuses its first row when the
+ * tree mounts, so reading focus as intent put every header "New file" inside
+ * whichever folder happened to sort first, with nothing selected at all.
+ * `focusedPath` is still accepted so a caller passing it compiles; it is not
+ * read.
  */
 export function resolveCreateParentPath(params: {
   focusedPath?: string | null;
@@ -113,10 +119,7 @@ export function resolveCreateParentPath(params: {
   pathIndex?: Record<string, { type: "file" | "directory" }>;
   isDirectoryPath?: (path: string) => boolean;
 }): string {
-  const candidate =
-    params.focusedPath ||
-    params.selectedPaths?.at(-1) ||
-    null;
+  const candidate = params.selectedPaths?.at(-1) || null;
 
   if (!candidate) return "";
 
@@ -131,6 +134,34 @@ export function resolveCreateParentPath(params: {
   }
 
   return parentPathOf(candidate).replace(/\/+$/, "");
+}
+
+/**
+ * Where a pasted copy of `destination` should go without replacing anything:
+ * the path itself when it is free, otherwise "name copy.ext", then
+ * "name copy 2.ext" and on — the names a file manager gives a duplicate.
+ *
+ * `taken` holds workspace-relative paths; a trailing slash on either side is
+ * ignored, since the tree marks directories with one and the daemon does not.
+ */
+export function copyDestinationPath(destination: string, taken: ReadonlySet<string>): string {
+  const normalized = destination.replace(/\/+$/, "");
+  const isTaken = (path: string) => taken.has(path) || taken.has(`${path}/`);
+  if (!isTaken(normalized)) return normalized;
+
+  const parent = parentPathOf(normalized).replace(/\/+$/, "");
+  const name = basenameOf(normalized);
+  // The extension starts at the last dot that is not the first character, so
+  // ".env.sample" keeps ".sample" and ".gitignore" has no extension at all.
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const extension = dot > 0 ? name.slice(dot) : "";
+
+  for (let attempt = 1; ; attempt++) {
+    const suffix = attempt === 1 ? " copy" : ` copy ${attempt}`;
+    const candidate = joinWorkspacePath(parent, `${stem}${suffix}${extension}`);
+    if (!isTaken(candidate)) return candidate;
+  }
 }
 
 export function formatCreateDestinationPath(parentPath: string): string {

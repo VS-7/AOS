@@ -9,15 +9,6 @@ import type {
 } from "@pierre/trees";
 import { AnimatedEmptyState } from "@/components/ui/animated-empty-state";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   SidebarGroup,
   SidebarGroupContent,
 } from "@/components/ui/sidebar";
@@ -101,10 +92,29 @@ export function FilesExplorerGroup() {
   return <FilesExplorerGroupInner key="files-explorer-collapsed" />;
 }
 
+/**
+ * The only context the explorer shows, for now.
+ *
+ * The switcher offered task worktrees and branches, and switching changed its
+ * label and nothing else: `/api/file` has no way to address a worktree, so the
+ * tree, every read and every write stayed on the main workspace while the
+ * header claimed otherwise. It stays hidden until the daemon can resolve one.
+ */
+const MAIN_CONTEXT: FileExplorerContext = { type: "main" };
+
 function FilesExplorerGroupInner() {
-  const explorerContext = aos.stores.files.useState((state) =>
+  const persistedContext = aos.stores.files.useState((state) =>
     parseExplorerContext(state.explorerContext),
   );
+  const explorerContext = MAIN_CONTEXT;
+
+  // A task context chosen before the switcher was hidden is still persisted,
+  // and every tab and clipboard entry would carry it. Put it back to main.
+  React.useEffect(() => {
+    if (persistedContext.type !== "main") {
+      aos.stores.files.actions.setExplorerContext(MAIN_CONTEXT);
+    }
+  }, [persistedContext.type]);
   const clipboard = aos.stores.files.useState((state) => state.clipboard);
   const themeIcons = aos.stores.theme.useState((state) => state.icons ?? { set: "complete", colored: true });
   const viewportTabs = aos.stores.viewport.useState((state) => state.tabs);
@@ -188,12 +198,10 @@ function FilesExplorerGroupInner() {
 
         for (const fromPath of event.draggedPaths) {
           const toPath = joinWorkspacePath(targetDir, basenameOf(fromPath));
-          void handleTreeMove(
-            fromPath,
-            toPath,
-            explorerContextRef.current,
-            () => explorerQuery.refetch(),
-          );
+          void handleTreeMove(fromPath, toPath, explorerContextRef.current, {
+            revert: () => revertTreeMove(fromPath, toPath),
+            refresh: () => void explorerQuery.refetch(),
+          });
         }
       },
       onDropError: (error: any) => toast.error(error),
@@ -201,12 +209,10 @@ function FilesExplorerGroupInner() {
     renaming: {
       canRename: () => !readOnlyRef.current,
       onRename: (event: any) => {
-        void handleTreeMove(
-          event.sourcePath,
-          event.destinationPath,
-          explorerContextRef.current,
-          () => explorerQuery.refetch(),
-        );
+        void handleTreeMove(event.sourcePath, event.destinationPath, explorerContextRef.current, {
+          revert: () => revertTreeMove(event.sourcePath, event.destinationPath),
+          refresh: () => void explorerQuery.refetch(),
+        });
       },
       onError: (error: any) => toast.error(error),
     },
@@ -214,21 +220,23 @@ function FilesExplorerGroupInner() {
       const path = selectedPaths.at(-1);
       if (!path) return;
 
-      const indexed = lookupPathIndex(snapshotRef.current?.pathIndex, path);
-      const file =
-        indexed ??
-        synthesizeFileFromPath(path, snapshotRef.current?.paths ?? []);
-      if (!file || file.type !== "file") return;
+      // Only a path the daemon listed opens. The tree also selects paths that
+      // are not there — the new name of a rename it is still waiting on, one
+      // the daemon then refused — and synthesising a file for those opened
+      // tabs onto nothing, with a "Load failed" badge.
+      const indexed = lookupPathIndex(snapshotRef.current?.pathIndex, path) as
+        | WorkspaceFile
+        | undefined;
+      if (!indexed || indexed.type !== "file") return;
 
-      // `indexed` (from `pathIndex`, loosely typed by design — see
-      // `file.interfaces.ts`'s `FileExplorerSnapshot` doc comment)
-      // doesn't structurally match `WorkspaceFile` even after the `type`
-      // narrowing above.
-      openFileTabRef.current(file as any);
+      openFileTabRef.current(indexed);
     },
   });
 
   function openFileTab(file: WorkspaceFile) {
+    // A tab with no path is a tab that says "No file selected", and — because
+    // the lookup below compares paths — one every later click would refocus.
+    if (!file.path) return;
     const readOnly = snapshotRef.current?.readOnly ?? false;
     const metadata = buildFileTabMetadata(file, explorerContextRef.current, {
       fileReadOnly: readOnly,
@@ -273,6 +281,24 @@ function FilesExplorerGroupInner() {
 
   openFileTabRef.current = openFileTab;
 
+  // Puts a rename or drag the daemon refused back where it was. The tree
+  // applies the move to itself before asking, and a refetch could not undo it:
+  // the answer is deep-equal to the last one, so React Query hands back the
+  // same array and the effect that resets the tree never runs.
+  function revertTreeMove(fromPath: string, toPath: string) {
+    try {
+      if (model.getItem(toPath) && !model.getItem(fromPath)) {
+        model.move(toPath, fromPath);
+      }
+    } catch {
+      // A tree that cannot be moved back is redrawn from the daemon instead.
+      const current = snapshotRef.current;
+      if (current?.paths?.length) {
+        model.resetPaths({ preparedInput: prepareFileTreeInput(treePathsOf(current)) });
+      }
+    }
+  }
+
   React.useEffect(() => {
     model.closeSearch();
   }, [model]);
@@ -284,20 +310,7 @@ function FilesExplorerGroupInner() {
   React.useEffect(() => {
     if (!snapshot?.paths?.length) return;
 
-    // Pierre marks directories only when paths end with `/`. Backend should emit
-    // that, but normalize from pathIndex so folders never render as file+dir.
-    const pathsForTree = snapshot.paths.map((entryPath) => {
-      const indexed =
-        snapshot.pathIndex[entryPath] ??
-        snapshot.pathIndex[`${entryPath}/`] ??
-        snapshot.pathIndex[entryPath.replace(/\/+$/, "")];
-      if (indexed?.type === "directory" && !entryPath.endsWith("/")) {
-        return `${entryPath}/`;
-      }
-      return entryPath;
-    });
-
-    const preparedInput = prepareFileTreeInput(pathsForTree);
+    const preparedInput = prepareFileTreeInput(treePathsOf(snapshot));
 
     model.resetPaths({
       preparedInput,
@@ -383,10 +396,6 @@ function FilesExplorerGroupInner() {
     await explorerQuery.refetch();
   }
 
-  function handleContextChange(value: string) {
-    aos.stores.files.actions.setExplorerContext(parseExplorerContext(value));
-  }
-
   function handleCreateNode(request: FilesCreateNodeRequest) {
     setCreateRequest(request);
     setEmptyMenuAnchor(null);
@@ -396,7 +405,6 @@ function FilesExplorerGroupInner() {
     if (snapshot?.readOnly) return;
 
     const parentPath = resolveCreateParentPath({
-      focusedPath: model.getFocusedPath(),
       selectedPaths: model.getSelectedPaths(),
       pathIndex: snapshot?.pathIndex,
       isDirectoryPath: (path) => model.getItem(path)?.isDirectory() === true,
@@ -412,56 +420,9 @@ function FilesExplorerGroupInner() {
   return (
     <SidebarGroup className="flex h-full min-h-0 flex-1 flex-col overflow-hidden p-0 px-3 pt-2 pb-0">
       <div className="flex shrink-0 items-center gap-2 pl-2 pb-2">
-        <Select
-          value={serializeExplorerContext(explorerContext)}
-          onValueChange={handleContextChange}
-        >
-          <SelectTrigger
-            size="sm"
-            className="h-auto w-fit max-w-36 shrink-0 border-0 bg-transparent px-0 py-0 text-[11px] font-medium tracking-wide text-sidebar-foreground/70 shadow-none focus-visible:border-0 focus-visible:ring-0 data-[size=sm]:h-auto"
-          >
-            <SelectValue placeholder="main">
-              {formatExplorerContextLabel(explorerContext, snapshot)}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectLabel>{t("Workspace")}</SelectLabel>
-              <SelectItem value={serializeExplorerContext({ type: "main" })}>
-                main
-              </SelectItem>
-            </SelectGroup>
-            {(snapshot?.tasks?.length ?? 0) > 0 ? (
-              <SelectGroup>
-                <SelectLabel>{t("Tasks")}</SelectLabel>
-                {snapshot?.tasks?.map((task) => (
-                  <SelectItem
-                    key={task.id}
-                    value={serializeExplorerContext({
-                      type: "task",
-                      taskId: task.id,
-                    })}
-                  >
-                    {task.title || task.id}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            ) : null}
-            {(snapshot?.branches?.length ?? 0) > 0 ? (
-              <SelectGroup>
-                <SelectLabel>{t("Branches")}</SelectLabel>
-                {snapshot?.branches?.map((branch) => (
-                  <SelectItem
-                    key={branch}
-                    value={serializeExplorerContext({ type: "branch", branch })}
-                  >
-                    {branch}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            ) : null}
-          </SelectContent>
-        </Select>
+        <span className="text-[11px] font-medium tracking-wide text-sidebar-foreground/70">
+          {formatExplorerContextLabel(explorerContext, snapshot)}
+        </span>
         <div className="ml-auto flex items-center gap-0.5">
           <SidebarActionButton
             icon={FilePlus}
@@ -623,19 +584,45 @@ function FilesExplorerGroupInner() {
             setCreateRequest(null);
           }
         }}
-        onCreated={() => {
-          void explorerQuery.refetch();
+        onCreated={(path, type) => {
+          // Opened once the tree knows the file, so the tab is built from what
+          // the daemon listed rather than guessed from the name.
+          void explorerQuery.refetch().then(() => {
+            if (type !== "file") return;
+            const created = lookupPathIndex(snapshotRef.current?.pathIndex, path) as
+              | WorkspaceFile
+              | undefined;
+            openFileTabRef.current(created ?? synthesizeFileFromPath(path, []));
+          });
         }}
       />
     </SidebarGroup>
   );
 }
 
+/**
+ * The paths as `@pierre/trees` takes them: a directory ends in `/`, which is
+ * the only way the tree tells a folder from a file. The daemon names
+ * directories without one.
+ */
+function treePathsOf(snapshot: FileExplorerSnapshot): string[] {
+  return snapshot.paths.map((entryPath) => {
+    const indexed =
+      snapshot.pathIndex[entryPath] ??
+      snapshot.pathIndex[`${entryPath}/`] ??
+      snapshot.pathIndex[entryPath.replace(/\/+$/, "")];
+    if (indexed?.type === "directory" && !entryPath.endsWith("/")) {
+      return `${entryPath}/`;
+    }
+    return entryPath;
+  });
+}
+
 async function handleTreeMove(
   fromPath: string,
   toPath: string,
   explorerContext: FileExplorerContext,
-  resync: () => void,
+  after: { revert: () => void; refresh: () => void },
 ) {
   if (!fromPath || !toPath || fromPath === toPath) return;
 
@@ -650,11 +637,37 @@ async function handleTreeMove(
   if (response.error) {
     toast.error(
       (response.error as { message?: string })?.message ||
-        `Unable to move "${fromPath}".`,
+        t("Unable to move \"{{path}}\".", { path: fromPath }),
     );
-    resync();
+    after.revert();
+    after.refresh();
     return;
   }
 
+  retargetOpenTabs(fromPath, toPath);
   toast.success(t("Moved."));
+  // The index is keyed by path; until it is read again, the moved file is not
+  // in it and a click on its new name would open nothing.
+  after.refresh();
+}
+
+/**
+ * Points the tabs open on a moved file — or on anything under a moved folder —
+ * at where it went, so the next save lands on the file rather than recreating
+ * it at its old name.
+ */
+function retargetOpenTabs(fromPath: string, toPath: string) {
+  const from = fromPath.replace(/\/+$/, "");
+  const to = toPath.replace(/\/+$/, "");
+  for (const tab of aos.stores.viewport.state.tabs.items) {
+    const current = getTabFilePath(tab);
+    if (tab.type !== "file" || !current) continue;
+    if (current !== from && !current.startsWith(`${from}/`)) continue;
+
+    const next = `${to}${current.slice(from.length)}`;
+    aos.stores.viewport.actions.updateTab(tab.id, {
+      title: basenameOf(next),
+      metadata: { ...tab.metadata, filePath: next, fileName: basenameOf(next) },
+    });
+  }
 }
