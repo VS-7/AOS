@@ -53,22 +53,29 @@ import { t } from "@/lib/i18n";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂"] as const;
 
-function pluralizeThinkingLabel(count: number, singular: string): string {
-  if (count === 1) {
-    return singular;
-  }
+/**
+ * One counter of the thinking header, as the words around its number.
+ *
+ * The number is drawn separately (it slides), so the label is the translated
+ * phrase with the number taken out — "{{count}} reads" in English, "{{count}}
+ * leituras" in Portuguese. English plural rules were hard-coded here before,
+ * which no catalogue could translate.
+ */
+const THINKING_COUNTERS = [
+  { key: "reads", one: "{{count}} read", many: "{{count}} reads" },
+  { key: "writes", one: "{{count}} write", many: "{{count}} writes" },
+  { key: "searches", one: "{{count}} search", many: "{{count}} searches" },
+  { key: "executions", one: "{{count}} run", many: "{{count}} runs" },
+  { key: "browsing", one: "{{count}} page visited", many: "{{count}} pages visited" },
+  { key: "actions", one: "{{count}} other action", many: "{{count}} other actions" },
+  { key: "errors", one: "{{count}} error", many: "{{count}} errors" },
+] as const;
 
-  if (
-    singular.endsWith("s") ||
-    singular.endsWith("x") ||
-    singular.endsWith("z") ||
-    singular.endsWith("ch") ||
-    singular.endsWith("sh")
-  ) {
-    return `${singular}es`;
-  }
-
-  return `${singular}s`;
+function thinkingCounterPhrase(
+  counter: (typeof THINKING_COUNTERS)[number],
+  count: number,
+): string {
+  return t(count === 1 ? counter.one : counter.many, { count });
 }
 
 function getDurationParts(
@@ -106,21 +113,25 @@ function getDurationParts(
 
 function AgentThinkingHeader({ summary }: { summary: AgentThinkingSummary }) {
   const durationParts = getDurationParts(summary.elapsedMs);
-  const counters = [
-    { count: summary.reads, label: "read" },
-    { count: summary.writes, label: "write" },
-    { count: summary.searches, label: "search" },
-    { count: summary.executions, label: "run" },
-    { count: summary.browsing, label: "browse" },
-    { count: summary.errors, label: "error" },
-  ].filter((item) => item.count > 0);
-  const prefix = summary.isRunning ? "Working for" : "Worked for";
+  // Every call lands in one counter. Management and unrecognised tools had
+  // none, so a turn of eighteen calls could read "2 searches • 1 run".
+  const counts: Record<(typeof THINKING_COUNTERS)[number]["key"], number> = {
+    reads: summary.reads,
+    writes: summary.writes,
+    searches: summary.searches,
+    executions: summary.executions,
+    browsing: summary.browsing,
+    actions: summary.management + summary.other,
+    errors: summary.errors,
+  };
+  const counters = THINKING_COUNTERS.map((counter) => ({
+    counter,
+    count: counts[counter.key],
+  })).filter((item) => item.count > 0);
+  const prefix = summary.isRunning ? t("Working for") : t("Worked for");
   const ariaLabel = [
     `${prefix} ${AgentToolThinkingHelper.formatElapsed(summary.elapsedMs)}`,
-    ...counters.map(
-      (item) =>
-        `${item.count} ${pluralizeThinkingLabel(item.count, item.label)}`,
-    ),
+    ...counters.map((item) => thinkingCounterPhrase(item.counter, item.count)),
   ].join(" • ");
 
   return (
@@ -138,11 +149,13 @@ function AgentThinkingHeader({ summary }: { summary: AgentThinkingSummary }) {
         ))}
       </span>
       {counters.map((item) => (
-        <React.Fragment key={item.label}>
+        <React.Fragment key={item.counter.key}>
           <span className="text-muted-foreground/50">•</span>
           <span className="inline-flex items-center gap-1">
             <SlidingNumber value={item.count} />
-            <span>{pluralizeThinkingLabel(item.count, item.label)}</span>
+            <span>
+              {t(item.count === 1 ? item.counter.one : item.counter.many, { count: "" }).trim()}
+            </span>
           </span>
         </React.Fragment>
       ))}
@@ -344,14 +357,14 @@ export function ChatMessageItem({
                 description={step.description}
                 descriptionFade={Boolean(step.description && hasDetails)}
                 trailing={
-                  <ThinkingStepDetails summary="Details" mode="trigger" />
+                  <ThinkingStepDetails summary={t("Details")} mode="trigger" />
                 }
                 status={step.status}
                 index={index}
                 isLast={index === agentThinkingSteps.length - 1}
               >
                 <ThinkingStepDetails
-                  summary="Details"
+                  summary={t("Details")}
                   details={step.details}
                   mode="content"
                   className="pt-1"
