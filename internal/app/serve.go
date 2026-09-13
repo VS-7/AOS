@@ -54,6 +54,10 @@ type ServeOptions struct {
 // finish, and then the process stops waiting. A daemon that hangs on shutdown
 // is a daemon the supervisor has to kill, which is how work gets lost.
 func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
+	// From here on this process is the daemon, and the update service must
+	// not treat it as a supervisor that can restart the daemon — see
+	// updateSupervisor.
+	a.serving.Store(true)
 	resolver := a.env
 	host := opts.Host
 	if host == "" {

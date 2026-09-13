@@ -1476,12 +1476,8 @@ export interface CommandMap {
   "update_apply": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
-    /** The staged release, as DownloadOutput.staged returned it. */
-    "staged": {
-    "binaries": Record<string, string>;
-    "dir": string;
+    /** The version to install, as DownloadOutput.staged.version returned it. */
     "version": string;
-  };
   }; output: unknown };
   /** Query the release channel. Never downloads anything. */
   "update_check": { input: {
@@ -1500,12 +1496,13 @@ export interface CommandMap {
     "channel": string;
     "checksumsUrl": string;
     "notes"?: string;
+    "pageUrl"?: string;
     "publishedAt": string;
     "signatureUrl": string;
     "version": string;
   };
   }; output: unknown };
-  /** Report the current version and channel, without checking the network. */
+  /** Report the current version, the last check and what is staged, without checking the network. */
   "update_status": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;

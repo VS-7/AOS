@@ -5,13 +5,25 @@ Check for, download and apply a signed update to aos, aosd and aos-desktop toget
 Keep the three binaries on one version, verified before anything is
 installed.
 
-Check reads the release channel; it never downloads. Download fetches this
-platform's assets for a release Check found, verifies the checksums file's
-signature against the embedded key and every asset's own checksum, and
-refuses to stage anything on the first failure. Apply swaps the staged
-binaries in, waits for in-flight agent turns to finish first, restarts the
-daemon, and rolls back automatically if the new version does not report
-healthy.
+Check reads the release channel; it never downloads. It answers with a
+state: up-to-date, available, not-configured (this build has no release
+feed) or developer-build (a binary with no release version to compare). Only
+a strictly newer release is offered.
+
+Download fetches this platform's assets for a release Check found, verifies
+the checksums file's signature against the embedded key and every asset's
+own checksum, and refuses to stage anything on the first failure. Apply
+takes the staged version, proves the staged files against the signature
+again, swaps them in, waits for in-flight agent turns to finish first,
+restarts the daemon, and rolls back automatically if the new version does
+not report healthy. Download and Apply are for administrators (super
+accounts) only.
+
+The daemon cannot restart itself, so Apply refuses to run inside it
+(UPDATE_RESTART_UNAVAILABLE) before touching anything; Check's install
+field names the command that installs from a terminal instead. A signed
+macOS application bundle cannot be updated one binary at a time and is
+reinstalled whole (UPDATE_REINSTALL_REQUIRED).
 
 ## When to use
 - A person checking for updates, or scripting an update in CI/an installer
@@ -27,12 +39,20 @@ healthy.
 
 Install a staged, verified release and restart the daemon.
 
-Waits for in-flight agent turns to finish (bounded — UPDATE_ACTIVE_WORK_TIMEOUT
-if they never do), swaps the staged binaries in, restarts the daemon, and
+Refuses before touching anything when the release is not staged under
+that version (UPDATE_NOTHING_STAGED), when this process cannot restart the
+daemon (UPDATE_RESTART_UNAVAILABLE — the daemon does not restart itself),
+or when the installation is a signed bundle (UPDATE_REINSTALL_REQUIRED).
+Then proves every staged file against the signed checksums again
+(UPDATE_STAGED_TAMPERED discards what no longer matches), waits for
+in-flight agent turns to finish (bounded — UPDATE_ACTIVE_WORK_TIMEOUT if
+they never do), swaps the staged binaries in, restarts the daemon, and
 verifies it becomes healthy. On any failure after the swap, every binary is
 rolled back and the daemon is restarted again on the previous version —
 UPDATE_ROLLED_BACK reports that this happened, not that the whole operation
 silently failed.
+
+- install the release a download staged
 
 ### `update_check`
 
@@ -49,15 +69,19 @@ Fetch and verify this platform's assets for a release. Nothing is installed yet.
 
 Downloads the checksums file and its signature first, and refuses the
 whole release (UPDATE_SIGNATURE_INVALID) if the signature does not verify
-against the embedded public key before a single asset is fetched. Each
-asset's own SHA-256 is then checked against the (now-trusted) checksums
-file; a mismatch (UPDATE_CHECKSUM_MISMATCH) leaves nothing staged.
+against the embedded public key before a single asset is fetched — or
+UPDATE_SIGNATURE_MISSING when the release was published without one. Each
+asset's binary, version and platform must match its file name in the signed
+checksums (UPDATE_ASSET_REJECTED), and its own SHA-256 must match that file;
+a mismatch (UPDATE_CHECKSUM_MISMATCH) leaves nothing staged. Only binaries
+already installed on this machine are downloaded, and only for a release
+newer than this one (UPDATE_NOT_NEWER).
 
 ### `update_status`
 
-Report the current version and channel, without checking the network.
+Report the current version, the last check and what is staged, without checking the network.
 
-Read this installation's own version and configured channel.
+Read this installation's own version, whether it has a release feed, what the last check found, what is staged, and how a release would be installed here.
 
 - what am I running
 

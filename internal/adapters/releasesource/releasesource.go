@@ -13,12 +13,14 @@ package releasesource
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/OWNER/aos/internal/core/apperr"
+	"github.com/OWNER/aos/internal/core/env"
 	"github.com/OWNER/aos/internal/domain/update"
 )
 
@@ -27,9 +29,8 @@ const defaultTimeout = 30 * time.Second
 // Source reaches one hosted release feed over HTTP.
 type Source struct {
 	// BaseURL is the feed's root, without a trailing slash. Empty disables
-	// the source entirely — Latest then reports "no release" rather than
-	// erroring, which is what an installation with no release
-	// infrastructure configured yet looks like.
+	// the source entirely — Configured reports false, which is what an
+	// installation with no release infrastructure configured yet looks like.
 	BaseURL string
 
 	Client  *http.Client
@@ -44,6 +45,9 @@ func New(baseURL string) *Source {
 
 var _ update.ReleaseSource = (*Source)(nil)
 
+// Configured reports whether a feed address was given at all.
+func (s *Source) Configured() bool { return s.BaseURL != "" }
+
 func (s *Source) client() *http.Client {
 	if s.Client != nil {
 		return s.Client
@@ -56,12 +60,15 @@ func (s *Source) client() *http.Client {
 }
 
 // Latest reads GET {baseURL}/{channel}.json and decodes an update.Release
-// directly. A 404 (channel has no releases yet) and an unconfigured
-// BaseURL both answer (nil, nil) — a channel with nothing published is not
-// a failure to check it.
+// directly.
+//
+// A 404 is an error wrapping update.ErrNotPublished. It used to be (nil, nil),
+// "no release", which Check turned into "you are on the newest release": a
+// feed pointed at the wrong address, or at a release that never uploaded its
+// manifest, told everybody they were current.
 func (s *Source) Latest(ctx context.Context, channel update.Channel) (*update.Release, error) {
 	if s.BaseURL == "" {
-		return nil, nil
+		return nil, errNotConfigured()
 	}
 	u := s.BaseURL + "/" + string(channel) + ".json"
 
@@ -77,9 +84,6 @@ func (s *Source) Latest(ctx context.Context, channel update.Channel) (*update.Re
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, nil
-	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return nil, errBadStatus(u, resp.StatusCode, string(body))
@@ -130,21 +134,39 @@ func errRequestFailed(u string, cause error) error {
 		Wrap(cause)
 }
 
+// errUnreachable wraps update.ErrUnreachable: the address did not answer,
+// which is the one failure the domain attributes to the network.
 func errUnreachable(u string, cause error) error {
 	return apperr.New("RELEASESOURCE_UNREACHABLE").
 		Causer("releasesource.Source").
 		Msgf("could not reach %q: %v", u, cause).
 		Status(apperr.StatusServiceUnavailable).
-		Wrap(cause)
+		Wrap(fmt.Errorf("%w: %w", update.ErrUnreachable, cause))
 }
 
+// errBadStatus wraps update.ErrNotPublished on a 404, so a missing manifest,
+// signature or asset is told apart from a server that answered with an
+// error — the difference between "this release has no signature" and
+// "retry later".
 func errBadStatus(u string, status int, body string) error {
-	return apperr.New("RELEASESOURCE_BAD_STATUS").
+	e := apperr.New("RELEASESOURCE_BAD_STATUS").
 		Causer("releasesource.Source").
 		Msgf("%q answered %d", u, status).
 		Issue("status", status).
 		Issue("body", body).
 		Status(apperr.StatusBadGateway)
+	if status == http.StatusNotFound || status == http.StatusGone {
+		e = e.Wrap(update.ErrNotPublished)
+	}
+	return e
+}
+
+func errNotConfigured() error {
+	return apperr.New("RELEASESOURCE_NOT_CONFIGURED").
+		Causer("releasesource.Source.Latest").
+		Msgf("no release feed is configured").
+		Status(apperr.StatusServiceUnavailable).
+		CTA(apperr.CallToAction{Label: "set " + env.Key(env.KeyUpdateBaseURL) + " to a release feed, or reinstall to update"})
 }
 
 func errBadBody(u string, cause error) error {

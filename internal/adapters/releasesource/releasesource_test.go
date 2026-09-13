@@ -3,6 +3,7 @@ package releasesource_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -38,7 +39,10 @@ func TestLatestDecodesAPublishedRelease(t *testing.T) {
 	}
 }
 
-func TestLatestOnAnUnpublishedChannelReportsNoRelease(t *testing.T) {
+// A configured feed with no manifest at the channel's address is not "no
+// release": it was read that way, and Check answered "you are on the newest
+// release" for a feed pointed at the wrong address.
+func TestLatestOnAnUnpublishedChannelSaysNothingIsPublished(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/beta.json", func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
@@ -48,8 +52,8 @@ func TestLatestOnAnUnpublishedChannelReportsNoRelease(t *testing.T) {
 
 	src := releasesource.New(srv.URL)
 	release, err := src.Latest(context.Background(), update.ChannelBeta)
-	if err != nil {
-		t.Fatalf("a 404 channel should not be an error, got %v", err)
+	if !errors.Is(err, update.ErrNotPublished) {
+		t.Fatalf("a 404 channel should wrap ErrNotPublished, got %v", err)
 	}
 	if release != nil {
 		t.Fatalf("expected no release, got %+v", release)
@@ -58,15 +62,32 @@ func TestLatestOnAnUnpublishedChannelReportsNoRelease(t *testing.T) {
 
 // An unconfigured BaseURL is what an installation with no release
 // infrastructure set up yet looks like — Check's own contract needs this
-// told apart from a real failure to reach a configured one.
-func TestLatestWithNoBaseURLReportsNoReleaseWithoutARequest(t *testing.T) {
+// told apart from a real failure to reach a configured one, and it asks
+// Configured rather than inferring it from an empty answer.
+func TestNoBaseURLIsNotConfiguredAndMakesNoRequest(t *testing.T) {
 	src := releasesource.New("")
-	release, err := src.Latest(context.Background(), update.ChannelStable)
-	if err != nil {
-		t.Fatalf("an unconfigured source should not error, got %v", err)
+	if src.Configured() {
+		t.Fatal("an empty base URL is not a configured feed")
 	}
-	if release != nil {
-		t.Fatalf("expected no release, got %+v", release)
+	if _, err := src.Latest(context.Background(), update.ChannelStable); err == nil {
+		t.Fatal("asking an unconfigured source for a release should say it is not configured")
+	}
+	if !releasesource.New("https://example.test/feed/").Configured() {
+		t.Fatal("a base URL is a configured feed")
+	}
+}
+
+func TestAnAddressThatDoesNotAnswerIsUnreachable(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	url := srv.URL
+	srv.Close()
+
+	src := releasesource.New(url)
+	if _, err := src.Latest(context.Background(), update.ChannelStable); !errors.Is(err, update.ErrUnreachable) {
+		t.Fatalf("expected ErrUnreachable, got %v", err)
+	}
+	if _, err := src.Fetch(context.Background(), url+"/checksums.txt"); !errors.Is(err, update.ErrUnreachable) {
+		t.Fatalf("expected ErrUnreachable, got %v", err)
 	}
 }
 
@@ -80,8 +101,25 @@ func TestLatestOnAServerErrorFails(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	src := releasesource.New(srv.URL)
-	if _, err := src.Latest(context.Background(), update.ChannelStable); err == nil {
+	_, err := src.Latest(context.Background(), update.ChannelStable)
+	if err == nil {
 		t.Fatal("expected an error on a 500")
+	}
+	if errors.Is(err, update.ErrNotPublished) || errors.Is(err, update.ErrUnreachable) {
+		t.Fatalf("a server error is neither missing nor unreachable, got %v", err)
+	}
+}
+
+func TestLatestOnABodyThatIsNotAManifestFails(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stable.json", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("<html>not json</html>"))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	if _, err := releasesource.New(srv.URL).Latest(context.Background(), update.ChannelStable); err == nil {
+		t.Fatal("expected an error decoding a body that is not a manifest")
 	}
 }
 
@@ -112,7 +150,7 @@ func TestFetchOnA404Fails(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	src := releasesource.New(srv.URL)
-	if _, err := src.Fetch(context.Background(), srv.URL+"/missing"); err == nil {
-		t.Fatal("expected an error fetching a missing asset")
+	if _, err := src.Fetch(context.Background(), srv.URL+"/missing"); !errors.Is(err, update.ErrNotPublished) {
+		t.Fatalf("a missing file should wrap ErrNotPublished, got %v", err)
 	}
 }
