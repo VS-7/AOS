@@ -10,9 +10,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -30,6 +33,8 @@ type Client struct {
 	agent     atomic.Pointer[string]
 	workdir   atomic.Pointer[string]
 	http      *http.Client
+	timeout   time.Duration
+	liveness  time.Duration
 }
 
 // Options configure the client.
@@ -61,20 +66,62 @@ type Options struct {
 	// names, and the daemon's own directory is the right fallback there.
 	WorkingDir string
 
-	// Timeout bounds one call. A turn is not taken here — the daemon runs it
-	// and the answer arrives over the realtime channel — so this is short.
+	// Timeout bounds a question about the daemon itself — its health, the
+	// session, signing in, the command listing — and how long a stream waits
+	// for its answer to start. It does not bound a command: see
+	// LivenessInterval.
 	Timeout time.Duration
+
+	// LivenessInterval is how often a command still waiting for its answer
+	// checks that the daemon is still answering at all.
+	//
+	// A command used to be bounded by Timeout, as http.Client.Timeout, and a
+	// download, an install or a large write outlasted it: the call was cut
+	// while the daemon was still doing the work, and reported as a daemon that
+	// was not there — which the window asks again for. A command now waits for
+	// as long as the daemon is alive (a turn is not taken here — the daemon
+	// runs it and the answer arrives over the realtime channel), and a daemon
+	// that stops answering its health check ends the wait. A deadline on the
+	// caller's own context still applies.
+	LivenessInterval time.Duration
 }
+
+const (
+	defaultTimeout  = 30 * time.Second
+	defaultLiveness = 10 * time.Second
+
+	// livenessMisses is how many health checks in a row a daemon may miss
+	// before a command waiting on it is given up: one is a busy machine.
+	livenessMisses = 3
+
+	// connectTimeout bounds reaching the daemon's port, which on this machine
+	// is immediate or refused. A request that never connected is the one
+	// failure that is safe to send again, and waiting longer to learn that
+	// buys nothing.
+	connectTimeout = 5 * time.Second
+)
 
 // New builds a client.
 func New(opts Options) *Client {
 	timeout := opts.Timeout
 	if timeout <= 0 {
-		timeout = 30 * time.Second
+		timeout = defaultTimeout
 	}
+	liveness := opts.LivenessInterval
+	if liveness <= 0 {
+		liveness = defaultLiveness
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{Timeout: min(timeout, connectTimeout), KeepAlive: 30 * time.Second}).DialContext
 	c := &Client{
 		base: strings.TrimSuffix(opts.BaseURL, "/"),
-		http: &http.Client{Timeout: timeout},
+		// No client-wide Timeout: it also covers reading the body, which cut
+		// a video in the Files panel after thirty seconds, and it cannot tell
+		// a command that is taking long from a daemon that is gone. Each call
+		// bounds itself below.
+		http:     &http.Client{Transport: transport},
+		timeout:  timeout,
+		liveness: liveness,
 	}
 	c.SetToken(opts.Token)
 	c.SetWorkspace(opts.Workspace)
@@ -147,10 +194,16 @@ func (c *Client) currentWorkingDir() string {
 // The command key maps to the path the HTTP surface publishes: memories_store
 // becomes /api/memories/store. There is one rule and it is the same one the
 // frontend's browser transport uses, so a path that works in one works in both.
+//
+// It waits for as long as the daemon is alive — see Options.LivenessInterval —
+// and a failure says whether the daemon can have received the command: see
+// send.
 func (c *Client) Invoke(ctx context.Context, key string, input json.RawMessage) (json.RawMessage, error) {
 	path := "/api/" + strings.ReplaceAll(key, "_", "/")
 	body := bytes.NewReader(input)
 
+	ctx, done := c.whileAlive(ctx)
+	defer done()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+path, body)
 	if err != nil {
 		return nil, errUnreachable(c.base, err)
@@ -169,15 +222,15 @@ func (c *Client) Invoke(ctx context.Context, key string, input json.RawMessage) 
 		req.Header.Set("x-working-dir", dir)
 	}
 
-	res, err := c.http.Do(req)
+	res, err := c.send(req)
 	if err != nil {
-		return nil, errUnreachable(c.base, err)
+		return nil, err
 	}
 	defer func() { _ = res.Body.Close() }()
 
 	raw, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, errUnreachable(c.base, err)
+		return nil, c.failed(req, true, err)
 	}
 	// The envelope carries the error, so a non-2xx status is passed through
 	// rather than replaced: the domain already said what went wrong and in
@@ -190,6 +243,8 @@ func (c *Client) Invoke(ctx context.Context, key string, input json.RawMessage) 
 // application — without requiring a credential; unlike the others it works
 // whether or not this client currently holds a token.
 func (c *Client) Status(ctx context.Context) (wailsvc.AuthStatus, error) {
+	ctx, cancel := c.brief(ctx)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/api/auth/status", nil)
 	if err != nil {
 		return wailsvc.AuthStatus{}, errUnreachable(c.base, err)
@@ -197,9 +252,9 @@ func (c *Client) Status(ctx context.Context) (wailsvc.AuthStatus, error) {
 	if token := c.currentToken(); token != "" {
 		req.Header.Set("authorization", "Bearer "+token)
 	}
-	res, err := c.http.Do(req)
+	res, err := c.send(req)
 	if err != nil {
-		return wailsvc.AuthStatus{}, errUnreachable(c.base, err)
+		return wailsvc.AuthStatus{}, err
 	}
 	defer func() { _ = res.Body.Close() }()
 
@@ -239,6 +294,8 @@ func (c *Client) Onboarding(ctx context.Context, name, email, password string) (
 // Logout revokes the token this client currently holds and forgets it.
 func (c *Client) Logout(ctx context.Context) error {
 	token := c.currentToken()
+	ctx, cancel := c.brief(ctx)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/api/auth/logout", bytes.NewReader([]byte("{}")))
 	if err != nil {
 		return errUnreachable(c.base, err)
@@ -247,9 +304,9 @@ func (c *Client) Logout(ctx context.Context) error {
 	if token != "" {
 		req.Header.Set("authorization", "Bearer "+token)
 	}
-	res, err := c.http.Do(req)
+	res, err := c.send(req)
 	if err != nil {
-		return errUnreachable(c.base, err)
+		return err
 	}
 	defer func() { _ = res.Body.Close() }()
 	c.SetToken("")
@@ -259,6 +316,8 @@ func (c *Client) Logout(ctx context.Context) error {
 // Session reads the account the token this client holds belongs to, or
 // reports that there is none.
 func (c *Client) Session(ctx context.Context) (wailsvc.PublicUser, error) {
+	ctx, cancel := c.brief(ctx)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/api/auth/session", nil)
 	if err != nil {
 		return wailsvc.PublicUser{}, errUnreachable(c.base, err)
@@ -266,9 +325,9 @@ func (c *Client) Session(ctx context.Context) (wailsvc.PublicUser, error) {
 	if token := c.currentToken(); token != "" {
 		req.Header.Set("authorization", "Bearer "+token)
 	}
-	res, err := c.http.Do(req)
+	res, err := c.send(req)
 	if err != nil {
-		return wailsvc.PublicUser{}, errUnreachable(c.base, err)
+		return wailsvc.PublicUser{}, err
 	}
 	defer func() { _ = res.Body.Close() }()
 
@@ -325,15 +384,17 @@ func (c *Client) authRequest(ctx context.Context, path string, body map[string]s
 	if err != nil {
 		return wailsvc.AuthResult{}, err
 	}
+	ctx, cancel := c.brief(ctx)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+path, bytes.NewReader(raw))
 	if err != nil {
 		return wailsvc.AuthResult{}, errUnreachable(c.base, err)
 	}
 	req.Header.Set("content-type", "application/json")
 
-	res, err := c.http.Do(req)
+	res, err := c.send(req)
 	if err != nil {
-		return wailsvc.AuthResult{}, errUnreachable(c.base, err)
+		return wailsvc.AuthResult{}, err
 	}
 	defer func() { _ = res.Body.Close() }()
 
@@ -357,6 +418,8 @@ func (c *Client) authRequest(ctx context.Context, path string, body map[string]s
 
 // Commands lists what the daemon publishes.
 func (c *Client) Commands(ctx context.Context) ([]wailsvc.CommandInfo, error) {
+	ctx, cancel := c.brief(ctx)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/api/_commands", nil)
 	if err != nil {
 		return nil, errUnreachable(c.base, err)
@@ -365,9 +428,9 @@ func (c *Client) Commands(ctx context.Context) ([]wailsvc.CommandInfo, error) {
 		req.Header.Set("authorization", "Bearer "+token)
 	}
 
-	res, err := c.http.Do(req)
+	res, err := c.send(req)
 	if err != nil {
-		return nil, errUnreachable(c.base, err)
+		return nil, err
 	}
 	defer func() { _ = res.Body.Close() }()
 
@@ -386,6 +449,8 @@ func (c *Client) Commands(ctx context.Context) ([]wailsvc.CommandInfo, error) {
 // `self llms` answer with, and what they used to answer with four commands
 // because the only registry they could see was the terminal's own.
 func (c *Client) Manifest(ctx context.Context) (command.Manifest, error) {
+	ctx, cancel := c.brief(ctx)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/api/_manifest", nil)
 	if err != nil {
 		return command.Manifest{}, errUnreachable(c.base, err)
@@ -393,9 +458,9 @@ func (c *Client) Manifest(ctx context.Context) (command.Manifest, error) {
 	if token := c.currentToken(); token != "" {
 		req.Header.Set("authorization", "Bearer "+token)
 	}
-	res, err := c.http.Do(req)
+	res, err := c.send(req)
 	if err != nil {
-		return command.Manifest{}, errUnreachable(c.base, err)
+		return command.Manifest{}, err
 	}
 	defer func() { _ = res.Body.Close() }()
 
@@ -423,6 +488,8 @@ func (c *Client) Ready(ctx context.Context) (bool, error) {
 	// /api/health, which is where the daemon answers it (see httpapi.New): the
 	// bare /health this used to ask for reached the not-found handler, so the
 	// answer was always "not ready" no matter what the daemon was doing.
+	ctx, cancel := c.brief(ctx)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/api/health", nil)
 	if err != nil {
 		return false, nil //nolint:nilerr // a malformed address is "not ready", not an incident
@@ -450,13 +517,15 @@ type HealthInfo struct {
 // daemon it started keeps running, and a new window that only asked "is it
 // up" adopted the old daemon, with every defect the update had fixed.
 func (c *Client) Health(ctx context.Context) (HealthInfo, error) {
+	ctx, cancel := c.brief(ctx)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/api/health", nil)
 	if err != nil {
 		return HealthInfo{}, errUnreachable(c.base, err)
 	}
-	res, err := c.http.Do(req)
+	res, err := c.send(req)
 	if err != nil {
-		return HealthInfo{}, errUnreachable(c.base, err)
+		return HealthInfo{}, err
 	}
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
@@ -469,6 +538,104 @@ func (c *Client) Health(ctx context.Context) (HealthInfo, error) {
 	return info, nil
 }
 
+// brief bounds a question about the daemon itself by Timeout, or by the
+// caller's own deadline when that is sooner.
+func (c *Client) brief(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, c.timeout)
+}
+
+// errStoppedAnswering and errNoAnswerInTime are why this client itself gave up
+// waiting for an answer, as the cause of the context it cancelled.
+var (
+	errStoppedAnswering = errors.New("the daemon stopped answering its health check")
+	errNoAnswerInTime   = errors.New("the daemon did not start answering in time")
+)
+
+// whileAlive is the context a command waits under: the caller's, cancelled
+// once the daemon has missed livenessMisses health checks in a row. The
+// returned function ends the watch, and has to be called.
+func (c *Client) whileAlive(ctx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancelCause(ctx)
+	go func() {
+		ticker := time.NewTicker(c.liveness)
+		defer ticker.Stop()
+		misses := 0
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			probe, stop := context.WithTimeout(ctx, c.liveness)
+			ready, _ := c.Ready(probe)
+			stop()
+			switch {
+			case ctx.Err() != nil:
+				return
+			case ready:
+				misses = 0
+			default:
+				misses++
+				if misses >= livenessMisses {
+					cancel(errStoppedAnswering)
+					return
+				}
+			}
+		}
+	}()
+	return ctx, func() { cancel(nil) }
+}
+
+// send performs req, and a failure says whether the daemon can have received
+// it — which decides whether anything may send it again.
+//
+// The line is the request having been written in full. Before that the daemon
+// has not got a request it could act on: nothing listening, a refused
+// connection, a dial that timed out. That is AOS_DAEMON_UNREACHABLE, and the
+// window waits it out and asks again, since a daemon it started a moment ago
+// may not be listening yet. After it, the daemon may be doing the work, and
+// asking again could do it twice — see failed. The mark is reset for every
+// attempt, since the transport retries on a fresh connection by itself when an
+// idle one turns out to have been closed before anything reached it.
+func (c *Client) send(req *http.Request) (*http.Response, error) {
+	var written atomic.Bool
+	trace := &httptrace.ClientTrace{
+		GetConn: func(string) { written.Store(false) },
+		WroteRequest: func(info httptrace.WroteRequestInfo) {
+			if info.Err == nil {
+				written.Store(true)
+			}
+		},
+	}
+	res, err := c.http.Do(req.WithContext(httptrace.WithClientTrace(req.Context(), trace)))
+	if err != nil {
+		return nil, c.failed(req, written.Load(), err)
+	}
+	return res, nil
+}
+
+// failed names a request that did not get its whole answer.
+func (c *Client) failed(req *http.Request, written bool, err error) error {
+	path := req.URL.Path
+	cause := context.Cause(req.Context())
+	switch {
+	case !written:
+		return errUnreachable(c.base, err)
+	case errors.Is(cause, errStoppedAnswering), errors.Is(cause, errNoAnswerInTime):
+		return errTimedOut(c.base, path, cause)
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, errNoAnswerInTime), isTimeout(err):
+		return errTimedOut(c.base, path, err)
+	default:
+		return errAnswerLost(c.base, path, err)
+	}
+}
+
+func isTimeout(err error) bool {
+	var timeout interface{ Timeout() bool }
+	return errors.As(err, &timeout) && timeout.Timeout()
+}
+
+// errUnreachable is a request that never reached the daemon.
 func errUnreachable(base string, cause error) error {
 	return apperr.New("DAEMON_UNREACHABLE").
 		Causer("daemonclient.Client").
@@ -480,6 +647,36 @@ func errUnreachable(base string, cause error) error {
 			Label:   "start the daemon, or check that nothing else is holding its port",
 			Command: "aos gateway status",
 			Tool:    "gateway_status",
+		})
+}
+
+// errTimedOut is a request the daemon received and has not answered.
+func errTimedOut(base, path string, cause error) error {
+	return apperr.New("DAEMON_TIMEOUT").
+		Causer("daemonclient.Client").
+		Msgf("the daemon at %s received %s and has not answered it; it may still be doing it", base, path).
+		Issue("address", base).
+		Issue("path", path).
+		Status(apperr.StatusGatewayTimeout).
+		Wrap(cause).
+		CTA(apperr.CallToAction{
+			Label: "check whether it was done before trying again — sending it again could do it twice",
+		})
+}
+
+// errAnswerLost is a request the daemon received whose answer never arrived
+// whole: the connection closed under it, a daemon that went away mid-request
+// above all.
+func errAnswerLost(base, path string, cause error) error {
+	return apperr.New("DAEMON_ANSWER_LOST").
+		Causer("daemonclient.Client").
+		Msgf("the connection to the daemon at %s closed before its answer to %s arrived; it may have been done", base, path).
+		Issue("address", base).
+		Issue("path", path).
+		Status(apperr.StatusBadGateway).
+		Wrap(cause).
+		CTA(apperr.CallToAction{
+			Label: "check whether it was done before trying again — sending it again could do it twice",
 		})
 }
 
@@ -509,11 +706,15 @@ func errUnreadable(base string, cause error) error {
 // This is the same credential every other call from the window already uses,
 // applied to the two surfaces that had no bridge of their own. The token
 // never reaches the page: it is held here, in the process that owns it.
+//
+// A write can be as slow as any command, so it waits the way Invoke does.
 func (c *Client) Fetch(ctx context.Context, method, path, contentType string, body []byte) (int, []byte, error) {
 	var reader io.Reader
 	if len(body) > 0 {
 		reader = bytes.NewReader(body)
 	}
+	ctx, done := c.whileAlive(ctx)
+	defer done()
 	req, err := http.NewRequestWithContext(ctx, method, c.base+path, reader)
 	if err != nil {
 		return 0, nil, errUnreachable(c.base, err)
@@ -531,15 +732,15 @@ func (c *Client) Fetch(ctx context.Context, method, path, contentType string, bo
 		req.Header.Set("x-agent-id", agent)
 	}
 
-	res, err := c.http.Do(req)
+	res, err := c.send(req)
 	if err != nil {
-		return 0, nil, errUnreachable(c.base, err)
+		return 0, nil, err
 	}
 	defer func() { _ = res.Body.Close() }()
 
 	raw, err := io.ReadAll(res.Body)
 	if err != nil {
-		return res.StatusCode, nil, errUnreachable(c.base, err)
+		return res.StatusCode, nil, c.failed(req, true, err)
 	}
 	return res.StatusCode, raw, nil
 }
@@ -563,10 +764,17 @@ func (c *Client) Token() string { return c.currentToken() }
 // reach the daemon and the daemon's own 206 to come back — which is why the
 // caller's headers are forwarded and the response is returned unread.
 //
+// The daemon has Timeout to start answering; the body then arrives for as long
+// as the caller reads it, since what it reads is a video as often as not.
+//
 // The caller closes the body.
 func (c *Client) Stream(ctx context.Context, path string, header http.Header) (*http.Response, error) {
+	ctx, cancel := context.WithCancelCause(ctx)
+	waiting := time.AfterFunc(c.timeout, func() { cancel(errNoAnswerInTime) })
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
 	if err != nil {
+		waiting.Stop()
+		cancel(nil)
 		return nil, errUnreachable(c.base, err)
 	}
 	// Range and the conditional headers, so seeking and caching work through
@@ -586,9 +794,29 @@ func (c *Client) Stream(ctx context.Context, path string, header http.Header) (*
 		req.Header.Set("x-agent-id", agent)
 	}
 
-	res, err := c.http.Do(req)
-	if err != nil {
-		return nil, errUnreachable(c.base, err)
+	res, err := c.send(req)
+	if !waiting.Stop() && err == nil {
+		// The answer started just as the wait ran out, and the context it
+		// would be read under is already cancelled.
+		_ = res.Body.Close()
+		err = c.failed(req, true, errNoAnswerInTime)
 	}
+	if err != nil {
+		cancel(nil)
+		return nil, err
+	}
+	res.Body = &cancelOnClose{ReadCloser: res.Body, cancel: func() { cancel(nil) }}
 	return res, nil
+}
+
+// cancelOnClose releases a stream's context when its body is closed.
+type cancelOnClose struct {
+	io.ReadCloser
+	cancel func()
+}
+
+func (b *cancelOnClose) Close() error {
+	err := b.ReadCloser.Close()
+	b.cancel()
+	return err
 }

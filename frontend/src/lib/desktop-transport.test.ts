@@ -102,6 +102,60 @@ describe("a command inside the desktop window", () => {
   });
 });
 
+/**
+ * A command is sent again only when its failure proves it went nowhere.
+ *
+ * update_download on a slow link reached the daemon, outlasted the Go client's
+ * thirty seconds, came back as AOS_DAEMON_UNREACHABLE — which this transport
+ * retries, for a daemon that is still starting — and was sent a second time.
+ * The daemon refused that one with AOS_UPDATE_IN_PROGRESS; a command with no
+ * such guard would have run twice.
+ */
+describe("a command that may have reached the daemon", () => {
+  it.each(["AOS_DAEMON_TIMEOUT", "AOS_DAEMON_ANSWER_LOST"])("is not sent again after %s", async (code) => {
+    vi.useFakeTimers();
+    const { client } = await loadAt(DESKTOP);
+    bridge.byName.mockRejectedValue(runtimeError(code, "the daemon received it and has not answered"));
+
+    const outcome = client.client.invoke("update_download", {} as never).catch((err: unknown) => err);
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(await outcome).toMatchObject({ code });
+    expect(bridge.byName).toHaveBeenCalledTimes(1);
+    // Not the daemon being absent: nothing should say the window is waiting for it.
+    expect(client.isDaemonUnreachable(await outcome)).toBe(false);
+  });
+
+  // The runtime's request failed without an answer: whether Go ran the method
+  // is unknown, and the bridge is the window's own process — there is no
+  // warming up to wait out.
+  it("is not sent again when the bridge gave no answer at all", async () => {
+    vi.useFakeTimers();
+    const { client } = await loadAt(DESKTOP);
+    bridge.byName.mockRejectedValue(new TypeError("Load failed"));
+
+    const outcome = client.client.invoke("tasks_create", {} as never).catch((err: unknown) => err);
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(await outcome).toMatchObject({ code: "TRANSPORT_UNREACHABLE" });
+    expect(bridge.byName).toHaveBeenCalledTimes(1);
+  });
+
+  it("is sent again when the daemon never received it", async () => {
+    vi.useFakeTimers();
+    const { client } = await loadAt(DESKTOP);
+    bridge.byName
+      .mockRejectedValueOnce(runtimeError("AOS_DAEMON_UNREACHABLE", "the daemon did not answer"))
+      .mockResolvedValueOnce(JSON.stringify({ data: { id: "t1" } }));
+
+    const outcome = client.client.invoke("tasks_create", {} as never);
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    await expect(outcome).resolves.toEqual({ id: "t1" });
+    expect(bridge.byName).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("the credential being refused", () => {
   // The daemon answers AOS_AUTH_UNAUTHENTICATED for an expired or revoked
   // bearer (httpapi's authenticate middleware passes auth.Service's error
