@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthGate } from "@/features/auth/AuthGate";
 import { WorkspaceGate } from "@/features/workspace/WorkspaceGate";
+import { VersionSkewBanner } from "@/features/update/presentation/components/version-skew-banner";
 import { useRealtime } from "@/lib/realtime";
 import { t } from "@/lib/i18n";
 import { router } from "@/app/router";
@@ -107,6 +108,7 @@ export function App(): JSX.Element {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <RealtimeConnection />
+        <VersionSkewBanner />
         <I18nProvider>
         <AppStateProvider>
           {/*

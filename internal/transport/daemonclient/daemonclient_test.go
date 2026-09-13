@@ -198,6 +198,30 @@ func TestReadyIsWhatTheSplashWaitsOn(t *testing.T) {
 	}
 }
 
+// TestHealthSaysWhichBuildIsAnswering. The window compares it with its own:
+// an update from a terminal replaces the daemon under a window that keeps
+// running the previous release, and nothing else would notice.
+func TestHealthSaysWhichBuildIsAnswering(t *testing.T) {
+	body := `{"status":"ok","version":"v0.15.2-fase9","name":"aos"}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	client := daemonclient.New(daemonclient.Options{BaseURL: server.URL})
+	health, err := client.Health(ctx())
+	if err != nil || !health.Ready || health.Version != "v0.15.2-fase9" {
+		t.Fatalf("health = %+v, %v", health, err)
+	}
+
+	// An answer without a version is still a daemon that is answering.
+	body = `not json`
+	health, err = client.Health(ctx())
+	if err != nil || !health.Ready || health.Version != "" {
+		t.Fatalf("health without a version = %+v, %v", health, err)
+	}
+}
+
 // TestATrailingSlashInTheAddressDoesNotDoubleUp.
 func TestATrailingSlashInTheAddressDoesNotDoubleUp(t *testing.T) {
 	var path string
