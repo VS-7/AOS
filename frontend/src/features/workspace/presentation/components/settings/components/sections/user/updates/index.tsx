@@ -3,7 +3,7 @@ import { toast } from "sonner";
 
 import { aos } from "@/app/aos";
 import { system } from "@/lib/client";
-import { isDesktopWindow } from "@/lib/wails";
+import { isDesktopWindow, openExternal } from "@/lib/wails";
 import { t } from "@/lib/i18n";
 import { useAlert } from "@/components/ui/alert-provider";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,17 @@ import type {
   Staged,
   UpdateStatus,
 } from "@/features/update/interfaces/update.interfaces";
+import {
+  canCheck,
+  checkLine,
+  messageOf,
+  offerLine,
+  offerOf,
+  refusalOf,
+  releasePage,
+  reopenLine,
+  statusLine,
+} from "./updates.helper";
 
 /**
  * Keeping this installation current.
@@ -42,56 +53,81 @@ import type {
  * bad signature; applying is the step that restarts the daemon underneath a
  * running window. Collapsing them would hide which one failed, and the
  * failures are exactly what somebody needs to see.
+ *
+ * What a check found is shown as found, never rounded up to good news: a
+ * build with no release feed, a development build and an installation that
+ * has to be reinstalled each say so, instead of the green "You are on the
+ * newest release." all three used to get. And a refusal is a refusal
+ * wherever the facade reports it — see `refusalOf`.
  */
 function UpdatesPanel(): React.JSX.Element {
   const [check, setCheck] = React.useState<CheckResult | null>(null);
-  const [staged, setStaged] = React.useState<Staged | null>(null);
+  const [downloaded, setDownloaded] = React.useState<Staged | null>(null);
 
   const statusQuery = aos.client.update.status.useQuery<UpdateStatus>();
+  const status = statusQuery.data ?? null;
 
   const { mutate: runCheck, loading: isChecking } = aos.client.update.check.useMutation({
     onSuccess: (result: any) => {
-      const answer = result?.data as CheckResult | undefined;
-      setCheck(answer ?? null);
-      setStaged(null);
-      if (answer?.upToDate) toast.success(t("You are on the newest release."));
+      const refused = refusalOf(result);
+      if (refused) {
+        setCheck(null);
+        toast.error(messageOf(refused, t("The release channel could not be reached.")));
+        return;
+      }
+      const answer = (result?.data as CheckResult | undefined) ?? null;
+      setCheck(answer);
+      if (answer?.state === "up-to-date") toast.success(t("You are on the newest release."));
       void statusQuery.refetch();
     },
-    onError: (error: any) => {
-      toast.error(
-        error?.error?.message ?? error?.message ?? t("The release channel could not be reached."),
-      );
+    onError: (error: unknown) => {
+      setCheck(null);
+      toast.error(messageOf(error, t("The release channel could not be reached.")));
     },
   });
 
   const { mutate: runDownload, loading: isDownloading } = aos.client.update.download.useMutation({
     onSuccess: (result: any) => {
-      setStaged((result?.data?.staged as Staged | undefined) ?? null);
+      // A signature or checksum failure lands here too, and it is the one
+      // message in this screen that must not be softened.
+      const refused = refusalOf(result);
+      if (refused) {
+        toast.error(messageOf(refused, t("The download could not be verified.")));
+        return;
+      }
+      setDownloaded((result?.data?.staged as Staged | undefined) ?? null);
       toast.success(t("Downloaded and verified."));
+      void statusQuery.refetch();
     },
-    onError: (error: any) => {
-      // A signature or checksum failure lands here, and it is the one message
-      // in this screen that must not be softened.
-      toast.error(
-        error?.error?.message ?? error?.message ?? t("The download could not be verified."),
-      );
+    onError: (error: unknown) => {
+      toast.error(messageOf(error, t("The download could not be verified.")));
     },
   });
 
   const { mutate: runApply, loading: isApplying } = aos.client.update.apply.useMutation({
-    onSuccess: () => {
+    onSuccess: (result: any) => {
+      const refused = refusalOf(result);
+      if (refused) {
+        toast.error(messageOf(refused, t("The update could not be applied.")));
+        void statusQuery.refetch();
+        return;
+      }
       toast.success(t("Installed. The daemon restarted on the new version."));
       setCheck(null);
-      setStaged(null);
+      setDownloaded(null);
       void statusQuery.refetch();
     },
-    onError: (error: any) => {
-      toast.error(error?.error?.message ?? error?.message ?? t("The update could not be applied."));
+    onError: (error: unknown) => {
+      toast.error(messageOf(error, t("The update could not be applied.")));
     },
   });
 
-  const status = statusQuery.data ?? null;
   const busy = isChecking || isDownloading || isApplying;
+  const answer = checkLine(check, status);
+  const offer = offerOf(check, downloaded, status);
+  const page = offer ? releasePage(offer.release) : null;
+  const reopen = offer ? reopenLine(offer) : null;
+  const waiting = !check && status?.staged ? status.staged : null;
 
   return (
     <>
@@ -107,50 +143,64 @@ function UpdatesPanel(): React.JSX.Element {
           <FormSectionItem>
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">{t("Running")}</p>
-              <p className="text-sm text-muted-foreground">
-                {status?.checkedAt
-                  ? t("Last checked {{when}}.", { when: status.checkedAt })
-                  : t("This installation has not been checked against the release channel yet.")}
-              </p>
+              <p className="text-sm text-muted-foreground">{statusLine(status)}</p>
             </div>
 
             <div className="flex items-center gap-2">
               <Badge variant="secondary">{status?.current ?? "—"}</Badge>
               {status?.channel ? <Badge variant="outline">{status.channel}</Badge> : null}
-              <Button type="button" size="sm" disabled={busy} onClick={() => void runCheck({})}>
-                {isChecking ? t("Checking…") : t("Check for updates")}
-              </Button>
+              {canCheck(status) ? (
+                <Button type="button" size="sm" disabled={busy} onClick={() => void runCheck({})}>
+                  {isChecking ? t("Checking…") : t("Check for updates")}
+                </Button>
+              ) : null}
             </div>
           </FormSectionItem>
 
-          {check?.upToDate ? (
+          {answer ? (
             <FormSectionItem>
-              <p className="text-sm text-muted-foreground">{t("You are on the newest release.")}</p>
+              <p className="text-sm text-muted-foreground">{answer}</p>
+            </FormSectionItem>
+          ) : null}
+
+          {waiting ? (
+            <FormSectionItem>
+              <p className="text-sm text-muted-foreground">
+                {t("{{version}} is downloaded and verified. Check for updates to install it.", {
+                  version: waiting.version,
+                })}
+              </p>
             </FormSectionItem>
           ) : null}
         </FormSectionContent>
       </FormSection>
 
-      {check && !check.upToDate && check.release ? (
+      {offer ? (
         <FormSection>
           <FormSectionHeader>
             <FormSectionTitle>
-              {t("{{version}} is available", { version: check.release.version })}
+              {t("{{version}} is available", { version: offer.release.version })}
             </FormSectionTitle>
-            <FormSectionDescription>
-              {staged
-                ? t("Verified and staged. Installing restarts the daemon; in-flight work finishes first.")
-                : t("Nothing is installed until you download it and the signature checks out.")}
-            </FormSectionDescription>
+            <FormSectionDescription>{offerLine(offer)}</FormSectionDescription>
           </FormSectionHeader>
 
           <FormSectionContent>
+            {offer.install.method === "terminal" && offer.staged && offer.install.command ? (
+              <FormSectionItem>
+                <div className="min-w-0 space-y-2">
+                  <code className="block select-all break-all rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
+                    {offer.install.command}
+                  </code>
+                  {reopen ? <p className="text-sm text-muted-foreground">{reopen}</p> : null}
+                </div>
+              </FormSectionItem>
+            ) : null}
             <FormSectionItem>
               <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground">{t("Release notes")}</p>
-                {check.release.notes ? (
+                {offer.release.notes ? (
                   <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-sm text-muted-foreground">
-                    {check.release.notes}
+                    {offer.release.notes}
                   </pre>
                 ) : (
                   <p className="text-sm text-muted-foreground">
@@ -158,28 +208,40 @@ function UpdatesPanel(): React.JSX.Element {
                   </p>
                 )}
               </div>
-              <Badge variant="outline">{check.channel}</Badge>
+              <Badge variant="outline">{offer.release.channel}</Badge>
             </FormSectionItem>
           </FormSectionContent>
 
           <FormSectionFooter className="flex justify-end gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              disabled={busy || Boolean(staged)}
-              onClick={() => void runDownload({ body: { release: check.release } })}
-            >
-              {isDownloading ? t("Downloading…") : t("Download and verify")}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={busy || !staged}
-              onClick={() => void runApply({ body: { staged } })}
-            >
-              {isApplying ? t("Installing…") : t("Install and restart")}
-            </Button>
+            {offer.install.method === "reinstall" ? (
+              page ? (
+                <Button type="button" size="sm" variant="secondary" onClick={() => void openExternal(page)}>
+                  {t("Open the release page")}
+                </Button>
+              ) : null
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={busy || Boolean(offer.staged)}
+                  onClick={() => void runDownload({ body: { release: offer.release } })}
+                >
+                  {isDownloading ? t("Downloading…") : t("Download and verify")}
+                </Button>
+                {offer.install.method === "here" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={busy || !offer.staged}
+                    onClick={() => void runApply({ body: { version: offer.staged?.version } })}
+                  >
+                    {isApplying ? t("Installing…") : t("Install and restart")}
+                  </Button>
+                ) : null}
+              </>
+            )}
           </FormSectionFooter>
         </FormSection>
       ) : null}

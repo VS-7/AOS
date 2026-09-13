@@ -112,7 +112,7 @@ que o projeto ainda não tem — ver [Release](10-release.md)).
 | RF-75 | **Telegram**: webhook por agente com segredo próprio, mensagens divididas no limite da API, resposta do turno entregue de volta. | S | `internal/domain/bot`, `adapters/telegramapi`, `transport/botapi` | `bot`, `telegramapi`, `botapi` tests |
 | RF-76 | **Túnel** Cloudflare gerenciado pelo daemon (`tunnel start\|stop\|status`), fornecendo a URL pública que webhooks e bots usam. | S | `internal/domain/tunnel`, `adapters/cloudflaredproc` | `tunnel` tests |
 | RF-77 | **Skill publicada**: `SKILL.md` curado + uma referência por grupo, gerados do registro, embutidos nos binários e instaláveis em Claude Code, Codex, Cursor, Gemini CLI, OpenCode e `.agents` (`aos self skill install`, menu do aplicativo). | M | `pkg/skill`, `tools/genskill`, `clix/skill.go`, `wailsvc/skill.go` | `pkg/skill` tests, `clix` tests, `wailsvc` tests |
-| RF-78 | Auto-update: verificar, baixar, conferir checksum + assinatura Ed25519, aplicar com troca e rollback. Desligado por padrão (`AOS_UPDATE_BASE_URL` vazio). | C | `internal/domain/update`, `adapters/updateinstall` | `update` tests |
+| RF-78 | Auto-update: verificar, baixar, conferir checksum + assinatura Ed25519, aplicar com troca e rollback. Desligado por padrão (`AOS_UPDATE_BASE_URL` vazio), ligado só em releases assinados. | C | `internal/domain/update`, `adapters/updateinstall` | `update` tests |
 
 ## 4. Requisitos não funcionais
 

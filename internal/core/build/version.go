@@ -18,6 +18,17 @@ var (
 	Date    = "unknown"
 )
 
+// UpdateBaseURL is the release feed this build checks for updates when
+// AOS_UPDATE_BASE_URL does not name one — injected at link time the same way:
+//
+//	-X github.com/OWNER/aos/internal/core/build.UpdateBaseURL={{.RELEASE_FEED_URL}}
+//
+// Empty, as it is everywhere but a signed release, means no feed: a build
+// that is not published with a signature has nothing an updater could
+// install, and pointing it at a feed would only turn "updates are not
+// enabled" into a signature error on every download.
+var UpdateBaseURL = ""
+
 // Info is the machine-readable form of the build stamp. It is what `aos version
 // --json` prints and what the gateway records so a client can detect that the
 // registered binary and the running daemon are different builds (ADR-0011).

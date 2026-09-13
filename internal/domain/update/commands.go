@@ -1,6 +1,8 @@
 package update
 
 import (
+	"time"
+
 	"github.com/OWNER/aos/internal/core/command"
 )
 
@@ -16,23 +18,41 @@ var GroupDoc = command.GroupDoc{
 	Doc: `Keep the three binaries on one version, verified before anything is
 installed.
 
-Check reads the release channel; it never downloads. Download fetches this
-platform's assets for a release Check found, verifies the checksums file's
-signature against the embedded key and every asset's own checksum, and
-refuses to stage anything on the first failure. Apply swaps the staged
-binaries in, waits for in-flight agent turns to finish first, restarts the
-daemon, and rolls back automatically if the new version does not report
-healthy.
+Check reads the release channel; it never downloads. It answers with a
+state: up-to-date, available, not-configured (this build has no release
+feed) or developer-build (a binary with no release version to compare). Only
+a strictly newer release is offered.
+
+Download fetches this platform's assets for a release Check found, verifies
+the checksums file's signature against the embedded key and every asset's
+own checksum, and refuses to stage anything on the first failure. Apply
+takes the staged version, proves the staged files against the signature
+again, swaps them in, waits for in-flight agent turns to finish first,
+restarts the daemon, and rolls back automatically if the new version does
+not report healthy. Download and Apply are for administrators (super
+accounts) only, and never for an agent or an MCP client
+(UPDATE_NOT_FOR_AGENTS).
+
+The daemon cannot restart itself, so Apply refuses to run inside it
+(UPDATE_RESTART_UNAVAILABLE) before touching anything; Check's install
+field names the command that installs from a terminal instead, and says
+when the window has to be reopened afterwards. Three kinds of installation
+are reinstalled whole rather than updated one binary at a time
+(UPDATE_REINSTALL_REQUIRED, with the reason): a signed macOS application
+bundle; a directory this account cannot write, such as an AppImage or
+Program Files; and the server flavour of the daemon, which carries the web
+interface that the daemon a release publishes does not.
 
 ## When to use
 - A person checking for updates, or scripting an update in CI/an installer
 
 ## When NOT to use
-- Not from an agent: there is no MCP tool for this group. An update decision
-  is a human's, and Apply restarts the very process serving the agent's own
-  turn.`,
-	Hint: `Download without a prior Check that found a new release fails with
-UPDATE_NOTHING_STAGED. Apply without a prior Download fails the same way.`,
+- Not from an agent. MCP clients see this group like every other, and Check
+  and Status answer them, but Download and Apply refuse a call made through
+  MCP or by an agent: an update decision is a human's, and Apply restarts the
+  very process serving the agent's own turn.`,
+	Hint: `Apply without a prior Download of that same version fails with
+UPDATE_NOTHING_STAGED.`,
 }
 
 // CheckInput selects a channel; empty means stable.
@@ -42,12 +62,17 @@ type CheckInput struct {
 	command.Reasoning
 }
 
-// CheckOutput reports whether a newer release exists.
+// CheckOutput reports what the channel has, measured against this
+// installation.
 type CheckOutput struct {
-	UpToDate bool     `json:"upToDate" jsonschema:"True when Current is already the newest release on Channel."`
-	Current  string   `json:"current" jsonschema:"This installation's own version."`
-	Channel  Channel  `json:"channel"`
-	Release  *Release `json:"release,omitempty" jsonschema:"The newer release found, when UpToDate is false."`
+	State    CheckState `json:"state" jsonschema:"up-to-date, available, not-configured (no release feed in this build) or developer-build (no release version to compare)."`
+	UpToDate bool       `json:"upToDate" jsonschema:"True only when State is up-to-date: the channel has nothing newer than Current."`
+	Current  string     `json:"current" jsonschema:"This installation's own version."`
+	Channel  Channel    `json:"channel"`
+	Release  *Release   `json:"release,omitempty" jsonschema:"The newest release on Channel, when State is available or developer-build."`
+	// Install is set when State is available.
+	Install   *Install  `json:"install,omitempty" jsonschema:"How the offered release can be installed here: here, terminal (run Command) or reinstall."`
+	CheckedAt time.Time `json:"checkedAt"`
 }
 
 // DownloadInput carries the release Check found.
@@ -62,9 +87,10 @@ type DownloadOutput struct {
 	Staged Staged `json:"staged"`
 }
 
-// ApplyInput carries the release Download staged.
+// ApplyInput names the release Download staged. Only the version: what
+// was staged, and where, is the daemon's own record, never the caller's.
 type ApplyInput struct {
-	Staged Staged `json:"staged" jsonschema:"The staged release, as DownloadOutput.staged returned it." validate:"required"`
+	Version string `json:"version" jsonschema:"The version to install, as DownloadOutput.staged.version returned it." validate:"required"`
 
 	command.Reasoning
 }
@@ -111,9 +137,14 @@ func Register(reg *command.Registry, svc Service) {
 		Summary: "Fetch and verify this platform's assets for a release. Nothing is installed yet.",
 		Doc: `Downloads the checksums file and its signature first, and refuses the
 whole release (UPDATE_SIGNATURE_INVALID) if the signature does not verify
-against the embedded public key before a single asset is fetched. Each
-asset's own SHA-256 is then checked against the (now-trusted) checksums
-file; a mismatch (UPDATE_CHECKSUM_MISMATCH) leaves nothing staged.`,
+against the embedded public key before a single asset is fetched — or
+UPDATE_SIGNATURE_MISSING when the release was published without one. Each
+asset's binary, version and platform must match its file name in the signed
+checksums (UPDATE_ASSET_REJECTED), and its own SHA-256 must match that file;
+a mismatch (UPDATE_CHECKSUM_MISMATCH) leaves nothing staged. Only binaries
+already installed on this machine are downloaded, and only for a release
+newer than this one (UPDATE_NOT_NEWER). An installation that is reinstalled
+whole downloads nothing (UPDATE_REINSTALL_REQUIRED).`,
 		Local:       true,
 		Registry:    false,
 		Annotations: command.Annotations{Title: "Download and verify an update", OpenWorldHint: true},
@@ -124,12 +155,24 @@ file; a mismatch (UPDATE_CHECKSUM_MISMATCH) leaves nothing staged.`,
 		Group:   "update",
 		Name:    "apply",
 		Summary: "Install a staged, verified release and restart the daemon.",
-		Doc: `Waits for in-flight agent turns to finish (bounded — UPDATE_ACTIVE_WORK_TIMEOUT
-if they never do), swaps the staged binaries in, restarts the daemon, and
+		Doc: `Refuses before touching anything when another download or install is
+running on this installation, in this daemon or in a terminal
+(UPDATE_IN_PROGRESS), when the release is not staged under that version
+(UPDATE_NOTHING_STAGED), when this process cannot restart the
+daemon (UPDATE_RESTART_UNAVAILABLE — the daemon does not restart itself),
+or when the installation is reinstalled whole — a bundle, a directory this
+account cannot write, a server daemon (UPDATE_REINSTALL_REQUIRED).
+Then proves every staged file against the signed checksums again
+(UPDATE_STAGED_TAMPERED discards what no longer matches), waits for
+in-flight agent turns to finish (bounded — UPDATE_ACTIVE_WORK_TIMEOUT if
+they never do), swaps the staged binaries in, restarts the daemon, and
 verifies it becomes healthy. On any failure after the swap, every binary is
 rolled back and the daemon is restarted again on the previous version —
 UPDATE_ROLLED_BACK reports that this happened, not that the whole operation
 silently failed.`,
+		Examples: []command.Example{
+			{Description: "install the release a download staged", Input: ApplyInput{Version: "v0.16.0"}},
+		},
 		Local:       true,
 		Registry:    false,
 		Annotations: command.Annotations{Title: "Apply a staged update", OpenWorldHint: true},
@@ -139,8 +182,8 @@ silently failed.`,
 	command.MustRegister(reg, command.Command[StatusInput, Status]{
 		Group:   "update",
 		Name:    "status",
-		Summary: "Report the current version and channel, without checking the network.",
-		Doc:     "Read this installation's own version and configured channel.",
+		Summary: "Report the current version, the last check and what is staged, without checking the network.",
+		Doc:     "Read this installation's own version, whether it has a release feed, what the last check found, what is staged, and how a release would be installed here.",
 		Examples: []command.Example{
 			{Description: "what am I running", Input: StatusInput{}},
 		},

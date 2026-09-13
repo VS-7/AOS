@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 
 	"github.com/OWNER/aos/internal/adapters/activitylog"
 	"github.com/OWNER/aos/internal/adapters/artifactfiles"
@@ -122,6 +123,12 @@ type Options struct {
 	// connections to the same database for no gain — the worker that drains
 	// it is started once, by Serve, on the primary.
 	sharedQueue job.Queue
+
+	// sharedServing is the primary's "this process is the daemon" flag. One
+	// flag for every workspace the process builds: a secondary that believed
+	// it was not the daemon would let an update restart the daemon from
+	// inside it. See updateSupervisor.
+	sharedServing *atomic.Bool
 
 	// secondary marks a workspace built by another App, so it does not build
 	// a set of workspaces of its own and recurse forever.
@@ -269,6 +276,10 @@ type App struct {
 	// handle because the list grows with each phase, and a caller that has to
 	// remember which resources exist is a caller that will forget one.
 	closers []func() error
+
+	// serving is set by Serve, and shared with every workspace this App
+	// builds — see Options.sharedServing.
+	serving *atomic.Bool
 }
 
 // Close releases everything the application opened.
@@ -473,7 +484,7 @@ func New(opts Options) (*App, error) {
 	// Supervision is bound to the same installation the rest of the process
 	// serves: the record, the lock and the log all live under the state
 	// directory, so two installations on one machine do not fight.
-	gatewaySvc := gateway.NewService(gateway.Deps{
+	gatewayDeps := gateway.Deps{
 		Processes: supervise.NewProcesses(),
 		Health:    supervise.NewHealth(),
 		Store:     supervise.NewStore(filepath.Join(paths.GatewayDir(), "gateway.json")),
@@ -491,7 +502,8 @@ func New(opts Options) (*App, error) {
 		// This copy lives inside the daemon: it answers `gateway status` over
 		// HTTP rather than supervising anything. See Deps.Inside.
 		Inside: true,
-	})
+	}
+	gatewaySvc := gateway.NewService(gatewayDeps)
 
 	// The hook bus and the approval channel. The log is append-only and lives
 	// beside the agent it records, which is what makes it reviewable in the
@@ -874,10 +886,32 @@ func New(opts Options) (*App, error) {
 	if self, err := os.Executable(); err == nil {
 		binDir = filepath.Dir(self)
 	}
+	serving := opts.sharedServing
+	if serving == nil {
+		serving = new(atomic.Bool)
+	}
+	installer := updateinstall.New(filepath.Join(paths.UpdateDir(), "staged"), binDir)
+	// The same supervision, from outside: what `aosd update apply` run from a
+	// terminal restarts the daemon with. See updateSupervisor.
+	outsideDeps := gatewayDeps
+	outsideDeps.Inside = false
+	feed, customFeed := updateFeed(resolver)
 	updateSvc := update.NewService(update.Deps{
-		Source:     releasesource.New(resolver.String(env.KeyUpdateBaseURL, "")),
-		Installer:  updateinstall.New(paths.UpdateDir(), binDir),
-		Supervisor: updateSupervisor{svc: gatewaySvc},
+		Source:     releasesource.New(feed),
+		CustomFeed: customFeed,
+		Stager:     installer,
+		Installer:  installer,
+		Store:      updateinstall.NewStore(filepath.Join(paths.UpdateDir(), "state.json")),
+		// One lock file for the installation: every workspace App builds its
+		// own update service over the same directory, and a terminal's
+		// `aosd update apply` is a process of its own.
+		Lock: updateinstall.NewLock(filepath.Join(paths.UpdateDir(), "update.lock")),
+		Supervisor: updateSupervisor{
+			inside:  gatewaySvc,
+			outside: gateway.NewService(outsideDeps),
+			serving: serving.Load,
+		},
+		Operators:  updateOperators{auth: authSvc},
 		ActiveWork: updateActiveWork{queue: queue},
 		Clock:      clock,
 		Sleeper:    supervise.Sleeper{},
@@ -958,6 +992,7 @@ func New(opts Options) (*App, error) {
 		Clock:   clock,
 		env:     resolver,
 		closers: closers,
+		serving: serving,
 	}
 
 	// The workspaces this process serves besides the one it opened.
@@ -984,6 +1019,7 @@ func New(opts Options) (*App, error) {
 					workspaceID:   id,
 					sharedEvents:  events,
 					sharedQueue:   queue,
+					sharedServing: serving,
 					secondary:     true,
 				})
 			},

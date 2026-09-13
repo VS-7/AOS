@@ -542,3 +542,47 @@ func TestARawMessageFieldIsPublishedAsAnythingRatherThanBytes(t *testing.T) {
 		t.Error("the description was dropped, which is the model's only guidance about the shape")
 	}
 }
+
+// A handler learns which surface a call came through. Update's Download and
+// Apply refuse an MCP client and an agent. Before this they could not tell
+// either one from a person at a terminal: `aosd --mcp` carries no account and
+// no agent, and a call through it looked exactly like `aosd update apply`.
+func TestAHandlerKnowsTheSurfaceItWasCalledThrough(t *testing.T) {
+	type out struct {
+		Surface string `json:"surface"`
+		Known   bool   `json:"known"`
+	}
+	type in struct{ command.Reasoning }
+	reg := command.NewRegistry()
+	command.MustRegister(reg, command.Command[in, out]{
+		Group: "probe", Name: "surface", Summary: "Say which surface called.",
+		Handler: func(ctx context.Context, _ in) (out, error) {
+			s, ok := command.SurfaceOf(ctx)
+			return out{Surface: s.String(), Known: ok}, nil
+		},
+	})
+	d, _, _ := reg.Lookup("probe_surface")
+	for _, s := range []command.Surface{command.SurfaceCLI, command.SurfaceHTTP, command.SurfaceMCP, command.SurfaceAgent} {
+		got, err := d.Invoke(context.Background(), s, json.RawMessage(`{"_reasoning":"which surface"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if o := got.(out); !o.Known || o.Surface != s.String() {
+			t.Errorf("invoked through %s, the handler saw %+v", s, o)
+		}
+	}
+
+	routed := command.Route(reg, func(context.Context) (*command.Registry, error) { return reg, nil })
+	r, _, _ := routed.Lookup("probe_surface")
+	got, err := r.Invoke(context.Background(), command.SurfaceMCP, json.RawMessage(`{"_reasoning":"which surface"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o := got.(out); o.Surface != "mcp" {
+		t.Errorf("a routed call lost its surface: %+v", o)
+	}
+
+	if _, ok := command.SurfaceOf(context.Background()); ok {
+		t.Error("a call that did not come through Invoke has no surface")
+	}
+}
