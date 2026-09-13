@@ -165,7 +165,7 @@ export const SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
   {
     id: "workspace.jobs",
     get title() { return t("Jobs"); },
-    get description() { return t("The execution queue behind every turn, routine and background task."); },
+    get description() { return t("The queue of work deferred to run later."); },
     group: "workspace",
     icon: Queue01Icon,
   },

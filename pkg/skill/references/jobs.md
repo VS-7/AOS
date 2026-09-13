@@ -2,10 +2,12 @@
 
 The queue of deferred work, and whether it is healthy.
 
-What the daemon is running, has run, and could not run.
+What the daemon has deferred to run later, and whether that work is healthy.
 
-Turns, tasks and routines all become jobs. This group is how you find out
-whether the work you expected to happen actually did, and why it did not.
+Only work handed to the queue is here. Conversation turns, routine runs and task
+runs start directly and never become jobs, so an empty queue is the ordinary
+state: to learn whether one of those happened, read its conversation (a failed
+turn is recorded on the message that asked for it) or the activity log.
 
 ## Commands
 - **list** — the jobs, filtered by queue, status, workspace or kind
@@ -15,10 +17,12 @@ whether the work you expected to happen actually did, and why it did not.
 - **purge** — remove finished jobs older than the window
 
 ## When to use
-- **When something did not happen:** stats first, then list the dead ones
+- **When deferred work did not happen:** stats first, then list the dead ones
 - **After a crash:** recover, to return the work its worker was holding
 
 ## When NOT to use
+- Not to find out whether a turn, a routine run or a task run happened; those
+  are not jobs
 - Not to schedule work — work is enqueued by whatever owns it
 - Not as a log of what an agent did; that is the activity log
 
