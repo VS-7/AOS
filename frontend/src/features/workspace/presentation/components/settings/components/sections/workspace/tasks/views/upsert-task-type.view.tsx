@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { WorkspaceTaskType } from "@/features/workspace/interfaces/workspace.interfaces";
@@ -19,6 +20,13 @@ import { SettingsStackedView } from "../../../../stacked-view";
 import { aos } from "@/app/aos";
 import { t } from "@/lib/i18n";
 
+// The label is what the id is slugged from, so an empty one saved a task
+// type with no label and an empty id — which the daemon accepted — the
+// first time "Create task type" actually submitted.
+const taskTypeFormSchema = WorkspaceTaskTypeSchema.extend({
+  label: z.string().trim().min(1, "Label is required"),
+});
+
 interface UpsertTaskTypeViewProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -35,7 +43,7 @@ export function UpsertTaskTypeView({
   onSave,
 }: UpsertTaskTypeViewProps) {
   const form = aos.useForm({
-    schema: WorkspaceTaskTypeSchema,
+    schema: taskTypeFormSchema,
     values: {
       id: "",
       label: "",
@@ -77,11 +85,11 @@ export function UpsertTaskTypeView({
     <SettingsStackedView
       open={open}
       onBack={() => onOpenChange(false)}
-      title={taskType ? "Edit Task Type" : "Create Task Type"}
+      title={taskType ? t("Edit Task Type") : t("Create Task Type")}
       description={
         taskType
-          ? "Update the details for this task type."
-          : "Define a new task type for your workspace."
+          ? t("Update the details for this task type.")
+          : t("Define a new task type for your workspace.")
       }
       contentClassName="p-6"
     >
@@ -162,7 +170,7 @@ export function UpsertTaskTypeView({
             {t("Cancel")}
           </Button>
           <Button type="submit">
-            {taskType ? "Save changes" : "Create task type"}
+            {taskType ? t("Save changes") : t("Create task type")}
           </Button>
         </div>
       </Form>

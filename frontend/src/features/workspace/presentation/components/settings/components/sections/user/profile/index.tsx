@@ -55,13 +55,10 @@ const passwordFormSchema = z
     newPassword: z.string().optional().or(z.literal("")),
     verifyPassword: z.string().optional().or(z.literal("")),
   })
+  // Always checked. This form has its own "Update password" button and
+  // nothing else to save, so an empty submission is a mistake to point at,
+  // not a no-op to congratulate with "Password updated successfully!".
   .superRefine((data, ctx) => {
-    const wantsPasswordChange = Boolean(
-      data.currentPassword || data.newPassword || data.verifyPassword,
-    );
-
-    if (!wantsPasswordChange) return;
-
     if (!data.currentPassword) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -70,10 +67,12 @@ const passwordFormSchema = z
       });
     }
 
-    if (!data.newPassword || data.newPassword.length < 6) {
+    // Twelve, as the daemon enforces (auth.MinPasswordLen). Six here let a
+    // password through the form that the daemon then refused.
+    if (!data.newPassword || data.newPassword.length < 12) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "New password must be at least 6 characters",
+        message: "New password must be at least 12 characters",
         path: ["newPassword"],
       });
     }
@@ -171,18 +170,6 @@ export function UserProfileSection() {
       verifyPassword: "",
     },
     onSubmit: async (values) => {
-      const wantsPasswordChange = Boolean(
-        values.currentPassword || values.newPassword || values.verifyPassword,
-      );
-
-      if (!wantsPasswordChange) {
-        return {
-          currentPassword: "",
-          newPassword: "",
-          verifyPassword: "",
-        };
-      }
-
       // `verifyPassword` is the form's own confirmation field, checked by
       // the schema above; the daemon takes the two it acts on.
       const passwordResult = await aos.stores.auth.actions.updatePassword({
@@ -452,6 +439,7 @@ export function UserProfileSection() {
                       <FormDescription>
                         {t("Your current password.")}
                       </FormDescription>
+                      <FormMessage />
                     </div>
                     <FormControl>
                       <Input
@@ -473,8 +461,9 @@ export function UserProfileSection() {
                     <div className="flex-1 space-y-0.5">
                       <FormLabel>{t("New password")}</FormLabel>
                       <FormDescription>
-                        {t("At least 6 characters.")}
+                        {t("At least 12 characters.")}
                       </FormDescription>
+                      <FormMessage />
                     </div>
                     <FormControl>
                       <Input
@@ -498,6 +487,7 @@ export function UserProfileSection() {
                       <FormDescription>
                         {t("Type it again to confirm.")}
                       </FormDescription>
+                      <FormMessage />
                     </div>
                     <FormControl>
                       <Input

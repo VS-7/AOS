@@ -12,7 +12,6 @@ import {
   Tags,
   X,
 } from "lucide-react";
-import { MarkdownPlugin } from "@platejs/markdown";
 import { Plate, usePlateEditor } from "platejs/react";
 
 import { AutoformatKit } from "@/components/editor/plugins/autoformat-kit";
@@ -26,6 +25,7 @@ import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 import { MediaKit } from "@/components/editor/plugins/media-kit";
 import { SlashKit } from "@/components/editor/plugins/slash-kit";
 import { TableKit } from "@/components/editor/plugins/table-kit";
+import { useMarkdownBinding } from "@/components/editor/use-markdown-binding";
 import { Editor } from "@/components/ui/editor";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -597,96 +597,36 @@ export function MarkdownEditor({
         ...SlashKit,
         ...TableKit,
       ],
-      value: [],
     },
     [],
   );
 
-  const hasSyncedInitialValueRef = React.useRef(false);
-  const isSyncingRef = React.useRef(false);
-  const lastValueRef = React.useRef(value);
-  const lastEditorMarkdownRef = React.useRef(editorMarkdown);
-  const lastSerializedBodyRef = React.useRef<string | null>(null);
-
   const publishValue = React.useCallback(
     (nextValue: string) => {
-      if (nextValue === lastValueRef.current) return;
-      lastValueRef.current = nextValue;
+      if (nextValue === value) return;
       onValueChange(nextValue);
     },
-    [onValueChange],
+    [onValueChange, value],
   );
 
-  const syncEditorNodes = React.useCallback(
-    (markdown: string) => {
-      const nextNodes = markdown.trim()
-        ? editor.getApi(MarkdownPlugin).markdown.deserialize(markdown)
-        : [];
-
-      // Plate fires onChange for programmatic replaceNodes. Suppress so the
-      // deserialize→serialize round-trip does not look like a user edit.
-      isSyncingRef.current = true;
-      try {
-        editor.tf.replaceNodes(nextNodes, {
-          at: [],
-          children: true,
-        });
-      } finally {
-        isSyncingRef.current = false;
+  const handleEditorEdit = React.useCallback(
+    (serializedBody: string) => {
+      if (canShowPropertiesPanel && propertiesPanelEnabled) {
+        bodyRef.current = serializedBody;
+        publishValue(composeMarkdown(fields, serializedBody));
+        return;
       }
 
-      // Baseline after round-trip — catches deferred onChange from Plate/React.
-      lastSerializedBodyRef.current = editor
-        .getApi(MarkdownPlugin)
-        .markdown.serialize();
+      publishValue(serializedBody);
     },
-    [editor],
+    [canShowPropertiesPanel, fields, propertiesPanelEnabled, publishValue],
   );
 
-  React.useEffect(() => {
-    if (!hasSyncedInitialValueRef.current) {
-      hasSyncedInitialValueRef.current = true;
-      lastValueRef.current = value;
-      lastEditorMarkdownRef.current = editorMarkdown;
-      syncEditorNodes(editorMarkdown);
-      return;
-    }
-
-    if (
-      value === lastValueRef.current &&
-      editorMarkdown === lastEditorMarkdownRef.current
-    ) {
-      return;
-    }
-
-    lastValueRef.current = value;
-    lastEditorMarkdownRef.current = editorMarkdown;
-    syncEditorNodes(editorMarkdown);
-  }, [editorMarkdown, syncEditorNodes, value]);
-
-  const handleEditorChange = React.useCallback(() => {
-    if (isSyncingRef.current) return;
-
-    const serializedBody = editor.getApi(MarkdownPlugin).markdown.serialize();
-
-    // Ignore no-op / round-trip echoes (including deferred post-sync onChange).
-    if (serializedBody === lastSerializedBodyRef.current) return;
-    lastSerializedBodyRef.current = serializedBody;
-
-    if (canShowPropertiesPanel && propertiesPanelEnabled) {
-      bodyRef.current = serializedBody;
-      publishValue(composeMarkdown(fields, serializedBody));
-      return;
-    }
-
-    publishValue(serializedBody);
-  }, [
-    canShowPropertiesPanel,
+  const { handleChange: handleEditorChange } = useMarkdownBinding({
     editor,
-    fields,
-    propertiesPanelEnabled,
-    publishValue,
-  ]);
+    markdown: editorMarkdown,
+    onEdit: handleEditorEdit,
+  });
 
   const handleFieldsChange = React.useCallback(
     (nextFields: FrontMatterField[]) => {

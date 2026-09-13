@@ -16,6 +16,7 @@ import {
   Form,
   FormControl,
   FormField,
+  FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -61,6 +62,18 @@ export function FilesCreateNodeDialog({
     values: {
       name: "",
       type: defaultType,
+    },
+    // Runs after validation, from the Create button or Enter in the name
+    // field — <Form> routes both here. `createNode` is declared below; this
+    // only runs on a submit, long after the render that declared it.
+    onSubmit: (values) => {
+      createNode({
+        body: {
+          path: joinWorkspacePath(parentPath, values.name.trim()),
+          type: values.type,
+          context: explorerContext,
+        },
+      });
     },
   });
 
@@ -114,20 +127,6 @@ export function FilesCreateNodeDialog({
     form.reset({ name: "", type: defaultType });
   }, [defaultType, form, open]);
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    void form.handleSubmit((values) => {
-      createNode({
-        body: {
-          path: joinWorkspacePath(parentPath, values.name.trim()),
-          type: values.type,
-          context: explorerContext,
-        },
-      });
-    })();
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -142,73 +141,76 @@ export function FilesCreateNodeDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Form form={form}>
-          <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-            <FieldGroup>
-              <div className="rounded-md border bg-muted/40 px-3 py-2">
-                <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                  {t("Path")}
-                </p>
-                <p className="mt-1 break-all font-mono text-xs text-foreground">
-                  {previewPath}
-                </p>
-              </div>
+        {/* One <form>, the one <Form> renders. This dialog used to put its
+            own <form> inside it; Blink and WebKit stop a nested form's
+            submit event at the outer one, so Create reloaded the app at
+            /?name=<typed name> and created nothing. */}
+        <Form form={form} className="flex flex-col gap-4">
+          <FieldGroup>
+            <div className="rounded-md border bg-muted/40 px-3 py-2">
+              <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                {t("Path")}
+              </p>
+              <p className="mt-1 break-all font-mono text-xs text-foreground">
+                {previewPath}
+              </p>
+            </div>
 
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <Field>
-                    <Label htmlFor="files-create-name">{t("Name")}</Label>
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <Field>
+                  <Label htmlFor="files-create-name">{t("Name")}</Label>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      id="files-create-name"
+                      autoFocus
+                      placeholder={
+                        defaultType === "directory" ? "components" : "index.ts"
+                      }
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </Field>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="type"
+              render={({ field }) => (
+                <Field>
+                  <Label htmlFor="files-create-type">{t("Type")}</Label>
+                  <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl>
-                      <Input
-                        {...field}
-                        id="files-create-name"
-                        autoFocus
-                        placeholder={
-                          defaultType === "directory" ? "components" : "index.ts"
-                        }
-                      />
+                      <SelectTrigger id="files-create-type">
+                        <SelectValue placeholder={t("Select type")} />
+                      </SelectTrigger>
                     </FormControl>
-                  </Field>
-                )}
-              />
+                    <SelectContent>
+                      <SelectItem value="file">{t("File")}</SelectItem>
+                      <SelectItem value="directory">{t("Folder")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
+            />
+          </FieldGroup>
 
-              <FormField
-                control={form.control}
-                name="type"
-                render={({ field }) => (
-                  <Field>
-                    <Label htmlFor="files-create-type">{t("Type")}</Label>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger id="files-create-type">
-                          <SelectValue placeholder={t("Select type")} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="file">{t("File")}</SelectItem>
-                        <SelectItem value="directory">{t("Folder")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                )}
-              />
-            </FieldGroup>
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-              >
-                {t("Cancel")}
-              </Button>
-              <Button type="submit" disabled={isCreating}>
-                {t("Create")}
-              </Button>
-            </DialogFooter>
-          </form>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              {t("Cancel")}
+            </Button>
+            <Button type="submit" disabled={isCreating}>
+              {t("Create")}
+            </Button>
+          </DialogFooter>
         </Form>
       </DialogContent>
     </Dialog>

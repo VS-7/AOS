@@ -150,6 +150,8 @@ export interface CommandMap {
   "agents_update": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
+    /** New communication channel bindings. Replaces the list entirely; an empty list removes every binding. */
+    "channels"?: unknown;
     /** New Markdown system instructions. Replaces the body entirely. */
     "content"?: unknown;
     /** New orchestrator-facing summary. */

@@ -338,3 +338,48 @@ func TestTheAvatarIsWritable(t *testing.T) {
 		t.Errorf("image = %q, want it cleared", cleared.Image)
 	}
 }
+
+// The Channels tab saves a Telegram binding with `agents update`, and the
+// input had no field for it: the decoder dropped the list and the save
+// answered with an unchanged agent. Channels are replaced whole, like the
+// sandbox, so removing a binding really removes it.
+func TestChannelsAreWritableAndReplacedWhole(t *testing.T) {
+	svc, _ := newService(t)
+	if _, err := svc.Create(ctx(), agent.CreateInput{
+		ID:       "luara",
+		Role:     "Orchestrator",
+		Channels: []agent.Channel{{Provider: "discord", Data: map[string]any{"guild": "1"}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	telegram := []agent.Channel{{Provider: "telegram", Data: map[string]any{"token": "123:abc", "allowedIds": []any{"42"}}}}
+	got, err := svc.Update(ctx(), agent.UpdateInput{ID: "luara", Channels: &telegram})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Channels) != 1 || got.Channels[0].Provider != "telegram" {
+		t.Fatalf("channels = %+v, want only the telegram binding that was sent", got.Channels)
+	}
+	if got.Role != "Orchestrator" {
+		t.Errorf("role = %q, want it left alone", got.Role)
+	}
+
+	role := "Lead"
+	kept, err := svc.Update(ctx(), agent.UpdateInput{ID: "luara", Role: &role})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kept.Channels) != 1 {
+		t.Errorf("channels = %+v, want them left alone by an update that did not send any", kept.Channels)
+	}
+
+	none := []agent.Channel{}
+	cleared, err := svc.Update(ctx(), agent.UpdateInput{ID: "luara", Channels: &none})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cleared.Channels) != 0 {
+		t.Errorf("channels = %+v, want them cleared", cleared.Channels)
+	}
+}

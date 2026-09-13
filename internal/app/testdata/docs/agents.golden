@@ -459,6 +459,30 @@ Only the fields you send are changed; the rest are left alone. Sending
       "description": "New filesystem and execution policy. Replaces the block entirely.",
       "additionalProperties": false
     },
+    "channels": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "description": "Channel provider slug registered for this agent. Example: \"telegram\"."
+          },
+          "data": {
+            "description": "Provider-specific configuration payload. Pass structured JSON. Example: { \"chatId\": \"123\" }."
+          }
+        },
+        "required": [
+          "provider",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "description": "New communication channel bindings. Replaces the list entirely; an empty list removes every binding."
+    },
     "content": {
       "type": [
         "null",

@@ -2,6 +2,7 @@ import { t } from "@/lib/i18n";
 import * as React from "react"
 import { z } from "zod"
 import { useRouter } from "@tanstack/react-router"
+import { toast } from "sonner"
 import {
   GitBranch,
   TagIcon,
@@ -22,7 +23,8 @@ import {
   Field,
   FieldGroup,
   FieldLabel,
-  Form
+  Form,
+  FormMessage
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -125,15 +127,19 @@ export function TaskDialog() {
       }
     }),
     onResponse: ({ error }) => {
-      if (!error) {
-        // Was `'tasks.dialog'` (flat) — but the read above (`state.tasks.
-        // dialog.visible`) expects a nested path, a pre-existing
-        // inconsistency in the source. Corrected to match.
-        aos.stores.viewport.actions.toggle('tasks.dialog.visible', false);
-        form.reset();
-        // Invalidate all loaders to refresh the task list
-        router.invalidate();
+      // Said nothing while Create never submitted; now that it does, a
+      // refusal from the daemon has to reach the person, not just the log.
+      if (error) {
+        toast.error(error.message || t("Could not create the task."));
+        return;
       }
+      // Was `'tasks.dialog'` (flat) — but the read above (`state.tasks.
+      // dialog.visible`) expects a nested path, a pre-existing
+      // inconsistency in the source. Corrected to match.
+      aos.stores.viewport.actions.toggle('tasks.dialog.visible', false);
+      form.reset();
+      // Invalidate all loaders to refresh the task list
+      router.invalidate();
     }
   });
 
@@ -210,6 +216,7 @@ export function TaskDialog() {
                         autoFocus
                       />
                     </FormControl>
+                    <FormMessage />
                   </Field>
                 )}
               />
@@ -406,7 +413,7 @@ export function TaskDialog() {
                 {t("Cancel")}
               </Button>
               <Button size="sm" type="submit" disabled={form.isLoading}>
-                {form.isLoading ? "Creating..." : "Create"}
+                {form.isLoading ? t("Creating...") : t("Create")}
               </Button>
             </div>
           </div>

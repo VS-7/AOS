@@ -34,9 +34,12 @@ export function WorkspaceTasksSection() {
     { data: WorkspaceTaskType; index: number } | undefined
   >();
 
+  // No autosave mode: the list changes only through handleSave and
+  // handleDelete, which submit themselves. With "onChange" as well, the
+  // field-array write they make fired the autosave too, and every task type
+  // was saved twice, with two "updated" toasts.
   const form = aos.useForm({
     schema: taskTypesFormSchema,
-    mode: "onChange",
     mutation: "workspace.update",
     values: {
       // Task 10: `currentWorkspace.tasks` (`app/stores.ts`'s own
@@ -79,9 +82,15 @@ export function WorkspaceTasksSection() {
   // shape from `taskTypesFormSchema` through to `form.control` here, so
   // `useFieldArray` falls back to react-hook-form's default (untyped)
   // field shape without this explicit type parameter.
-  const taskTypesFieldArray = useFieldArray<{ tasks: WorkspaceTaskType[] }, "tasks">({
+  //
+  // `keyName: "key"`: react-hook-form writes its own generated row key into
+  // each item under `keyName`, "id" by default — the task type's own id. The
+  // editor was handed that uuid as the type's id, so saving an edit renamed
+  // "bug" to "f6c08556-…" in the workspace config.
+  const taskTypesFieldArray = useFieldArray<{ tasks: WorkspaceTaskType[] }, "tasks", "key">({
     control: form.control as any,
     name: "tasks",
+    keyName: "key",
   });
 
   const filteredTasks = taskTypesFieldArray.fields
@@ -99,7 +108,7 @@ export function WorkspaceTasksSection() {
       taskTypesFieldArray.append(data);
     }
 
-    form.handleSubmit((values) => form.submit())();
+    void form.submit();
   }
 
   function handleEdit(index: number) {
@@ -117,116 +126,123 @@ export function WorkspaceTasksSection() {
     }
 
     taskTypesFieldArray.remove(index);
-    form.handleSubmit((values) => form.submit())();
+    void form.submit();
   }
 
   return (
-    <Form form={form} className="flex h-full flex-1 flex-col overflow-y-auto">
-      <SettingsSectionShell className="relative">
-        <div className="flex flex-col gap-6">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-sm font-semibold tracking-tight">{t("Task types")}</h1>
-            <p className="text-sm text-muted-foreground">
-              {t("Define the task taxonomy used across the workspace, including colors and agent instructions.")}
-            </p>
-          </div>
-
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex max-w-sm flex-1 items-center gap-2">
-              <InputGroup className="border-0 p-0 has-[[data-slot=input-group-control]:focus-visible]:bg-transparent">
-                <InputGroupAddon className="p-0">
-                  <SearchIcon />
-                </InputGroupAddon>
-                <InputGroupInput
-                  placeholder={t("Filter by name...")}
-                  className="border-0 p-0 focus:bg-transparent"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-              </InputGroup>
+    // The task-type editor is a <Form> of its own, so it sits beside the
+    // list's form rather than inside it: a <form> nested in another makes
+    // Blink and WebKit stop its submit event at the outer one, and "Create
+    // task type" used to reload the window with the fields in the URL. This
+    // wrapper is what the editor's `absolute inset-0` covers and clips to.
+    <div className="relative flex h-full flex-1 flex-col overflow-hidden">
+      <Form form={form} className="flex h-full flex-1 flex-col overflow-y-auto">
+        <SettingsSectionShell>
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-1">
+              <h1 className="text-sm font-semibold tracking-tight">{t("Task types")}</h1>
+              <p className="text-sm text-muted-foreground">
+                {t("Define the task taxonomy used across the workspace, including colors and agent instructions.")}
+              </p>
             </div>
 
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                setSelectedTaskType(undefined);
-                setUpsertOpen(true);
-              }}
-            >
-              {!form.isLoading ? <PlusIcon /> : <Spinner />}
-              {t("New task type")}
-            </Button>
-          </div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex max-w-sm flex-1 items-center gap-2">
+                <InputGroup className="border-0 p-0 has-[[data-slot=input-group-control]:focus-visible]:bg-transparent">
+                  <InputGroupAddon className="p-0">
+                    <SearchIcon />
+                  </InputGroupAddon>
+                  <InputGroupInput
+                    placeholder={t("Filter by name...")}
+                    className="border-0 p-0 focus:bg-transparent"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                  />
+                </InputGroup>
+              </div>
 
-          <div className="rounded-md">
-            <div className="grid grid-cols-[1.5fr_2fr_100px] items-center gap-4 px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              <div className="flex items-center gap-2">{t("Name")}</div>
-              <div>{t("Description")}</div>
-              <div className="text-right">{t("Actions")}</div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setSelectedTaskType(undefined);
+                  setUpsertOpen(true);
+                }}
+              >
+                {!form.isLoading ? <PlusIcon /> : <Spinner />}
+                {t("New task type")}
+              </Button>
             </div>
 
-            <div className="flex flex-col divide-y rounded-md border">
-              {filteredTasks.length === 0 ? (
-                <div className="flex h-32 flex-col items-center justify-center gap-2 text-muted-foreground">
-                  <p className="text-sm">{t("No task types found")}</p>
-                </div>
-              ) : (
-                filteredTasks.map(({ field, index }) => (
-                  <div
-                    key={field.id}
-                    className="group grid grid-cols-[1.5fr_2fr_100px] items-center gap-4 px-4 py-3 text-sm transition-colors hover:bg-muted/30"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="h-2 w-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: field.color || "#64748b" }}
-                      />
-                      <span className="font-medium text-foreground">{field.label}</span>
-                    </div>
-                    <div className="min-w-0">
-                      <span className="line-clamp-1 text-xs text-muted-foreground">
-                        {field.description || (
-                          <span className="italic opacity-40">{t("No description")}</span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        onClick={() => handleEdit(index)}
-                      >
-                        <PencilIcon className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        onClick={() => handleDelete(index)}
-                        disabled={taskTypesFieldArray.fields.length === 1}
-                      >
-                        <Trash2Icon className="h-4 w-4" />
-                      </Button>
-                    </div>
+            <div className="rounded-md">
+              <div className="grid grid-cols-[1.5fr_2fr_100px] items-center gap-4 px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                <div className="flex items-center gap-2">{t("Name")}</div>
+                <div>{t("Description")}</div>
+                <div className="text-right">{t("Actions")}</div>
+              </div>
+
+              <div className="flex flex-col divide-y rounded-md border">
+                {filteredTasks.length === 0 ? (
+                  <div className="flex h-32 flex-col items-center justify-center gap-2 text-muted-foreground">
+                    <p className="text-sm">{t("No task types found")}</p>
                   </div>
-                ))
-              )}
+                ) : (
+                  filteredTasks.map(({ field, index }) => (
+                    <div
+                      key={field.key}
+                      className="group grid grid-cols-[1.5fr_2fr_100px] items-center gap-4 px-4 py-3 text-sm transition-colors hover:bg-muted/30"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: field.color || "#64748b" }}
+                        />
+                        <span className="font-medium text-foreground">{field.label}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <span className="line-clamp-1 text-xs text-muted-foreground">
+                          {field.description || (
+                            <span className="italic opacity-40">{t("No description")}</span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          onClick={() => handleEdit(index)}
+                        >
+                          <PencilIcon className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleDelete(index)}
+                          disabled={taskTypesFieldArray.fields.length === 1}
+                        >
+                          <Trash2Icon className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        </SettingsSectionShell>
+      </Form>
 
-        <UpsertTaskTypeView
-          open={upsertOpen}
-          onOpenChange={setUpsertOpen}
-          taskType={selectedTaskType?.data}
-          index={selectedTaskType?.index}
-          onSave={handleSave}
-        />
-      </SettingsSectionShell>
-    </Form>
+      <UpsertTaskTypeView
+        open={upsertOpen}
+        onOpenChange={setUpsertOpen}
+        taskType={selectedTaskType?.data}
+        index={selectedTaskType?.index}
+        onSave={handleSave}
+      />
+    </div>
   );
 }

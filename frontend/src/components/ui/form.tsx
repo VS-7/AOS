@@ -14,14 +14,41 @@ import {
 
 import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
+import { t } from "@/lib/i18n"
 
 type FormProps = {
-  /** react-hook-form instance. Renders a <form> that disables its fields while a submission is in flight (see `disableLoadingState`). */
-  form: UseFormReturn<any>;
+  /**
+   * The object `aos.useForm` returns. Renders a <form> that disables its
+   * fields while a submission is in flight (see `disableLoadingState`); a
+   * submit button inside it runs `form.submit`, validation included.
+   */
+  form: UseFormReturn<any> & { submit?: (...args: any[]) => unknown };
   /** When true and `form` is provided, form fields are NOT automatically disabled during submission */
   disableLoadingState?: boolean;
   children?: React.ReactNode;
   className?: string;
+}
+
+/**
+ * Whether a submit event is this form asking to be submitted.
+ *
+ * Only a control that declares `type="submit"` counts. A <button> with no
+ * type is a submit button to the browser, and these forms are full of them
+ * — toolbar, "add row" and tab buttons whose authors never meant them to
+ * save — which went unnoticed while every submit was swallowed. A
+ * submission with no submitter (Enter in a lone text field, `requestSubmit()`)
+ * counts only in a form that has a submit button: a page that saves from a
+ * header button has none, and Enter in its search box must not save the
+ * entity next to it.
+ */
+function isOwnSubmission(event: React.FormEvent<HTMLFormElement>): boolean {
+  // A <form> nested inside this one, or rendered in a portal whose React
+  // parent is this one, reaches this handler with its own submission.
+  if (event.target !== event.currentTarget) return false;
+
+  const submitter = (event.nativeEvent as SubmitEvent).submitter;
+  if (submitter) return submitter.getAttribute("type") === "submit";
+  return event.currentTarget.querySelector('[type="submit"]') !== null;
 }
 
 const Form = React.forwardRef<React.ElementRef<typeof FormProvider>, FormProps>(
@@ -29,12 +56,17 @@ const Form = React.forwardRef<React.ElementRef<typeof FormProvider>, FormProps>(
     return (
       <FormProvider {...form}>
         <form
-          onSubmit={(e) => {
-            // Submission wiring (mapping to a backend mutation) is intentionally
-            // not implemented yet; this just keeps the browser from navigating
-            // away on a native form submit.
-            e.preventDefault();
-            e.stopPropagation();
+          // Capture, not bubble. Blink and WebKit stop a submit event that
+          // bubbles out of a nested <form> at the outer one, so a bubble
+          // handler on the inner form never runs and the browser submits
+          // natively: a GET that puts the field values (a bot token, once)
+          // in the URL and reloads the window without its `?daemon=`
+          // address. The capture phase reaches every form on the path
+          // before that happens.
+          onSubmitCapture={(event) => {
+            event.preventDefault();
+            if (!isOwnSubmission(event)) return;
+            void form.submit?.();
           }}
           className={className}
           {...props}
@@ -173,7 +205,10 @@ function FormDescription({ className, ...props }: React.ComponentProps<"p">) {
 
 function FormMessage({ className, ...props }: React.ComponentProps<"p">) {
   const { error, formMessageId } = useFormField()
-  const body = error ? String(error?.message ?? "") : props.children
+  // A validation message is written in English in a zod schema, far from
+  // any t(). Translating it here is what lets a catalogued message reach a
+  // Portuguese screen; an uncatalogued one falls back to itself.
+  const body = error ? t(String(error?.message ?? "")) : props.children
 
   if (!body) {
     return null
