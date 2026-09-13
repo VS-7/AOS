@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -311,8 +312,11 @@ func main() {
 	window := desktop.Window.NewWithOptions(windowOptions(address))
 	platform.window = window
 	// The menu's Reload goes through the page, which keeps the parameters the
-	// window was opened with — see applicationMenu.
-	desktop.Menu.Set(applicationMenu(func() { window.EmitEvent(ReloadEventName) }))
+	// window was opened with — see applicationMenu, and hasMenuBar for why
+	// only macOS has one.
+	if hasMenuBar(runtime.GOOS) {
+		desktop.Menu.Set(applicationMenu(func() { window.EmitEvent(ReloadEventName) }))
+	}
 	emitRealtime = func(event any) { window.EmitEvent(RealtimeEventName, event) }
 	emitDaemon = func(event any) { window.EmitEvent(DaemonEventName, event) }
 

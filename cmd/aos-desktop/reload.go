@@ -4,7 +4,6 @@ import (
 	"io/fs"
 	"net/http"
 	"path"
-	"runtime"
 	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -26,9 +25,7 @@ const ReloadEventName = "aos:reload"
 // Edit above all: without it Cmd+C and Cmd+V do nothing in a macOS webview.
 func applicationMenu(reload func()) *application.Menu {
 	menu := application.NewMenu()
-	if runtime.GOOS == "darwin" {
-		menu.AddRole(application.AppMenu)
-	}
+	menu.AddRole(application.AppMenu)
 	menu.AddRole(application.FileMenu)
 	menu.AddRole(application.EditMenu)
 	menu.AddSubmenu("View").Append(viewMenu(reload))
@@ -37,12 +34,25 @@ func applicationMenu(reload func()) *application.Menu {
 	return menu
 }
 
+// hasMenuBar is whether applicationMenu is installed on goos: macOS only,
+// which is also where Wails installs its default (App.Run sets the
+// application menu on darwin alone).
+//
+// Linux is the reason it matters. A GTK window with no menu of its own takes
+// the application menu as its menubar (webview_window_linux.go), and the window
+// there is frameless and draws its own chrome, so a File/Edit/View strip
+// appeared above the tab bar.
+func hasMenuBar(goos string) bool {
+	return goos == "darwin"
+}
+
 // viewMenu is Wails' View menu with the reload handed to the page.
 func viewMenu(reload func()) *application.Menu {
 	view := application.NewMenu()
 	view.Add("Reload").
 		SetAccelerator("CmdOrCtrl+r").
 		OnClick(func(*application.Context) { reload() })
+	addDevTools(view)
 	view.AddSeparator()
 	view.AddRole(application.ResetZoom)
 	view.AddRole(application.ZoomIn)

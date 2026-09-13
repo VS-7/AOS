@@ -29,6 +29,27 @@ func TestTheViewMenuReloadsThroughThePage(t *testing.T) {
 	if acc := item.GetAccelerator(); !strings.EqualFold(acc, "Cmd+R") && !strings.EqualFold(acc, "Ctrl+R") {
 		t.Errorf("Reload accelerator = %q, want Cmd+R where people expect it", item.GetAccelerator())
 	}
+	// Tests build without the production tag, which is a development build:
+	// Wails' own View menu has Open DevTools there, and so should this one.
+	if view.FindByRole(application.OpenDevTools) == nil {
+		t.Error("a development build's View menu lost Open DevTools")
+	}
+}
+
+// The menu is macOS's alone. On Linux, Wails makes the application menu the
+// GTK menubar of every window that has no menu of its own, so installing one
+// there put a File/Edit/View strip above the frameless window's own tab bar.
+// Before this application had a menu of its own, App.Run installed Wails'
+// default on macOS only, and Linux and Windows had none.
+func TestOnlyMacOSGetsAMenuBar(t *testing.T) {
+	for _, goos := range []string{"linux", "windows", "freebsd"} {
+		if hasMenuBar(goos) {
+			t.Errorf("%s gets a menu bar above its frameless window", goos)
+		}
+	}
+	if !hasMenuBar("darwin") {
+		t.Error("macOS has no menu bar, so Cmd+C, Cmd+V and Cmd+R do nothing")
+	}
 }
 
 type recorded struct{ paths []string }
