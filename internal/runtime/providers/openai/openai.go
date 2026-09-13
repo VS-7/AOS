@@ -10,6 +10,7 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -121,6 +122,14 @@ func (p *Provider) Name() string { return p.name }
 
 // Generate makes one call.
 func (p *Provider) Generate(ctx context.Context, req agentloop.Request) (agentloop.Response, error) {
+	if p.codex {
+		// The Codex backend serves only the streamed form of this call and
+		// refuses the other with "Stream must be set to true". Generate's
+		// production caller is the subconscious observer, so posting the plain
+		// form failed every observation of anybody whose background model is
+		// codex — no memory ever formed, and the only trace was a warning.
+		return p.drain(ctx, req)
+	}
 	var out response
 	if err := p.client.PostJSON(ctx, "/responses", p.body(req, false), &out); err != nil {
 		return agentloop.Response{}, err
@@ -135,6 +144,23 @@ func (p *Provider) Stream(ctx context.Context, req agentloop.Request) (agentloop
 		return nil, err
 	}
 	return &stream{reader: reader, model: req.Model}, nil
+}
+
+// drain makes the streamed call and waits for the whole answer, for a caller
+// that wants one response rather than deltas.
+func (p *Provider) drain(ctx context.Context, req agentloop.Request) (agentloop.Response, error) {
+	s, err := p.Stream(ctx, req)
+	if err != nil {
+		return agentloop.Response{}, err
+	}
+	defer func() { _ = s.Close() }()
+	for {
+		if _, err := s.Recv(); errors.Is(err, io.EOF) {
+			return s.Response(), nil
+		} else if err != nil {
+			return agentloop.Response{}, err
+		}
+	}
 }
 
 // body builds the request.
