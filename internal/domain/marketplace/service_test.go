@@ -144,6 +144,36 @@ func TestInstallFetchesFromTheNamedRegistryAndInstallsThePackage(t *testing.T) {
 	}
 }
 
+// An installed skill did not remember which listing it came from: the package
+// a registry serves rarely names its own source, so Source stayed empty and
+// nothing could tell a marketplace install from a local one — the plugin page
+// kept offering to install what was already installed.
+func TestInstallRecordsWhereThePackageCameFrom(t *testing.T) {
+	a := &fakeRegistry{fetchPkg: skill.Package{Manifest: skill.Manifest{Name: "crm"}}}
+	inst := &fakeInstaller{result: &skill.Skill{ID: "crm"}}
+	svc := marketplace.NewService(marketplace.Deps{
+		Registries: map[string]marketplace.Registry{"a": a},
+		Order:      []string{"a"},
+		Installer:  inst,
+	})
+
+	if _, err := svc.Install(context.Background(), marketplace.InstallInput{Reasoning: reasoning(), Source: "acme/crm"}); err != nil {
+		t.Fatal(err)
+	}
+	if inst.gotPkg.Manifest.Source != "acme/crm" {
+		t.Fatalf("the package reached the installer with source %q, want acme/crm", inst.gotPkg.Manifest.Source)
+	}
+
+	// A package that does name a source keeps its own word for it.
+	a.fetchPkg = skill.Package{Manifest: skill.Manifest{Name: "crm", Source: "acme/crm-mirror"}}
+	if _, err := svc.Install(context.Background(), marketplace.InstallInput{Reasoning: reasoning(), Source: "acme/crm"}); err != nil {
+		t.Fatal(err)
+	}
+	if inst.gotPkg.Manifest.Source != "acme/crm-mirror" {
+		t.Fatalf("source = %q, want the package's own", inst.gotPkg.Manifest.Source)
+	}
+}
+
 func TestInstallTriesEveryRegistryUntilOneAnswers(t *testing.T) {
 	down := &fakeRegistry{fetchErr: errors.New("down")}
 	up := &fakeRegistry{fetchPkg: skill.Package{Manifest: skill.Manifest{Name: "crm"}}}

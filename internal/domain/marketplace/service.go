@@ -195,6 +195,12 @@ func (s *Service) Install(ctx context.Context, in InstallInput) (*skill.Skill, e
 			lastErr = errRegistryUnreachable(id, err)
 			continue
 		}
+		// Provenance: the installed skill records where it came from, and a
+		// registry's package rarely names its own source. Without this a
+		// marketplace install was indistinguishable from a local one.
+		if strings.TrimSpace(pkg.Manifest.Source) == "" {
+			pkg.Manifest.Source = source
+		}
 		return s.installer.InstallPackage(ctx, source, pkg, in.acceptedAll)
 	}
 	return nil, errFetchFailed(source, lastErr)
