@@ -6,6 +6,7 @@ import {
   type SettingsSectionId,
 } from "@/features/workspace/presentation/components/settings/constants";
 import { SettingsRouteHelper } from "@/features/workspace/presentation/helpers/settings-route.helper";
+import { t } from "@/lib/i18n";
 
 export type ViewportTabType = "in-app" | "browser" | "file" | "changes" | "chat";
 export type WorkspaceSidebarMenu = "main" | "files" | "settings";
@@ -275,11 +276,14 @@ export const ViewportStore = AosStore.create("viewport")
   .addAction("createTab", (ctx) => (input?: Partial<ViewportTabState>) => {
     const id = input?.id || generateId();
 
+    // No address: the tab opens on its own start page with the address bar
+    // focused (browser/index.tsx). The default used to be a site that refuses
+    // to be framed, so a new tab was always a broken page.
     const newTab: ViewportTabState = {
       id,
       type: input?.type ?? "browser",
-      title: "New tab",
-      url: "https://duckduckgo.com/",
+      title: t("New tab"),
+      url: undefined,
       status: "idle",
       canGoBack: false,
       canGoForward: false,
