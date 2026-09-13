@@ -172,6 +172,7 @@
   "Check the release channel, verify what it offers, and install it.": "Consulte o canal de versões, verifique o que ele oferece e instale.",
   "Checking…": "Procurando…",
   "Choose a file in the sidebar explorer to inspect its content.": "Escolha um arquivo no explorador lateral para inspecionar o conteúdo.",
+  "Choose a limit from 1 to 50.": "Escolha um limite de 1 a 50.",
   "Choose a short, readable name. We'll slugify it automatically for consistency.": "Escolha um nome curto e legível. Vamos gerar o slug automaticamente para manter a consistência.",
   "Choose how": "Escolha como",
   "Choose how AOS adapts to your environment": "Escolha como o AOS se adapta ao seu ambiente",

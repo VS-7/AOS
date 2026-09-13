@@ -81,11 +81,19 @@ export function WorkspaceWorktreesSection() {
             <FormField
               control={form.control}
               name="worktreeLimit"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
                   <div className="flex-1 space-y-0.5">
                     <FormLabel>{t("Worktree Limit")}</FormLabel>
                     <FormDescription>{t("Maximum number of active worktrees to keep.")}</FormDescription>
+                    {/* The reason the autosave did not happen: a limit
+                        outside 1-50, or an empty field, was simply never
+                        saved, with nothing on screen to say so. */}
+                    {fieldState.error ? (
+                      <p role="alert" className="text-sm text-destructive">
+                        {t("Choose a limit from 1 to 50.")}
+                      </p>
+                    ) : null}
                   </div>
                   <FormControl>
                     <Input
