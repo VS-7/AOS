@@ -84,8 +84,10 @@ func (s *Service) ask(ctx context.Context, id string) Provider {
 		// Logged as well as returned: the message reaches whoever asked, and
 		// the log is where somebody looks when a provider has been quietly
 		// failing for a week.
-		reason, actions := explain(err)
-		s.log.Warn("could not read a provider's model catalogue", "provider", id, "err", reason)
+		reason, because, actions := explain(err)
+		// The error itself, not its rendering: the log's secret filter reads
+		// an AOS_ code in a string as an aos_ token and masks it.
+		s.log.Warn("could not read a provider's model catalogue", "provider", id, "err", err, "because", because)
 		return Provider{ID: id, Models: []Model{}, Error: reason, Actions: actions}
 	}
 	if models == nil {
@@ -103,7 +105,7 @@ func (s *Service) ask(ctx context.Context, id string) Provider {
 // while the cause — renewal needs an OAuth client pair this process was never
 // given — and the call to action that says how to supply it were one level
 // down, where neither Settings nor the log looked.
-func explain(err error) (string, []apperr.CallToAction) {
+func explain(err error) (reason, because string, actions []apperr.CallToAction) {
 	var chain []*apperr.Error
 	for next := err; next != nil; {
 		app, ok := apperr.As(next)
@@ -114,14 +116,14 @@ func explain(err error) (string, []apperr.CallToAction) {
 		next = app.Cause
 	}
 	if len(chain) == 0 {
-		return err.Error(), nil
+		return err.Error(), "", nil
 	}
 
-	reason := chain[0].Error()
+	reason = chain[0].Error()
 	if deepest := chain[len(chain)-1]; len(chain) > 1 && deepest.Message != "" {
-		reason += ": " + deepest.Message
+		because = deepest.Message
+		reason += ": " + because
 	}
-	var actions []apperr.CallToAction
 	seen := map[string]bool{}
 	for i := len(chain) - 1; i >= 0; i-- {
 		for _, cta := range chain[i].Actions {
@@ -131,7 +133,7 @@ func explain(err error) (string, []apperr.CallToAction) {
 			}
 		}
 	}
-	return reason, actions
+	return reason, because, actions
 }
 
 func contains(list []string, want string) bool {
