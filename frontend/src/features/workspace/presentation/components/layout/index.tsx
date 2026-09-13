@@ -17,6 +17,7 @@ import { ChatPanel } from "@/features/chat/presentation/components/panels/chat";
 import { useRealtime } from "@/hooks/use-realtime";
 import { aos } from "@/app/aos";
 import { useNotification } from "@/hooks/use-notification";
+import { isOwnActivity } from "@/features/activity/presentation/helpers/activity-presentation.helper";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useCoalescedInvalidate } from "@/hooks/use-coalesced-invalidate";
 import { WorkspaceNavControlsShell } from "../sidebar/components/workspace-nav-controls-shell";
@@ -121,7 +122,13 @@ export function WorkspaceLayout() {
   useRealtime(
     "activity:created",
     async (event) => {
-      await notify(event);
+      // Not for what you did yourself: the screen you did it on already said
+      // so ("Goal created."), and the notification on top of it was a second
+      // toast — and a sound — about your own click. Everything still
+      // refreshes below; only the announcement is skipped.
+      if (!isOwnActivity(event, aos.stores.auth.state.user?.id)) {
+        await notify(event);
+      }
       invalidate();
 
       aos.stores.activity.actions.refresh();
