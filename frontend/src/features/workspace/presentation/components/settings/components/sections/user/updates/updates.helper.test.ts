@@ -9,6 +9,7 @@ import {
   offerOf,
   refusalOf,
   releasePage,
+  reopenLine,
   statusLine,
 } from "./updates.helper";
 
@@ -123,6 +124,32 @@ describe("an offered release", () => {
     expect(offerLine(offer("terminal", true))).toContain("from a terminal");
     expect(offerLine(offer("terminal", false))).toContain("Nothing is installed");
     expect(offerLine(offer("here", true))).toContain("Installing restarts the daemon");
+  });
+
+  // Every installation that had to be reinstalled was told it was an
+  // application bundle — a server, or a folder this account cannot change,
+  // included — and a server was sent to the wrong installer.
+  it("says why an installation is reinstalled, in its own terms", () => {
+    const reinstall = (reason?: "bundle" | "read-only" | "server") =>
+      offerLine(offerOf(check({ state: "available", release, install: { method: "reinstall", reason } }), null, status())!);
+
+    expect(reinstall("bundle")).toContain("application bundle");
+    expect(reinstall(undefined)).toContain("application bundle");
+    expect(reinstall("read-only")).toContain("cannot be changed by this account");
+    expect(reinstall("read-only")).not.toContain("application bundle");
+    expect(reinstall("server")).toContain("AOS_SERVER=1");
+    expect(reinstall("server")).not.toContain("application bundle");
+  });
+
+  // The terminal install replaces the window's binary as well, and the open
+  // window keeps running the previous release until it is reopened.
+  it("says to reopen the window after a terminal install that replaces it", () => {
+    const terminal = (reopen: boolean) =>
+      offerOf(check({ state: "available", release, install: { method: "terminal", command: "aosd update apply --version v0.16.0", reopen } }), staged, status())!;
+
+    expect(reopenLine(terminal(true))).toContain("quit and reopen AOS");
+    expect(reopenLine(terminal(false))).toBeNull();
+    expect(reopenLine(offerOf(check({ state: "available", release, install: { method: "terminal", reopen: true } }), null, status())!)).toBeNull();
   });
 });
 

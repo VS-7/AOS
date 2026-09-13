@@ -25,11 +25,20 @@ export type CheckState = "up-to-date" | "available" | "not-configured" | "develo
  * `here`: Download and Install work from this screen. `terminal`: the
  * binaries can be replaced, but the daemon answering this screen cannot
  * restart itself onto them — `command` installs the staged release from a
- * terminal. `reinstall`: a signed application bundle, installed whole.
+ * terminal. `reinstall`: the new version is installed whole, for `reason`.
  */
 export interface UpdateInstall {
   method: "here" | "terminal" | "reinstall";
+  /**
+   * Why an installation is reinstalled: a signed macOS `bundle`; a folder
+   * this account cannot change (`read-only` — an AppImage, Program Files);
+   * or a `server` daemon, which carries the web interface the release's own
+   * daemon does not.
+   */
+  reason?: "bundle" | "read-only" | "server";
   command?: string;
+  /** The window is among the binaries an install replaces here. */
+  reopen?: boolean;
 }
 
 /** Which version this installation runs, and what the last check found. */

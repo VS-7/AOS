@@ -30,8 +30,11 @@ const (
 )
 
 // daemonBinary is the binary a terminal runs to install a staged release —
-// see InstallFromTerminal.
-const daemonBinary = "aosd"
+// see InstallFromTerminal. windowBinary is the one an open window runs.
+const (
+	daemonBinary = "aosd"
+	windowBinary = "aos-desktop"
+)
 
 type service struct {
 	source     ReleaseSource
@@ -62,6 +65,9 @@ type service struct {
 	version string
 
 	customFeed bool
+
+	// flavour is this binary's build flavour, build.Flavour by default.
+	flavour string
 
 	activeWorkGrace time.Duration
 	healthTimeout   time.Duration
@@ -96,6 +102,11 @@ type Deps struct {
 	// somebody can fix, or a release published without a feed.
 	CustomFeed bool
 
+	// Flavour is the build flavour of the daemon an update would replace —
+	// build.Flavour, the binary this runs in, by default. The release feed
+	// publishes the standard flavour only.
+	Flavour string
+
 	ActiveWorkGrace time.Duration
 	HealthTimeout   time.Duration
 }
@@ -114,6 +125,7 @@ func NewService(d Deps) Service {
 		supervisor: d.Supervisor, operators: d.Operators,
 		activeWork: d.ActiveWork, clock: d.Clock, sleeper: d.Sleeper, log: d.Log,
 		publicKey: d.PublicKey, platform: d.Platform, version: d.Version, customFeed: d.CustomFeed,
+		flavour:         d.Flavour,
 		activeWorkGrace: d.ActiveWorkGrace, healthTimeout: d.HealthTimeout,
 	}
 	if s.log == nil {
@@ -127,6 +139,9 @@ func NewService(d Deps) Service {
 	}
 	if s.version == "" {
 		s.version = build.Current().Version
+	}
+	if s.flavour == "" {
+		s.flavour = build.Flavour
 	}
 	if s.activeWorkGrace == 0 {
 		s.activeWorkGrace = DefaultActiveWorkGrace
@@ -288,13 +303,15 @@ func (s *service) Status(ctx context.Context, _ StatusInput) (Status, error) {
 // install says how a release reaches this installation. version is the
 // release a terminal command would install, when there is one to name.
 func (s *service) install(ctx context.Context, version string) Install {
-	if !s.installer.InPlace(ctx) {
-		return Install{Method: InstallReinstall}
+	if why := s.reinstallReason(ctx); why != "" {
+		return Install{Method: InstallReinstall, Reason: why}
 	}
+	_, window, err := s.installer.Target(ctx, windowBinary)
+	reopen := err == nil && window
 	if s.supervisor.CanRestart(ctx) {
-		return Install{Method: InstallHere}
+		return Install{Method: InstallHere, Reopen: reopen}
 	}
-	out := Install{Method: InstallFromTerminal}
+	out := Install{Method: InstallFromTerminal, Reopen: reopen}
 	if version == "" {
 		return out
 	}
@@ -304,6 +321,16 @@ func (s *service) install(ctx context.Context, version string) Install {
 	}
 	out.Command = installCommand(s.goos(), path, version)
 	return out
+}
+
+// reinstallReason is why this installation cannot take a release one binary
+// at a time, or nothing. The flavour comes first: a server daemon is not
+// swapped for the one the feed publishes whatever directory it lives in.
+func (s *service) reinstallReason(ctx context.Context) ReinstallReason {
+	if s.flavour != build.FlavourStandard {
+		return ReinstallServer
+	}
+	return s.installer.Reinstall(ctx)
 }
 
 func (s *service) goos() string {
@@ -356,8 +383,8 @@ func (s *service) Download(ctx context.Context, in DownloadInput) (DownloadOutpu
 	if err := s.newer("update.Service.Download", release.Version); err != nil {
 		return DownloadOutput{}, err
 	}
-	if !s.installer.InPlace(ctx) {
-		return DownloadOutput{}, errReinstallRequired("update.Service.Download")
+	if why := s.reinstallReason(ctx); why != "" {
+		return DownloadOutput{}, errReinstallRequired("update.Service.Download", why)
 	}
 
 	checksumsRaw, err := s.source.Fetch(ctx, release.ChecksumsURL)
@@ -554,11 +581,11 @@ func (s *service) Apply(ctx context.Context, in ApplyInput) (ApplyOutput, error)
 	if err := s.newer("update.Service.Apply", staged.Version); err != nil {
 		return ApplyOutput{}, err
 	}
-	if !s.installer.InPlace(ctx) {
-		return ApplyOutput{}, errReinstallRequired("update.Service.Apply")
+	if why := s.reinstallReason(ctx); why != "" {
+		return ApplyOutput{}, errReinstallRequired("update.Service.Apply", why)
 	}
 	if !s.supervisor.CanRestart(ctx) {
-		return ApplyOutput{}, errRestartUnavailable(s.install(ctx, staged.Version).Command)
+		return ApplyOutput{}, errRestartUnavailable(s.install(ctx, staged.Version))
 	}
 	installed, err := s.installedBinaries(ctx, "update.Service.Apply")
 	if err != nil {

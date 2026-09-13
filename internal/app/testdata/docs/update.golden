@@ -19,9 +19,13 @@ accounts) only.
 
 The daemon cannot restart itself, so Apply refuses to run inside it
 (UPDATE_RESTART_UNAVAILABLE) before touching anything; Check's install
-field names the command that installs from a terminal instead. A signed
-macOS application bundle cannot be updated one binary at a time and is
-reinstalled whole (UPDATE_REINSTALL_REQUIRED).
+field names the command that installs from a terminal instead, and says
+when the window has to be reopened afterwards. Three kinds of installation
+are reinstalled whole rather than updated one binary at a time
+(UPDATE_REINSTALL_REQUIRED, with the reason): a signed macOS application
+bundle; a directory this account cannot write, such as an AppImage or
+Program Files; and the server flavour of the daemon, which carries the web
+interface that the daemon a release publishes does not.
 
 ## When to use
 - A person checking for updates, or scripting an update in CI/an installer
@@ -49,7 +53,8 @@ Install a staged, verified release and restart the daemon.
 Refuses before touching anything when the release is not staged under
 that version (UPDATE_NOTHING_STAGED), when this process cannot restart the
 daemon (UPDATE_RESTART_UNAVAILABLE — the daemon does not restart itself),
-or when the installation is a signed bundle (UPDATE_REINSTALL_REQUIRED).
+or when the installation is reinstalled whole — a bundle, a directory this
+account cannot write, a server daemon (UPDATE_REINSTALL_REQUIRED).
 Then proves every staged file against the signed checksums again
 (UPDATE_STAGED_TAMPERED discards what no longer matches), waits for
 in-flight agent turns to finish (bounded — UPDATE_ACTIVE_WORK_TIMEOUT if
@@ -120,7 +125,8 @@ asset's binary, version and platform must match its file name in the signed
 checksums (UPDATE_ASSET_REJECTED), and its own SHA-256 must match that file;
 a mismatch (UPDATE_CHECKSUM_MISMATCH) leaves nothing staged. Only binaries
 already installed on this machine are downloaded, and only for a release
-newer than this one (UPDATE_NOT_NEWER).
+newer than this one (UPDATE_NOT_NEWER). An installation that is reinstalled
+whole downloads nothing (UPDATE_REINSTALL_REQUIRED).
 
 ```json
 {

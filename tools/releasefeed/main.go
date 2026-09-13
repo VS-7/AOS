@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/OWNER/aos/internal/adapters/updateinstall"
+	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/relsig"
 	"github.com/OWNER/aos/internal/domain/update"
@@ -274,6 +275,10 @@ func stageFor(ctx context.Context, source dirSource, release *update.Release, pu
 		// version the updater could ever install — and refuses one it could
 		// not, like a tag that is not a version.
 		Version: "v0.0.0",
+		// What the feed publishes is the standard daemon, and what it has
+		// to install into is a standard installation: a server daemon is
+		// reinstalled with its own tarball, never updated from the feed.
+		Flavour: build.FlavourStandard,
 	})
 	out, err := svc.Download(ctx, update.DownloadInput{Release: release})
 	return out.Staged, err

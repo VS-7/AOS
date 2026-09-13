@@ -207,12 +207,39 @@ func (i *Installer) Commit(_ context.Context, binary string) error {
 	return nil
 }
 
-// InPlace is false inside a macOS application bundle. codesign seals every
-// file of a bundle, so replacing Contents/MacOS/aosd — or leaving an
-// aosd.prev beside it — makes `codesign --verify` fail for the whole
-// application, the very check install.sh refuses a download over.
-func (i *Installer) InPlace(context.Context) bool {
-	return !inAppBundle(i.BinDir)
+// Reinstall says why the binaries in BinDir cannot be replaced one at a time.
+//
+// Inside a macOS application bundle: codesign seals every file of a bundle,
+// so replacing Contents/MacOS/aosd — or leaving an aosd.prev beside it —
+// makes `codesign --verify` fail for the whole application, the very check
+// install.sh refuses a download over.
+//
+// In a directory this account cannot write: an AppImage's binaries live on a
+// read-only mount, and an install for every account (Program Files, /usr)
+// needs an administrator. SwapIn renames and creates files in BinDir, so
+// such an installation used to be offered a terminal command that could only
+// fail at the swap. Writing is asked of the directory itself, by creating a
+// file and removing it: permission bits, ACLs, a read-only mount and a
+// process without elevation all answer that one question the same way.
+func (i *Installer) Reinstall(context.Context) update.ReinstallReason {
+	if inAppBundle(i.BinDir) {
+		return update.ReinstallBundle
+	}
+	if !writable(i.BinDir) {
+		return update.ReinstallReadOnly
+	}
+	return ""
+}
+
+// writable reports whether this process can create a file in dir.
+func writable(dir string) bool {
+	probe, err := os.CreateTemp(dir, ".aos-update-probe-*")
+	if err != nil {
+		return false
+	}
+	name := probe.Name()
+	_ = probe.Close()
+	return os.Remove(name) == nil
 }
 
 // inAppBundle reports whether dir is inside "<name>.app/Contents".

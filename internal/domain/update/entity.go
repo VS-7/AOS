@@ -139,18 +139,42 @@ const (
 	// process answering is the daemon itself, which cannot restart itself
 	// and bring the new version up. A separate process can: Command.
 	InstallFromTerminal InstallMethod = "terminal"
-	// InstallReinstall: the binaries cannot be replaced one at a time (a
-	// signed application bundle); the new version is installed whole, with
-	// the installer or from the release page.
+	// InstallReinstall: the binaries cannot be replaced one at a time — see
+	// ReinstallReason for why; the new version is installed whole, with the
+	// installer or from the release page.
 	InstallReinstall InstallMethod = "reinstall"
+)
+
+// ReinstallReason is why an installation is reinstalled whole rather than
+// updated one binary at a time. Each one is told a different remedy.
+type ReinstallReason string
+
+const (
+	// ReinstallBundle: a signed macOS application bundle, whose signature
+	// seals every file in it.
+	ReinstallBundle ReinstallReason = "bundle"
+	// ReinstallReadOnly: the directory the binaries live in cannot be
+	// changed by the account running this — an AppImage's read-only mount,
+	// an install for every account under Program Files or /usr.
+	ReinstallReadOnly ReinstallReason = "read-only"
+	// ReinstallServer: this daemon is the server flavour, with the web
+	// interface compiled in (build.FlavourServer), and a release publishes
+	// only the daemon without it.
+	ReinstallServer ReinstallReason = "server"
 )
 
 // Install says how to install a release on this machine.
 type Install struct {
 	Method InstallMethod `json:"method"`
+	// Reason is why, when Method is InstallReinstall.
+	Reason ReinstallReason `json:"reason,omitempty"`
 	// Command is the exact command that installs the staged or offered
 	// release, when Method is InstallFromTerminal.
 	Command string `json:"command,omitempty"`
+	// Reopen is true when the window is one of the binaries an install
+	// replaces here. The window already open goes on running the previous
+	// release until it is quit and opened again.
+	Reopen bool `json:"reopen,omitempty"`
 }
 
 // Staged is what Download left ready for Apply, as a caller sees it.

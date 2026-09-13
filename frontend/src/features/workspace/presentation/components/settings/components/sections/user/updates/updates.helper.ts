@@ -122,7 +122,7 @@ export function offerOf(
 export function offerLine(offer: Offer): string {
   switch (offer.install.method) {
     case "reinstall":
-      return t("This installation is an application bundle, which is updated by installing the new version over it — with the installer, or from the release page.");
+      return reinstallLine(offer.install);
     case "terminal":
       return offer.staged
         ? t("Verified and staged. The daemon cannot restart itself onto a new version, so install it from a terminal:")
@@ -132,6 +132,35 @@ export function offerLine(offer: Offer): string {
         ? t("Verified and staged. Installing restarts the daemon; in-flight work finishes first.")
         : t("Nothing is installed until you download it and the signature checks out.");
   }
+}
+
+/**
+ * Why an installation is reinstalled rather than updated in place, and with
+ * what. Every one of them used to be told it was an application bundle —
+ * a server, sent to the desktop's installer, included.
+ */
+function reinstallLine(install: UpdateInstall): string {
+  switch (install.reason) {
+    case "server":
+      return t("This is a server installation: its daemon carries the web interface, and the daemon a release publishes on its own does not. Update it by running install.sh again with AOS_SERVER=1.");
+    case "read-only":
+      return t("This installation's folder cannot be changed by this account — an AppImage, or an installation for every account on the machine — so it is updated by installing the new version over it, with the installer or from the release page.");
+    default:
+      return t("This installation is an application bundle, which is updated by installing the new version over it — with the installer, or from the release page.");
+  }
+}
+
+/**
+ * What to do once the terminal command has run, when it replaces the window
+ * too: the window already open goes on running the previous release until it
+ * is quit and opened again. Nothing before the release is staged, when there
+ * is no command yet.
+ */
+export function reopenLine(offer: Offer): string | null {
+  if (offer.install.method !== "terminal" || !offer.staged || !offer.install.command || !offer.install.reopen) {
+    return null;
+  }
+  return t("When it finishes, quit and reopen AOS: this window keeps running the previous release until it is reopened.");
 }
 
 /**

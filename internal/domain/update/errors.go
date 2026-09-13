@@ -180,12 +180,27 @@ func errDeveloperBuild(causer, current string) error {
 		CTA(apperr.CallToAction{Label: "rebuild it from source, or install a release with the installer"})
 }
 
-func errReinstallRequired(causer string) error {
+// errReinstallRequired refuses to download or install into an installation
+// that takes a release whole, and says why, because the remedy differs: the
+// installer or the release page for a bundle or a directory this account
+// cannot change, and the server installer for a daemon that carries the web
+// interface.
+func errReinstallRequired(causer string, why ReinstallReason) error {
+	message := "this installation is a signed application bundle, which cannot be updated one binary at a time"
+	action := "install the new version whole, with the installer or from the release page"
+	switch why {
+	case ReinstallReadOnly:
+		message = "the directory this installation's binaries live in cannot be changed by this account, so they cannot be replaced one at a time"
+	case ReinstallServer:
+		message = "this daemon carries the web interface, and a release publishes only the daemon without it — installing that would leave this server answering the API alone"
+		action = "run install.sh again with AOS_SERVER=1, which installs the server build of the new release"
+	}
 	return apperr.New("UPDATE_REINSTALL_REQUIRED").
 		Causer(causer).
-		Msgf("this installation is a signed application bundle, which cannot be updated one binary at a time").
+		Msgf("%s", message).
+		Issue("reason", string(why)).
 		Status(apperr.StatusConflict).
-		CTA(apperr.CallToAction{Label: "install the new version whole, with the installer or from the release page"})
+		CTA(apperr.CallToAction{Label: action})
 }
 
 func errForbidden(causer string) error {
@@ -265,15 +280,22 @@ func errInstallationUnreadable(causer string, cause error) error {
 // itself, the rollback's own restart was refused the same way, and the
 // answer was "rollback ALSO failed — the daemon may be down" from a daemon
 // that was answering the call, with the staged file consumed.
-func errRestartUnavailable(command string) error {
+//
+// Where the installation carries the window, the window already open stays
+// on the previous release after the terminal install, so that is said too.
+func errRestartUnavailable(install Install) error {
+	actions := []apperr.CallToAction{{
+		Label:   "install it from a terminal, where a separate process can restart the daemon and roll back if the new version does not come up",
+		Command: install.Command,
+	}}
+	if install.Reopen {
+		actions = append(actions, apperr.CallToAction{Label: "when it finishes, quit and reopen AOS: the open window keeps running the previous release until then"})
+	}
 	return apperr.New("UPDATE_RESTART_UNAVAILABLE").
 		Causer("update.Service.Apply").
 		Msgf("the daemon cannot restart itself onto a new version, so it did not replace anything").
 		Status(apperr.StatusConflict).
-		CTA(apperr.CallToAction{
-			Label:   "install it from a terminal, where a separate process can restart the daemon and roll back if the new version does not come up",
-			Command: command,
-		})
+		CTA(actions...)
 }
 
 func errActiveWorkTimeout(grace string) error {

@@ -32,6 +32,7 @@ import {
   offerOf,
   refusalOf,
   releasePage,
+  reopenLine,
   statusLine,
 } from "./updates.helper";
 
@@ -125,6 +126,7 @@ function UpdatesPanel(): React.JSX.Element {
   const answer = checkLine(check, status);
   const offer = offerOf(check, downloaded, status);
   const page = offer ? releasePage(offer.release) : null;
+  const reopen = offer ? reopenLine(offer) : null;
   const waiting = !check && status?.staged ? status.staged : null;
 
   return (
@@ -185,9 +187,12 @@ function UpdatesPanel(): React.JSX.Element {
           <FormSectionContent>
             {offer.install.method === "terminal" && offer.staged && offer.install.command ? (
               <FormSectionItem>
-                <code className="min-w-0 select-all break-all rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
-                  {offer.install.command}
-                </code>
+                <div className="min-w-0 space-y-2">
+                  <code className="block select-all break-all rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
+                    {offer.install.command}
+                  </code>
+                  {reopen ? <p className="text-sm text-muted-foreground">{reopen}</p> : null}
+                </div>
               </FormSectionItem>
             ) : null}
             <FormSectionItem>

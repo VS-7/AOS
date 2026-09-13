@@ -106,10 +106,12 @@ type Installer interface {
 	Rollback(ctx context.Context, binary string) error
 	// Commit drops the copy SwapIn kept, once the new binary is proven.
 	Commit(ctx context.Context, binary string) error
-	// InPlace reports whether binaries here can be replaced one at a time. A
-	// macOS application bundle cannot: its signature seals every file in it,
-	// so replacing one breaks the seal of the whole application.
-	InPlace(ctx context.Context) bool
+	// Reinstall says why the binaries here cannot be replaced one at a time,
+	// or nothing when they can. A macOS application bundle cannot — its
+	// signature seals every file in it, so replacing one breaks the seal of
+	// the whole application — and neither can a directory this account
+	// cannot write, where the swap could only fail halfway.
+	Reinstall(ctx context.Context) ReinstallReason
 }
 
 // Store keeps the Record between calls, and between daemon restarts.

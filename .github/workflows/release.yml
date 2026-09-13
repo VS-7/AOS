@@ -107,6 +107,13 @@ jobs:
   # Cross-compiled from one runner because it is pure Go — the desktop is the
   # binary that cannot be, and for the opposite reason: Wails links a platform
   # GUI toolkit, while this only serves the bundle over HTTP.
+  #
+  # The feed is compiled in here too, so a server is told a release exists —
+  # and only told: the feed publishes the cli job's aosd, which has no
+  # interface, and a daemon built with -tags webui reports build.FlavourServer
+  # and refuses to download or install it (UPDATE_REINSTALL_REQUIRED), pointing
+  # at install.sh with AOS_SERVER=1 instead. Swapping it in would bring the
+  # server back answering the API alone.
   server:
     runs-on: ubuntu-latest
     env:

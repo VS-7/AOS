@@ -272,16 +272,62 @@ func TestEveryMethodRefusesANameThatIsNotAManagedBinary(t *testing.T) {
 
 func TestABundleCannotBeUpdatedInPlace(t *testing.T) {
 	ctx := context.Background()
-	for dir, want := range map[string]bool{
-		"/Applications/AOS.app/Contents/MacOS":        false,
-		"/Users/me/Applications/AOS.app/Contents/Mac": false,
-		"/usr/local/bin":          true,
-		"/opt/AOS.app.backup/bin": true,
-		"/home/me/AOS":            true,
+	for _, dir := range []string{
+		"/Applications/AOS.app/Contents/MacOS",
+		"/Users/me/Applications/AOS.app/Contents/Mac",
 	} {
-		if got := updateinstall.New(t.TempDir(), dir).InPlace(ctx); got != want {
-			t.Errorf("InPlace(%q) = %v, want %v", dir, got, want)
+		if got := updateinstall.New(t.TempDir(), dir).Reinstall(ctx); got != update.ReinstallBundle {
+			t.Errorf("Reinstall(%q) = %q, want a bundle", dir, got)
 		}
+	}
+	// A directory merely named like one is not a bundle.
+	root := t.TempDir()
+	for _, dir := range []string{"AOS.app.backup/bin", "home/AOS"} {
+		path := filepath.Join(root, dir)
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if got := updateinstall.New(t.TempDir(), path).Reinstall(ctx); got != "" {
+			t.Errorf("Reinstall(%q) = %q, want an in-place install", dir, got)
+		}
+	}
+}
+
+// A directory this account cannot write is where the swap could only fail
+// halfway: an AppImage's read-only mount, Program Files without elevation,
+// /usr/bin for a package manager. It was offered a terminal command anyway.
+func TestADirectoryThisAccountCannotWriteIsReinstalled(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("permission bits do not stop this account here")
+	}
+	ctx := context.Background()
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "aosd"), []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(bin, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(bin, 0o755) })
+
+	if got := updateinstall.New(t.TempDir(), bin).Reinstall(ctx); got != update.ReinstallReadOnly {
+		t.Fatalf("Reinstall = %q, want read-only", got)
+	}
+	entries, _ := os.ReadDir(bin)
+	if len(entries) != 1 {
+		t.Fatalf("asking left something behind: %v", entries)
+	}
+	if got := updateinstall.New(t.TempDir(), filepath.Join(bin, "missing")).Reinstall(ctx); got != update.ReinstallReadOnly {
+		t.Fatalf("a directory that is not there cannot be written either, got %q", got)
+	}
+
+	_ = os.Chmod(bin, 0o755)
+	if got := updateinstall.New(t.TempDir(), bin).Reinstall(ctx); got != "" {
+		t.Fatalf("a writable directory is updated in place, got %q", got)
+	}
+	entries, _ = os.ReadDir(bin)
+	if len(entries) != 1 {
+		t.Fatalf("the probe was not removed: %v", entries)
 	}
 }
 

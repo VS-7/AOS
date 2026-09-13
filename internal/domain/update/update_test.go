@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/OWNER/aos/internal/core/apperr"
+	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/relsig"
 	"github.com/OWNER/aos/internal/domain/update"
 )
@@ -72,11 +73,13 @@ func (f *fakeSource) Fetch(_ context.Context, url string) ([]byte, error) {
 type fakeMachine struct {
 	mu sync.Mutex
 	// dir is where Target says the live binaries are.
-	dir       string
-	live      map[string]string
-	staged    map[string]string
-	prev      map[string]string
-	bundle    bool
+	dir    string
+	live   map[string]string
+	staged map[string]string
+	prev   map[string]string
+	// reinstall is what Reinstall answers: why this machine's binaries
+	// cannot be replaced one at a time, or nothing.
+	reinstall update.ReinstallReason
 	failSwap  string
 	failUndo  string
 	targetErr error
@@ -164,7 +167,7 @@ func (m *fakeMachine) Commit(_ context.Context, binary string) error {
 	return nil
 }
 
-func (m *fakeMachine) InPlace(context.Context) bool { return !m.bundle }
+func (m *fakeMachine) Reinstall(context.Context) update.ReinstallReason { return m.reinstall }
 
 func (m *fakeMachine) liveAt(binary string) string {
 	m.mu.Lock()
@@ -257,6 +260,7 @@ type harness struct {
 	version    string
 	platform   string
 	customFeed bool
+	flavour    string
 	pub, priv  string
 	// chosenInstall is set by installed(): the test decided what is on this
 	// machine, and signedRelease leaves it alone. Otherwise a release
@@ -272,8 +276,18 @@ func installed(binaries ...string) option {
 }
 func onPlatform(platform string) option    { return func(h *harness) { h.platform = platform } }
 func withCustomFeed() option               { return func(h *harness) { h.customFeed = true } }
+func withFlavour(f string) option          { return func(h *harness) { h.flavour = f } }
 func withStore(store update.Store) option  { return func(h *harness) { h.store = store } }
 func withOperators(o fakeOperators) option { return func(h *harness) { h.operators = o } }
+
+// sameMachineAs builds the service over another harness's machine, feed,
+// daemon and key: a second binary on the same installation.
+func sameMachineAs(o *harness) option {
+	return func(h *harness) {
+		h.source, h.machine, h.supervisor, h.activeWork = o.source, o.machine, o.supervisor, o.activeWork
+		h.pub, h.priv, h.chosenInstall = o.pub, o.priv, true
+	}
+}
 
 func newHarness(t *testing.T, opts ...option) *harness {
 	t.Helper()
@@ -289,6 +303,7 @@ func newHarness(t *testing.T, opts ...option) *harness {
 		clock:      &steppingClock{at: time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)},
 		version:    "v0.9.0",
 		platform:   "linux/amd64",
+		flavour:    build.FlavourStandard,
 		pub:        pub, priv: priv,
 	}
 	for _, o := range opts {
@@ -298,7 +313,8 @@ func newHarness(t *testing.T, opts ...option) *harness {
 		Source: h.source, Stager: h.machine, Installer: h.machine, Store: h.store,
 		Supervisor: h.supervisor, Operators: h.operators, ActiveWork: h.activeWork,
 		Clock: h.clock, Sleeper: h.clock,
-		PublicKey: pub, Platform: h.platform, Version: h.version, CustomFeed: h.customFeed,
+		PublicKey: h.pub, Platform: h.platform, Version: h.version, CustomFeed: h.customFeed,
+		Flavour: h.flavour,
 	})
 	return h
 }
@@ -650,15 +666,122 @@ func TestCheckOnAnEmptyFeedSaysWhoseFeedItIs(t *testing.T) {
 
 func TestCheckSendsABundleToTheInstaller(t *testing.T) {
 	h := newHarness(t)
-	h.machine.bundle = true
+	h.machine.reinstall = update.ReinstallBundle
 	h.source.release = &update.Release{Version: "v0.10.0"}
 
 	out, err := h.svc.Check(context.Background(), update.CheckInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.Install == nil || out.Install.Method != update.InstallReinstall {
+	if out.Install == nil || out.Install.Method != update.InstallReinstall || out.Install.Reason != update.ReinstallBundle {
 		t.Fatalf("install = %+v", out.Install)
+	}
+}
+
+// The server tarball's aosd is built with the web interface compiled in; the
+// release feed publishes the plain aosd, the one aos-desktop supervises. A
+// server installation that took it came back answering the API only, and the
+// machine a person reached with a browser had no interface left. It is sent
+// to the installer instead, at every step that could have installed it.
+func TestAServerInstallationIsNotSwappedForTheDaemonWithoutItsInterface(t *testing.T) {
+	store := &sharedStore{}
+	// Staged by a standard daemon sharing the state directory, which is
+	// what Apply would otherwise have installed.
+	standard := newHarness(t, withStore(store))
+	release := standard.signedRelease(t, "v0.10.0", "aos", "aosd")
+	standard.download(t, release)
+
+	h := newHarness(t, withStore(store), withFlavour(build.FlavourServer), sameMachineAs(standard))
+
+	out, err := h.svc.Check(context.Background(), update.CheckInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.State != update.StateAvailable {
+		t.Fatalf("a server installation should still be told a release exists, got %+v", out)
+	}
+	if out.Install == nil || out.Install.Method != update.InstallReinstall || out.Install.Reason != update.ReinstallServer {
+		t.Fatalf("install = %+v, want reinstall for the server flavour", out.Install)
+	}
+
+	_, err = h.svc.Download(context.Background(), update.DownloadInput{Release: release})
+	e := wantCode(t, err, "UPDATE_REINSTALL_REQUIRED")
+	if !strings.Contains(e.Message, "web interface") || len(e.Actions) == 0 || !strings.Contains(e.Actions[0].Label, "AOS_SERVER=1") {
+		t.Fatalf("the refusal should say why and how, got %q %+v", e.Message, e.Actions)
+	}
+
+	_, err = h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+	wantCode(t, err, "UPDATE_REINSTALL_REQUIRED")
+	if h.machine.liveAt("aosd") != "old aosd" || h.supervisor.restarts != 0 {
+		t.Fatal("the server's daemon must not be replaced")
+	}
+
+	st, err := h.svc.Status(context.Background(), update.StatusInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Install.Method != update.InstallReinstall || st.Install.Reason != update.ReinstallServer {
+		t.Fatalf("status install = %+v", st.Install)
+	}
+}
+
+// A directory this account cannot write — an AppImage's read-only mount, an
+// install for every account under Program Files or /usr — was offered a
+// terminal command that could only fail at the swap.
+func TestAnInstallationThisAccountCannotChangeIsReinstalled(t *testing.T) {
+	h := newHarness(t)
+	release := h.signedRelease(t, "v0.10.0", "aos", "aosd")
+	h.machine.reinstall = update.ReinstallReadOnly
+
+	out, err := h.svc.Check(context.Background(), update.CheckInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Install == nil || out.Install.Method != update.InstallReinstall || out.Install.Reason != update.ReinstallReadOnly || out.Install.Command != "" {
+		t.Fatalf("install = %+v", out.Install)
+	}
+	_, err = h.svc.Download(context.Background(), update.DownloadInput{Release: release})
+	e := wantCode(t, err, "UPDATE_REINSTALL_REQUIRED")
+	if !strings.Contains(e.Message, "cannot be changed by this account") {
+		t.Fatalf("message = %q", e.Message)
+	}
+	if len(h.machine.staged) != 0 {
+		t.Fatal("nothing should be downloaded for an installation that cannot take it")
+	}
+}
+
+// An update installed from a terminal replaces the window's binary too, and
+// the window already open keeps running the previous release until it is
+// reopened. The command says so where there is a window to reopen.
+func TestTheTerminalInstallSaysToReopenTheWindowWhenThereIsOne(t *testing.T) {
+	for _, c := range []struct {
+		installed []string
+		reopen    bool
+	}{
+		{[]string{"aos", "aos-desktop", "aosd"}, true},
+		{[]string{"aos", "aosd"}, false},
+	} {
+		h := newHarness(t, installed(c.installed...))
+		h.supervisor.cannot = true
+		h.download(t, h.signedRelease(t, "v0.10.0", c.installed...))
+
+		out, err := h.svc.Check(context.Background(), update.CheckInput{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out.Install == nil || out.Install.Reopen != c.reopen {
+			t.Errorf("installed %v: install = %+v, want reopen %v", c.installed, out.Install, c.reopen)
+		}
+
+		_, err = h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+		e := wantCode(t, err, "UPDATE_RESTART_UNAVAILABLE")
+		said := false
+		for _, a := range e.Actions {
+			said = said || strings.Contains(a.Label, "reopen AOS")
+		}
+		if said != c.reopen {
+			t.Errorf("installed %v: calls to action %+v, want reopen %v", c.installed, e.Actions, c.reopen)
+		}
 	}
 }
 
@@ -857,7 +980,7 @@ func TestDownloadRefusesWhatIsNotAnUpdate(t *testing.T) {
 
 func TestDownloadRefusesABundle(t *testing.T) {
 	h := newHarness(t)
-	h.machine.bundle = true
+	h.machine.reinstall = update.ReinstallBundle
 	release := h.signedRelease(t, "v0.10.0", "aosd")
 
 	_, err := h.svc.Download(context.Background(), update.DownloadInput{Release: release})
@@ -972,7 +1095,7 @@ func TestApplyThatCannotRestartRefusesBeforeTouchingAnything(t *testing.T) {
 func TestApplyRefusesABundle(t *testing.T) {
 	h := newHarness(t)
 	h.download(t, h.signedRelease(t, "v0.10.0", "aosd"))
-	h.machine.bundle = true
+	h.machine.reinstall = update.ReinstallBundle
 
 	_, err := h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
 	wantCode(t, err, "UPDATE_REINSTALL_REQUIRED")
