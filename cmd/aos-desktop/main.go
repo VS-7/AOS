@@ -95,19 +95,29 @@ func main() {
 	port := resolver.Int(env.KeyServerPort, build.Port)
 	address := fmt.Sprintf("http://%s:%d", host, port)
 
+	// Which credential this window signs in with, and what it remembers of
+	// signing in and out — see windowSession for why the terminal's
+	// credential and the window's own session are kept apart.
+	session := newWindowSession(
+		filepath.Join(paths.Root, desktopTokenFile),
+		localToken(resolver, paths),
+		strings.TrimSpace(resolver.String("TOKEN", "")) != "",
+		log,
+	)
+
 	daemon := daemonclient.New(daemonclient.Options{
 		BaseURL: address,
 		// AOS_TOKEN first, for pointing this window at a daemon it did not
-		// start; then the installation's own credential, which is what makes
-		// the application remember you.
+		// start; then the window's own session from its last sign-in; then
+		// the installation's own credential, which is what makes the
+		// application remember you on a first launch.
 		//
-		// It read neither. The token lived only in this process's memory and
-		// was set by AuthService.Login, so every launch of the application
-		// showed the Login page — while `aos` in a terminal on the same
-		// machine, as the same person, needed no password at all, because it
-		// reads exactly this file. There was nothing to log *into*: the
-		// account already existed and the credential was already on disk.
-		Token:     localToken(resolver, paths),
+		// It used to read none of them. The token lived only in this
+		// process's memory and was set by AuthService.Login, so every launch
+		// of the application showed the Login page — while `aos` in a
+		// terminal on the same machine, as the same person, needed no password
+		// at all, because it reads local.token.
+		Token:     session.Initial(),
 		Workspace: resolver.String(env.KeyWorkspaceID, ""),
 	})
 
@@ -251,7 +261,7 @@ func main() {
 		Services: []application.Service{
 			application.NewService(systemSvc),
 			application.NewService(domainSvc),
-			application.NewService(wailsvc.NewAuth(daemon, func(ctx context.Context, event wailsvc.AuthEvent) {
+			application.NewService(wailsvc.NewAuth(session.Caller(daemon), func(ctx context.Context, event wailsvc.AuthEvent) {
 				// A successful login or onboarding is the first moment this
 				// client can call anything past /api/auth — workspace
 				// registration needed a token it didn't have until now.
@@ -350,7 +360,8 @@ func main() {
 	}
 }
 
-// localToken is the credential this installation already holds.
+// localToken is the credential this installation already holds — the shared
+// one, which windowSession uses until the window has a session of its own.
 //
 // `~/.aos/local.token` is written once, at onboarding, as the same-machine
 // credential (authapi's own doc comment); `aos` has always read it and the
@@ -402,6 +413,15 @@ func ensureDaemon(supervisor *gateway.Service, client *daemonclient.Client, root
 		healthy = true
 	}
 	if !healthy {
+		return
+	}
+
+	// Nobody signed in yet — a fresh installation, or a window whose person
+	// signed out. There is nothing to open, and asking anyway was the
+	// `POST /api/workspace/list` 401 at the start of every such launch in the
+	// daemon's log. AuthService opens the workspace after the sign-in.
+	if status, err := client.Status(ctx); err == nil && !status.Authenticated {
+		log.Debug("nobody is signed in yet; the workspace is opened after sign-in")
 		return
 	}
 
