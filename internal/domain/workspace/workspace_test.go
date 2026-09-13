@@ -272,6 +272,25 @@ func TestGitIsInitialisedWhenAbsent(t *testing.T) {
 	if out.Scaffold.GitWarning != "" {
 		t.Errorf("unexpected warning: %q", out.Scaffold.GitWarning)
 	}
+	// A repository with no commit has no branch, and a task's checkout is cut
+	// from a branch: every tasks_branch in a fresh workspace failed with
+	// "invalid reference: main". The repository is born with a commit.
+	if h.git.commits[repoRoot] != 1 {
+		t.Errorf("commits = %v, want the new repository given its first commit", h.git.commits)
+	}
+}
+
+func TestAFirstCommitThatFailsIsVisible(t *testing.T) {
+	h := newHarness(t)
+	h.git.commitErr = errors.New("fatal: unable to auto-detect email address")
+
+	out := h.create(t, workspace.CreateInput{Name: "Project Alpha", Path: repoRoot})
+	if !out.Scaffold.GitInit {
+		t.Error("the repository was created and the report says it was not")
+	}
+	if !strings.Contains(out.Scaffold.GitWarning, "no commit") {
+		t.Errorf("warning = %q, want it to say the repository has no commit", out.Scaffold.GitWarning)
+	}
 }
 
 func TestAnExistingRepositoryIsLeftAlone(t *testing.T) {

@@ -35,11 +35,6 @@ func (s *Service) Branch(ctx context.Context, in BranchInput) (*Worktree, error)
 	if err != nil {
 		return nil, err
 	}
-	if policy.Limit > 0 {
-		if err := s.pruneToLimit(ctx, policy); err != nil {
-			return nil, err
-		}
-	}
 
 	branch := strings.TrimSpace(in.Branch)
 	if branch == "" {
@@ -52,11 +47,33 @@ func (s *Service) Branch(ctx context.Context, in BranchInput) (*Worktree, error)
 	if base == "" {
 		base = policy.DefaultBase
 	}
+	spec := WorktreeSpec{
+		TaskID: current.ID, Branch: branch, Base: base, Path: filepath.Join(policy.Root, current.ID),
+	}
 
-	path := filepath.Join(policy.Root, current.ID)
-	created, err := s.worktrees.Create(ctx, WorktreeSpec{
-		TaskID: current.ID, Branch: branch, Base: base, Path: path,
-	})
+	// Asked before anything is pruned or created. The two ways a workspace
+	// has nothing to cut from — it is not a repository of its own, or its base
+	// has no commit — both reached git, and what came back was
+	// TASK_WORKTREE_FAILED with the reason in a cause nothing renders, which
+	// is where an executor agent stopped the task for good.
+	source, err := s.worktrees.Source(ctx, spec)
+	if err != nil {
+		return nil, errWorktreeFailed(current.ID, branch, err)
+	}
+	if !source.Own {
+		return nil, errWorktreeNoRepository(current.ID, source)
+	}
+	if !source.BaseExists {
+		return nil, errWorktreeBaseMissing(current.ID, base, source)
+	}
+
+	if policy.Limit > 0 {
+		if err := s.pruneToLimit(ctx, policy); err != nil {
+			return nil, err
+		}
+	}
+
+	created, err := s.worktrees.Create(ctx, spec)
 	if err != nil {
 		return nil, errWorktreeFailed(current.ID, branch, err)
 	}

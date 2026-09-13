@@ -63,6 +63,7 @@ type worktrees struct {
 	existing []string
 	removed  []string
 	failWith error
+	source   *WorktreeSource
 }
 
 func (w *worktrees) Create(_ context.Context, spec WorktreeSpec) (string, error) {
@@ -88,6 +89,13 @@ func (w *worktrees) Remove(_ context.Context, path string) error {
 
 func (w *worktrees) List(context.Context) ([]string, error) {
 	return append([]string(nil), w.existing...), nil
+}
+
+func (w *worktrees) Source(context.Context, WorktreeSpec) (WorktreeSource, error) {
+	if w.source != nil {
+		return *w.source, nil
+	}
+	return WorktreeSource{Dir: "/w", Toplevel: "/w", Own: true, BaseExists: true}, nil
 }
 
 // setup records that the script ran and under whose policy.

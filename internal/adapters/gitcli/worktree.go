@@ -51,6 +51,11 @@ func resolve(path string) string {
 // that was branched, pruned and branched again should return to its own work,
 // not fail because the name is taken.
 func (w *Worktrees) Create(ctx context.Context, spec task.WorktreeSpec) (string, error) {
+	// Never from an enclosing repository: the checkout would hold somebody
+	// else's files, on a branch of somebody else's repository.
+	if err := w.git.ownRepository(ctx, "worktree add", w.repo); err != nil {
+		return "", err
+	}
 	path := filepath.Clean(spec.Path)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", err
@@ -110,6 +115,29 @@ func (w *Worktrees) List(ctx context.Context) ([]string, error) {
 		paths = append(paths, path)
 	}
 	return paths, nil
+}
+
+// Source reports what a checkout for spec would be cut from.
+func (w *Worktrees) Source(ctx context.Context, spec task.WorktreeSpec) (task.WorktreeSource, error) {
+	top, own, err := w.git.topOf(ctx, w.repo)
+	if err != nil {
+		return task.WorktreeSource{}, err
+	}
+	out := task.WorktreeSource{Dir: w.repo, Toplevel: top, Own: own}
+	if !own {
+		return out, nil
+	}
+	if w.hasBranch(ctx, spec.Branch) {
+		out.BaseExists = true
+		return out, nil
+	}
+	base := strings.TrimSpace(spec.Base)
+	if base == "" {
+		base = "HEAD"
+	}
+	_, err = w.git.run(ctx, w.repo, "rev-parse", "--verify", "--quiet", base+"^{commit}")
+	out.BaseExists = err == nil
+	return out, nil
 }
 
 // hasBranch reports whether a branch name already exists.
