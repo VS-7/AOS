@@ -37,6 +37,10 @@ func TestTheServingDaemonFiresScheduledRoutinesInEveryWorkspace(t *testing.T) {
 			env.KeyJobsTick: "24h",
 		})),
 		WorkspaceRoot: first,
+		// Records are stamped an hour ago, so a routine created a moment
+		// before the worker's first pass is not younger than the minute that
+		// pass finds due: a routine never fires for a slot before it existed.
+		Clock: anHourAgo{},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -129,3 +133,8 @@ func TestTheServingDaemonFiresScheduledRoutinesInEveryWorkspace(t *testing.T) {
 	}
 	_ = a.Worker.Stop(context.Background())
 }
+
+// anHourAgo is the wall clock an hour behind.
+type anHourAgo struct{}
+
+func (anHourAgo) Now() time.Time { return time.Now().Add(-time.Hour) }

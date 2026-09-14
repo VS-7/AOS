@@ -346,8 +346,12 @@ func (s *Service) ProcessScheduled(ctx context.Context, now time.Time) (Schedule
 				out.Broken = append(out.Broken, r.ID)
 				continue
 			}
-			var last time.Time
-			if r.LastFiredAt != nil {
+			// The window starts no earlier than the routine: with no firing
+			// yet it reached a whole tick back, and a routine fired for a
+			// slot that passed before it was created — the one its next run
+			// had just been shown as after.
+			last := r.CreatedAt
+			if r.LastFiredAt != nil && r.LastFiredAt.After(last) {
 				last = *r.LastFiredAt
 			}
 			if !DueInWindow(schedule, last, now, s.tick) {
