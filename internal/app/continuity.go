@@ -19,6 +19,7 @@ import (
 
 	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/identity"
+	"github.com/OWNER/aos/internal/core/ids"
 	"github.com/OWNER/aos/internal/domain/activity"
 	"github.com/OWNER/aos/internal/domain/agent"
 	"github.com/OWNER/aos/internal/domain/chat"
@@ -617,21 +618,98 @@ func (h turnHandler) Handle(ctx context.Context, j job.Job) (json.RawMessage, er
 }
 
 // runtimeFor is the runtime of the workspace a queued job names.
+func (a *App) runtimeFor(ctx context.Context, workspaceID string) (*session.Runner, error) {
+	target, err := a.jobScope(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return target.Runtime, nil
+}
+
+// jobScope is the services of the workspace a queued job names.
 //
 // A job that names no workspace is the primary's. One that names a workspace
 // this installation cannot open fails rather than running in the primary —
 // commands fall back to it (scopeFor), but a turn run against another
 // workspace's conversations would read a chat that is not there, or worse,
 // one of the same id that belongs to somebody else.
-func (a *App) runtimeFor(ctx context.Context, workspaceID string) (*session.Runner, error) {
+func (a *App) jobScope(ctx context.Context, workspaceID string) (*App, error) {
 	if workspaceID == "" || a.scopes == nil {
-		return a.Runtime, nil
+		return a, nil
 	}
-	target, err := a.scopes.forID(ctx, a.Workspaces, workspaceID)
+	return a.scopes.forID(ctx, a.Workspaces, workspaceID)
+}
+
+// routineHandler runs a scheduled firing the worker's tick queued, in the
+// workspace the job names, as the scheduled run it is.
+type routineHandler struct {
+	scopeFor func(ctx context.Context, workspaceID string) (*App, error)
+}
+
+func (h routineHandler) Handle(ctx context.Context, j job.Job) (json.RawMessage, error) {
+	var firing routine.Firing
+	if err := json.Unmarshal(j.Payload, &firing); err != nil {
+		return nil, err
+	}
+	target, err := h.scopeFor(ctx, j.Workspace)
 	if err != nil {
 		return nil, err
 	}
-	return target.Runtime, nil
+	// As the system, the way the tick that found it due acted: the run itself
+	// is taken as the routine's own agent (routine.Service.fire).
+	ctx = identity.With(ctx, identity.Identity{WorkspaceID: j.Workspace})
+	run, err := target.Routines.Fire(ctx, firing.Input())
+	if err != nil {
+		// The run record says how it went, and the job fails with the same
+		// reason, once: it is queued with a single try, because a routine's
+		// turn is not taken again behind its owner's back.
+		return nil, err
+	}
+	return json.Marshal(map[string]any{
+		"agent": firing.Agent, "routine": firing.Routine,
+		"run": run.ID, "status": run.Status, "chat": run.ChatID,
+	})
+}
+
+// routineQueue hands one workspace's due firings to the job queue, where the
+// pool's slots run them.
+type routineQueue struct {
+	queue     job.Queue
+	ids       ids.Generator
+	workspace string
+}
+
+func (q routineQueue) Dispatch(ctx context.Context, f routine.Firing) (bool, error) {
+	// A firing of this routine still waiting or running is the one the new
+	// firing would repeat. A worker that died holding one leaves it claimed
+	// until its lease lapses and it is handed back and run, so this never
+	// waits on work nothing will do.
+	for _, status := range []job.Status{job.Pending, job.Claimed} {
+		waiting, err := q.queue.List(ctx, job.Filter{Kind: kindRoutine, Status: status, Workspace: q.workspace})
+		if err != nil {
+			return false, err
+		}
+		for _, j := range waiting {
+			var queued routine.Firing
+			// An empty workspace filters nothing, so the primary's own is
+			// compared here too.
+			if j.Workspace == q.workspace && json.Unmarshal(j.Payload, &queued) == nil &&
+				queued.Agent == f.Agent && queued.Routine == f.Routine {
+				return false, nil
+			}
+		}
+	}
+	payload, err := json.Marshal(f)
+	if err != nil {
+		return false, err
+	}
+	if _, err := q.queue.Enqueue(ctx, job.Job{
+		ID: q.ids.New(), Queue: job.QueueRoutine, Kind: kindRoutine,
+		Workspace: q.workspace, Payload: payload, MaxTries: 1,
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // servedScope is one workspace the periodic work runs in: its services, and
@@ -705,21 +783,31 @@ func (a *App) everyScope(tick scopeTick) func(context.Context, time.Time) error 
 	}
 }
 
-// routineTick evaluates one workspace's cron triggers once per window.
-func routineTick(ctx context.Context, scope *App, workspaceID string, now time.Time) error {
-	// The tick acts as the system, not as any agent: a routine that fires
-	// on a schedule was not asked for by whoever last used the terminal.
-	ctx = identity.With(ctx, identity.Identity{WorkspaceID: workspaceID})
-	out, err := scope.Routines.ProcessScheduled(ctx, now)
-	if err != nil {
-		return err
+// routineTick evaluates one workspace's cron triggers once per window, and
+// queues the firings that are due.
+//
+// Queued, not run: a run is a whole turn, and taken here it held up every
+// other workspace's due routines and both retention passes behind it, while
+// the ticks that passed meanwhile were dropped. The pool's slots run the
+// queued firings side by side, stop with the daemon inside its shutdown
+// timeout, and a firing a dead worker held is handed back and run.
+func routineTick(queue job.Queue, idgen ids.Generator) scopeTick {
+	return func(ctx context.Context, scope *App, workspaceID string, now time.Time) error {
+		// The tick acts as the system, not as any agent: a routine that fires
+		// on a schedule was not asked for by whoever last used the terminal.
+		ctx = identity.With(ctx, identity.Identity{WorkspaceID: workspaceID})
+		out, err := scope.Routines.DispatchScheduled(ctx, now,
+			routineQueue{queue: queue, ids: idgen, workspace: workspaceID})
+		if err != nil {
+			return err
+		}
+		if len(out.Fired) > 0 || len(out.Failed) > 0 || len(out.Broken) > 0 {
+			slog.Default().Info("the scheduler evaluated the routines",
+				"workspace", workspaceID, "queued", len(out.Fired), "failed", len(out.Failed),
+				"stillRunning", len(out.Running), "broken", len(out.Broken))
+		}
+		return nil
 	}
-	if len(out.Fired) > 0 || len(out.Broken) > 0 {
-		slog.Default().Info("the scheduler evaluated the routines",
-			"workspace", workspaceID,
-			"fired", len(out.Fired), "failed", len(out.Failed), "broken", len(out.Broken))
-	}
-	return nil
 }
 
 // activityRetention purges one workspace's activity log on the tick.
@@ -739,5 +827,6 @@ func jobRetention(jobs job.Queue) func(context.Context, time.Time) error {
 
 // The kinds of queued work this build knows.
 const (
-	kindTurn = build.Name + ".turn"
+	kindTurn    = build.Name + ".turn"
+	kindRoutine = build.Name + ".routine"
 )

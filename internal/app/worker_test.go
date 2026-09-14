@@ -11,6 +11,7 @@ import (
 
 	"github.com/OWNER/aos/internal/app"
 	"github.com/OWNER/aos/internal/core/env"
+	"github.com/OWNER/aos/internal/domain/job"
 	"github.com/OWNER/aos/internal/domain/workspace"
 )
 
@@ -111,9 +112,9 @@ func TestTheServingDaemonFiresScheduledRoutinesInEveryWorkspace(t *testing.T) {
 	}
 	late := routineIn("third")
 	a.Worker.TickOnce(ctx)
-	if got := runsOf("third", late); got == 0 {
-		t.Error("the routine in a workspace registered after boot never fired")
-	}
+	waitFor(t, "the routine in a workspace registered after boot to fire", func() bool {
+		return runsOf("third", late) > 0
+	})
 
 	stop()
 	select {
@@ -138,3 +139,90 @@ func TestTheServingDaemonFiresScheduledRoutinesInEveryWorkspace(t *testing.T) {
 type anHourAgo struct{}
 
 func (anHourAgo) Now() time.Time { return time.Now().Add(-time.Hour) }
+
+// A scheduled routine's run is a whole turn, and the worker's tick took it
+// inline: one long run held up every other workspace's due routines and both
+// retention passes, and the ticks that passed meanwhile were dropped. The tick
+// now puts each due firing on the queue and returns, the pool's slots run
+// them, and a routine whose firing is still waiting is not queued twice.
+func TestTheTickQueuesScheduledRunsForThePoolToRun(t *testing.T) {
+	home, first, second := t.TempDir(), t.TempDir(), t.TempDir()
+	a, err := app.New(app.Options{
+		Env: env.New(env.Map(map[string]string{
+			env.KeyHome:     home,
+			env.KeyJobsTick: "24h",
+		})),
+		WorkspaceRoot: first,
+		Clock:         anHourAgo{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = a.Close() })
+	ctx := context.Background()
+	if _, err := a.Workspaces.Create(ctx, workspace.CreateInput{Name: "Second", Path: second}); err != nil {
+		t.Fatal(err)
+	}
+	var out struct {
+		Routine struct {
+			ID string `json:"id"`
+		} `json:"routine"`
+	}
+	raw := invokeIn(inWorkspace("second"), t, a, "routines_create", `{
+		"_reasoning": "a test is checking where a scheduled run is taken",
+		"name": "Every minute", "agent": "atlas",
+		"triggers": [{"type": "scheduled", "cron": "* * * * *"}],
+		"content": "Say what time it is."
+	}`)
+	if err := json.Unmarshal(raw, &out); err != nil || out.Routine.ID == "" {
+		t.Fatalf("routines_create answered %s (%v)", raw, err)
+	}
+	runs := func() int {
+		var got struct {
+			Total int `json:"total"`
+		}
+		raw := invokeIn(inWorkspace("second"), t, a, "routines_runs",
+			`{"_reasoning":"a test is checking whether the schedule fired","id":"`+out.Routine.ID+`"}`)
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatal(err)
+		}
+		return got.Total
+	}
+	queued := func() []job.Job {
+		listed, err := a.Queue.List(ctx, job.Filter{Kind: "aos.routine"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return listed
+	}
+
+	// The pool is not draining: whatever the tick does not queue, it ran.
+	a.Worker.TickOnce(ctx)
+	if n := runs(); n != 0 {
+		t.Fatalf("the tick ran the routine itself (%d runs) instead of queueing it", n)
+	}
+	jobs := queued()
+	if len(jobs) != 1 || jobs[0].Workspace != "second" || jobs[0].Queue != job.QueueRoutine || jobs[0].Status != job.Pending {
+		t.Fatalf("queued = %+v, want one pending routine job for the second workspace", jobs)
+	}
+	a.Worker.TickOnce(ctx)
+	if jobs := queued(); len(jobs) != 1 {
+		t.Fatalf("a firing still waiting was queued again: %d jobs", len(jobs))
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := a.Worker.Start(runCtx); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stopCancel()
+		_ = a.Worker.Stop(stopCtx)
+	}()
+	waitFor(t, "the pool to run the queued firing", func() bool { return runs() > 0 })
+	waitFor(t, "the routine job to finish", func() bool {
+		jobs := queued()
+		return len(jobs) >= 1 && jobs[len(jobs)-1].EndedAt != nil
+	})
+}

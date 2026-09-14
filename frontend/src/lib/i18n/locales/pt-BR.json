@@ -902,6 +902,7 @@
   "Saving your preferences": "Salvando suas preferências",
   "Saving...": "Salvando...",
   "Scheduled": "Agendada",
+  "Scheduled routine runs wait here until the daemon's worker runs them. Chat turns, task runs and routines fired any other way start directly, so they do not appear in this queue.": "As execuções agendadas de rotinas esperam aqui até o worker do daemon executá-las. Turnos de chat, execuções de tarefas e rotinas disparadas de qualquer outra forma começam diretamente, então não aparecem nesta fila.",
   "Schema": "Schema",
   "Scope": "Escopo",
   "Search": "Buscar",

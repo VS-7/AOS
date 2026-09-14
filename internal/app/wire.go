@@ -1039,10 +1039,11 @@ func New(opts Options) (*App, error) {
 			built.Worker = worker.New(worker.Deps{
 				Queue: queue,
 				Handlers: map[string]job.Handler{
-					kindTurn: turnHandler{runtimeFor: built.runtimeFor},
+					kindTurn:    turnHandler{runtimeFor: built.runtimeFor},
+					kindRoutine: routineHandler{scopeFor: built.jobScope},
 				},
 				Ticks: []worker.Tick{
-					{Name: "routines", Run: built.everyScope(routineTick)},
+					{Name: "routines", Run: built.everyScope(routineTick(queue, idgen))},
 					{Name: "activity-retention", Run: built.everyScope(activityRetention)},
 					{Name: "job-retention", Run: jobRetention(queue)},
 				},

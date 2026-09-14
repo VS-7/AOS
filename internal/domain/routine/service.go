@@ -318,9 +318,27 @@ func (s *Service) OnActivity(ctx context.Context, namespace, event string, data 
 	}
 }
 
-// ProcessScheduled is the queue job: it evaluates cron triggers against the
-// current tick window and fires the ones that are due.
+// ProcessScheduled evaluates cron triggers against the current tick window and
+// fires the ones that are due, each run taken before the next is looked at.
 func (s *Service) ProcessScheduled(ctx context.Context, now time.Time) (ScheduleOutput, error) {
+	return s.scheduled(ctx, now, func(ctx context.Context, r *Routine, schedule *Schedule) (bool, error) {
+		_, err := s.fire(ctx, r, Scheduled, map[string]any{"cron": schedule.Expr()}, false)
+		return true, err
+	})
+}
+
+// DispatchScheduled evaluates cron triggers against the current tick window and
+// hands the firings that are due to d, which runs them later. It is what the
+// worker's tick does, so one routine's turn does not hold up the rest.
+func (s *Service) DispatchScheduled(ctx context.Context, now time.Time, d Dispatcher) (ScheduleOutput, error) {
+	return s.scheduled(ctx, now, func(ctx context.Context, r *Routine, schedule *Schedule) (bool, error) {
+		return d.Dispatch(ctx, Firing{Agent: r.Agent, Routine: r.ID, Cron: schedule.Expr()})
+	})
+}
+
+// scheduled finds the routines due in the window ending at now and hands each
+// to fire, which reports whether it fired.
+func (s *Service) scheduled(ctx context.Context, now time.Time, fire func(context.Context, *Routine, *Schedule) (bool, error)) (ScheduleOutput, error) {
 	found, err := s.repo.List(ctx, collections.Query{IncludeContent: true})
 	if err != nil {
 		return ScheduleOutput{}, errReadFailed("ProcessScheduled", err)
@@ -357,12 +375,16 @@ func (s *Service) ProcessScheduled(ctx context.Context, now time.Time) (Schedule
 			if !DueInWindow(schedule, last, now, s.tick) {
 				continue
 			}
-			if _, err := s.fire(ctx, r, Scheduled, map[string]any{"cron": schedule.Expr()}, false); err != nil {
+			fired, err := fire(ctx, r, schedule)
+			switch {
+			case err != nil:
 				s.log.Error("a scheduled routine failed", "routine", r.ID, "err", err)
 				out.Failed = append(out.Failed, r.ID)
-				continue
+			case !fired:
+				out.Running = append(out.Running, r.ID)
+			default:
+				out.Fired = append(out.Fired, r.ID)
 			}
-			out.Fired = append(out.Fired, r.ID)
 			break // one firing per tick, however many schedules are due
 		}
 	}

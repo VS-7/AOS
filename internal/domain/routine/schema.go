@@ -173,6 +173,10 @@ type ScheduleOutput struct {
 	Fired  []string `json:"fired,omitempty" jsonschema:"Routines that fired."`
 	Failed []string `json:"failed,omitempty" jsonschema:"Routines that fired and failed."`
 
+	// Running lists the routines that were due while an earlier firing was
+	// still waiting or running, and so were not fired again.
+	Running []string `json:"running,omitempty" jsonschema:"Routines that were due while an earlier firing was still waiting or running."`
+
 	// Broken lists the routines whose cron does not parse. They will never fire
 	// and nothing else in the system would say so.
 	Broken []string `json:"broken,omitempty" jsonschema:"Routines with a cron expression that does not parse. These never fire."`

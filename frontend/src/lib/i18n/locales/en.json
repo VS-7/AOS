@@ -902,6 +902,7 @@
   "Saving your preferences": "Saving your preferences",
   "Saving...": "Saving...",
   "Scheduled": "Scheduled",
+  "Scheduled routine runs wait here until the daemon's worker runs them. Chat turns, task runs and routines fired any other way start directly, so they do not appear in this queue.": "Scheduled routine runs wait here until the daemon's worker runs them. Chat turns, task runs and routines fired any other way start directly, so they do not appear in this queue.",
   "Schema": "Schema",
   "Scope": "Scope",
   "Search": "Search",

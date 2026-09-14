@@ -36,9 +36,10 @@ describe("WorkspaceJobsSection", () => {
     render(<WorkspaceJobsSection />);
     expect(screen.queryByText(/every turn/i)).toBeNull();
     expect(screen.getByText(/start directly/i)).toBeTruthy();
-    // The daemon's worker drains the queue while it serves; it used to be
-    // built and never started.
-    expect(screen.getByText(/worker runs it/i)).toBeTruthy();
+    // The daemon's tick queues a scheduled routine's run and its worker runs
+    // it; the worker used to be built and never started, and the tick used to
+    // take every run itself.
+    expect(screen.getByText(/scheduled routine runs wait here/i)).toBeTruthy();
   });
 
   it("offers no action there is nothing to act on", () => {
