@@ -10,7 +10,6 @@ import {
   Delete01Icon,
   Cancel01Icon,
 } from "@hugeicons/core-free-icons";
-import { toast } from "sonner";
 import {
   SidebarMenuAction,
   SidebarMenuButton,
@@ -36,12 +35,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { useAlert } from "@/components/ui/alert-provider";
 import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
-import {
-  closeChatTab,
-  openChatTab,
-} from "@/features/chat/presentation/helpers/open-chat-tab.helper";
+import { openChatTab } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
+import { useChatActions } from "@/features/chat/presentation/hooks/use-chat-actions";
 import { ChatActivityStamp } from "../../chat/components/chat-activity-stamp";
 import { t } from "@/lib/i18n";
 
@@ -58,7 +54,6 @@ export function ChannelItem({
   unreadCount = 0,
   onChanged,
 }: ChannelItemProps) {
-  const { confirm } = useAlert();
   const [isEditing, setIsEditing] = React.useState(false);
   const [draftTitle, setDraftTitle] = React.useState(chat.title);
 
@@ -68,39 +63,15 @@ export function ChannelItem({
     }
   }, [chat.title, isEditing]);
 
-  const { mutate: updateChat, loading: isRenaming } =
-    aos.client.chat.update.useMutation({
-      onSuccess: () => {
-        setIsEditing(false);
-        onChanged?.();
-        toast.success(t("Channel renamed."));
-      },
-      onError: (error: any) => {
-        toast.error(
-          error?.error?.message ||
-            error?.message ||
-            "Unable to rename channel.",
-        );
-      },
-    });
-
-  const { mutate: deleteChat, loading: isDeleting } =
-    aos.client.chat.delete.useMutation({
-      onSuccess: () => {
-        onChanged?.();
-        toast.success(t("Channel deleted."));
-        if (isActive) {
-          closeChatTab(chat.id);
-        }
-      },
-      onError: (error: any) => {
-        toast.error(
-          error?.error?.message ||
-            error?.message ||
-            "Unable to delete channel.",
-        );
-      },
-    });
+  // Rename and delete are shared with every other kind of conversation (the
+  // chat header menu); see useChatActions for what a delete cleans up.
+  const { rename, remove, isRenaming, isDeleting } = useChatActions(chat, {
+    onRenamed: () => {
+      setIsEditing(false);
+      onChanged?.();
+    },
+    onDeleted: onChanged,
+  });
 
   function handleOpen() {
     if (isEditing) {
@@ -124,37 +95,9 @@ export function ChannelItem({
   }
 
   function handleRename() {
-    const nextTitle = draftTitle.trim();
-
-    if (!nextTitle || nextTitle === chat.title) {
+    if (!rename(draftTitle)) {
       cancelEditing();
-      return;
     }
-
-    updateChat({
-      params: { chat: chat.id },
-      body: {
-        title: nextTitle,
-      },
-    });
-  }
-
-  async function handleDelete() {
-    // The application's own dialog, not `window.confirm`. WKWebView routes
-    // `confirm()` to a delegate method Wails does not implement, so it
-    // returned false without drawing anything and this channel could not be
-    // deleted from the desktop at all. See lib/wails.ts.
-    const accepted = await confirm({
-      title: `Delete "${chat.title}"?`,
-      description: "This channel and its messages cannot be recovered.",
-      confirmText: "Delete",
-      variant: "destructive",
-    });
-    if (!accepted) return;
-
-    deleteChat({
-      params: { chat: chat.id },
-    });
   }
 
   return (
@@ -292,9 +235,12 @@ export function ChannelItem({
                     {unreadCount}
                   </Badge>
                 ) : null}
+                {/* Hidden while the row's menu is open too, not only on hover:
+                    moving the pointer into the menu dropped the hover, and the
+                    ⋯ trigger then sat on top of the stamp ("1m…"). */}
                 <ChatActivityStamp
                   at={chat.updatedAt}
-                  className="group-hover/menu-item:opacity-0"
+                  className="group-hover/menu-item:opacity-0 group-has-[[data-state=open]]/menu-item:opacity-0"
                 />
               </motion.span>
             )}
@@ -307,7 +253,7 @@ export function ChannelItem({
           <DropdownMenuTrigger asChild>
             <SidebarMenuAction
               showOnHover
-              aria-label={`Open actions for ${chat.title}`}
+              aria-label={t("Open actions for {{title}}", { title: chat.title })}
             >
               {isDeleting ? (
                 <HugeiconsIcon
@@ -336,7 +282,7 @@ export function ChannelItem({
               variant="destructive"
               onClick={(event) => {
                 event.stopPropagation();
-                void handleDelete();
+                void remove();
               }}
             >
               <HugeiconsIcon icon={Delete01Icon} />

@@ -61,14 +61,10 @@ export class ChatSearchHelper {
         title,
         kind,
         updatedAt: chat.updatedAt,
-        subtitle:
-          kind === "task"
-            ? chat.task
-            : kind === "run"
-              ? chat.routine
-              : kind === "dm"
-                ? "DM"
-                : undefined,
+        // No subtitle for a task or a run: the only thing to put there was
+        // the task's or routine's id, a UUID that told the person nothing the
+        // title had not already said.
+        subtitle: kind === "dm" ? "DM" : undefined,
         score,
       });
     }

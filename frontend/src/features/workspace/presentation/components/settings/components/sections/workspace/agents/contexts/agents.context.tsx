@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import { z } from "zod";
+import { useRouterState } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { aos } from "@/app/aos";
 import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
@@ -93,6 +94,20 @@ export function AgentsProvider({ children, agents }: AgentsProviderProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
   const isCreateMode = selectedAgentId === NEW_AGENT_ID;
+
+  // An agent named in the URL (`?agent=luara`) is the one to open: the chat
+  // sidebar's "View details" landed here with both agents listed and nothing
+  // selected. Applied once the list has it, and again only if the URL
+  // changes, so it never fights a selection the person makes afterwards.
+  const requestedAgent = useRouterState({
+    select: (state) => (state.location.search as { agent?: unknown }).agent,
+  });
+  const requestedAgentListed =
+    typeof requestedAgent === "string" &&
+    agents.some((agent) => agent.id === requestedAgent);
+  useEffect(() => {
+    if (requestedAgentListed) setSelectedAgentId(requestedAgent as string);
+  }, [requestedAgent, requestedAgentListed]);
 
   const form = aos.useForm({
     schema: agentFormSchema,

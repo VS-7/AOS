@@ -8,7 +8,7 @@
  */
 
 import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
-import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
+import type { Chat, ChatKind } from "@/features/chat/interfaces/chat.interfaces";
 
 /**
  * What `<ChatComposer>` needs from its page. The original also threaded a
@@ -33,6 +33,12 @@ export interface ChatComposerProps {
   agents: Agent[];
   chat: Chat;
   isDirectMessage?: boolean;
+  /**
+   * What surface the conversation is. It decides what the empty composer
+   * invites: a task thread read "Message this channel…" and wore a channel's
+   * `#`, which is not where a person thinks they are.
+   */
+  kind?: ChatKind;
   onSent?: (message: import("@/features/chat/interfaces/chat.interfaces").ChatMessage) => void;
   onConfirmed?: (
     previousId: string,

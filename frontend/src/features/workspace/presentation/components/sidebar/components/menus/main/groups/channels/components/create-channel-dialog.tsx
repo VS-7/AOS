@@ -24,6 +24,8 @@ import { getChannelTitleSuggestions } from "@/features/chat/presentation/consts/
 import { openChatTab } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
 import { SidebarGroupAction } from "@/components/ui/sidebar";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
+import { ChatKindHelper } from "@/features/chat/services/chat/chat-kind.helper";
 
 const MAX_CHANNEL_LENGTH = 80;
 
@@ -42,11 +44,26 @@ export function CreateChannelDialog({
   triggerVariant = "icon",
 }: CreateChannelDialogProps) {
   const [open, setOpen] = React.useState(false);
+  // What the person typed, kept as typed. The slug is derived for the preview
+  // and the submit only: slugifying each keystroke trimmed the trailing
+  // hyphen a space had just become, so a second word could never be started.
   const [channelName, setChannelName] = React.useState("");
 
   const normalizedName = React.useMemo(
     () => clampSlug(channelName),
     [channelName],
+  );
+
+  // The daemon keys chats by id and accepts a second channel with the same
+  // name; the sidebar would then show two rows nobody can tell apart.
+  const chats = aos.stores.chat.useState((state) => state.items);
+  const nameTaken = React.useMemo(
+    () =>
+      Boolean(normalizedName) &&
+      ChatKindHelper.filterByKind(chats, "channel", new Set()).some(
+        (chat) => clampSlug(chat.title ?? "") === normalizedName,
+      ),
+    [chats, normalizedName],
   );
   const suggestions = React.useMemo(
     () => getChannelTitleSuggestions(normalizedName, 3),
@@ -74,12 +91,8 @@ export function CreateChannelDialog({
         });
         toast.success(t("Channel created."));
       },
-      onError: (error: any) => {
-        toast.error(
-          error?.error?.message ||
-            error?.message ||
-            "Unable to create channel.",
-        );
+      onError: (error: unknown) => {
+        toast.error(errorMessage(error) ?? t("Unable to create channel."));
       },
     });
 
@@ -94,7 +107,7 @@ export function CreateChannelDialog({
   function handleSubmit(event?: React.FormEvent<HTMLFormElement>) {
     event?.preventDefault();
 
-    if (!normalizedName) {
+    if (!normalizedName || nameTaken) {
       return;
     }
 
@@ -194,9 +207,7 @@ export function CreateChannelDialog({
                   id="channel-name"
                   autoFocus
                   value={channelName}
-                  onChange={(event) =>
-                    setChannelName(clampSlug(event.target.value))
-                  }
+                  onChange={(event) => setChannelName(event.target.value)}
                   placeholder={t("For example, plano-orcamento")}
                   maxLength={MAX_CHANNEL_LENGTH}
                   disabled={isCreating}
@@ -212,6 +223,12 @@ export function CreateChannelDialog({
                   {normalizedName.length}
                 </motion.span>
               </motion.div>
+
+              {nameTaken ? (
+                <p className="text-xs text-destructive" role="alert">
+                  {t("There is already a channel called #{{name}}.", { name: normalizedName })}
+                </p>
+              ) : null}
 
               <AnimatePresence initial={false}>
                 {suggestions.length > 0 ? (
@@ -250,7 +267,7 @@ export function CreateChannelDialog({
                             {suggestion.name}
                           </span>
                           {" - "}
-                          {suggestion.description}
+                          {t(suggestion.description)}
                         </span>
                       </motion.button>
                     ))}
@@ -273,7 +290,7 @@ export function CreateChannelDialog({
                 className="text-xs text-muted-foreground"
               >
                 {t("Channel URL:")}{" "}
-                {normalizedName ? `#${normalizedName}` : "waiting for a name"}
+                {normalizedName ? `#${normalizedName}` : t("waiting for a name")}
               </motion.p>
 
               <div className="flex items-center gap-2">
@@ -291,7 +308,7 @@ export function CreateChannelDialog({
                   <Button
                     type="submit"
                     size="sm"
-                    disabled={isCreating || !normalizedName}
+                    disabled={isCreating || !normalizedName || nameTaken}
                   >
                     {isCreating ? (
                       <HugeiconsIcon

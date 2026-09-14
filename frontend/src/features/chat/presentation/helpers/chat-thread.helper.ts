@@ -3,6 +3,7 @@ import type { Agent } from "@/features/agent/interfaces/agent.interfaces"
 import type { Chat, ChatMessageMetadata } from "@/features/chat/interfaces/chat.interfaces"
 import type { WorkspaceDirectoryUser } from "@/features/workspace/interfaces/directory.interfaces"
 import { MessageHelper } from "./message.helper"
+import { getLocale, t } from "@/lib/i18n"
 
 interface ResolveParticipantOptions {
   agents: Agent[]
@@ -115,8 +116,8 @@ export class ChatThreadHelper {
     const label =
       profile?.name?.trim() ||
       profile?.username?.trim() ||
-      (isSelf ? params.userName || "You" : undefined) ||
-      "Teammate"
+      (isSelf ? params.userName || t("You") : undefined) ||
+      t("Teammate")
 
     return {
       id: params.userId,
@@ -135,19 +136,87 @@ export class ChatThreadHelper {
       .join("")
   }
 
-  public static formatMessageTime(value: Date) {
-    return new Intl.DateTimeFormat("en-US", {
+  // In the interface's language, not a fixed en-US: a Portuguese window read
+  // "Sat, Sep 12" over "5:49 PM".
+  public static formatMessageTime(value: Date, locale: string = getLocale()) {
+    return new Intl.DateTimeFormat(locale, {
       hour: "numeric",
       minute: "2-digit",
     }).format(value)
   }
 
-  public static formatMessageDay(value: Date) {
-    return new Intl.DateTimeFormat("en-US", {
+  public static formatMessageDay(value: Date, locale: string = getLocale()) {
+    return new Intl.DateTimeFormat(locale, {
       weekday: "short",
       month: "short",
       day: "numeric",
     }).format(value)
+  }
+
+  /**
+   * "You and Ana reacted with 👍".
+   *
+   * The daemon records who reacted by id — a user's id, an agent's slug —
+   * never by name. The tooltip used to compare those ids with the viewer's
+   * display name, so nothing ever matched and it printed the raw UUID.
+   */
+  public static formatReactionTooltip(options: {
+    actors: string[]
+    emoji: string
+    selfUserId?: string
+    usersById?: ReadonlyMap<string, Pick<WorkspaceDirectoryUser, "name" | "username">>
+    agents?: Array<Pick<Agent, "id" | "name">>
+  }): string {
+    const nameOf = (actor: string) => {
+      if (options.selfUserId && actor === options.selfUserId) return t("You")
+      const user = options.usersById?.get(actor)
+      const userName = user?.name?.trim() || user?.username?.trim()
+      if (userName) return userName
+      return options.agents?.find((agent) => agent.id === actor)?.name || actor
+    }
+    const names = options.actors.map(nameOf)
+    const emoji = options.emoji
+
+    if (names.length === 1) {
+      return t("{{name}} reacted with {{emoji}}", { name: names[0], emoji })
+    }
+    if (names.length === 2) {
+      return t("{{first}} and {{second}} reacted with {{emoji}}", { first: names[0], second: names[1], emoji })
+    }
+    const others = names.length - 2
+    return others === 1
+      ? t("{{first}}, {{second}} and 1 other reacted with {{emoji}}", { first: names[0], second: names[1], emoji })
+      : t("{{first}}, {{second}} and {{count}} others reacted with {{emoji}}", {
+          first: names[0],
+          second: names[1],
+          count: others,
+          emoji,
+        })
+  }
+
+  /**
+   * Whether a newly appended message should pull the thread to the bottom.
+   *
+   * Always while the reader is already there. Otherwise only for the reader's
+   * own message that the daemon has not confirmed yet — the echo of what they
+   * just sent. Following only at the bottom meant a send from a scrolled-up
+   * thread added the message below the fold and nothing visibly happened;
+   * following everything would yank somebody reading history down whenever an
+   * agent spoke.
+   */
+  public static shouldFollowNewest(options: {
+    atBottom: boolean
+    newest: UIMessage<ChatMessageMetadata> | undefined
+    persistedIds: ReadonlySet<string>
+    selfUserId?: string
+  }): boolean {
+    if (options.atBottom) return true
+    const newest = options.newest
+    if (!newest || newest.role !== "user" || options.persistedIds.has(newest.id)) {
+      return false
+    }
+    const author = newest.metadata?.type === "user" ? newest.metadata.data?.id : undefined
+    return Boolean(options.selfUserId) && author === options.selfUserId
   }
 
   public static isSameDay(left: Date | null, right: Date | null) {

@@ -10,12 +10,32 @@ import { SettingsRouteHelper } from "@/features/workspace/presentation/helpers/s
 export type ViewportTabType = "in-app" | "browser" | "file" | "changes" | "chat";
 export type WorkspaceSidebarMenu = "main" | "files" | "settings";
 
+/**
+ * What a settings section should open on, when the caller knows.
+ *
+ * Carried in the URL (`?agent=luara`), so the section reads it the same way
+ * whether it was opened from a hover card or from a link.
+ */
+export interface SettingsSelection {
+  agent?: string;
+}
+
 async function navigateToSettingsSection(
   sectionId: SettingsSectionId,
+  selection?: SettingsSelection,
 ): Promise<void> {
   const { router } = await import("@/app/router");
   const args = SettingsRouteHelper.sectionIdToNavigateArgs(sectionId);
-  await router.navigate(args as never);
+  await router.navigate(
+    (selection
+      ? {
+          ...args,
+          // Merged into what is already there: the window's own parameters
+          // (`daemon`, `platform`) ride in the same query string.
+          search: (previous: Record<string, unknown>) => ({ ...previous, ...selection }),
+        }
+      : args) as never,
+  );
 }
 
 export interface ViewportTabState {
@@ -216,7 +236,7 @@ export const ViewportStore = AosStore.create("viewport")
         },
       }));
   })
-  .addAction("openSettings", (ctx) => (section?: SettingsSectionId) => {
+  .addAction("openSettings", (ctx) => (section?: SettingsSectionId, selection?: SettingsSelection) => {
     const nextSection =
       section ??
       ctx.state.get().settings.dialog.section ??
@@ -235,7 +255,7 @@ export const ViewportStore = AosStore.create("viewport")
       },
     }));
 
-    void navigateToSettingsSection(nextSection);
+    void navigateToSettingsSection(nextSection, selection);
   })
   .addAction("closeSettings", (ctx) => () => {
     ctx.state.set((state) => ({

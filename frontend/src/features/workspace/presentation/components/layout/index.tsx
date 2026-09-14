@@ -87,8 +87,14 @@ export function WorkspaceLayout() {
   // In-app route changes (Tasks, Goals, …) reveal the Outlet by focusing the
   // "aos" tab. Sidebar chat opens call openChatTab without changing
   // pathname, so chat multi-tabs are not reset by this effect.
+  //
+  // `/chats/$id` is the exception: its page moves the conversation into a
+  // chat tab of its own. A child's effects run before its parent's, so this
+  // effect ran second and put the "aos" tab back in front — a deep link to a
+  // conversation landed on an empty page.
   useEffect(() => {
     if (activeTabId === "aos") return;
+    if (pathname.startsWith("/chats/")) return;
 
     stores.viewport.actions.setActiveTab("aos");
   }, [pathname]);

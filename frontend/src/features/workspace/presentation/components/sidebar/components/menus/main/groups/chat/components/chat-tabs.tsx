@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/tabs-subtle";
 import type { IconComponent } from "@/lib/icon-context";
 import type { IconComponentProps } from "@/lib/icon-map";
+import { t } from "@/lib/i18n";
 
 export type ChatSidebarTab = "channels" | "team" | "tasks" | "runs";
 
@@ -124,14 +125,18 @@ export function ChatTabs({ value, onValueChange, badges }: ChatTabsProps) {
     >
       {TABS.map((tab, index) => {
         const count = badges?.[tab.id] ?? 0;
+        // Translated here, at render, rather than in the table above: the
+        // table is built once when the module loads, before the interface
+        // knows its language.
+        const label = t(tab.label);
         return (
           <TabsSubtleItem
             key={tab.id}
             index={index}
             icon={TAB_ICON_COMPONENTS[tab.id]}
-            label={tab.label}
+            label={label}
             count={count > 0 ? count : undefined}
-            aria-label={tab.label}
+            aria-label={label}
           />
         );
       })}

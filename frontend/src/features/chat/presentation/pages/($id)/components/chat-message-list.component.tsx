@@ -12,6 +12,7 @@ import type {
 import type { WorkspaceDirectoryUser } from "@/features/workspace/interfaces/directory.interfaces";
 import { ChatThreadHelper } from "@/features/chat/presentation/helpers/chat-thread.helper";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
 import {
   ChatMessageItem,
   type ChatMessageReaction,
@@ -191,7 +192,12 @@ const ChatMessageRow = React.memo(function ChatMessageRow({
         animateIn={!persisted}
       />
 
-      {failure ? <ChatTurnFailure run={failure} /> : null}
+      {failure ? (
+        <ChatTurnFailure
+          run={failure}
+          agentName={agents.find((agent) => agent.id === failure.agentId)?.name}
+        />
+      ) : null}
     </React.Fragment>
   );
 }, areRowsEqual);
@@ -216,17 +222,30 @@ export function ChatMessageList({
   );
   const currentActor = selfUserId?.trim() || userName.trim() || "user";
 
+  // Read at append time, not at render time: Virtuoso calls this when the
+  // list grows, and the closure it holds may be a render old.
+  const followRef = React.useRef({ messages, persistedMessageIdSet, selfUserId });
+  followRef.current = { messages, persistedMessageIdSet, selfUserId };
+  const followOutput = React.useCallback(
+    (atBottom: boolean) =>
+      ChatThreadHelper.shouldFollowNewest({
+        atBottom,
+        newest: followRef.current.messages.at(-1),
+        persistedIds: followRef.current.persistedMessageIdSet,
+        selfUserId: followRef.current.selfUserId,
+      })
+        ? ("smooth" as const)
+        : false,
+    [],
+  );
+
   const { mutate: toggleReaction, loading: isTogglingReaction } =
     aos.client.chat.toggleReaction.useMutation({
       onSuccess: () => {
         onReactionToggled?.();
       },
-      onError: (error: any) => {
-        toast.error(
-          error?.error?.message ||
-            error?.message ||
-            "Unable to update reaction.",
-        );
+      onError: (error: unknown) => {
+        toast.error(errorMessage(error) ?? t("Unable to update reaction."));
       },
     });
 
@@ -269,8 +288,16 @@ export function ChatMessageList({
     <Conversation
       computeItemKey={(_index, message) => message.id}
       data={messages}
+      followOutput={followOutput}
       footerHeight={256}
-      scrollButtonClassName="bottom-52"
+      // Just above the composer rather than a third of the way up the thread,
+      // and opaque: over text, a see-through button read as a glyph inside
+      // the sentence ("lowest-de↓dency").
+      scrollButtonClassName="bottom-44 z-30 bg-popover shadow-sm dark:bg-popover"
+      // The thread fades out behind the lower half of the floating composer,
+      // so nothing shows in the gap under it. A painted strip cannot do this:
+      // the window's background is translucent, and text showed through it.
+      scrollerClassName="[mask-image:linear-gradient(to_bottom,black_calc(100%-5rem),transparent_calc(100%-3rem))]"
       itemContent={(index, message) => (
         <ChatMessageRow
           agents={agents}
