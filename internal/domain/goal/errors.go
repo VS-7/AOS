@@ -87,11 +87,11 @@ func errAlreadyExists(id string) error {
 		})
 }
 
-// errDueAtInvalid fires when an update's due date is neither empty nor an
-// RFC3339 instant.
-func errDueAtInvalid(raw string) error {
+// errDueAtInvalid fires when a create's or an update's due date is neither
+// empty nor an RFC3339 instant.
+func errDueAtInvalid(causer, raw string) error {
 	return apperr.New("GOAL_DUE_AT_INVALID").
-		Causer("goal.Service.Update").
+		Causer(causer).
 		Msgf("%q is not an RFC3339 instant", raw).
 		Issue("dueAt", raw).
 		Status(apperr.StatusBadRequest).

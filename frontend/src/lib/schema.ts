@@ -569,8 +569,8 @@ export interface CommandMap {
     "content"?: string;
     /** One line summarising the outcome. */
     "description"?: string;
-    /** When this goal is due, if it has a deadline. */
-    "dueAt"?: unknown;
+    /** When this goal is due, if it has a deadline: an RFC3339 instant. */
+    "dueAt"?: string;
     /** How to tell this goal was actually served. */
     "measure"?: string;
     /** How urgent this goal is. Defaults to no_priority. */

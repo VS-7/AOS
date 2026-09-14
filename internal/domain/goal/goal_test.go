@@ -507,8 +507,7 @@ func TestPriorityPublishesItsValues(t *testing.T) {
 func TestUpdateClearsTheDueDateWithAnEmptyString(t *testing.T) {
 	repo := newFakeRepository()
 	svc := newService(repo, &fakeTasks{})
-	due := refTime.Add(24 * time.Hour)
-	created, err := svc.Create(ctx(), goal.CreateInput{Title: "Dated", DueAt: &due})
+	created, err := svc.Create(ctx(), goal.CreateInput{Title: "Dated", DueAt: "2026-09-20T00:00:00Z"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -628,5 +627,50 @@ func TestUpdateAcceptsTheInstantABrowserWrites(t *testing.T) {
 	}
 	if want := time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC); updated.DueAt == nil || !updated.DueAt.Equal(want) {
 		t.Fatalf("DueAt = %v, want %v", updated.DueAt, want)
+	}
+}
+
+// goals_create read dueAt as a time and goals_update as text, so one bad
+// value was refused two ways: AOS_COMMAND_INVALID_INPUT from the decoder on
+// create, AOS_GOAL_DUE_AT_INVALID with a call to action on update. Both read
+// it the same way now, the way tasks_create and tasks_update already do.
+func TestCreateRefusesADueDateThatIsNotAnInstant(t *testing.T) {
+	repo := newFakeRepository()
+	svc := newService(repo, &fakeTasks{})
+	_, err := svc.Create(ctx(), goal.CreateInput{Title: "Dated", DueAt: "2026-09-20"})
+	if code := codeOf(t, err); code != "AOS_GOAL_DUE_AT_INVALID" {
+		t.Fatalf("code = %q, want GOAL_DUE_AT_INVALID", code)
+	}
+	if status := apperr.StatusOf(err); status != 400 {
+		t.Fatalf("status = %d, want 400", status)
+	}
+	if _, err := repo.Get(ctx(), collections.Key{"id": "dated"}); err == nil {
+		t.Fatal("the refused goal was written anyway")
+	}
+}
+
+// An agent's deadline keeps the offset it was written with. The window reads
+// a deadline written at midnight UTC as a picked calendar day, and anything
+// else as an instant in the reader's zone; normalising to UTC would turn
+// 18:00 at UTC-6 into exactly that midnight and move the deadline a day.
+func TestCreateKeepsTheOffsetADueDateWasWrittenWith(t *testing.T) {
+	repo := newFakeRepository()
+	svc := newService(repo, &fakeTasks{})
+	created, err := svc.Create(ctx(), goal.CreateInput{Title: "Dated", DueAt: "2026-08-31T18:00:00-06:00"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.DueAt == nil {
+		t.Fatal("DueAt = nil, want the deadline")
+	}
+	if got := created.DueAt.Format(time.RFC3339); got != "2026-08-31T18:00:00-06:00" {
+		t.Fatalf("DueAt = %s, want the offset kept", got)
+	}
+	blank, err := svc.Create(ctx(), goal.CreateInput{Title: "Undated", DueAt: "  "})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if blank.DueAt != nil {
+		t.Fatalf("DueAt = %v, want none for a blank value", blank.DueAt)
 	}
 }

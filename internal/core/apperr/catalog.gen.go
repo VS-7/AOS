@@ -172,7 +172,7 @@ var Catalog = []Entry{
 	{Code: "AOS_GIT_NOT_A_REPOSITORY", Package: "internal/adapters/gitcli", File: "internal/adapters/gitcli/git.go", Line: 246, Status: 422, Causer: "<dynamic>", CTA: true, Issues: []string{"dir"}},
 	{Code: "AOS_GIT_UNAVAILABLE", Package: "internal/adapters/gitcli", File: "internal/adapters/gitcli/git.go", Line: 237, Status: 422, Causer: "gitcli.Git", CTA: true},
 	{Code: "AOS_GOAL_ALREADY_EXISTS", Package: "internal/domain/goal", File: "internal/domain/goal/errors.go", Line: 79, Status: 409, Causer: "goal.Service.Create", CTA: true, Issues: []string{"id"}},
-	{Code: "AOS_GOAL_DUE_AT_INVALID", Package: "internal/domain/goal", File: "internal/domain/goal/errors.go", Line: 93, Status: 400, Causer: "goal.Service.Update", CTA: true, Issues: []string{"dueAt"}},
+	{Code: "AOS_GOAL_DUE_AT_INVALID", Package: "internal/domain/goal", File: "internal/domain/goal/errors.go", Line: 93, Status: 400, Causer: "<dynamic>", CTA: true, Issues: []string{"dueAt"}},
 	{Code: "AOS_GOAL_NOT_FOUND", Package: "internal/domain/goal", File: "internal/domain/goal/errors.go", Line: 7, Status: 404, Causer: "goal.Service.Get", CTA: true, Issues: []string{"id"}},
 	{Code: "AOS_GOAL_PRIORITY_INVALID", Package: "internal/domain/goal", File: "internal/domain/goal/errors.go", Line: 43, Status: 400, Causer: "goal.Service", CTA: true, Issues: []string{"allowed", "priority"}},
 	{Code: "AOS_GOAL_READ_FAILED", Package: "internal/domain/goal", File: "internal/domain/goal/errors.go", Line: 54, Status: 500, Causer: "<dynamic>", CTA: true, Issues: []string{"operation"}},

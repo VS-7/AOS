@@ -137,15 +137,18 @@ func (s *Service) get(ctx context.Context, id string) (*Goal, error) {
 // CreateInput is what a new goal needs. ID is derived from Title, the same
 // way every slug-keyed native does — see internal/core/slug.
 type CreateInput struct {
-	Title       string     `json:"title" jsonschema:"What this goal is." validate:"required,notblank"`
-	Description string     `json:"description,omitempty" jsonschema:"One line summarising the outcome."`
-	Status      Status     `json:"status,omitempty" jsonschema:"One of: active, achieved, abandoned, paused. Defaults to active."`
-	Priority    Priority   `json:"priority,omitempty" jsonschema:"How urgent this goal is. Defaults to no_priority."`
-	Project     string     `json:"project,omitempty" jsonschema:"Project this goal belongs to, if any."`
-	DueAt       *time.Time `json:"dueAt,omitempty" jsonschema:"When this goal is due, if it has a deadline."`
-	Skill       string     `json:"skill,omitempty" jsonschema:"Skill installing this goal, if any."`
-	Measure     string     `json:"measure,omitempty" jsonschema:"How to tell this goal was actually served."`
-	Content     string     `json:"content,omitempty" jsonschema:"Markdown body."`
+	Title       string   `json:"title" jsonschema:"What this goal is." validate:"required,notblank"`
+	Description string   `json:"description,omitempty" jsonschema:"One line summarising the outcome."`
+	Status      Status   `json:"status,omitempty" jsonschema:"One of: active, achieved, abandoned, paused. Defaults to active."`
+	Priority    Priority `json:"priority,omitempty" jsonschema:"How urgent this goal is. Defaults to no_priority."`
+	Project     string   `json:"project,omitempty" jsonschema:"Project this goal belongs to, if any."`
+	// DueAt is text for the same reason UpdateInput.DueAt is: a value that is
+	// not an instant is refused as GOAL_DUE_AT_INVALID, saying what to send,
+	// instead of failing the whole payload's decoding.
+	DueAt   string `json:"dueAt,omitempty" jsonschema:"When this goal is due, if it has a deadline: an RFC3339 instant."`
+	Skill   string `json:"skill,omitempty" jsonschema:"Skill installing this goal, if any."`
+	Measure string `json:"measure,omitempty" jsonschema:"How to tell this goal was actually served."`
+	Content string `json:"content,omitempty" jsonschema:"Markdown body."`
 
 	command.Reasoning
 }
@@ -180,11 +183,16 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Goal, error) {
 		return nil, errPriorityInvalid(string(priority))
 	}
 
+	due, err := parseDueAt("goal.Service.Create", in.DueAt)
+	if err != nil {
+		return nil, err
+	}
+
 	now := s.clock.Now()
 	g := Goal{
 		ID: id, Title: title, Description: in.Description, Status: status,
 		Priority: priority,
-		Project:  in.Project, DueAt: in.DueAt, Skill: in.Skill, Measure: in.Measure,
+		Project:  in.Project, DueAt: due, Skill: in.Skill, Measure: in.Measure,
 		Content:   in.Content,
 		CreatedAt: now, UpdatedAt: now,
 	}
@@ -252,7 +260,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Goal, error) {
 		current.Project = *in.Project
 	}
 	if in.DueAt != nil {
-		due, err := parseDueAt(*in.DueAt)
+		due, err := parseDueAt("goal.Service.Update", *in.DueAt)
 		if err != nil {
 			return nil, err
 		}
@@ -274,16 +282,18 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Goal, error) {
 	return current, nil
 }
 
-// parseDueAt reads UpdateInput.DueAt: blank clears the deadline, anything
-// else must be an RFC3339 instant.
-func parseDueAt(raw string) (*time.Time, error) {
+// parseDueAt reads a due date sent to Create or Update: blank is no
+// deadline, anything else must be an RFC3339 instant. The instant keeps the
+// offset it was written with — the window tells a picked calendar day
+// (midnight UTC) from a time of day by it, see frontend lib/calendar-day.ts.
+func parseDueAt(causer, raw string) (*time.Time, error) {
 	text := strings.TrimSpace(raw)
 	if text == "" {
 		return nil, nil
 	}
 	due, err := time.Parse(time.RFC3339, text)
 	if err != nil {
-		return nil, errDueAtInvalid(raw)
+		return nil, errDueAtInvalid(causer, raw)
 	}
 	return &due, nil
 }
