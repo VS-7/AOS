@@ -597,7 +597,7 @@ func (c *Client) whileAlive(ctx context.Context) (context.Context, context.Cance
 // connection, a dial that timed out. That is AOS_DAEMON_UNREACHABLE, and the
 // window waits it out and asks again, since a daemon it started a moment ago
 // may not be listening yet. After it, the daemon may be doing the work, and
-// asking again could do it twice — see failed. The mark is reset for every
+// asking again could do it twice — unless it was only a question: see failed. The mark is reset for every
 // attempt, since the transport retries on a fresh connection by itself when an
 // idle one turns out to have been closed before anything reached it.
 func (c *Client) send(req *http.Request) (*http.Response, error) {
@@ -618,11 +618,18 @@ func (c *Client) send(req *http.Request) (*http.Response, error) {
 }
 
 // failed names a request that did not get its whole answer.
+//
+// Only a request that can change something is left in doubt. A GET is a
+// question — the session, the published surface, the daemon's health, a
+// file's bytes — and one the daemon took and never answered is the daemon not
+// answering, which asking again cannot make worse: it is AOS_DAEMON_UNREACHABLE
+// like a request that never left, the code the sign-in screen and the layout
+// recognise, rather than a warning that it may run twice.
 func (c *Client) failed(req *http.Request, written bool, err error) error {
 	path := req.URL.Path
 	cause := context.Cause(req.Context())
 	switch {
-	case !written:
+	case !written, req.Method == http.MethodGet, req.Method == http.MethodHead:
 		return errUnreachable(c.base, err)
 	case errors.Is(cause, errStoppedAnswering), errors.Is(cause, errNoAnswerInTime):
 		return errTimedOut(c.base, path, cause)

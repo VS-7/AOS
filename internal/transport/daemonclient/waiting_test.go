@@ -247,10 +247,52 @@ func TestAStreamWhoseAnswerNeverStartsIsAbandoned(t *testing.T) {
 
 	started := time.Now()
 	_, err := client.Stream(ctx(), "/api/file/content?path=a.mp4", http.Header{})
-	if code := codeOf(t, err); code != "AOS_DAEMON_TIMEOUT" {
-		t.Fatalf("code = %s, want AOS_DAEMON_TIMEOUT", code)
+	// A read, so the daemon not answering rather than something left in doubt
+	// (see TestAnUnansweredQuestionIsTheDaemonNotAnswering).
+	if code := codeOf(t, err); code != "AOS_DAEMON_UNREACHABLE" {
+		t.Fatalf("code = %s, want AOS_DAEMON_UNREACHABLE", code)
 	}
 	if waited := time.Since(started); waited > 3*time.Second {
 		t.Errorf("waited %s for an answer that never started", waited)
+	}
+}
+
+// A question about the daemon — who is signed in, what it publishes, whether
+// it is healthy — asked of a daemon that took it and never answered came back
+// as AOS_DAEMON_TIMEOUT: "received /api/auth/status and has not answered it;
+// it may still be doing it", with a call to action warning that asking again
+// could do it twice. A read done twice is a read, and the code stopped being
+// the one the sign-in screen recognises as the daemon not answering, so it
+// showed that sentence instead. A read that goes unanswered is the daemon not
+// answering; only a request that can change something is left in doubt.
+func TestAnUnansweredQuestionIsTheDaemonNotAnswering(t *testing.T) {
+	daemon := newSlowDaemon(t, time.Hour)
+	daemon.healthy.Store(false)
+	client := daemonclient.New(daemonclient.Options{BaseURL: daemon.URL, Timeout: 100 * time.Millisecond, Token: "t"})
+
+	questions := map[string]func() error{
+		"Status":   func() error { _, err := client.Status(ctx()); return err },
+		"Session":  func() error { _, err := client.Session(ctx()); return err },
+		"Commands": func() error { _, err := client.Commands(ctx()); return err },
+		"Manifest": func() error { _, err := client.Manifest(ctx()); return err },
+		"Health":   func() error { _, err := client.Health(ctx()); return err },
+		"Stream": func() error {
+			_, err := client.Stream(ctx(), "/api/file/content?path=a.mp4", http.Header{})
+			return err
+		},
+	}
+	for name, ask := range questions {
+		err := ask()
+		if code := codeOf(t, err); code != "AOS_DAEMON_UNREACHABLE" {
+			t.Errorf("%s: code = %s, want AOS_DAEMON_UNREACHABLE", name, code)
+		}
+		if strings.Contains(strings.ToLower(err.Error()), "twice") || strings.Contains(err.Error(), "may still be doing it") {
+			t.Errorf("%s: a read is reported as something that could run twice: %v", name, err)
+		}
+	}
+
+	// Signing in can mint a session, so its fate stays in doubt.
+	if _, err := client.Login(ctx(), "vitor", "pw"); codeOf(t, err) != "AOS_DAEMON_TIMEOUT" {
+		t.Errorf("Login: code = %s, want AOS_DAEMON_TIMEOUT", codeOf(t, err))
 	}
 }
