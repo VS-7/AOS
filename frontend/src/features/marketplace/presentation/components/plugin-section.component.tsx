@@ -54,7 +54,7 @@ export function PluginSection({
           onClick={() => setExpanded(true)}
           className="mt-4 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
-          {t("View")} {hiddenCount} more
+          {t("View {{count}} more", { count: hiddenCount })}
         </button>
       ) : null}
     </section>

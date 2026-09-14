@@ -1,6 +1,8 @@
 import { AosStore } from "@/app/builders/store";
 
-export const BROWSER_HOME_URL = "https://duckduckgo.com/";
+// A search opens here in the tab. Search engines, this one included, refuse
+// to be framed, so the renderer's "Open in your browser" is the way through;
+// there is no home page any more — a new tab starts on its own blank page.
 const BROWSER_SEARCH_URL = "https://duckduckgo.com/?q=";
 
 export interface BrowserNavigateResult {
@@ -12,7 +14,7 @@ export function normalizeBrowserUrl(value: string) {
   const input = value.trim();
 
   if (!input) {
-    return BROWSER_HOME_URL;
+    return "";
   }
 
   try {

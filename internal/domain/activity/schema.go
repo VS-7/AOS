@@ -25,10 +25,23 @@ type ListInput struct {
 
 // ListOutput is a page of the inbox.
 type ListOutput struct {
-	Activities []Activity `json:"activities" jsonschema:"The entries, newest first."`
-	Total      int        `json:"total" jsonschema:"How many matched before the page was cut."`
-	Unread     int        `json:"unread" jsonschema:"How many of the matches you have not read."`
-	Actor      string     `json:"actor" jsonschema:"Whose read state was applied."`
+	Activities []Entry `json:"activities" jsonschema:"The entries, newest first, each saying whether you have read it."`
+	Total      int     `json:"total" jsonschema:"How many matched before the page was cut."`
+	Unread     int     `json:"unread" jsonschema:"How many of the matches you have not read."`
+	Actor      string  `json:"actor" jsonschema:"Whose read state was applied."`
+}
+
+// Entry is one line of an inbox page: the activity, and whether the actor the
+// page was read for has seen it.
+//
+// Read lives here and not on Activity because it is not a fact about what
+// happened — it is one reader's overlay (ReadState), and the log stays the
+// same record for everyone. Without it a page carried only the unread count,
+// so a reader could not tell which lines that count was about.
+type Entry struct {
+	Activity
+
+	Read bool `json:"read" jsonschema:"Whether the actor this page was read for has seen this entry."`
 }
 
 // GetInput names one entry.

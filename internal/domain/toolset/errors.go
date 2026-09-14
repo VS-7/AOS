@@ -169,6 +169,21 @@ func errConnectFailed(id string, cause error) error {
 }
 
 // errCallFailed wraps a failure of the tool call itself, once connected.
+// errListToolsFailed fires when a toolset connected but could not say what it
+// publishes — distinct from errConnectFailed, which never got that far.
+func errListToolsFailed(id string, cause error) error {
+	return apperr.New("TOOLSET_LIST_TOOLS_FAILED").
+		Causer("toolset.Service.Tools").
+		Msgf("toolset %q connected but could not list its tools: %v", id, cause).
+		Issue("id", id).
+		Status(apperr.StatusBadGateway).
+		Wrap(cause).
+		CTA(apperr.CallToAction{
+			Label: "check that the toolset's target publishes a tool list",
+			Tool:  "toolsets_get",
+		})
+}
+
 func errCallFailed(id, tool string, cause error) error {
 	return apperr.New("TOOLSET_CALL_FAILED").
 		Causer("toolset.Service.Call").

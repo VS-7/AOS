@@ -394,6 +394,10 @@ function stepTitle(step: Step): string {
       return t("Security");
     case "region":
       return t("Preferences");
+    // The footer read "5 of 6 · " with nothing after the dot: this step had
+    // no title.
+    case "workspace":
+      return t("Workspace");
     case "orchestrator":
       return t("Copilot");
     default:
@@ -911,7 +915,7 @@ function OrchestratorStep({ data, update }: { data: WizardData; update: Update }
           </div>
 
           <p className="text-xs text-muted-foreground">
-            {t("These preferences aren't wired to a running orchestrator yet — the one this workspace gets is seeded automatically when it's created.")}
+            {t("These are written into the instructions of the copilot this workspace creates. You can edit them later in its agent settings.")}
           </p>
         </div>
       </div>
@@ -1115,10 +1119,15 @@ function InitStep({
             return (
               <div key={stage.id} className="flex items-start gap-3">
                 <div className="relative mt-1.5 flex-shrink-0">
+                  {/* The colour is a class, not an animated value: the theme's
+                      colours are oklch(), which framer-motion cannot
+                      interpolate — it warned on every stage and snapped. */}
                   <motion.div
-                    className="w-2 h-2 rounded-full"
+                    className={cn(
+                      "w-2 h-2 rounded-full transition-colors duration-300",
+                      isStageDone || isStageActive ? "bg-primary" : "bg-muted",
+                    )}
                     animate={{
-                      backgroundColor: isStageDone || isStageActive ? "var(--primary)" : "var(--muted)",
                       scale: isStageActive ? [1, 1.3, 1] : 1,
                     }}
                     transition={{ scale: { duration: 1.2, repeat: Infinity, ease: "easeInOut" } }}

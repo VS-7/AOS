@@ -129,7 +129,7 @@ export function WorkspaceTabItem({
             <motion.button
               key="close"
               type="button"
-              aria-label={`Close ${getTabLabel(tab)}`}
+              aria-label={t("Close {{name}}", { name: getTabLabel(tab) })}
               initial={{ opacity: 0, scale: 0.88 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.88 }}

@@ -1,7 +1,9 @@
 import * as React from "react";
+import { Compass, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/i18n";
-import { frameAddress, frameSandbox } from "@/lib/wails";
+import { Button } from "@/components/ui/button";
+import { frameAddress, frameSandbox, openExternal } from "@/lib/wails";
 import { ViewportTabState } from "@/features/workspace/presentation/stores/viewport.store";
 
 /**
@@ -34,6 +36,16 @@ import { ViewportTabState } from "@/features/workspace/presentation/stores/viewp
  * and browser/index.tsx's own comments on what still depends on the bridge
  * that does not exist.
  */
+/** An http(s) page on another origin: something a site, not the window, serves. */
+function isExternalSite(url: string): boolean {
+  if (typeof window === "undefined" || !/^https?:\/\//i.test(url)) return false;
+  try {
+    return new URL(url).origin !== window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 export function BrowserRenderer({
   tab,
   active,
@@ -98,6 +110,7 @@ export function BrowserRenderer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab.url]);
   const src = tab.url && frame?.from === tab.url ? frame.src : null;
+  const external = tab.url ? isExternalSite(tab.url) : false;
 
   return (
     <div
@@ -106,6 +119,35 @@ export function BrowserRenderer({
         !active && "pointer-events-none opacity-0",
       )}
     >
+      {!tab.url ? (
+        // A new tab has no address until one is typed. It used to open
+        // https://duckduckgo.com/, which refuses to be framed, so every new
+        // tab was the browser's broken-page icon and nothing else.
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <Compass className="size-8 text-muted-foreground/60" aria-hidden />
+          <p className="text-sm font-medium text-muted-foreground">{t("New tab")}</p>
+          <p className="max-w-sm text-xs text-muted-foreground/80">
+            {t("Type an address or a search in the bar above.")}
+          </p>
+        </div>
+      ) : null}
+      {src && external ? (
+        // A site that refuses to be framed still fires `load`, into a page
+        // this one cannot read, so the refusal cannot be detected — only
+        // offered a way around, always, where the person will look for it.
+        <div className="flex items-center justify-between gap-3 border-b bg-muted/40 px-4 py-1.5 text-xs text-muted-foreground">
+          <span className="truncate">{t("Some sites refuse to open inside AOS.")}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 shrink-0 gap-1 px-2 text-xs"
+            onClick={() => void openExternal(tab.url!)}
+          >
+            <ExternalLink className="size-3" aria-hidden />
+            {t("Open in your browser")}
+          </Button>
+        </div>
+      ) : null}
       {src ? (
         <iframe
           key={`${tab.id}:${tab.reloadNonce ?? 0}`}

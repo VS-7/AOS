@@ -132,6 +132,13 @@ func (s *Service) Get(ctx context.Context, in GetInput) (*Listing, error) {
 		return nil, errSourceRequired()
 	}
 
+	// The same refusal Discovery and Install give. Without it an empty
+	// configuration fell through the loop below and answered "listing not
+	// found", which reads as a registry that was asked and did not have it.
+	if len(s.registries) == 0 {
+		return nil, errNoRegistriesConfigured()
+	}
+
 	ids := s.order
 	if in.Registry != "" {
 		if _, ok := s.registries[in.Registry]; !ok {
@@ -187,6 +194,12 @@ func (s *Service) Install(ctx context.Context, in InstallInput) (*skill.Skill, e
 		if err != nil {
 			lastErr = errRegistryUnreachable(id, err)
 			continue
+		}
+		// Provenance: the installed skill records where it came from, and a
+		// registry's package rarely names its own source. Without this a
+		// marketplace install was indistinguishable from a local one.
+		if strings.TrimSpace(pkg.Manifest.Source) == "" {
+			pkg.Manifest.Source = source
 		}
 		return s.installer.InstallPackage(ctx, source, pkg, in.acceptedAll)
 	}

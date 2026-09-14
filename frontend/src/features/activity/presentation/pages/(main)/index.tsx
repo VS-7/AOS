@@ -8,15 +8,17 @@ export const ActivitiesPage = aos.page("/activities")
     description: "Activities",
   })
   .use(WorkspacePageMiddleware())
-  .withComponent(({ route, client }) => {
+  .withComponent(() => {
+    // The height the layout gives the page, not the window's: `h-screen`
+    // under the top bar ran the list's end — and "Load more" — past the
+    // bottom edge. The panel scrolls its own list, so its header and the
+    // Mark all as read button stay where they are.
     return (
-      <div className="overflow-y-auto h-screen">
-        <div className="container max-w-5xl mx-auto">
-          <InboxPanel className="w-full border-l-0" />
+      <div className="h-full min-h-0 overflow-hidden">
+        <div className="container mx-auto h-full min-h-0 max-w-5xl">
+          <InboxPanel className="h-full w-full border-l-0" />
         </div>
       </div>
     );
   })
   .build();
-
-

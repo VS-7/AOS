@@ -1,37 +1,40 @@
-import type { NotificationPayload } from "@/core/builders/notification";
 import { AosStore } from "@/app/builders/store";
 import { api } from "@/lib/aos-facade";
+import type { ActivityEntry, ActivityList } from "@/features/activity/interfaces/activity.interfaces";
 
 /**
- * What `activity_list` actually answers with
- * (`internal/domain/activity/schema.go`'s `ListOutput`).
+ * The inbox, as `activity_list` answers it
+ * (`internal/domain/activity/schema.go`'s `ListOutput`): a page of entries,
+ * each saying whether the reader has seen it, the total that matched, and the
+ * unread count for all of them.
  *
- * `unread` is a *count* the daemon computes for the calling actor, not
- * something derivable from the entries: Go's `Activity`
- * (`internal/domain/activity/entity.go`) has no `read` field at all —
- * read state is per-actor and lives server-side, reachable only through
- * `activity_read`/`activity_read-all`. The ported code counted
- * `entry.read.length === 0` instead, which is the *original* app's shape
- * (`NotificationPayload.read`, a receipt array — see that interface's own
- * doc comment on how it was reconstructed). Against this backend every
- * entry's `read` is `undefined`, so the count threw `Cannot read
- * properties of undefined (reading 'length')` on the very first entry —
- * inside a preload whose only error handling is a `console.error`
- * (`app/builders/store.ts`'s `_hydrateActiveNamespace`). The store kept
- * its empty default state, so the Activities screen rendered no entries
- * and the sidebar's unread badge never appeared, silently, on every boot.
+ * `unread` is a count the daemon computes for the calling actor. Each entry's
+ * own `read` is the same overlay applied line by line; without it every line
+ * showed as unread forever, whatever "mark all as read" had recorded.
  */
-interface ActivityListOutput {
-  activities?: NotificationPayload[];
-  total?: number;
-  unread?: number;
-  actor?: string;
+
+/** One page of the inbox. The daemon's default, named so paging agrees with it. */
+const PAGE_SIZE = 50;
+
+/** A page, or the refusal: a list that could not be read is not an empty one. */
+async function fetchPage(offset: number, limit: number): Promise<ActivityList> {
+  const response = await api.activity.list.query({ query: { offset, limit } });
+  if (response.error) throw response.error;
+  const output = response.data as Partial<ActivityList> | undefined;
+  return {
+    activities: output?.activities ?? [],
+    total: output?.total ?? 0,
+    unread: output?.unread ?? 0,
+    actor: output?.actor ?? "",
+  };
 }
 
 export const ActivityStore = AosStore.create("activities")
   .withState({
-    activities: [] as NotificationPayload[],
-    unreadCount: 0
+    activities: [] as ActivityEntry[],
+    /** How many entries matched in all, loaded or not — what decides "Load more". */
+    total: 0,
+    unreadCount: 0,
   })
   .withPersistence({
     enabled: false,
@@ -40,53 +43,69 @@ export const ActivityStore = AosStore.create("activities")
     resolver: ({ namespaces }) => namespaces.workspaceId,
     strategy: "memory-partition",
   })
-  .withPreload(async (ctx) => {
-    // task-12 disclosed divergence: `activity_list` (Go's
-    // `internal/domain/activity/schema.go` `ListOutput`) answers
-    // `{ activities, total, unread, actor }`, not a bare array — reading
-    // `response.data` directly (as this originally did) hands `.filter` a
-    // plain object and throws `response.data.filter is not a function` on
-    // every load. `command-map.ts` has no mechanism for unwrapping a named
-    // `Output` struct's field the way `wrapOut` nests a bare entity (that
-    // only adds a layer, it doesn't remove one), so this is a call-site
-    // read fix, not a map entry.
-    const response = await api.activity.list.query();
-    const output = response.data as ActivityListOutput | undefined;
-    const activities = output?.activities ?? [];
-
-    return {
-      activities,
-      unreadCount: output?.unread ?? 0,
-    };
+  .withPreload(async () => {
+    const page = await fetchPage(0, PAGE_SIZE);
+    return { activities: page.activities, total: page.total, unreadCount: page.unread };
   })
   // `mutateOrThrow`: `mutate` resolves a refusal as a value, and these
   // awaited it and carried on — so a daemon that refused, or was not there
   // at all, still zeroed the unread badge and let the caller announce
   // "All activities marked as read". The state changes only after the daemon
   // has said yes, and a refusal reaches the caller as the rejection it is.
-  .addAction("markAsRead", () => async (activityId: string) => {
+  .addAction("markAsRead", (ctx) => async (activityId: string) => {
+    const entry = ctx.state.get().activities.find((item) => item.id === activityId);
+    if (entry?.read) return;
     await api.activity.markAsRead.mutateOrThrow({
       params: {
-        activity: activityId
-      }
-    })
+        activity: activityId,
+      },
+    });
+    ctx.state.set((prev) => ({
+      ...prev,
+      activities: prev.activities.map((item) => (item.id === activityId ? { ...item, read: true } : item)),
+      unreadCount: entry ? Math.max(0, prev.unreadCount - 1) : prev.unreadCount,
+    }));
   })
   .addAction("markAllAsRead", (ctx) => async () => {
     await api.activity.markAllAsRead.mutateOrThrow();
     return ctx.state.set((prev) => ({
       ...prev,
+      activities: prev.activities.map((item) => ({ ...item, read: true })),
       unreadCount: 0,
     }));
   })
+  // The next page, after what is already on screen. The list used to stop at
+  // the daemon's first 50 and then claim there were no more.
+  .addAction("loadMore", (ctx) => async () => {
+    const loaded = ctx.state.get().activities;
+    const page = await fetchPage(loaded.length, PAGE_SIZE);
+    const seen = new Set(loaded.map((item) => item.id));
+    ctx.state.set((prev) => ({
+      ...prev,
+      activities: [...prev.activities, ...page.activities.filter((item) => !seen.has(item.id))],
+      total: page.total,
+      unreadCount: page.unread,
+    }));
+  })
+  // As many entries as are already loaded, so a new activity arriving does
+  // not snap a long list the person paged through back to its first page.
+  //
+  // A refresh that fails keeps what is on screen: it runs on every realtime
+  // activity, unattended, and wiping the inbox because one read failed would
+  // be worse than showing it a moment stale.
   .addAction("refresh", (ctx) => async () => {
-    // Same shape fix as `withPreload` above.
-    const response = await api.activity.list.query();
-    const output = response.data as ActivityListOutput | undefined;
-    const activities = output?.activities ?? [];
-
+    const loaded = ctx.state.get().activities.length;
+    let page: ActivityList;
+    try {
+      page = await fetchPage(0, Math.max(PAGE_SIZE, loaded));
+    } catch (error) {
+      console.error("[activity] the inbox could not be refreshed", error);
+      return;
+    }
     return ctx.state.set({
-      activities,
-      unreadCount: output?.unread ?? 0,
+      activities: page.activities,
+      total: page.total,
+      unreadCount: page.unread,
     });
   })
   .build();

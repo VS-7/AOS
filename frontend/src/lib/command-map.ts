@@ -1017,6 +1017,10 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // `{toolset, connectionType, requirements}` — the field names this side
   // already read — with each variable marked set or missing and no values.
   "toolset.getConfig": { key: "toolsets_get-config", renameIn: { toolset: "id" } },
+  // What the sheet's Tools tab lists. It read `toolset.tools` off
+  // toolsets_get, a field no toolset has; toolsets_tools connects and asks,
+  // answering `{tools: [{name, description, inputSchema}]}`.
+  "toolset.listTools": { key: "toolsets_tools", renameIn: { toolset: "id" } },
   "toolset.updateConfig": {
     key: "toolsets_update-config",
     renameIn: { toolset: "id" },
@@ -1191,24 +1195,27 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
 
   // `marketplace.list` is the ported UI's name for a search/browse call —
   // maps to `marketplace_discovery`, not a literal `marketplace_list` (no
-  // such command; discovery is the list-equivalent). `getByName` maps to
-  // `marketplace_get`, which takes `source` — `renameIn: { name: "source" }`
-  // is a guess at the UI's own param name, not yet confirmed against the
-  // call site; `install` has no live caller yet.
-  // The marketplace screens read `.items` off the list and `.skill` off the
-  // detail, and sent `query`/`category`/`page`/`pageSize`. Go answers a bare
-  // `[]Listing` and a bare `*Listing`, and its search takes `text`/`tag` —
-  // so the list rendered nothing (`data.items` was undefined on an array)
-  // and the search box filtered nothing. `page`/`pageSize` have no Go
-  // counterpart at all and are dropped rather than sent to be ignored.
+  // such command; discovery is the list-equivalent).
+  // The marketplace screens read `.items` off the list, and sent
+  // `query`/`category`/`page`/`pageSize`. Go answers a bare `[]Listing` and
+  // its search takes `text`/`tag`. `page`/`pageSize` have no Go counterpart
+  // at all and are dropped rather than sent to be ignored. The items stay
+  // Go's Listing: the marketplace feature's `toMarketplaceListing` turns
+  // them into what its cards render, next to the rest of that shape.
   "marketplace.list": {
     key: "marketplace_discovery",
     renameIn: { query: "text", category: "tag" },
     coerceIn: { page: () => ({}), pageSize: () => ({}) },
     wrapOut: "items",
   },
-  "marketplace.getByName": { key: "marketplace_get", renameIn: { name: "source" }, wrapOut: "skill" },
-  "marketplace.install": "marketplace_install",
+  // One listing, by the `source` ("owner/repo") the plugin page routes by.
+  // It was wrapped as `.skill` for a page that also required an `inventory`
+  // Go never sends, so every plugin page was "Page not found".
+  "marketplace.getByName": { key: "marketplace_get", renameIn: { name: "source" }, wrapOut: "listing" },
+  // What the Install button calls: a registry package by its source and the
+  // registry that listed it. The button used to call skills_install with a
+  // made-up "aos/registry" source, which is not a package anywhere.
+  "marketplace.install": { key: "marketplace_install", wrapOut: "skill" },
 
   // Same bug class as goal.* just above: projects_list/-get/-create all
   // answer bare (internal/domain/project/service.go). Three live readers

@@ -6,6 +6,9 @@ export const viewportGroup = AosTriggerGroup.create("Viewport")
     id: "viewport.toggle.sidebar",
     label: "Toggle Sidebar",
     keybind: "mod+b",
+    // The sidebar component answers ⌘B itself (components/ui/sidebar.tsx);
+    // binding it here as well would toggle twice and change nothing.
+    globalKeybind: false,
     icon: "PanelLeft",
     handler: ({ stores }) => stores.viewport.actions.toggle('layout.sidebar.visible'),
   })

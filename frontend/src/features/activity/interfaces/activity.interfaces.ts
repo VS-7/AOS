@@ -23,8 +23,18 @@ export interface Activity {
   createdAt: string;
 }
 
+/**
+ * One line of an inbox page (`schema.go`'s `Entry`): the activity, plus
+ * whether the actor the page was read for has seen it. `read` is per reader,
+ * which is why it is not on `Activity` — the log is the same record for
+ * everyone.
+ */
+export interface ActivityEntry extends Activity {
+  read?: boolean;
+}
+
 export interface ActivityList {
-  activities: Activity[];
+  activities: ActivityEntry[];
   total: number;
   unread: number;
   actor: string;
