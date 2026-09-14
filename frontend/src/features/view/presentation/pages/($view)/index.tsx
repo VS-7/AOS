@@ -8,6 +8,7 @@ import { t } from "@/lib/i18n";
 import { isDormant } from "@/lib/command-map";
 import { DormantGate } from "@/components/DormantDomain";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
+import { resolveSkill } from "@/lib/skill-scope";
 import {
   CollectionViewProvider,
   ViewRenderer,
@@ -24,7 +25,7 @@ export const ViewPage = aos
     description: "Render an independent view",
   })
   .use(WorkspacePageMiddleware())
-  .withLoader(async ({ client, request, response }) => {
+  .withLoader(async ({ client, request, response, stores }) => {
     const { id: viewId } = request.params;
 
     // The domain is live — `views_*` is a real Go group — and this stays as
@@ -32,11 +33,21 @@ export const ViewPage = aos
     // declared dormant the empty envelope does not reach the `!view` check
     // below and preempt `DormantGate` with a 404.
     if (isDormant("view")) {
-      return { view: null, viewId, renderResult: null, renderError: null };
+      return { view: null, viewId, skill: undefined, renderResult: null, renderError: null };
     }
 
+    // A view a skill brought is found only with its skill. The sidebar puts it
+    // in the address; a link that does not (Home, the palette, a reload of an
+    // older URL) still resolves it from the views already listed.
+    const skill = await resolveSkill(
+      viewId,
+      (request.query as { skill?: unknown } | undefined)?.skill,
+      stores.view?.state.items,
+      async () => (await client.view.list.query({ query: {} })).data?.views ?? [],
+    );
+
     const viewResult = await client.view.getById.query({
-      params: { view: viewId },
+      params: { view: viewId, skill },
     });
 
     const view = viewResult.data?.view ?? null;
@@ -46,7 +57,7 @@ export const ViewPage = aos
     }
 
     const renderResult = await client.view.render.query({
-      params: { view: viewId },
+      params: { view: viewId, skill },
       query: {},
     });
 
@@ -58,6 +69,7 @@ export const ViewPage = aos
     return {
       view,
       viewId,
+      skill,
       renderResult: renderResponse,
       // Why the view could not be rendered — a source collection that is gone,
       // say. Without it the page could only say it had no spec to draw.
@@ -75,7 +87,7 @@ export const ViewPage = aos
       return <DormantGate feature="view">{null}</DormantGate>;
     }
 
-    const { view, viewId, renderResult, renderError } = route.useLoaderData();
+    const { view, viewId, skill, renderResult, renderError } = route.useLoaderData();
     const [spec, setSpec] = React.useState<Spec | null>(() =>
       ViewDataHelper.getSpec(renderResult),
     );
@@ -100,7 +112,7 @@ export const ViewPage = aos
           actionId,
           async (params: Record<string, unknown>) => {
             const response = await aos.client.view.executeAction.mutate({
-              params: { view: viewId, actionId },
+              params: { view: viewId, actionId, skill },
               body: { params },
             });
 
@@ -133,7 +145,7 @@ export const ViewPage = aos
           },
         ]),
       );
-    }, [viewDef, viewId]);
+    }, [viewDef, viewId, skill]);
 
     const title =
       (view as ViewDefinition & { title?: string; name?: string }).title ||
@@ -164,7 +176,7 @@ export const ViewPage = aos
             error={null}
             onExecuteAction={async (actionId, params) => {
               const response = await aos.client.view.executeAction.mutate({
-                params: { view: viewId, actionId },
+                params: { view: viewId, actionId, skill },
                 body: { params },
               });
               // The daemon's refusal is the reason, when there is one; "No
@@ -189,7 +201,7 @@ export const ViewPage = aos
                   {t("This view could not be rendered: {{reason}}", { reason: renderError })}
                 </div>
               ) : (
-                <ViewRenderer key={viewId} spec={spec} handlers={handlers} />
+                <ViewRenderer key={`${skill ?? ""}:${viewId}`} spec={spec} handlers={handlers} />
               )}
             </div>
           </CollectionViewProvider>

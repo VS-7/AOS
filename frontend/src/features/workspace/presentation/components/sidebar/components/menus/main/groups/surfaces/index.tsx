@@ -66,7 +66,7 @@ type SurfaceRow = {
  * chrome / kind cues use HugeIcons.
  */
 export function WorkspaceSidebarSurfacesGroupMenu() {
-  const { current: currentView, open: openView, views } = useViews();
+  const { isCurrent: isCurrentView, open: openView, views } = useViews();
   const {
     artifacts,
     current: currentArtifact,
@@ -78,16 +78,17 @@ export function WorkspaceSidebarSurfacesGroupMenu() {
       kind: "view" as const,
       id: view.id,
       managed: view.scope !== "skill" && !view.skill,
-      key: `view:${view.id}`,
+      key: `view:${view.skill ?? ""}:${view.id}`,
       label: view.title,
       icon:
         typeof view.metadata?.icon === "string"
           ? view.metadata.icon
           : undefined,
       // By id, which is what `/views/$id` and the URL carry; the name is only
-      // the label. Opening by name landed on "Page not found".
-      isActive: currentView === view.id,
-      onOpen: () => openView(view.id),
+      // the label. Opening by name landed on "Page not found" — and so did a
+      // skill's view opened without its skill.
+      isActive: isCurrentView(view),
+      onOpen: () => openView(view.id, view.skill),
     }));
 
     const artifactRows: SurfaceRow[] = artifacts.map((artifact) => ({
@@ -107,7 +108,7 @@ export function WorkspaceSidebarSurfacesGroupMenu() {
   }, [
     artifacts,
     currentArtifact,
-    currentView,
+    isCurrentView,
     openArtifact,
     openView,
     views,

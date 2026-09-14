@@ -2,6 +2,7 @@ import * as React from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 
 import { ViewStore } from "@/features/view/presentation/stores/view.store";
+import { skillSearch } from "@/lib/skill-scope";
 
 function getCurrentViewId(pathname: string): string | undefined {
   if (!pathname.startsWith("/views/")) {
@@ -17,6 +18,12 @@ export function useViews() {
     select: (state) => state.location.pathname,
   });
   const currentViewId = getCurrentViewId(pathname);
+  const currentSkill = useRouterState({
+    select: (state) => {
+      const skill = (state.location.search as { skill?: unknown } | undefined)?.skill;
+      return typeof skill === "string" && skill ? skill : undefined;
+    },
+  });
 
   const rawViews = ViewStore.useState((state) => state.items);
 
@@ -39,12 +46,24 @@ export function useViews() {
     });
   }, [rawViews]);
 
-  function openView(viewId: string) {
-    void navigate({ to: "/views/$id", params: { id: viewId } });
+  // A skill's view goes with its skill in the address: ids are unique only
+  // within a scope, and the id alone answers NOT_FOUND for a skill's view.
+  function openView(viewId: string, skill?: string) {
+    void navigate({ to: "/views/$id", params: { id: viewId }, search: skillSearch(skill) });
+  }
+
+  /** Whether `view` is the one on screen: same id, and the same scope. */
+  function isCurrent(view: { id: string; skill?: string }) {
+    if (currentViewId !== view.id) return false;
+    // An address without a skill opens whichever entry it resolves to; with
+    // one, only that skill's view is the current one.
+    return currentSkill === undefined || currentSkill === (view.skill || undefined);
   }
 
   return {
     current: currentViewId,
+    currentSkill,
+    isCurrent,
     open: openView,
     views,
   };

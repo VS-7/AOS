@@ -53,6 +53,7 @@ import {
 } from "../../../../helpers/form-schema.helper";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { t } from "@/lib/i18n";
+import { resolveSkill } from "@/lib/skill-scope";
 import { errorMessage } from "@/lib/aos-facade";
 import {
   cleanRecordData,
@@ -107,7 +108,7 @@ export const CollectionRecordUpsertPage = aos
     description: "Create and edit collection records",
   })
   .use(WorkspacePageMiddleware())
-  .withLoader(async ({ client, request, response }) => {
+  .withLoader(async ({ client, request, response, stores }) => {
     // Task 10: the `collection` domain is dormant — no Go backend to call
     // yet. Short-circuits before any client call so the dormant command's
     // empty envelope never reaches the `!collection` check below, which
@@ -124,7 +125,16 @@ export const CollectionRecordUpsertPage = aos
     }
 
     const collectionResult = await client.collection.getById.query({
-      params: { collection: request.params.id },
+      params: {
+        collection: request.params.id,
+        // See the collection page: a skill's collection needs its skill.
+        skill: await resolveSkill(
+          request.params.id,
+          undefined,
+          stores.collections?.state.items,
+          async () => (await client.collection.list.query({ query: {} })).data?.collections ?? [],
+        ),
+      },
     });
 
     const collection = collectionResult.data?.collection;

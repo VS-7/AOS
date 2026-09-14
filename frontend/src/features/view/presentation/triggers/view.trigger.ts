@@ -21,7 +21,10 @@ export const viewGroup = AosTriggerGroup.create("Views")
     const triggerItems = items.map((view) => ({
       // By id: `/views/$id` looks the view up by id, and a name ("Contacts
       // table") landed on "Page not found".
-      id: `view.navigate.${view.id}`,
+      // The skill is part of the id: two scopes may ship the same view id.
+      // The address carries only the id; the view page resolves a skill's
+      // view from the same list this group reads.
+      id: `view.navigate.${view.skill ? `${view.skill}:` : ""}${view.id}`,
       label: String.capitalizeFirst(view.title || view.name),
       icon: "Layout" as "Layout",
       group: "Views",

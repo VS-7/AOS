@@ -44,6 +44,7 @@ import { ButtonGroup } from "@/components/ui/button-group";
 import { t } from "@/lib/i18n";
 import { errorMessage } from "@/lib/aos-facade";
 import { formatViewValue } from "@/lib/view-spec";
+import { resolveSkill } from "@/lib/skill-scope";
 import {
   fieldsOf,
   recordLabel,
@@ -120,7 +121,7 @@ export const CollectionPage = aos
     description: "Custom collection records",
   })
   .use(WorkspacePageMiddleware())
-  .withLoader(async ({ client, request, response }) => {
+  .withLoader(async ({ client, request, response, stores }) => {
     // Task 10: the `collection` domain is dormant — no Go backend to call
     // yet. Short-circuits before any client call so the dormant command's
     // empty envelope never reaches the `!collection.data` check below,
@@ -138,7 +139,17 @@ export const CollectionPage = aos
     try {
 
       const collection = await client.collection.getById.query({
-        params: { collection: request.params.id },
+        params: {
+          collection: request.params.id,
+          // A skill's collection is found only with its skill. Ids are unique
+          // across scopes, so the listed collections always say which.
+          skill: await resolveSkill(
+            request.params.id,
+            undefined,
+            stores.collections?.state.items,
+            async () => (await client.collection.list.query({ query: {} })).data?.collections ?? [],
+          ),
+        },
       });
 
       if (!collection.data) {
@@ -288,7 +299,11 @@ export const CollectionPage = aos
 
     return (
       <DormantGate feature="collection">
+        {/* Keyed by collection: the same page serves every one, and the
+            search typed over Contacts stayed in the box over Meeting notes —
+            a table filtered to nothing over a collection with records. */}
         <DataTableProvider
+          key={collectionId}
           data={allRecords}
           columns={tableColumns}
           filters={filters}
