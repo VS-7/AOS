@@ -155,7 +155,7 @@ var Catalog = []Entry{
 	{Code: "AOS_FILE_GIT_FAILED", Package: "internal/domain/file", File: "internal/domain/file/errors.go", Line: 97, Status: 500, Causer: "<dynamic>", CTA: false, Issues: []string{"operation", "path"}},
 	{Code: "AOS_FILE_HTTP_BAD_BODY", Package: "internal/transport/fileapi", File: "internal/transport/fileapi/errors.go", Line: 15, Status: 400, Causer: "fileapi.decode", CTA: true},
 	{Code: "AOS_FILE_HTTP_BODY_TOO_LARGE", Package: "internal/transport/fileapi", File: "internal/transport/fileapi/errors.go", Line: 6, Status: 413, Causer: "fileapi.decode", CTA: true, Issues: []string{"limit"}},
-	{Code: "AOS_FILE_HTTP_INTERNAL", Package: "internal/transport/fileapi", File: "internal/transport/fileapi/fileapi.go", Line: 192, Status: 500, Causer: "fileapi", CTA: false},
+	{Code: "AOS_FILE_HTTP_INTERNAL", Package: "internal/transport/fileapi", File: "internal/transport/fileapi/fileapi.go", Line: 197, Status: 500, Causer: "fileapi", CTA: false},
 	{Code: "AOS_FILE_IO_FAILED", Package: "internal/domain/file", File: "internal/domain/file/errors.go", Line: 35, Status: 400, Causer: "<dynamic>", CTA: true, Issues: []string{"operation", "path"}},
 	{Code: "AOS_FILE_IS_A_DIRECTORY", Package: "internal/domain/file", File: "internal/domain/file/errors.go", Line: 71, Status: 400, Causer: "<dynamic>", CTA: true, Issues: []string{"path"}},
 	{Code: "AOS_FILE_NOT_A_DIRECTORY", Package: "internal/domain/file", File: "internal/domain/file/errors.go", Line: 46, Status: 400, Causer: "file.Service.Tree", CTA: true, Issues: []string{"path"}},
