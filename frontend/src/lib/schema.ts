@@ -1567,6 +1567,8 @@ export interface CommandMap {
     "input"?: Record<string, unknown>;
     /** Label of the action within the view's tree, as declared. */
     "label": string;
+    /** The skill the view ships with, when it is skill-scoped. */
+    "skill"?: string;
   }; output: unknown };
   /** Read one view's declaration. */
   "views_get": { input: {

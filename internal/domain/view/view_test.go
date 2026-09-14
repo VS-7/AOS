@@ -693,6 +693,34 @@ func TestGetAndDeleteOmitSkillFromTheKeyWhenNotGiven(t *testing.T) {
 	}
 }
 
+// A button on a skill's own view resolves that view the way Get does, by its
+// skill. ExecuteActionInput had no Skill, so every button on a skill-scoped
+// view answered VIEW_NOT_FOUND for a view the same screen had just rendered.
+func TestExecuteActionResolvesASkillScopedView(t *testing.T) {
+	spy := &viewKeySpyRepo{fakeRepository: newFakeRepository()}
+	spy.views["crm-table"] = view.View{
+		ID: "crm-table", Skill: "crm", Scope: "skill",
+		Tree: view.Node{Component: "Button", Actions: []view.Action{{Label: "Apagar", Command: "collections_records-delete"}}},
+	}
+	cmds := &fakeCommands{known: map[string]bool{"collections_records-delete": true}}
+	svc := view.NewService(view.Deps{
+		Repo:        spy,
+		Collections: &fakeCollections{schemas: map[string]collection.Collection{}, records: map[string][]collection.Record{}},
+		Commands:    cmds,
+		Clock:       clockx.Fixed{At: refTime},
+	})
+
+	if _, err := svc.ExecuteAction(ctx(), view.ExecuteActionInput{ID: "crm-table", Skill: "crm", Label: "Apagar"}); err != nil {
+		t.Fatal(err)
+	}
+	if spy.lastGetKey["skill"] != "crm" {
+		t.Fatalf("ExecuteAction looked the view up by %v, want skill=crm", spy.lastGetKey)
+	}
+	if len(cmds.invoked) != 1 {
+		t.Fatalf("invoked = %v", cmds.invoked)
+	}
+}
+
 // Create refuses an empty id up front: it is also the view's file name.
 func TestCreateRefusesAnEmptyID(t *testing.T) {
 	svc := newService(t, withCollection(contactsSchema()))
