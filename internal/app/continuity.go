@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -87,7 +88,54 @@ func (a assignees) Resolve(ctx context.Context, id string) (task.ResolvedAssigne
 type taskPolicy struct {
 	workspaces *workspace.Service
 	active     string
+
+	// root is this workspace's own directory of checkouts (worktreeRootFor),
+	// and legacyRoot the installation-wide one every workspace shared before.
 	root       string
+	legacyRoot string
+}
+
+// worktreeRootFor is the directory the checkouts of the workspace at dir go
+// in: one per workspace, under the installation's data directory.
+//
+// They all went into one directory, and that stopped being safe once a
+// workspace that is a folder of a project cuts its checkouts from the project:
+// two folders of one monorepo then share a repository, `git worktree list`
+// shows each the other's checkouts under the shared directory, and the prune
+// took the other's for leftovers of its own and removed them with --force.
+//
+// Named after the directory rather than the registry id, because the same
+// directory is the primary scope of a daemon started in it — with no id — and
+// a secondary scope of another, and its tasks' checkouts are the same in
+// both. Resolved first, so a link to it names the same directory. The folder's
+// own name is kept in front of the digest for whoever looks inside.
+func worktreeRootFor(data, dir string) string {
+	resolved := filepath.Clean(dir)
+	if abs, err := filepath.Abs(resolved); err == nil {
+		resolved = abs
+	}
+	if real, err := filepath.EvalSymlinks(resolved); err == nil {
+		resolved = real
+	}
+	sum := sha256.Sum256([]byte(resolved))
+	name := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r + ('a' - 'A')
+		default:
+			return '-'
+		}
+	}, filepath.Base(resolved))
+	name = strings.Trim(name, "-")
+	if len(name) > 32 {
+		name = name[:32]
+	}
+	if name == "" {
+		name = "workspace"
+	}
+	return filepath.Join(data, "worktrees", name+"-"+hex.EncodeToString(sum[:6]))
 }
 
 func (p taskPolicy) Worktrees(ctx context.Context) (task.WorktreePolicy, error) {
@@ -96,6 +144,7 @@ func (p taskPolicy) Worktrees(ctx context.Context) (task.WorktreePolicy, error) 
 		Limit:        workspace.DefaultWorktrees().WorktreeLimit,
 		DeleteOld:    workspace.DefaultWorktrees().DeleteOldWorktrees,
 		Root:         p.root,
+		LegacyRoot:   p.legacyRoot,
 	}
 	current, err := p.workspaces.Get(ctx, workspace.GetInput{Workspace: p.active})
 	if err != nil || current == nil {

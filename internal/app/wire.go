@@ -570,7 +570,8 @@ func New(opts Options) (*App, error) {
 		Setup:     setupScript{agents: agentSvc, tmp: paths.Outputs(), log: logger},
 		Policy: taskPolicy{
 			workspaces: workspaceSvc, active: active,
-			root: filepath.Join(paths.Data(), "worktrees"),
+			root:       worktreeRootFor(paths.Data(), root),
+			legacyRoot: filepath.Join(paths.Data(), "worktrees"),
 		},
 		Notifier: taskActivity{activities: activitySvc, log: logger},
 		Clock:    clock,

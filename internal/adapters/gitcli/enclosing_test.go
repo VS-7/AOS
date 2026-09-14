@@ -44,7 +44,7 @@ func TestATaskInAWorkspaceInsideAProjectIsCutFromTheProject(t *testing.T) {
 	if !trees.Exists(ctx(), root, path) {
 		t.Error("the checkout cut from the project does not exist")
 	}
-	listed, err := trees.List(ctx())
+	listed, err := trees.List(ctx(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

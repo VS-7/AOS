@@ -110,15 +110,27 @@ func (w *Worktrees) Remove(ctx context.Context, path string) error {
 	return nil
 }
 
-// List reports the checkouts that exist, excluding the main working tree.
+// List reports the checkouts that exist under root, excluding the main working
+// tree. An empty root lists every one.
 //
 // A checkout git still has a record of but whose directory is gone is not one
 // that exists: counting it against the limit made room for nothing, and
 // removing it is only forgetting the record, which Create does before it adds.
-func (w *Worktrees) List(ctx context.Context) ([]string, error) {
+//
+// git reports a checkout with every link resolved, and the root the caller
+// placed it under may be spelled through one — a state directory on another
+// volume, or macOS's /var, which is /private/var. Compared as spelled, no
+// checkout was ever under the root and the prune never saw one. So the root is
+// resolved for the comparison and each checkout is handed back spelled under
+// the root as given, the way the caller recorded it.
+func (w *Worktrees) List(ctx context.Context, root string) ([]string, error) {
 	listed, err := w.listed(ctx)
 	if err != nil {
 		return nil, err
+	}
+	realRoot := ""
+	if strings.TrimSpace(root) != "" {
+		realRoot = resolve(root)
 	}
 	var paths []string
 	for i, entry := range listed {
@@ -128,7 +140,18 @@ func (w *Worktrees) List(ctx context.Context) ([]string, error) {
 		if i == 0 || entry.prunable || !isDir(entry.path) {
 			continue
 		}
-		paths = append(paths, entry.path)
+		if realRoot == "" {
+			paths = append(paths, entry.path)
+			continue
+		}
+		if !inside(realRoot, entry.path) {
+			continue
+		}
+		rel, err := filepath.Rel(realRoot, entry.path)
+		if err != nil {
+			continue
+		}
+		paths = append(paths, filepath.Join(filepath.Clean(root), rel))
 	}
 	return paths, nil
 }

@@ -96,3 +96,91 @@ func TestThePruneKeepsAnUnfinishedTasksCheckoutWhateverAnotherTaskRecords(t *tes
 		t.Fatalf("branching past the limit with nothing finished to prune = %v, want the limit's refusal", err)
 	}
 }
+
+// Each workspace places its checkouts under a root of its own, and every
+// workspace used to share one. A checkout placed under the shared root before
+// is still its task's — its turns go on in it and Delete takes it — while
+// anything else under the shared root may be any workspace's, so the prune
+// neither counts nor removes it.
+func legacyHarness(t *testing.T, limit int) *harness {
+	t.Helper()
+	return newHarness(t, func(d *Deps) {
+		d.Policy = policy{worktrees: WorktreePolicy{
+			BranchPrefix: "aos", Limit: limit, DeleteOld: true,
+			Root: "/tmp/wt/api-1a2b3c", LegacyRoot: "/tmp/wt",
+		}}
+	})
+}
+
+func TestACheckoutUnderTheSharedRootIsStillItsTasks(t *testing.T) {
+	h := legacyHarness(t, 15)
+	old := h.create(t, CreateInput{Name: "Branched long ago", Status: Todo, Worktree: true})
+	placed := "/tmp/wt/" + old.ID
+	h.worktrees.existing = []string{placed}
+	h.record(t, old.ID, placed)
+
+	if got, err := h.svc.Checkout(ctx(), old.ID); err != nil || got != placed {
+		t.Fatalf("checkout = %q, %v; want the checkout placed under the shared root, %q", got, err, placed)
+	}
+	if tree, err := h.svc.Branch(ctx(), BranchInput{ID: old.ID}); err != nil || tree.Path != placed {
+		t.Fatalf("branching again = %+v, %v; want the checkout it has", tree, err)
+	}
+	if _, err := h.svc.Delete(ctx(), DeleteInput{ID: old.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.worktrees.removed) != 1 || h.worktrees.removed[0] != placed {
+		t.Fatalf("removed = %v, want the task's own checkout %q", h.worktrees.removed, placed)
+	}
+}
+
+func TestANewCheckoutGoesUnderTheWorkspacesOwnRoot(t *testing.T) {
+	h := legacyHarness(t, 15)
+	task := h.create(t, CreateInput{Name: "Branched today", Status: Todo, Worktree: true})
+	tree, err := h.svc.Branch(ctx(), BranchInput{ID: task.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "/tmp/wt/api-1a2b3c/" + task.ID; tree.Path != want {
+		t.Fatalf("branched into %q, want %q", tree.Path, want)
+	}
+}
+
+func TestThePruneLeavesWhatTheSharedRootHoldsForOtherWorkspaces(t *testing.T) {
+	h := legacyHarness(t, 1)
+	// Another workspace's checkouts of the same repository, one under the
+	// shared root and one under that workspace's own root.
+	theirs := []string{"/tmp/wt/another-workspaces-task", "/tmp/wt/web-4d5e6f/t-web"}
+	h.worktrees.existing = append([]string(nil), theirs...)
+
+	next := h.create(t, CreateInput{Name: "New work", Status: Todo, Worktree: true})
+	if _, err := h.svc.Branch(ctx(), BranchInput{ID: next.ID}); err != nil {
+		t.Fatalf("another workspace's checkouts counted against this one's limit: %v", err)
+	}
+	if len(h.worktrees.removed) != 0 {
+		t.Fatalf("removed = %v, checkouts of another workspace", h.worktrees.removed)
+	}
+}
+
+func TestThePruneTakesAFinishedTasksCheckoutUnderTheSharedRoot(t *testing.T) {
+	h := legacyHarness(t, 1)
+	done := h.create(t, CreateInput{Name: "Finished long ago", Status: Todo, Worktree: true})
+	placed := "/tmp/wt/" + done.ID
+	h.worktrees.existing = []string{placed}
+	h.record(t, done.ID, placed)
+	h.move(t, done.ID, InProgress, InReview, Finished)
+
+	next := h.create(t, CreateInput{Name: "New work", Status: Todo, Worktree: true})
+	if _, err := h.svc.Branch(ctx(), BranchInput{ID: next.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.worktrees.removed) != 1 || h.worktrees.removed[0] != placed {
+		t.Fatalf("removed = %v, want the finished task's checkout %q", h.worktrees.removed, placed)
+	}
+	stored, err := h.svc.Get(ctx(), GetInput{ID: done.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Worktree.Path != "" {
+		t.Fatalf("the pruned checkout is still recorded: %q", stored.Worktree.Path)
+	}
+}

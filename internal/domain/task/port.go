@@ -46,8 +46,13 @@ type Worktrees interface {
 	// a prune that stops working.
 	Remove(ctx context.Context, path string) error
 
-	// List reports the checkouts that exist, so the prune can see what it has.
-	List(ctx context.Context) ([]string, error)
+	// List reports the checkouts of this repository that exist under root,
+	// other than the main working tree, so the prune can see what it has.
+	// Whether one is under root is decided once links are resolved, the way
+	// git reports a checkout, and each is spelled under root as the caller
+	// wrote it — so the paths compare with the ones Branch placed there
+	// whatever link the state directory is reached through.
+	List(ctx context.Context, root string) ([]string, error)
 
 	// Exists reports whether path is one of this repository's checkouts, is
 	// still on disk, and — once links are resolved — sits under root. A task's
@@ -121,11 +126,23 @@ type Policy interface {
 
 // WorktreePolicy is the workspace's isolation configuration.
 type WorktreePolicy struct {
-	BranchPrefix       string
-	Limit              int
-	DeleteOld          bool
-	OnCreateScript     string
-	Root               string // where checkouts are placed
+	BranchPrefix   string
+	Limit          int
+	DeleteOld      bool
+	OnCreateScript string
+
+	// Root is where this workspace places its checkouts: its own directory,
+	// never shared with another workspace. Two workspaces that are folders of
+	// one repository cut checkouts from that one repository, and a root they
+	// shared made each one's checkouts look like the other's leftovers.
+	Root string
+
+	// LegacyRoot is the installation-wide directory checkouts were placed in
+	// before each workspace had a root of its own. A task's checkout recorded
+	// there, named after the task, is still the task's; anything else in it
+	// may belong to any workspace, so it is never counted or pruned.
+	LegacyRoot string
+
 	DefaultBase        string
 	EnabledByDefault   bool
 	ScriptTimeoutHint  time.Duration

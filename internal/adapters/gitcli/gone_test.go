@@ -58,7 +58,7 @@ func TestOnlyACheckoutOfThisRepositoryThatIsOnDiskExists(t *testing.T) {
 		t.Error("a checkout deleted from disk still exists")
 	}
 	// Nor is it a checkout to count against the limit or to offer the prune.
-	listed, err := trees.List(ctx())
+	listed, err := trees.List(ctx(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

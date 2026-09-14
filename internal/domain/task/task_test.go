@@ -3,6 +3,7 @@ package task
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -87,8 +88,17 @@ func (w *worktrees) Remove(_ context.Context, path string) error {
 	return nil
 }
 
-func (w *worktrees) List(context.Context) ([]string, error) {
-	return append([]string(nil), w.existing...), nil
+// List is the checkouts under root, compared as relative paths so
+// "/w/trees-of-mine" is not inside "/w/trees". The fake has no links.
+func (w *worktrees) List(_ context.Context, root string) ([]string, error) {
+	var out []string
+	for _, p := range w.existing {
+		rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(p))
+		if err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }
 
 func (w *worktrees) Exists(_ context.Context, _, path string) bool {

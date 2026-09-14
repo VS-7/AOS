@@ -189,14 +189,24 @@ func workspaceInCheckout(checkout string, source WorktreeSource) string {
 // is a file any agent that can write in the workspace can edit: a task given
 // another task's checkout took it as its own, rooted its turns in that task's
 // branch, and Delete removed it with --force, uncommitted work and all.
+//
+// A checkout placed before each workspace had its own root, at the task's id
+// under the installation-wide one, is still the task's: its turns go on in it
+// and Delete still takes it.
 func (s *Service) ownCheckout(ctx context.Context, policy WorktreePolicy, taskID, path string) bool {
-	return checkoutOf(policy, taskID) == filepath.Clean(path) && s.worktrees.Exists(ctx, policy.Root, path)
+	recorded := filepath.Clean(path)
+	for _, root := range []string{policy.Root, policy.LegacyRoot} {
+		if place := checkoutOf(root, taskID); place != "" && place == recorded {
+			return s.worktrees.Exists(ctx, root, path)
+		}
+	}
+	return false
 }
 
-// checkoutOf is where Branch places a task's checkout, or "" when the
-// workspace says nowhere.
-func checkoutOf(policy WorktreePolicy, taskID string) string {
-	root := strings.TrimSpace(policy.Root)
+// checkoutOf is where a task's checkout is under root, or "" when there is no
+// such place.
+func checkoutOf(root, taskID string) string {
+	root = strings.TrimSpace(root)
 	if root == "" || !filepath.IsAbs(root) || taskID == "" || !filepath.IsLocal(taskID) || filepath.Base(taskID) != taskID {
 		return ""
 	}
@@ -224,31 +234,29 @@ func BranchNameFor(prefix string, t *Task) string {
 // progress is never taken, even when that means the limit is not reached and
 // the create below fails with a clear reason instead.
 func (s *Service) pruneToLimit(ctx context.Context, policy WorktreePolicy) error {
-	if !policy.DeleteOld {
+	root := strings.TrimSpace(policy.Root)
+	if !policy.DeleteOld || root == "" {
 		return nil
 	}
-	listed, err := s.worktrees.List(ctx)
+
+	// Only this workspace's own checkouts: the ones under its own root.
+	// `git worktree list` reports every worktree of the repository — the
+	// person's own branches, and the checkouts of every other workspace that is
+	// a folder of the same repository. Counting those against a limit that
+	// bounds this workspace's checkouts let them consume the budget, and then
+	// the prune reached for them: branching a task in one folder of a monorepo
+	// removed an unfinished task's checkout in another, with --force.
+	mine, err := s.worktrees.List(ctx, root)
 	if err != nil {
 		return errWorktreeFailed("", "", err)
 	}
-
-	// Only this workspace's own checkouts, when it says where it puts them.
-	// `git worktree list` reports every worktree of the repository, the
-	// person's own branches included — and counting those against a limit
-	// that exists to bound *this system's* checkouts made an unrelated
-	// worktree consume the budget, then made the pruner reach for it. Both
-	// halves of that are wrong, and this is the line that fixes both.
-	root := strings.TrimSpace(policy.Root)
-	existing := listed
-	if root != "" {
-		existing = existing[:0:0]
-		for _, path := range listed {
-			if underRoot(root, path) {
-				existing = append(existing, path)
-			}
+	var legacy []string
+	if old := strings.TrimSpace(policy.LegacyRoot); old != "" && filepath.Clean(old) != filepath.Clean(root) {
+		if legacy, err = s.worktrees.List(ctx, old); err != nil {
+			return errWorktreeFailed("", "", err)
 		}
 	}
-	if len(existing) < policy.Limit {
+	if len(mine)+len(legacy) < policy.Limit {
 		return nil
 	}
 
@@ -265,32 +273,41 @@ func (s *Service) pruneToLimit(ctx context.Context, policy WorktreePolicy) error
 	for i := range all {
 		byID[all[i].ID] = &all[i]
 	}
-	held := map[string]*Task{}
-	for _, path := range existing {
-		if owner, ok := byID[filepath.Base(path)]; ok && filepath.Dir(path) == filepath.Clean(root) {
-			held[path] = owner
-		}
-	}
 
 	type candidate struct {
 		path string
 		task *Task
 	}
+	existing := len(mine)
 	var removable []candidate
-	for _, path := range existing {
-		owner, ok := held[path]
-		if !ok {
-			// A checkout of ours that no task claims: a leftover from a run
-			// that did not finish. Nothing is executing in it and nothing
-			// points at it. (`existing` is already confined to the
-			// workspace's own root above, so this can no longer be
-			// somebody's own worktree.)
+	for _, path := range mine {
+		owner, ok := byID[filepath.Base(path)]
+		if !ok || filepath.Dir(path) != filepath.Clean(root) {
+			// A checkout under this workspace's root that no task of it is
+			// named after: a leftover from a run that did not finish. Nothing
+			// is executing in it and nothing points at it — the root is this
+			// workspace's alone, so it is nobody else's either.
 			removable = append(removable, candidate{path: path})
 			continue
 		}
 		if owner.Status.Terminal() {
 			removable = append(removable, candidate{path: path, task: owner})
 		}
+	}
+	// Under the old shared root only a checkout named after one of this
+	// workspace's tasks is this workspace's; the rest may be any workspace's.
+	for _, path := range legacy {
+		owner, ok := byID[filepath.Base(path)]
+		if !ok || filepath.Dir(path) != filepath.Clean(policy.LegacyRoot) {
+			continue
+		}
+		existing++
+		if owner.Status.Terminal() {
+			removable = append(removable, candidate{path: path, task: owner})
+		}
+	}
+	if existing < policy.Limit {
+		return nil
 	}
 	sort.SliceStable(removable, func(i, j int) bool {
 		if removable[i].task == nil {
@@ -302,7 +319,7 @@ func (s *Service) pruneToLimit(ctx context.Context, policy WorktreePolicy) error
 		return removable[i].task.UpdatedAt.Before(removable[j].task.UpdatedAt)
 	})
 
-	need := len(existing) - policy.Limit + 1
+	need := existing - policy.Limit + 1
 	for _, c := range removable {
 		if need <= 0 {
 			break
@@ -312,9 +329,9 @@ func (s *Service) pruneToLimit(ctx context.Context, policy WorktreePolicy) error
 			continue
 		}
 		need--
-		// Only a task recording its own checkout loses the record: one that
-		// names some other path was never pointing at what was removed.
-		if c.task == nil || filepath.Clean(c.task.Worktree.Path) != checkoutOf(policy, c.task.ID) {
+		// Only a task recording the checkout that was removed loses the
+		// record: one that names some other path was never pointing at it.
+		if c.task == nil || filepath.Clean(c.task.Worktree.Path) != c.path {
 			continue
 		}
 		c.task.Worktree.Path = ""
@@ -325,7 +342,7 @@ func (s *Service) pruneToLimit(ctx context.Context, policy WorktreePolicy) error
 		}
 	}
 	if need > 0 {
-		return errWorktreeLimit(policy.Limit, len(existing))
+		return errWorktreeLimit(policy.Limit, existing)
 	}
 	return nil
 }
@@ -342,15 +359,4 @@ func (s *Service) worktreePolicy(ctx context.Context) (WorktreePolicy, error) {
 		policy.BranchPrefix = DefaultBranchPrefix
 	}
 	return policy, nil
-}
-
-// underRoot reports whether a checkout sits inside the directory the workspace
-// places its worktrees in. Compared as a relative path rather than a string
-// prefix, so "/w/trees-of-mine" is not inside "/w/trees".
-func underRoot(root, path string) bool {
-	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path))
-	if err != nil {
-		return false
-	}
-	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
