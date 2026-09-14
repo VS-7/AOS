@@ -100,18 +100,38 @@ function isProviderSelectable(provider: AgentModelSelectProvider) {
 }
 
 /**
- * Keys the search box keeps for itself.
+ * Keys the search box keeps for itself, and the ones that take a person from
+ * it into the list.
  *
  * A Radix menu runs typeahead on every printable key that reaches it, moving
  * focus to the first item whose label starts with that letter — so the second
- * letter of a search landed on a menu item instead of in the box. The arrows,
- * Tab and Escape still travel: they are how a person leaves the box for the
- * list, or closes the menu.
+ * letter of a search landed on a menu item instead of in the box. Those keys
+ * stay in the box.
+ *
+ * The menu does not move focus out of the box either: it answers the arrows
+ * only when they are aimed at the menu itself, and it swallows Tab. So
+ * ArrowDown and Tab go to the first result and ArrowUp to the last, from here,
+ * where the menu's own arrows take over. Escape still travels, and closes it,
+ * and so does Shift+Tab, which the menu keeps where it is.
  */
 function keepKeyInSearch(event: React.KeyboardEvent<HTMLInputElement>) {
-  if (!["ArrowDown", "ArrowUp", "Tab", "Escape"].includes(event.key)) {
-    event.stopPropagation();
+  const toLast = event.key === "ArrowUp";
+  const intoList = toLast || event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey);
+  if (!intoList) {
+    if (event.key !== "Escape" && event.key !== "Tab") event.stopPropagation();
+    return;
   }
+
+  const menu = event.currentTarget.closest("[data-radix-menu-content]");
+  const items = Array.from(
+    menu?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([data-disabled])') ?? [],
+  );
+  const target = toLast ? items.at(-1) : items[0];
+  // Nothing to move to: the menu handles the key as it always did.
+  if (!target) return;
+  event.preventDefault();
+  event.stopPropagation();
+  target.focus();
 }
 
 /** The models matching `term` by model id, model name or provider name, per provider. */
