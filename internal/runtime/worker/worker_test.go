@@ -315,6 +315,33 @@ func TestStartingTwiceIsRefused(t *testing.T) {
 	}
 }
 
+// TestThePoolSaysWhetherItIsDraining. Work handed to the queue instead of done
+// where it was asked for is only done if a pool in this process takes it; a
+// process that runs one command and exits has none running.
+func TestThePoolSaysWhetherItIsDraining(t *testing.T) {
+	var none *worker.Pool
+	if none.Running() {
+		t.Fatal("a process with no pool says it drains the queue")
+	}
+	q, _ := openQueue(t)
+	p := worker.New(worker.Deps{Queue: q, Concurrency: 1, Idle: time.Hour, TickRate: time.Hour})
+	if p.Running() {
+		t.Fatal("a pool nobody started says it drains the queue")
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !p.Running() {
+		t.Fatal("a started pool says it does not drain the queue")
+	}
+	if err := p.Stop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if p.Running() {
+		t.Fatal("a stopped pool says it still drains the queue")
+	}
+}
+
 // TestStoppingAPoolThatNeverStartedIsFine, because a shutdown path should not
 // have to know whether the thing it is shutting down ever ran.
 func TestStoppingAPoolThatNeverStartedIsFine(t *testing.T) {

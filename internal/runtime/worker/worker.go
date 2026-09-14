@@ -176,6 +176,17 @@ func (p *Pool) Start(ctx context.Context) error {
 	return nil
 }
 
+// Running reports whether the pool has been started and not stopped: whether
+// work enqueued now will be taken by this process.
+func (p *Pool) Running() bool {
+	if p == nil {
+		return false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.running
+}
+
 // Stop cancels the pool and waits for it to finish.
 func (p *Pool) Stop(ctx context.Context) error {
 	p.mu.Lock()

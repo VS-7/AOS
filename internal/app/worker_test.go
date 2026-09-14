@@ -11,7 +11,9 @@ import (
 
 	"github.com/OWNER/aos/internal/app"
 	"github.com/OWNER/aos/internal/core/env"
+	"github.com/OWNER/aos/internal/domain/agent"
 	"github.com/OWNER/aos/internal/domain/job"
+	"github.com/OWNER/aos/internal/domain/routine"
 	"github.com/OWNER/aos/internal/domain/workspace"
 )
 
@@ -225,4 +227,181 @@ func TestTheTickQueuesScheduledRunsForThePoolToRun(t *testing.T) {
 		jobs := queued()
 		return len(jobs) >= 1 && jobs[len(jobs)-1].EndedAt != nil
 	})
+}
+
+// An activity published in a workspace the daemon serves beside the one it
+// opened sets off that workspace's routines, and the firing was taken inside
+// the mutation that published it. It is queued now, naming that workspace
+// explicitly: a job that names none is the primary's, and the primary of the
+// daemon that claims it is not the directory whose routine this is.
+//
+// A directory the registry cannot name — a primary nobody registered, whose
+// lookup answers with the one workspace registered elsewhere — is not queued
+// under that other name: its routines still react, where the activity was
+// published.
+func TestAnActivityQueuesItsReactionsForTheWorkspaceItHappenedIn(t *testing.T) {
+	home, first, second := t.TempDir(), t.TempDir(), t.TempDir()
+	a, err := app.New(app.Options{
+		Env: env.New(env.Map(map[string]string{
+			env.KeyHome:     home,
+			env.KeyJobsTick: "24h",
+		})),
+		WorkspaceRoot: first,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = a.Close() })
+	ctx := context.Background()
+	if _, err := a.Workspaces.Create(ctx, workspace.CreateInput{Name: "Second", Path: second}); err != nil {
+		t.Fatal(err)
+	}
+	reactingIn := func(where context.Context, agentID string) string {
+		var out struct {
+			Routine struct {
+				ID string `json:"id"`
+			} `json:"routine"`
+		}
+		raw := invokeIn(where, t, a, "routines_create", `{
+			"_reasoning": "a test is checking where a reaction is taken",
+			"name": "Hear new tasks", "agent": "`+agentID+`",
+			"triggers": [{"type": "activity", "namespace": "task", "event": "created"}],
+			"content": "Say which task was created."
+		}`)
+		if err := json.Unmarshal(raw, &out); err != nil || out.Routine.ID == "" {
+			t.Fatalf("routines_create answered %s (%v)", raw, err)
+		}
+		return out.Routine.ID
+	}
+	runsIn := func(where context.Context, routineID string) int {
+		var got struct {
+			Total int `json:"total"`
+		}
+		raw := invokeIn(where, t, a, "routines_runs",
+			`{"_reasoning":"a test is checking whether the reaction ran","id":"`+routineID+`"}`)
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatal(err)
+		}
+		return got.Total
+	}
+	queued := func() []job.Job {
+		listed, err := a.Queue.List(ctx, job.Filter{Kind: "aos.routine"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return listed
+	}
+	createTaskIn := func(where context.Context) {
+		invokeIn(where, t, a, "tasks_create", `{
+			"_reasoning": "a test is publishing the activity the routine waits for",
+			"name": "Anything", "status": "todo"
+		}`)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := a.Worker.Start(runCtx); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stopCancel()
+		_ = a.Worker.Stop(stopCtx)
+	}()
+
+	elsewhere := reactingIn(inWorkspace("second"), "atlas")
+	createTaskIn(inWorkspace("second"))
+	jobs := queued()
+	if len(jobs) != 1 || jobs[0].Workspace != "second" || jobs[0].Queue != job.QueueRoutine {
+		t.Fatalf("queued = %+v, want one routine job naming the second workspace", jobs)
+	}
+	waitFor(t, "the pool to run the reaction in the second workspace", func() bool {
+		return runsIn(inWorkspace("second"), elsewhere) > 0
+	})
+
+	// Only a registered workspace is seeded with an orchestrator.
+	owner, err := a.Agents.Create(ctx, agent.CreateInput{Name: "Scout"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	here := reactingIn(ctx, owner.ID)
+	createTaskIn(ctx)
+	if n := runsIn(ctx, here); n != 1 {
+		t.Fatalf("the unregistered directory's routine ran %d times by the time its activity was published, want once, inline", n)
+	}
+	if jobs := queued(); len(jobs) != 1 {
+		t.Fatalf("a reaction in a directory the registry cannot name was queued: %+v", jobs)
+	}
+}
+
+// A routine's scheduled firing is not queued while one of its firings is still
+// waiting, because the new one would repeat it. A firing an activity set off
+// is not that: it reacts to something that happened, not to the slot the
+// schedule is due in, and a task moved a moment before the tick was costing
+// the routine its scheduled run.
+func TestAWaitingReactionDoesNotStandInForTheScheduledRun(t *testing.T) {
+	home, first, second := t.TempDir(), t.TempDir(), t.TempDir()
+	a, err := app.New(app.Options{
+		Env: env.New(env.Map(map[string]string{
+			env.KeyHome:     home,
+			env.KeyJobsTick: "24h",
+		})),
+		WorkspaceRoot: first,
+		Clock:         anHourAgo{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = a.Close() })
+	ctx := context.Background()
+	if _, err := a.Workspaces.Create(ctx, workspace.CreateInput{Name: "Second", Path: second}); err != nil {
+		t.Fatal(err)
+	}
+	var out struct {
+		Routine struct {
+			ID string `json:"id"`
+		} `json:"routine"`
+	}
+	raw := invokeIn(inWorkspace("second"), t, a, "routines_create", `{
+		"_reasoning": "a test is checking what stands in for a scheduled run",
+		"name": "Every minute and every move", "agent": "atlas",
+		"triggers": [
+			{"type": "scheduled", "cron": "* * * * *"},
+			{"type": "activity", "namespace": "task", "event": "status_changed"}
+		],
+		"content": "Say what happened."
+	}`)
+	if err := json.Unmarshal(raw, &out); err != nil || out.Routine.ID == "" {
+		t.Fatalf("routines_create answered %s (%v)", raw, err)
+	}
+	reaction, err := json.Marshal(routine.Firing{
+		Agent: "atlas", Routine: out.Routine.ID,
+		Activity: &routine.Occurrence{Namespace: "task", Event: "status_changed"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Queue.Enqueue(ctx, job.Job{
+		ID: "a-reaction", Queue: job.QueueRoutine, Kind: "aos.routine",
+		Workspace: "second", Payload: reaction, MaxTries: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	a.Worker.TickOnce(ctx)
+
+	jobs, err := a.Queue.List(ctx, job.Filter{Kind: "aos.routine", Status: job.Pending})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scheduled := 0
+	for _, j := range jobs {
+		var f routine.Firing
+		if json.Unmarshal(j.Payload, &f) == nil && f.Activity == nil && f.Routine == out.Routine.ID {
+			scheduled++
+		}
+	}
+	if scheduled != 1 {
+		t.Fatalf("the tick queued %d scheduled firings beside a waiting reaction, want 1 (%d jobs pending)", scheduled, len(jobs))
+	}
 }
