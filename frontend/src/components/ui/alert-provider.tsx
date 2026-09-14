@@ -14,6 +14,7 @@ import {
 } from './alert-dialog'
 import { Button } from './button'
 import { setUnsavedPromptHandler } from '@/lib/unsaved-prompt.bridge'
+import { t } from '@/lib/i18n'
 
 interface AlertOptions {
   title?: string
@@ -185,11 +186,11 @@ export function AlertProvider({ children }: AlertProviderProps) {
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>
-                    {options.title || 'Unsaved changes'}
+                    {options.title || t('Unsaved changes')}
                   </AlertDialogTitle>
                   <AlertDialogDescription>
                     {options.description ||
-                      'Do you want to save your changes before closing?'}
+                      t('Do you want to save your changes before closing?')}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -198,18 +199,18 @@ export function AlertProvider({ children }: AlertProviderProps) {
                       variant='outline'
                       onClick={() => handleUnsaved(id, 'cancel')}
                     >
-                      {options.cancelText || 'Cancel'}
+                      {options.cancelText || t('Cancel')}
                     </Button>
                   </AlertDialogCancel>
                   <Button
                     variant='outline'
                     onClick={() => handleUnsaved(id, 'discard')}
                   >
-                    {options.discardText || "Don't Save"}
+                    {options.discardText || t("Don't Save")}
                   </Button>
                   <AlertDialogAction asChild>
                     <Button onClick={() => handleUnsaved(id, 'save')}>
-                      {options.saveText || 'Save'}
+                      {options.saveText || t('Save')}
                     </Button>
                   </AlertDialogAction>
                 </AlertDialogFooter>
@@ -225,7 +226,7 @@ export function AlertProvider({ children }: AlertProviderProps) {
               <AlertDialogHeader>
                 <AlertDialogTitle>
                   {options.title ||
-                    (type === 'confirm' ? 'Confirm Action' : 'Alert')}
+                    (type === 'confirm' ? t('Confirm Action') : t('Alert'))}
                 </AlertDialogTitle>
                 {options.description && (
                   <AlertDialogDescription>
@@ -237,26 +238,23 @@ export function AlertProvider({ children }: AlertProviderProps) {
               <AlertDialogFooter>
                 {type === 'confirm' ? (
                   <>
-                    <AlertDialogCancel asChild>
-                      <Button
-                        variant='outline'
-                        onClick={() => handleCancel(id, options)}
-                      >
-                        {options.cancelText || 'Cancel'}
-                      </Button>
+                    <AlertDialogCancel onClick={() => handleCancel(id, options)}>
+                      {options.cancelText || t('Cancel')}
                     </AlertDialogCancel>
-                    <AlertDialogAction asChild>
-                      <Button
-                        variant={options.variant || 'default'}
-                        onClick={() => handleConfirm(id, options)}
-                      >
-                        {options.confirmText || 'Confirm'}
-                      </Button>
+                    {/* The variant on the action itself: given to a Button
+                        inside it, AlertDialogAction's own default-variant
+                        Button won the class merge, and every destructive
+                        confirmation drew a solid black button. */}
+                    <AlertDialogAction
+                      variant={options.variant || 'default'}
+                      onClick={() => handleConfirm(id, options)}
+                    >
+                      {options.confirmText || t('Confirm')}
                     </AlertDialogAction>
                   </>
                 ) : (
                   <AlertDialogAction asChild>
-                    <Button onClick={() => handleAlertClose(id)}>OK</Button>
+                    <Button onClick={() => handleAlertClose(id)}>{t('OK')}</Button>
                   </AlertDialogAction>
                 )}
               </AlertDialogFooter>

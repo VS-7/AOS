@@ -21,8 +21,13 @@ export function DormantDomain({ feature }: { feature: string }): JSX.Element {
         <p className="text-sm font-medium text-foreground">
           {t("Domain not available yet")}
         </p>
+        {/* One sentence, translated whole, and about the app rather than
+            its backend: it was stitched from fragments ("The" + feature +
+            "interface already exists…"), which read "O workspace a interface
+            já existe" in Portuguese, and it told a person using the app that
+            "the Go backend does not publish this domain". */}
         <p className="mt-2 text-sm text-muted-foreground">
-          {t("The")} <code className="font-mono">{feature}</code> {t("interface already exists, but the Go backend does not publish this domain yet. The screen lights up on its own once it is implemented.")}
+          {t("This part of AOS ({{feature}}) is not available in this version yet. It will appear here once it is.", { feature })}
         </p>
       </div>
     </div>

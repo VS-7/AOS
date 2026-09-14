@@ -21,7 +21,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { MarkdownEditor } from "@/components/ui/markdown-editor";
+import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { SettingsContentContainer } from "../../../../../content-container";
@@ -70,7 +70,12 @@ export function SelectedInstructionContent() {
 
   async function handleCopyId() {
     if (!selectedInstruction?.id) return;
-    await navigator.clipboard.writeText(selectedInstruction.id);
+    try {
+      await navigator.clipboard.writeText(selectedInstruction.id);
+      toast.success(t("Copied"));
+    } catch {
+      toast.error(t("Failed to copy"));
+    }
   }
 
   return (
@@ -79,7 +84,7 @@ export function SelectedInstructionContent() {
         <SplitPageLayout.ContentHeaderMain>
           <SplitPageLayout.ContentTitle>
             {title?.trim() ||
-              (isCreateMode ? "New Instruction" : selectedInstruction?.name)}
+              (isCreateMode ? t("New Instruction") : selectedInstruction?.name)}
           </SplitPageLayout.ContentTitle>
         </SplitPageLayout.ContentHeaderMain>
 
@@ -117,8 +122,7 @@ export function SelectedInstructionContent() {
                         {t("Delete this instruction?")}
                       </AlertDialogTitle>
                       <AlertDialogDescription>
-                        {t("This action removes")}{" "}
-                        <strong>{selectedInstruction.name}</strong> permanently.
+                        {t("This action removes {{name}} permanently.", { name: selectedInstruction.name })}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -130,7 +134,7 @@ export function SelectedInstructionContent() {
                         disabled={isDeleting}
                         onClick={deleteSelectedInstruction}
                       >
-                        {isDeleting ? "Deleting..." : "Delete instruction"}
+                        {isDeleting ? t("Deleting...") : t("Delete instruction")}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -147,10 +151,10 @@ export function SelectedInstructionContent() {
             >
               <Save />
               {form.isLoading
-                ? "Saving..."
+                ? t("Saving...")
                 : isCreateMode
-                  ? "Create instruction"
-                  : "Save changes"}
+                  ? t("Create instruction")
+                  : t("Save changes")}
             </Button>
           </div>
         </SplitPageLayout.ContentHeaderActions>
@@ -210,10 +214,20 @@ export function SelectedInstructionContent() {
                   <FormItem>
                     <FormLabel className="opacity-60">{t("Content")}</FormLabel>
                     <FormControl>
-                      <MarkdownEditor
+                      {/* Plain text, not MarkdownEditor. An instruction is
+                          injected into a prompt as written, and the rich
+                          editor re-serialised what it loaded: `<rules>` came
+                          back as `\<rules>`, `-` bullets as `*`, and HTML
+                          comments vanished, so opening and saving one quietly
+                          changed what every agent reads. What is typed here
+                          is what is saved, byte for byte; the field grows
+                          with its content. */}
+                      <Textarea
+                        {...field}
                         value={field.value ?? ""}
-                        onValueChange={field.onChange}
+                        spellCheck={false}
                         placeholder={t("Write the full markdown instruction body...")}
+                        className="min-h-64 resize-y font-mono text-sm leading-relaxed"
                       />
                     </FormControl>
                     <FormMessage />

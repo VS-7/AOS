@@ -9,19 +9,26 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { aos } from "@/app/aos";
 import type { Instruction } from "@/features/instruction/interfaces/instruction.interfaces";
+import { errorMessage } from "@/lib/aos-facade";
 import { t } from "@/lib/i18n";
+import {
+  instructionCreatePayload,
+  instructionUpdatePayload,
+  type InstructionFormValues,
+} from "../helpers/instruction-payload";
 
 const NEW_INSTRUCTION_ID = "__new_instruction__";
 
-const instructionFormSchema = z.object({
-  name: z.string().trim().min(1, "Name is required"),
-  type: z.string().trim().min(1, "Type is required"),
-  description: z.string().optional(),
-  content: z.string().optional(),
-  pathsText: z.string().optional(),
-});
-
-type InstructionFormValues = z.infer<typeof instructionFormSchema>;
+/** Built when the provider renders, so its messages are in the language on screen. */
+function buildInstructionFormSchema() {
+  return z.object({
+    name: z.string().trim().min(1, t("Name is required")),
+    type: z.string().trim().min(1, t("Type is required")),
+    description: z.string().optional(),
+    content: z.string().optional(),
+    pathsText: z.string().optional(),
+  });
+}
 
 interface InstructionsContextType {
   instructions: Instruction[];
@@ -59,24 +66,8 @@ function buildInstructionFormValues(
   };
 }
 
-function buildInstructionPayload(values: InstructionFormValues) {
-  const paths = values.pathsText
-    ?.split("\n")
-    .map((path) => path.trim())
-    .filter(Boolean);
-
-  return {
-    name: values.name.trim(),
-    type: values.type.trim(),
-    description: values.description?.trim() || undefined,
-    content: values.content?.trim() || undefined,
-    paths: paths?.length ? paths : undefined,
-  };
-}
-
 function getErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message;
-  return "Unable to save this instruction.";
+  return errorMessage(error) ?? t("Unable to save this instruction.");
 }
 
 export function InstructionsProvider({
@@ -95,14 +86,13 @@ export function InstructionsProvider({
 
   const isCreateMode = selectedInstructionId === NEW_INSTRUCTION_ID;
 
+  const instructionFormSchema = useMemo(buildInstructionFormSchema, []);
   const form = aos.useForm({
     schema: instructionFormSchema,
     values: buildInstructionFormValues(null),
     onSubmit: async (values: InstructionFormValues) => {
-      const body = buildInstructionPayload(values);
-
       if (isCreateMode) {
-        const result = await aos.client.instruction.create.mutate({ body });
+        const result = await aos.client.instruction.create.mutate({ body: instructionCreatePayload(values) });
 
         const createdInstruction = result?.data?.instruction;
 
@@ -123,7 +113,7 @@ export function InstructionsProvider({
 
       const result = await aos.client.instruction.update.mutate({
         params: { instruction: selectedInstructionId },
-        body,
+        body: instructionUpdatePayload(values),
       });
 
       const updatedInstruction = result?.data?.instruction;

@@ -47,14 +47,20 @@ export function InstructionsSidebar() {
           onChange={(event) => setSearchQuery(event.target.value)}
         />
         <SplitPageLayout.SidebarHeaderActions>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="rounded-md"
-            onClick={startCreate}
-          >
-            <PlusSquareIcon />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="rounded-md"
+                onClick={startCreate}
+                aria-label={t("New instruction")}
+              >
+                <PlusSquareIcon />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t("New instruction")}</TooltipContent>
+          </Tooltip>
         </SplitPageLayout.SidebarHeaderActions>
       </SplitPageLayout.SidebarHeader>
 
@@ -68,8 +74,8 @@ export function InstructionsSidebar() {
                 </AnimatedEmptyState.Title>
                 <AnimatedEmptyState.Description>
                   {searchQuery
-                    ? `No results for "${searchQuery}"`
-                    : "Create a new instruction to start documenting workspace rules."}
+                    ? t("No results for \"{{query}}\"", { query: searchQuery })
+                    : t("Create a new instruction to start documenting workspace rules.")}
                 </AnimatedEmptyState.Description>
               </AnimatedEmptyState.Content>
             </AnimatedEmptyState>
@@ -97,10 +103,14 @@ export function InstructionsSidebar() {
                           {instruction.paths?.length ? (
                             <TooltipProvider>
                               <Tooltip>
+                                {/* A span, not a button: the card is already
+                                    the button, and a button inside a button is
+                                    invalid HTML that React logged on every
+                                    load. The hint needs no action of its own. */}
                                 <TooltipTrigger asChild>
-                                  <button type="button" className="shrink-0">
+                                  <span className="inline-flex shrink-0">
                                     <InfoIcon className="size-3 opacity-60" />
-                                  </button>
+                                  </span>
                                 </TooltipTrigger>
                                 <TooltipContent>
                                   <div className="flex flex-col gap-1">
@@ -116,7 +126,7 @@ export function InstructionsSidebar() {
                                       ))}
                                     {instruction.paths.length > 3 ? (
                                       <span className="text-sm text-muted-foreground">
-                                        +{instruction.paths.length - 3} more
+                                        {t("+{{count}} more", { count: instruction.paths.length - 3 })}
                                       </span>
                                     ) : null}
                                   </div>
@@ -138,8 +148,9 @@ export function InstructionsSidebar() {
       <SplitPageLayout.SidebarFooter>
         <span className="inline-flex items-center gap-2">
           <FileText className="size-3.5 text-muted-foreground" />
-          {instructions.length} instruction
-          {instructions.length !== 1 ? "s" : ""}
+          {instructions.length === 1
+            ? t("1 instruction")
+            : t("{{count}} instructions", { count: instructions.length })}
         </span>
       </SplitPageLayout.SidebarFooter>
     </>

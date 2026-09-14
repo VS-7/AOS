@@ -476,6 +476,24 @@ func TestSessionReportsWhoTheHeldTokenBelongsTo(t *testing.T) {
 	}
 }
 
+// The window reads the account through this call, so a field it drops is a
+// field the desktop never shows: the avatar saved on the Profile page came
+// back as initials inside the window while the daemon had it.
+func TestSessionCarriesTheAvatar(t *testing.T) {
+	server := newAuthServer(t, map[string]string{
+		"/api/auth/session": `{"data":{"user":{"id":"u1","name":"Vitor","image":"data:image/png;base64,iVBORw0KGgo="}}}`,
+	})
+	client := daemonclient.New(daemonclient.Options{BaseURL: server.URL, Token: "abc"})
+
+	got, err := client.Session(ctx())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Image != "data:image/png;base64,iVBORw0KGgo=" {
+		t.Fatalf("image = %q", got.Image)
+	}
+}
+
 func TestSessionSurfacesARefusalAsTheDaemonsError(t *testing.T) {
 	server := newAuthServer(t, map[string]string{
 		"/api/auth/session": `{"error":{"code":"AOS_AUTH_HTTP_UNAUTHENTICATED","message":"no session"}}`,

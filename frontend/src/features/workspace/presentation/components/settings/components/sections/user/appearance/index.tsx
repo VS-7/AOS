@@ -55,6 +55,10 @@ const SETTINGS_SELECT_TRIGGER = cn(
   "rounded-md py-0",
 );
 
+/** The sizes the interface can be drawn at and still hold together. */
+const FONT_SIZE_MIN = 9;
+const FONT_SIZE_MAX = 24;
+
 const appearanceFormSchema = z.object({
   mode: z.enum(["light", "dark", "system"]),
   preset: z.string(),
@@ -66,8 +70,10 @@ const appearanceFormSchema = z.object({
   uiFont: z.string().optional(),
   codeFont: z.string().optional(),
   radius: z.enum(["none", "sm", "md", "lg"]),
-  uiFontSize: z.number(),
-  codeFontSize: z.number(),
+  // Bounded: an emptied field used to store 0 and report success, and the
+  // interface quietly fell back to 13px over a setting that read 0.
+  uiFontSize: z.number().min(FONT_SIZE_MIN).max(FONT_SIZE_MAX),
+  codeFontSize: z.number().min(FONT_SIZE_MIN).max(FONT_SIZE_MAX),
   iconsSet: z.enum(["minimal", "standard", "complete", "none"]),
   iconsColored: z.boolean(),
 });
@@ -133,13 +139,12 @@ export function UserAppearanceSection() {
         iconsColored: next.icons?.colored ?? values.iconsColored,
       });
     },
+    // No success toast: every change here is visible the moment it is made,
+    // and a toast per slider tick or toggle only covered the preview.
     onResponse: ({ error }) => {
       if (error) {
-        toast.error(error.message || "Failed to update appearance");
-        return;
+        toast.error(error.message || t("Failed to update appearance"));
       }
-
-      toast.success(t("Appearance updated successfully!"));
     },
   });
 
@@ -314,8 +319,10 @@ export function UserAppearanceSection() {
             </div>
 
             <FormSectionItem className="border-t-0!">
-              <h4 className="text-sm font-medium capitalize">
-                {mode} {t("theme settings")}
+              {/* One sentence per mode, not "{mode} theme settings" with CSS
+                  capitalisation, which drew "Light Configurações De Tema". */}
+              <h4 className="text-sm font-medium">
+                {mode === "dark" ? t("Dark theme settings") : t("Light theme settings")}
               </h4>
             </FormSectionItem>
 
@@ -376,8 +383,8 @@ export function UserAppearanceSection() {
                   <FormItem className="gap-0">
                     <FormSectionItem className="bg-background/50">
                       <SettingsFieldLabel
-                        label={item.label}
-                        description={item.description}
+                        label={t(item.label)}
+                        description={t(item.description)}
                       />
                       <FormControl>
                         {/* A theme's palette is hex (theme render parses
@@ -414,10 +421,13 @@ export function UserAppearanceSection() {
                           SETTINGS_CONTROL_WIDTH,
                         )}
                       >
+                        {/* The value is drawn once, beside the slider: the
+                            slider's own label drew it a second time. */}
                         <Slider
                           min={0}
                           max={100}
                           step={1}
+                          showValue={false}
                           value={field.value}
                           onChange={(val) => {
                             const numVal = Array.isArray(val) ? val[0] : val;
@@ -449,7 +459,7 @@ export function UserAppearanceSection() {
                         className={SETTINGS_CONTROL_WIDTH}
                         value={field.value ?? SYSTEM_FONT_VALUE}
                         onValueChange={field.onChange}
-                        systemLabel="System font"
+                        systemLabel={t("System font")}
                       />
                     </FormControl>
                   </FormSectionItem>
@@ -471,7 +481,7 @@ export function UserAppearanceSection() {
                         className={SETTINGS_CONTROL_WIDTH}
                         value={field.value ?? SYSTEM_FONT_VALUE}
                         onValueChange={field.onChange}
-                        systemLabel="Default monospace"
+                        systemLabel={t("Default monospace")}
                         mono
                       />
                     </FormControl>
@@ -553,7 +563,9 @@ export function UserAppearanceSection() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="complete">{t("Complete")}</SelectItem>
+                          {/* Its own word: "Complete" is a verb elsewhere, and
+                              its catalogue entry drew "Concluir" here. */}
+                          <SelectItem value="complete">{t("Full")}</SelectItem>
                           <SelectItem value="standard">{t("Standard")}</SelectItem>
                           <SelectItem value="minimal">{t("Minimal")}</SelectItem>
                           <SelectItem value="none">{t("None")}</SelectItem>
@@ -611,22 +623,33 @@ export function UserAppearanceSection() {
                 key={item.name}
                 control={form.control}
                 name={item.name}
-                render={({ field }) => (
+                render={({ field, fieldState }) => (
                   <FormItem className="gap-0">
                     <FormSectionItem>
-                      <SettingsFieldLabel
-                        label={item.label}
-                        description={item.description}
-                      />
+                      <div className="space-y-0.5">
+                        <SettingsFieldLabel
+                          label={t(item.label)}
+                          description={t(item.description)}
+                        />
+                        {fieldState.error ? (
+                          <p role="alert" className="text-sm text-destructive">
+                            {t("Choose a size from {{min}} to {{max}} px.", { min: FONT_SIZE_MIN, max: FONT_SIZE_MAX })}
+                          </p>
+                        ) : null}
+                      </div>
                       <FormControl>
                         <ButtonGroup>
                           <Input
                             type="number"
+                            min={FONT_SIZE_MIN}
+                            max={FONT_SIZE_MAX}
                             className="h-8 w-16 text-center focus-visible:ring-0"
                             {...field}
-                            onChange={(event) =>
-                              field.onChange(Number(event.target.value))
-                            }
+                            // Empty is NaN — refused by the schema, drawn as an
+                            // empty box — rather than Number("") = 0, which
+                            // saved.
+                            value={Number.isFinite(field.value) ? field.value : ""}
+                            onChange={(event) => field.onChange(event.target.valueAsNumber)}
                           />
                           <ButtonGroupText className="h-8 px-3 text-xs font-normal text-muted-foreground">
                             px

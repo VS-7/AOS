@@ -13,21 +13,39 @@ import { toast } from "sonner";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { useAlert } from "@/components/ui/alert-provider";
+import { cn } from "@/lib/utils";
 import { UpsertTaskTypeView } from "./views/upsert-task-type.view";
+import { SETTINGS_CONTENT_MAX_WIDTH } from "../../../../constants";
+import { changedSettings } from "../../../../helpers/changed-settings";
+import { saveWorkspaceSettings } from "../../../../helpers/save-workspace-settings";
 import { t } from "@/lib/i18n";
 
 const taskTypesFormSchema = z.object({
   tasks: z.array(WorkspaceTaskTypeSchema).min(1, "At least one task type is required."),
 });
 
+type WorkspaceSnapshot = typeof aos.stores.workspace.state.current;
+
+/** What the form shows for a workspace — also what a change is measured against. */
+function taskTypesFormValues(workspace: WorkspaceSnapshot): { tasks: WorkspaceTaskType[] } {
+  // Go's `workspace_get` does not always carry a label or colour, and this
+  // form's schema requires both, so an entry missing either gets the same
+  // fallback an empty workspace starts from.
+  const tasks = (workspace?.tasks ?? []) as WorkspaceTaskType[];
+  return {
+    tasks: tasks.length
+      ? tasks.map((task) => ({ ...task, label: task.label || "Task", color: task.color || "#64748b" }))
+      : [{ id: "task", label: "Task", color: "#64748b", instructions: "" }],
+  };
+}
+
 export function WorkspaceTasksSection() {
-  
-  // `aos.useContext()` is AOS's global route context (`withContext(...)`),
-  // which this port's `app/aos.tsx` never wires -- `DefaultContext` (`app/
-  // builders/types.ts`) is deliberately loose (`Record<string, any>`) for
-  // exactly this unset case, so no per-call-site cast is needed here.
-  const context = aos.useContext();
-  const currentWorkspace = context.workspaces?.current;
+  // The store, not the route context: the context is a copy taken when the
+  // route loaded, and a save never reached it — a deleted type came back on
+  // returning here, and the next save wrote it back.
+  const currentWorkspace = aos.stores.workspace.useState((state) => state.current);
+  const { confirm } = useAlert();
   const [search, setSearch] = useState("");
   const [upsertOpen, setUpsertOpen] = useState(false);
   const [selectedTaskType, setSelectedTaskType] = useState<
@@ -40,41 +58,25 @@ export function WorkspaceTasksSection() {
   // was saved twice, with two "updated" toasts.
   const form = aos.useForm({
     schema: taskTypesFormSchema,
-    mutation: "workspace.update",
-    values: {
-      // Task 10: `currentWorkspace.tasks` (`app/stores.ts`'s own
-      // `WorkspaceTaskType`) types `label`/`color` optional — Go's
-      // `workspace_get` doesn't always populate them (see that file's own
-      // doc comment on the honest-empty-state policy). This form's Zod
-      // schema (`WorkspaceTaskTypeSchema`, pristine) requires both
-      // as non-empty strings, so entries missing either get the same
-      // fallback the empty-workspace default below already uses, rather
-      // than widening the schema itself to accept what Go's shape allows.
-      tasks: currentWorkspace?.tasks?.length
-        ? currentWorkspace.tasks.map((task) => ({
-            ...task,
-            label: task.label || "Task",
-            color: task.color || "#64748b",
-          }))
-        : [{ id: "task", label: "Task", color: "#64748b", instructions: "" }],
+    values: taskTypesFormValues(currentWorkspace),
+    onSubmit: async (values) => {
+      const saved = aos.stores.workspace.state.current;
+      if (await saveWorkspaceSettings(saved?.id, changedSettings("", values, taskTypesFormValues(saved)))) {
+        toast.success(t("Task settings updated successfully!"));
+      }
+      return values;
     },
-    onSubmit: (values) => ({
-      body: { tasks: values.tasks },
-      params: { id: currentWorkspace?.id },
-    }),
     onResponse: ({ error }) => {
-      if (error) {
-        if (error instanceof AppError) {
-          toast.error(error.message);
-          return;
-        }
-
-        console.error(error);
-        toast.error(error.message || "Failed to update task settings");
+      if (!error) return;
+      // What the daemon refused — a type with no id or label, or two types
+      // sharing an id — is put back on screen as it is saved, not as the
+      // refused edit left it.
+      form.reset(taskTypesFormValues(aos.stores.workspace.state.current));
+      if (error instanceof AppError) {
+        toast.error(error.message);
         return;
       }
-
-      toast.success(t("Task settings updated successfully!"));
+      toast.error(error.message || t("Failed to update task settings"));
     },
   });
 
@@ -112,18 +114,33 @@ export function WorkspaceTasksSection() {
   }
 
   function handleEdit(index: number) {
+    // The form's value, not the field-array row: a row also carries the
+    // array's own `key`, which is not part of a task type.
     setSelectedTaskType({
-      data: taskTypesFieldArray.fields[index],
+      data: form.getValues(`tasks.${index}`) as WorkspaceTaskType,
       index,
     });
     setUpsertOpen(true);
   }
 
-  function handleDelete(index: number) {
+  async function handleDelete(index: number) {
     if (taskTypesFieldArray.fields.length === 1) {
       toast.error(t("At least one task type is required."));
       return;
     }
+
+    // Asked first, like every other delete in these settings: one click on
+    // the trash icon used to remove the type, and the tasks that use it lose
+    // their type and its instructions.
+    const label = taskTypesFieldArray.fields[index]?.label ?? "";
+    const confirmed = await confirm({
+      title: t("Delete this task type?"),
+      description: t("Tasks of type {{label}} keep their records but lose the type and its instructions.", { label }),
+      confirmText: t("Delete"),
+      cancelText: t("Cancel"),
+      variant: "destructive",
+    });
+    if (!confirmed) return;
 
     taskTypesFieldArray.remove(index);
     void form.submit();
@@ -213,6 +230,7 @@ export function WorkspaceTasksSection() {
                           size="icon"
                           className="h-8 w-8 text-muted-foreground hover:text-foreground"
                           onClick={() => handleEdit(index)}
+                          aria-label={t("Edit {{label}}", { label: field.label })}
                         >
                           <PencilIcon className="h-4 w-4" />
                         </Button>
@@ -221,8 +239,9 @@ export function WorkspaceTasksSection() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleDelete(index)}
+                          onClick={() => void handleDelete(index)}
                           disabled={taskTypesFieldArray.fields.length === 1}
+                          aria-label={t("Delete {{label}}", { label: field.label })}
                         >
                           <Trash2Icon className="h-4 w-4" />
                         </Button>
@@ -236,13 +255,23 @@ export function WorkspaceTasksSection() {
         </SettingsSectionShell>
       </Form>
 
-      <UpsertTaskTypeView
-        open={upsertOpen}
-        onOpenChange={setUpsertOpen}
-        taskType={selectedTaskType?.data}
-        index={selectedTaskType?.index}
-        onSave={handleSave}
-      />
+      {/* The editor slides over the list's own centred column rather than
+          the whole content area, so its fields line up with the rows they
+          edit. Neither layer takes clicks of its own; the open editor does. */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className={cn("relative mx-auto h-full w-full", SETTINGS_CONTENT_MAX_WIDTH)}>
+          <UpsertTaskTypeView
+            open={upsertOpen}
+            onOpenChange={setUpsertOpen}
+            taskType={selectedTaskType?.data}
+            index={selectedTaskType?.index}
+            onSave={handleSave}
+            takenIds={taskTypesFieldArray.fields
+              .filter((_, index) => index !== selectedTaskType?.index)
+              .map((field) => field.id)}
+          />
+        </div>
+      </div>
     </div>
   );
 }
