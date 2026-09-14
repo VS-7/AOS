@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net"
 	"net/http"
@@ -145,6 +146,40 @@ func NewHealth() *Health { return &Health{Timeout: 2 * time.Second} }
 
 // Probe returns nil when the daemon answered.
 func (h *Health) Probe(ctx context.Context, host string, port int) error {
+	_, err := h.ask(ctx, host, port)
+	return err
+}
+
+// Identity is what a daemon says about itself on its health endpoint.
+type Identity struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	// PID is the process answering; 0 from a release that did not say.
+	PID int `json:"pid"`
+}
+
+// Identify reads which daemon answers at host:port — its release and its
+// process — where Probe only asks whether anything does.
+//
+// An update needs the difference. It restarts the daemon its supervisor
+// started, and a daemon started by hand answers a probe just the same; and
+// the new version is running only when the daemon answering says it is.
+func (h *Health) Identify(ctx context.Context, host string, port int) (Identity, error) {
+	raw, err := h.ask(ctx, host, port)
+	if err != nil {
+		return Identity{}, err
+	}
+	var id Identity
+	if err := jsonUnmarshal(raw, &id); err != nil {
+		return Identity{}, fmt.Errorf("health endpoint answered something that is not a daemon's health: %w", err)
+	}
+	return id, nil
+}
+
+// ask requests the health endpoint once, within Timeout, and returns the
+// body of an OK answer. A health answer is a few fields; anything past
+// maxHealthBody is not one.
+func (h *Health) ask(ctx context.Context, host string, port int) ([]byte, error) {
 	timeout := h.Timeout
 	if timeout == 0 {
 		timeout = 2 * time.Second
@@ -155,18 +190,20 @@ func (h *Health) Probe(ctx context.Context, host string, port int) error {
 	url := "http://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/api/health"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("health endpoint answered %d", res.StatusCode)
+		return nil, fmt.Errorf("health endpoint answered %d", res.StatusCode)
 	}
-	return nil
+	return io.ReadAll(io.LimitReader(res.Body, maxHealthBody))
 }
+
+const maxHealthBody = 64 << 10
 
 // Store holds the record of the running daemon.
 type Store struct{ path string }

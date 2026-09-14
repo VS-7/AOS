@@ -2,6 +2,7 @@ package update
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/build"
@@ -324,11 +325,17 @@ func errInstallationUnreadable(causer string, cause error) error {
 //
 // Where the installation carries the window, the window already open stays
 // on the previous release after the terminal install, so that is said too.
+// And a daemon started by hand is one the terminal cannot restart either: it
+// is stopped first, where it was started.
 func errRestartUnavailable(install Install) error {
-	actions := []apperr.CallToAction{{
+	var actions []apperr.CallToAction
+	if install.Unsupervised {
+		actions = append(actions, apperr.CallToAction{Label: stopUnsupervised})
+	}
+	actions = append(actions, apperr.CallToAction{
 		Label:   "install it from a terminal, where a separate process can restart the daemon and roll back if the new version does not come up",
 		Command: install.Command,
-	}}
+	})
 	if install.Reopen {
 		actions = append(actions, apperr.CallToAction{Label: "when it finishes, quit and reopen AOS: the open window keeps running the previous release until then"})
 	}
@@ -337,6 +344,58 @@ func errRestartUnavailable(install Install) error {
 		Msgf("the daemon cannot restart itself onto a new version, so it did not replace anything").
 		Status(apperr.StatusConflict).
 		CTA(actions...)
+}
+
+// stopUnsupervised is what to do about a daemon the supervisor did not start,
+// said once for both refusals that meet one.
+const stopUnsupervised = "the daemon serving this installation was started by hand or by a service manager, not by the " + build.DisplayName + " application or `" + build.Name + " gateway`, so an install cannot restart it: stop it where it was started (the terminal running `" + build.Name + "d serve`, or its service) — the install then starts the new version itself"
+
+// errDaemonNotSupervised is Apply refusing up front, with nothing touched,
+// because the daemon answering for this installation is not the process its
+// supervisor started — so a restart cannot stop it, and the new version
+// cannot come up in its place. See service.go's mayRestart.
+func errDaemonNotSupervised(daemon Daemon, command string) error {
+	who := "a daemon"
+	if daemon.PID > 0 {
+		who = fmt.Sprintf("the daemon (process %d)", daemon.PID)
+	}
+	return apperr.New("UPDATE_DAEMON_NOT_SUPERVISED").
+		Causer("update.Service.Apply").
+		Msgf("%s serving on %s was not started by this installation's supervisor, so an install could not restart it onto the new version; nothing was replaced", who, daemon.Address).
+		Issue("address", daemon.Address).
+		Issue("pid", daemon.PID).
+		Status(apperr.StatusConflict).
+		CTA(apperr.CallToAction{Label: stopUnsupervised}, apperr.CallToAction{
+			Label:   "then install it from a terminal",
+			Command: command,
+		})
+}
+
+// errDaemonNotAnswering: the supervisor's daemon is running and not
+// answering — still starting, or stuck — so what a restart would stop, and
+// whether the new version then came up, cannot be told apart from it.
+func errDaemonNotAnswering(daemon Daemon) error {
+	return apperr.New("UPDATE_DAEMON_NOT_ANSWERING").
+		Causer("update.Service.Apply").
+		Msgf("the daemon this installation's supervisor started (process %d) is not answering on %s, so an install cannot tell what it would restart; nothing was replaced", daemon.RecordedPID, daemon.Address).
+		Issue("address", daemon.Address).
+		Issue("pid", daemon.RecordedPID).
+		Status(apperr.StatusConflict).
+		CTA(apperr.CallToAction{
+			Label:   "restart the daemon, then install again",
+			Command: build.Name + " gateway restart",
+		})
+}
+
+// errDaemonUnknown: which daemon serves this installation could not be read,
+// and an install that cannot tell does not restart anything.
+func errDaemonUnknown(cause error) error {
+	return apperr.New("UPDATE_DAEMON_UNKNOWN").
+		Causer("update.Service.Apply").
+		Msgf("could not tell which daemon serves this installation, so nothing was replaced: %v", cause).
+		Status(apperr.StatusInternalServerError).
+		Wrap(cause).
+		CTA(apperr.CallToAction{Label: "retry; if it persists, check the permissions of the state directory"})
 }
 
 func errActiveWorkTimeout(grace string) error {
@@ -356,17 +415,31 @@ func errApplyFailed(cause error) error {
 		CTA(apperr.CallToAction{Label: "the previous binaries are back in place; retry, or investigate before retrying"})
 }
 
-// errRolledBack fires when the daemon did not report healthy after
+// errRolledBack fires when the new version did not answer as itself after
 // restarting on the new binaries. The previous version is already back in
 // place and answering by the time this is returned — see service.go's Apply.
+//
+// A daemon that came back up as another version is not the release's defect:
+// the supervisor started it from another copy of the binary than the one the
+// install replaced, and that is what is said.
 func errRolledBack(cause error) error {
+	action := "the daemon is running the previous version again; this is a defect in the release, not in your machine"
+	var wrong *wrongVersionError
+	if errors.As(cause, &wrong) {
+		action = "the daemon is running the previous version again; it is started from another copy of " + build.Name + "d than the one this install replaces — check " + envDaemonPath + ", then install again"
+	}
 	return apperr.New("UPDATE_ROLLED_BACK").
 		Causer("update.Service.Apply").
-		Msgf("the new version did not become healthy after restart; rolled back to the previous one: %v", cause).
+		Msgf("the new version did not come up after restart; rolled back to the previous one: %v", cause).
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause).
-		CTA(apperr.CallToAction{Label: "the daemon is running the previous version again; this is a defect in the release, not in your machine"})
+		CTA(apperr.CallToAction{Label: action})
 }
+
+// envDaemonPath names the setting that makes the supervisor start a daemon
+// binary of its choosing — spelled from build.EnvPrefix, like
+// envUpdateBaseURL.
+const envDaemonPath = build.EnvPrefix + "_DAEMON_PATH"
 
 // errRestartAfterRollback: the previous binaries are back on disk, and the
 // daemon did not come back up on them. The files are fine; the process is

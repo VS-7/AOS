@@ -319,13 +319,17 @@ func (d dirSource) Fetch(_ context.Context, url string) ([]byte, error) {
 	return data, err
 }
 
+// noSupervisor is the daemon verify never has: it downloads, and restarts
+// nothing, so it says it is the daemon itself, the one process an install
+// never restarts from.
 type noSupervisor struct{}
 
-func (noSupervisor) CanRestart(context.Context) bool { return false }
+func (noSupervisor) Observe(context.Context) (update.Daemon, error) {
+	return update.Daemon{Self: true}, nil
+}
 func (noSupervisor) Restart(context.Context) error {
 	return errors.New("verify never restarts anything")
 }
-func (noSupervisor) Healthy(context.Context) bool { return false }
 
 type anyone struct{}
 

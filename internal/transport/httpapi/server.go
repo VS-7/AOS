@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -338,11 +339,17 @@ func (s *Server) invoke(d command.Descriptor, notice *command.DeprecationNotice)
 	}
 }
 
+// health says the daemon is serving, and which one it is. The process id is
+// how an update tells the daemon its supervisor started from one somebody
+// started by hand on the same port — the first is restarted onto the new
+// release, the second cannot be — and the version is how it sees the new
+// release answering rather than anything at all.
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":  "ok",
 		"version": build.Version,
 		"name":    build.Name,
+		"pid":     os.Getpid(),
 	})
 }
 

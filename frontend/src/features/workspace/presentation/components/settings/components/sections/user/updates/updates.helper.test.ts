@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { CheckResult, Release, Staged, UpdateStatus } from "@/features/update/interfaces/update.interfaces";
 import {
+  busyLine,
   canCheck,
   checkLine,
+  followed,
   messageOf,
   offerLine,
   offerOf,
@@ -11,6 +13,8 @@ import {
   releasePage,
   reopenLine,
   statusLine,
+  stillRunning,
+  unsupervisedLine,
 } from "./updates.helper";
 
 const release: Release = {
@@ -150,6 +154,57 @@ describe("an offered release", () => {
     expect(reopenLine(terminal(true))).toContain("quit and reopen AOS");
     expect(reopenLine(terminal(false))).toBeNull();
     expect(reopenLine(offerOf(check({ state: "available", release, install: { method: "terminal", reopen: true } }), null, status())!)).toBeNull();
+  });
+});
+
+// A daemon started by hand is not one the terminal command can restart: the
+// command refused, and the screen offered it as if it would work.
+describe("a terminal install beside a daemon started by hand", () => {
+  const staged: Staged = { version: "v0.16.0", dir: "/state/update/staged", binaries: { aosd: "/state/update/staged/aosd" } };
+  const terminal = (unsupervised: boolean, withStaged = true) =>
+    offerOf(
+      check({ state: "available", release, install: { method: "terminal", command: "aosd update apply --version v0.16.0", unsupervised } }),
+      withStaged ? staged : null,
+      status(),
+    )!;
+
+  it("says to stop that daemon before running the command", () => {
+    expect(unsupervisedLine(terminal(true))).toContain("stop it where it was started");
+    expect(unsupervisedLine(terminal(false))).toBeNull();
+    expect(unsupervisedLine(terminal(true, false))).toBeNull();
+  });
+});
+
+// One click on "Download and verify" on a slow link: the bridge gave up
+// waiting, sent the call again, and the daemon answered that a download was
+// already running — which the screen toasted as a failure, and never showed
+// the release it went on to stage.
+describe("a download whose answer did not come back", () => {
+  it("is still running when the daemon says one is, or the answer was lost", () => {
+    for (const code of ["AOS_UPDATE_IN_PROGRESS", "AOS_DAEMON_TIMEOUT", "AOS_DAEMON_ANSWER_LOST"]) {
+      expect(stillRunning({ code, message: "x" }), code).toBe(true);
+    }
+    expect(stillRunning({ code: "AOS_UPDATE_SIGNATURE_INVALID", message: "x" })).toBe(false);
+    expect(stillRunning({ code: "AOS_DAEMON_UNREACHABLE", message: "x" })).toBe(false);
+    expect(stillRunning(new Error("boom"))).toBe(false);
+    expect(stillRunning(null)).toBe(false);
+  });
+
+  it("is followed through the status until it ends, and ends as what the status shows", () => {
+    const staged: Staged = { version: "v0.16.0", dir: "/d", binaries: {} };
+    expect(followed({ kind: "download", version: "v0.16.0" }, status({ busy: true }))).toBe("running");
+    expect(followed({ kind: "download", version: "v0.16.0" }, status({ staged }))).toBe("staged");
+    expect(followed({ kind: "download", version: "v0.16.0" }, status({ current: "v0.16.0" }))).toBe("installed");
+    expect(followed({ kind: "download", version: "v0.16.0" }, status())).toBe("ended");
+    expect(followed({ kind: "download", version: "v0.16.0" }, null)).toBe("running");
+    expect(followed({ kind: "install", version: "v0.16.0" }, status({ staged }))).toBe("ended");
+    expect(followed({ kind: "install", version: "v0.16.0" }, status({ current: "v0.16.0" }))).toBe("installed");
+  });
+
+  it("is said to be running when the screen opens on one", () => {
+    expect(busyLine(status({ busy: true }), false)).toContain("is running on this installation");
+    expect(busyLine(status({ busy: true }), true)).toBeNull();
+    expect(busyLine(status(), false)).toBeNull();
   });
 });
 

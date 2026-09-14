@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -351,6 +352,11 @@ func TestHealthIsReachableWithoutACredential(t *testing.T) {
 	}
 	if body["status"] != "ok" {
 		t.Fatalf("health = %s", raw)
+	}
+	// An update tells the daemon its supervisor started from one somebody
+	// started by hand by the process answering here.
+	if pid, ok := body["pid"].(float64); !ok || int(pid) != os.Getpid() {
+		t.Fatalf("health should name the process answering, got %s", raw)
 	}
 }
 
