@@ -51,7 +51,13 @@ const GoalsHeader = React.memo(function GoalsHeader() {
 });
 
 const GoalsListView = React.memo(function GoalsListView() {
-  const { displayedGroupedGoals, selectedStatuses } = useGoalsContext();
+  const {
+    displayedGroupedGoals,
+    selectedStatuses,
+    filteredGoals,
+    activeFilterCount,
+    clearFilters,
+  } = useGoalsContext();
 
   const visibleStatuses = useMemo(
     () =>
@@ -61,6 +67,21 @@ const GoalsListView = React.memo(function GoalsListView() {
       ),
     [selectedStatuses],
   );
+
+  // Filters that match nothing used to leave a column of collapsed "0"
+  // headers and no word about why, nor a way back.
+  if (filteredGoals.length === 0 && activeFilterCount > 0) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 p-12 text-center">
+        <p className="text-sm text-muted-foreground">
+          {t("No goals match these filters.")}
+        </p>
+        <Button variant="outline" size="sm" onClick={clearFilters}>
+          {t("Clear filters")}
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="gap-4 p-4">

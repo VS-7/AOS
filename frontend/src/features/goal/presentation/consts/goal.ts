@@ -5,7 +5,7 @@ import {
   CircleX,
   CirclePause,
   CircleDashed,
-  SignalZero,
+  Minus,
   SignalLow,
   SignalMedium,
   SignalHigh,
@@ -61,20 +61,23 @@ export const GOAL_PRIORITY_CONFIG: Record<
   GoalPriority,
   { label: string; icon: any; colorClass: string }
 > = {
+  // SignalZero at 70% of the muted colour drew a single faint dot, which read
+  // as nothing at all; a dash says "no priority", and the three quiet levels
+  // take the full muted colour so their bars can be told apart.
   no_priority: {
     get label() { return t("No Priority"); },
-    icon: SignalZero,
-    colorClass: "text-muted-foreground/70",
+    icon: Minus,
+    colorClass: "text-muted-foreground",
   },
   low: {
     get label() { return t("Low"); },
     icon: SignalLow,
-    colorClass: "text-muted-foreground/70",
+    colorClass: "text-muted-foreground",
   },
   medium: {
     get label() { return t("Medium"); },
     icon: SignalMedium,
-    colorClass: "text-muted-foreground/70",
+    colorClass: "text-muted-foreground",
   },
   high: { get label() { return t("High"); }, icon: SignalHigh, colorClass: "text-yellow-500" },
   urgent: { get label() { return t("Urgent"); }, icon: FlagIcon, colorClass: "text-red-500" },

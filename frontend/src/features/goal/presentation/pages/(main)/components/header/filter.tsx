@@ -20,9 +20,17 @@ import { useGoalsContext } from "@/features/goal/presentation/pages/(main)/conte
 import { aos } from "@/app/aos";
 import { Icon } from "@/components/ui/icon";
 import { ProjectHelper } from "@/features/project/presentation/helpers/project.helper";
-import { t } from "@/lib/i18n";
+import { useTranslation } from "@/lib/i18n";
+
+/**
+ * These menus pick several values, and a checkbox item closes its menu on
+ * select by default — so picking a second project meant reopening it.
+ */
+const keepOpen = (event: Event) => event.preventDefault();
 
 export function GoalsFilter() {
+  // Subscribing re-renders the button labels when the language changes.
+  const { t } = useTranslation();
   const {
     selectedStatuses,
     selectedPriorities,
@@ -37,28 +45,28 @@ export function GoalsFilter() {
   const projects = aos.stores.projects.useState((state) => state.items);
 
   const getStatusButtonLabel = () => {
-    if (selectedStatuses.length === 0) return "Status";
+    if (selectedStatuses.length === 0) return t("Status");
     if (selectedStatuses.length === 1) {
-      return `Status: ${GoalHelper.getStatus(selectedStatuses[0]).label}`;
+      return t("Status: {{value}}", { value: GoalHelper.getStatus(selectedStatuses[0]).label });
     }
-    return `Status (${selectedStatuses.length})`;
+    return t("Status ({{count}})", { count: selectedStatuses.length });
   };
 
   const getPriorityButtonLabel = () => {
-    if (selectedPriorities.length === 0) return "Priority";
+    if (selectedPriorities.length === 0) return t("Priority");
     if (selectedPriorities.length === 1) {
-      return `Priority: ${goalPriorityConfig(selectedPriorities[0]).label}`;
+      return t("Priority: {{value}}", { value: goalPriorityConfig(selectedPriorities[0]).label });
     }
-    return `Priority (${selectedPriorities.length})`;
+    return t("Priority ({{count}})", { count: selectedPriorities.length });
   };
 
   const getProjectButtonLabel = () => {
-    if (selectedProjects.length === 0) return "Project";
+    if (selectedProjects.length === 0) return t("Project");
     if (selectedProjects.length === 1) {
       const proj = projects.find((p) => p.id === selectedProjects[0]);
-      return `Project: ${proj ? proj.name : selectedProjects[0]}`;
+      return t("Project: {{value}}", { value: proj ? proj.name : selectedProjects[0] });
     }
-    return `Project (${selectedProjects.length})`;
+    return t("Project ({{count}})", { count: selectedProjects.length });
   };
 
   const selectedProjectIcon =
@@ -96,6 +104,7 @@ export function GoalsFilter() {
                 key={status}
                 checked={selectedStatuses.includes(status)}
                 onCheckedChange={() => handleToggleStatus(status)}
+                onSelect={keepOpen}
               >
                 <Icon className={`mr-2 size-4 ${config.color}`} />
                 {config.label}
@@ -131,6 +140,7 @@ export function GoalsFilter() {
                 key={priority}
                 checked={selectedPriorities.includes(priority)}
                 onCheckedChange={() => handleTogglePriority(priority)}
+                onSelect={keepOpen}
               >
                 <PriorityIcon className={`mr-2 size-4 ${config.colorClass}`} />
                 {config.label}
@@ -170,6 +180,7 @@ export function GoalsFilter() {
               key={project.id}
               checked={selectedProjects.includes(project.id)}
               onCheckedChange={() => handleToggleProject(project.id)}
+              onSelect={keepOpen}
             >
               <Icon
                 value={ProjectHelper.getIcon(project.icon)}

@@ -569,8 +569,8 @@ export interface CommandMap {
     "content"?: string;
     /** One line summarising the outcome. */
     "description"?: string;
-    /** When this goal is due, if it has a deadline. */
-    "dueAt"?: unknown;
+    /** When this goal is due, if it has a deadline: an RFC3339 instant. */
+    "dueAt"?: string;
     /** How to tell this goal was actually served. */
     "measure"?: string;
     /** How urgent this goal is. Defaults to no_priority. */
@@ -617,13 +617,13 @@ export interface CommandMap {
     "_reasoning": string;
     /** New body content, in Markdown. Omit to leave unchanged. */
     "content"?: unknown;
-    /** New one-line summary of the outcome. Omit to leave unchanged. */
+    /** New one-line summary of the outcome. Empty string clears it. Omit to leave unchanged. */
     "description"?: unknown;
-    /** New due date. Omit to leave unchanged. */
+    /** New due date, an RFC3339 instant. Empty string clears it. Omit to leave unchanged. */
     "dueAt"?: unknown;
     /** Identifier of the goal to update. */
     "id": string;
-    /** New measure that makes this goal checkable rather than aspirational. Omit to leave unchanged. */
+    /** New measure that makes this goal checkable rather than aspirational. Empty string clears it. Omit to leave unchanged. */
     "measure"?: unknown;
     /** New priority: no_priority, urgent, high, medium or low. Omit to leave unchanged. */
     "priority"?: "no_priority" | "urgent" | "high" | "medium" | "low";

@@ -69,7 +69,7 @@ export interface ViewportVisibilityState {
   };
   agent: { history: { visible: boolean }; panel: { visible: boolean } };
   inbox: { panel: { visible: boolean } };
-  tasks: { dialog: { visible: boolean } };
+  tasks: { dialog: { visible: boolean; project?: string } };
   project: { dialog: { visible: boolean } };
   goal: { dialog: { visible: boolean } };
   settings: { dialog: { visible: boolean; section: SettingsSectionId } };
@@ -96,7 +96,10 @@ export const ViewportStore = AosStore.create("viewport")
     },
     agent: { history: { visible: false }, panel: { visible: true } },
     inbox: { panel: { visible: false } },
-    tasks: { dialog: { visible: false } },
+    // `project`: what the create-task dialog files the new task under — set
+    // by whoever opens it for a project (a project's Tasks tab), cleared when
+    // it closes.
+    tasks: { dialog: { visible: false, project: undefined as string | undefined } },
     project: { dialog: { visible: false } },
     goal: { dialog: { visible: false } },
     settings: { dialog: { visible: false, section: DEFAULT_SETTINGS_SECTION } },
@@ -125,6 +128,11 @@ export const ViewportStore = AosStore.create("viewport")
       current[lastKey] = visible ?? !current[lastKey];
       return newState;
     });
+  })
+  .addAction("setTaskDialogProject", (ctx) => (project?: string) => {
+    ctx.state.set((state) => ({
+      tasks: { ...state.tasks, dialog: { ...state.tasks.dialog, project } },
+    }));
   })
   .addAction(
     "updateInAppMetadata",

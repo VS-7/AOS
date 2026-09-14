@@ -1,4 +1,4 @@
-import { ChevronRight, Folder } from "lucide-react";
+import { ChevronRight, Folder, FolderKanban } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 
 import { Icon } from "@/components/ui/icon";
@@ -43,6 +43,12 @@ export function WorkspaceSidebarProjectsGroupMenu() {
     void navigate({ to: "/projects/$id", params: { id: "new" } });
   }
 
+  // The row above only opens this submenu, so without this nothing in the
+  // sidebar reached the list of projects at all.
+  function openAll() {
+    void navigate({ to: "/projects" });
+  }
+
   return (
     <Collapsible
       key="projects"
@@ -62,6 +68,14 @@ export function WorkspaceSidebarProjectsGroupMenu() {
           <SidebarMenuSub>
             <SidebarMenuMotionItem index={0}>
               <SidebarMenuItem>
+                <SidebarMenuButton isActive={pathname === "/projects"} onClick={openAll}>
+                  <FolderKanban className="size-3.5 text-muted-foreground" />
+                  <span className="truncate">{t("All projects")}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenuMotionItem>
+            <SidebarMenuMotionItem index={1}>
+              <SidebarMenuItem>
                 <SidebarMenuButton onClick={handleCreate}>
                   <HugeiconsIcon
                     icon={AddSquareIcon}
@@ -76,7 +90,7 @@ export function WorkspaceSidebarProjectsGroupMenu() {
               const iconName = ProjectHelper.getIcon(project.icon);
 
               return (
-                <SidebarMenuMotionItem key={project.id} index={index + 1}>
+                <SidebarMenuMotionItem key={project.id} index={index + 2}>
                   <SidebarMenuItem>
                     <SidebarMenuButton
                       isActive={isActive}
