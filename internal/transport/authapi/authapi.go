@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
@@ -320,10 +321,28 @@ func (s *server) apiToken(w http.ResponseWriter, r *http.Request) {
 
 // regenerateAPIToken replaces the signed-in account's API credential and
 // answers the new value — the only time it is ever answered.
+//
+// It revokes the token every MCP client the person configured is using, so two
+// callers that can authenticate are still refused. The API token itself: it is
+// what those clients and agents hold, and accepting it let any of them replace
+// the person's token and keep the new one. And a request a browser sends
+// without asking — the session cookie is SameSite=Lax, and a page on any other
+// 127.0.0.1 port is the same site, so a plain form there posted here with the
+// cookie attached. A form cannot send application/json, and a script that does
+// needs a preflight the daemon's CORS policy answers only for the window. That
+// check runs first, so a forged request touches no credential at all.
 func (s *server) regenerateAPIToken(w http.ResponseWriter, r *http.Request) {
-	user, err := s.authenticate(r)
+	if !sentAsJSON(r) {
+		s.writeError(w, errNotJSON())
+		return
+	}
+	user, presented, err := s.svc.Credential(r.Context(), bearerOf(r))
 	if err != nil {
 		s.writeError(w, err)
+		return
+	}
+	if presented.Name == auth.APITokenName {
+		s.writeError(w, errAPITokenReplacingItself())
 		return
 	}
 	token, plain, err := s.svc.RegenerateAPIToken(r.Context(), user.ID)
@@ -340,6 +359,13 @@ func (s *server) authenticate(r *http.Request) (*auth.User, error) {
 		return nil, errUnauthenticated()
 	}
 	return s.svc.Authenticate(r.Context(), bearer)
+}
+
+// sentAsJSON reports whether r declares a JSON body, which only a request a
+// browser would preflight can.
+func sentAsJSON(r *http.Request) bool {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	return err == nil && mediaType == "application/json"
 }
 
 func (s *server) decode(w http.ResponseWriter, r *http.Request, v any) bool {

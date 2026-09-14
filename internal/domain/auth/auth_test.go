@@ -77,6 +77,30 @@ func onboard(t *testing.T, svc *auth.Service) auth.OnboardingOutput {
 	return out
 }
 
+// A route that must tell an API token from the person's own session is told
+// which credential was presented, not only whose it is.
+func TestCredentialSaysWhichCredentialWasPresented(t *testing.T) {
+	svc, _ := newService(t)
+	out := onboard(t, svc)
+	_, api, err := svc.RegenerateAPIToken(ctx(), out.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for bearer, want := range map[string]string{out.Token: "initial", api: auth.APITokenName} {
+		user, presented, err := svc.Credential(ctx(), bearer)
+		if err != nil {
+			t.Fatalf("%s: %v", want, err)
+		}
+		if user.ID != out.User.ID || presented.Name != want {
+			t.Errorf("credential = %s/%q, want %s/%q", user.ID, presented.Name, out.User.ID, want)
+		}
+	}
+	if _, _, err := svc.Credential(ctx(), "aos_not-a-real-token"); !errors.Is(err, apperr.ErrUnauthorized) {
+		t.Errorf("unknown bearer: error = %v", err)
+	}
+}
+
 // TestAPasswordOfElevenIsRejected pins the divergence: the original accepts
 // six, for an account that can run shell commands on the machine.
 func TestAPasswordOfElevenIsRejected(t *testing.T) {

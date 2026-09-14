@@ -167,13 +167,25 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Session, error) {
 // whether or not a candidate exists, so a caller cannot learn from the timing
 // whether a token is merely wrong or is one character off.
 func (s *Service) Authenticate(ctx context.Context, bearer string) (*User, error) {
+	user, _, err := s.Credential(ctx, bearer)
+	return user, err
+}
+
+// Credential is Authenticate, also answering which of the account's
+// credentials the bearer is.
+//
+// Most routes only need the account. A few must also know the kind of
+// credential presented: the API token is handed to MCP clients and agents, and
+// the route that replaces it must not accept it, or whoever holds it could
+// revoke the person's token and keep the new one.
+func (s *Service) Credential(ctx context.Context, bearer string) (*User, Token, error) {
 	presented := strings.TrimSpace(bearer)
 	if presented == "" {
-		return nil, errUnauthenticated()
+		return nil, Token{}, errUnauthenticated()
 	}
 	users, err := s.store.Load(ctx)
 	if err != nil {
-		return nil, errStoreFailed("Authenticate", err)
+		return nil, Token{}, errStoreFailed("Authenticate", err)
 	}
 
 	want := hashToken(presented)
@@ -194,20 +206,17 @@ func (s *Service) Authenticate(ctx context.Context, bearer string) (*User, error
 		}
 	}
 	if match == nil {
-		return nil, errUnauthenticated()
+		return nil, Token{}, errUnauthenticated()
 	}
 
 	// Recording last use is a write on a read path. It is done because a token
 	// nobody can tell the age of is a token nobody will ever revoke, and it is
 	// best-effort because failing an authenticated request over an audit field
-	// would be the wrong trade.
+	// would be the wrong trade — so a failed save is not returned.
 	match.Tokens[matchToken].LastUsed = &now
-	if err := s.store.Save(ctx, users); err != nil {
-		out := *match
-		return &out, nil
-	}
+	_ = s.store.Save(ctx, users)
 	out := *match
-	return &out, nil
+	return &out, match.Tokens[matchToken], nil
 }
 
 // IssueTokenInput names a new credential for an account.

@@ -27,3 +27,19 @@ func errBadRequestBody(cause error) error {
 		Wrap(cause).
 		CTA(apperr.CallToAction{Label: "send a JSON object matching this endpoint's fields"})
 }
+
+func errNotJSON() error {
+	return apperr.New("AUTH_HTTP_NOT_JSON").
+		Causer("authapi.regenerateAPIToken").
+		Msgf("this request must be sent with Content-Type: application/json").
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{Label: "send the request from the application, or with a JSON body and that header"})
+}
+
+func errAPITokenReplacingItself() error {
+	return apperr.New("AUTH_HTTP_API_TOKEN_CANNOT_REPLACE_ITSELF").
+		Causer("authapi.regenerateAPIToken").
+		Msgf("the API token cannot be used to replace the API token").
+		Status(apperr.StatusForbidden).
+		CTA(apperr.CallToAction{Label: "sign in to the application and regenerate it from Settings > Developers"})
+}
