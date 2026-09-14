@@ -1,5 +1,4 @@
-import { useMemo } from "react";
-import { useRouter } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
 import * as z from "zod";
 
 import { aos } from "@/app/aos";
@@ -23,84 +22,101 @@ import {
 } from "@/components/ui/form";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { AppError } from "@/core/errors/aos.error";
-import { api } from "@/lib/aos-facade";
-import { t, LOCALES, LOCALE_NAMES, normalizeLocale, setLocale } from "@/lib/i18n";
+import type { Config } from "@/features/config/interfaces/config.interfaces";
+import { errorMessage } from "@/lib/aos-facade";
+import { t, LOCALES, LOCALE_NAMES, LOCALE_TAGS, useTranslation, type Locale } from "@/lib/i18n";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { changedSettings } from "../../../../helpers/changed-settings";
+import { saveConfigSettings } from "../../../../helpers/save-config-settings";
 
 /**
  * Built when the section renders rather than when the module loads: the
- * name rule's message goes through `t()`, which answers in the locale in
- * force at the moment it runs.
+ * messages go through `t()`, which answers in the locale in force at the
+ * moment it runs.
  */
 function buildProfileFormSchema() {
   return z.object({
-    // Trimmed before the length check: "   " passed `min(2)` and went to the
-    // daemon, which refuses a name that is only spaces.
-    name: z.string().trim().min(2, t("Name must be at least 2 characters.")),
-    email: z.string().email(),
+    // Judged trimmed — "   " passed `min(2)` and went to the daemon, which
+    // refuses a name that is only spaces — but not *transformed*: the form
+    // resets itself with what a save returns, and a trimmed value took the
+    // space out from under somebody still typing "Vitor Sergio".
+    name: z.string().refine((value) => value.trim().length >= 2, t("Name must be at least 2 characters.")),
+    email: z.string().email(t("Enter a valid email address.")),
     image: z.string().optional().or(z.literal("")),
     timezone: z.string(),
-    language: z.string(),
     city: z.string().optional(),
     country: z.string().optional(),
   });
 }
 
-const passwordFormSchema = z
-  .object({
-    currentPassword: z.string().optional().or(z.literal("")),
-    newPassword: z.string().optional().or(z.literal("")),
-    verifyPassword: z.string().optional().or(z.literal("")),
-  })
-  // Always checked. This form has its own "Update password" button and
-  // nothing else to save, so an empty submission is a mistake to point at,
-  // not a no-op to congratulate with "Password updated successfully!".
-  .superRefine((data, ctx) => {
-    if (!data.currentPassword) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Current password is required",
-        path: ["currentPassword"],
-      });
-    }
+function buildPasswordFormSchema() {
+  return z
+    .object({
+      currentPassword: z.string().optional().or(z.literal("")),
+      newPassword: z.string().optional().or(z.literal("")),
+      verifyPassword: z.string().optional().or(z.literal("")),
+    })
+    // Always checked. This form has its own "Update password" button and
+    // nothing else to save, so an empty submission is a mistake to point at,
+    // not a no-op to congratulate with "Password updated successfully!".
+    .superRefine((data, ctx) => {
+      if (!data.currentPassword) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: t("Current password is required"),
+          path: ["currentPassword"],
+        });
+      }
 
-    // Twelve, as the daemon enforces (auth.MinPasswordLen). Six here let a
-    // password through the form that the daemon then refused.
-    if (!data.newPassword || data.newPassword.length < 12) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "New password must be at least 12 characters",
-        path: ["newPassword"],
-      });
-    }
+      // Twelve, as the daemon enforces (auth.MinPasswordLen). Six here let a
+      // password through the form that the daemon then refused.
+      if (!data.newPassword || data.newPassword.length < 12) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: t("New password must be at least 12 characters"),
+          path: ["newPassword"],
+        });
+      }
 
-    if (data.newPassword !== data.verifyPassword) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Passwords do not match",
-        path: ["verifyPassword"],
-      });
-    }
-  });
+      if (data.newPassword !== data.verifyPassword) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: t("Passwords do not match"),
+          path: ["verifyPassword"],
+        });
+      }
+    });
+}
+
+/** The region paths this page edits, with the values it shows for them. */
+function regionSettings(config: Config | undefined) {
+  return {
+    "region.timezone": config?.region?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    "region.city": config?.region?.city || "",
+    "region.country": config?.region?.country || "",
+  };
+}
 
 /**
  * Account identity, region, and password — AuthStore + config region.
  */
 export function UserProfileSection() {
-  const router = useRouter();
-  
-  // `aos.useContext()` is AOS's global route context (`withContext(...)`),
-  // which this port's `app/aos.tsx` never wires -- `DefaultContext` (`app/
-  // builders/types.ts`) is deliberately loose (`Record<string, any>`) for
-  // exactly this unset case, so no per-call-site cast is needed here.
-  const context = aos.useContext();
+  // The stores, not the route context: the context is a copy taken when the
+  // route loaded, and a save never reached it — a city saved here came back
+  // as the old one after visiting another section, and the next edit sent
+  // the old one again.
   const authUser = aos.stores.auth.useState((state) => state.user);
-  const config = context.config;
+  const config = aos.stores.config.useState();
+  const { locale } = useTranslation();
+  const [switchingLanguage, setSwitchingLanguage] = useState(false);
 
   const profileFormSchema = useMemo(buildProfileFormSchema, []);
+  const passwordFormSchema = useMemo(buildPasswordFormSchema, []);
+  const region = regionSettings(config);
 
   const profileForm = aos.useForm({
     schema: profileFormSchema,
@@ -109,56 +125,43 @@ export function UserProfileSection() {
       name: authUser?.name || "",
       email: authUser?.email || "",
       image: authUser?.image || "",
-      timezone:
-        config?.region?.timezone ||
-        Intl.DateTimeFormat().resolvedOptions().timeZone,
-      language: config?.region?.language || "en-US",
-      city: config?.region?.city || "",
-      country: config?.region?.country || "",
+      timezone: region["region.timezone"],
+      city: region["region.city"],
+      country: region["region.country"],
     },
+    // Each half is sent only when something in it changed: the account and
+    // the configuration are two writes, and a city edit has no reason to
+    // rewrite the account (or a name edit the region).
     onSubmit: async (values) => {
-      const profileResult = await aos.stores.auth.actions.updateProfile({
-        name: values.name,
-        email: values.email,
-        image: values.image || undefined,
-      });
-
-      if (profileResult.error) {
-        throw profileResult.error;
+      const account = aos.stores.auth.state.user;
+      const name = values.name.trim();
+      const image = values.image || "";
+      let saved = false;
+      if (name !== (account?.name ?? "") || values.email !== (account?.email ?? "") || image !== (account?.image ?? "")) {
+        const profileResult = await aos.stores.auth.actions.updateProfile({ name, email: values.email, image });
+        if (profileResult.error) throw profileResult.error;
+        saved = true;
       }
 
-      const regionResult = await api.config.update.mutate({
-        body: {
-          region: {
-            timezone: values.timezone,
-            language: values.language,
-            city: values.city,
-            country: values.country,
-          },
-        },
-      });
-
-      if (regionResult.error) {
-        throw regionResult.error;
+      const nextRegion = {
+        "region.timezone": values.timezone,
+        "region.city": values.city ?? "",
+        "region.country": values.country ?? "",
+      };
+      if (await saveConfigSettings(changedSettings("", nextRegion, regionSettings(aos.stores.config.state)))) {
+        saved = true;
       }
 
+      if (saved) toast.success(t("Profile updated successfully!"));
       return values;
     },
     onResponse: ({ error }) => {
-      if (error) {
-        if (error instanceof AppError) {
-          toast.error(error.message);
-          return;
-        }
-
-        toast.error(
-          error instanceof Error ? error.message : "Failed to update profile",
-        );
+      if (!error) return;
+      if (error instanceof AppError) {
+        toast.error(error.message);
         return;
       }
-
-      toast.success(t("Profile updated successfully!"));
-      router.invalidate();
+      toast.error(error instanceof Error ? error.message : t("Failed to update profile"));
     },
   });
 
@@ -194,22 +197,47 @@ export function UserProfileSection() {
           return;
         }
 
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to update password",
-        );
+        toast.error(error instanceof Error ? error.message : t("Failed to update password"));
         return;
       }
 
       toast.success(t("Password updated successfully!"));
-      router.invalidate();
     },
   });
 
+  /**
+   * Saves the language to the configuration, which then puts the interface
+   * in it — `region.language` is where the language lives (see
+   * `applyConfiguredLocale`).
+   *
+   * It used to switch the interface first and leave the save to the form's
+   * autosave, which the switch cancelled: changing language remounts the
+   * whole tree, taking the pending save with it. The language was never
+   * saved, the select went back to the old one, and picking that one again
+   * did nothing because the select already showed it — there was no way back.
+   * A pending edit elsewhere on the page is saved first for the same reason.
+   */
+  const chooseLanguage = async (next: Locale) => {
+    if (next === locale || switchingLanguage) return;
+    setSwitchingLanguage(true);
+    try {
+      // Unconditionally: the save sends only what differs from what is
+      // stored, so with nothing pending it sends nothing.
+      await profileForm.submit();
+      await saveConfigSettings({ "region.language": LOCALE_TAGS[next] });
+    } catch (error) {
+      toast.error(t("The language could not be saved"), { description: errorMessage(error) });
+      setSwitchingLanguage(false);
+    }
+  };
+
   return (
     <div className="flex h-full flex-1 flex-col overflow-y-auto">
-      <Form form={profileForm}>
+      {/* `disableLoadingState`: this form saves itself while the person is
+          still typing, and disabling its fields for each save took the
+          focus out of the one being typed in — the keystrokes after it went
+          nowhere. */}
+      <Form form={profileForm} disableLoadingState>
         <SettingsSectionShell>
           <FormSection>
             <FormSectionHeader>
@@ -231,11 +259,16 @@ export function UserProfileSection() {
                       </FormDescription>
                     </div>
                     <FormControl>
+                      {/* A thumbnail: the daemon keeps it with the account and
+                          sends it with every session read, so it takes no
+                          more than an avatar needs (see auth.MaxImageBytes). */}
                       <ImageUpload
                         value={field.value}
                         fallback={authUser?.name || "U"}
                         onChange={field.onChange}
                         onRemove={() => field.onChange("")}
+                        maxEdgePx={256}
+                        maxBytes={150_000}
                       />
                     </FormControl>
                   </FormItem>
@@ -273,6 +306,7 @@ export function UserProfileSection() {
                       <FormDescription>
                         {t("Email used to sign in.")}
                       </FormDescription>
+                      <FormMessage />
                     </div>
                     <FormControl>
                       <Input
@@ -317,50 +351,38 @@ export function UserProfileSection() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={profileForm.control}
-                name="language"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between gap-4 p-4">
-                    <div className="flex-1 space-y-0.5">
-                      <FormLabel>{t("Language")}</FormLabel>
-                      <FormDescription>
-                        {t("The language the interface is shown in.")}
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      {/*
-                        * A select, not the free-text box this used to be: the
-                        * field decides which of two catalogues the interface
-                        * renders from, so a typo here used to mean silently
-                        * getting English back with no way to tell why.
-                        *
-                        * It applies on change rather than on save — a language
-                        * you cannot see until you submit is a language you
-                        * cannot check.
-                        */}
-                      <Select
-                        value={normalizeLocale(field.value) ?? "en"}
-                        onValueChange={(next) => {
-                          field.onChange(next);
-                          setLocale(next as (typeof LOCALES)[number]);
-                        }}
-                      >
-                        <SelectTrigger className="max-w-50">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {LOCALES.map((locale) => (
-                            <SelectItem key={locale} value={locale}>
-                              {LOCALE_NAMES[locale]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
+              <div className="flex flex-row items-center justify-between gap-4 p-4">
+                <div className="flex-1 space-y-0.5">
+                  <Label htmlFor="profile-language">{t("Language")}</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {t("The language the interface is shown in.")}
+                  </p>
+                </div>
+                {/*
+                  * A select, not the free-text box this used to be: the field
+                  * decides which of two catalogues the interface renders from,
+                  * so a typo here used to mean silently getting English back
+                  * with no way to tell why. It shows the language on screen,
+                  * and applies on change — a language you cannot see until you
+                  * submit is a language you cannot check.
+                  */}
+                <Select
+                  value={locale}
+                  disabled={switchingLanguage}
+                  onValueChange={(next) => void chooseLanguage(next as Locale)}
+                >
+                  <SelectTrigger id="profile-language" className="max-w-50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LOCALES.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {LOCALE_NAMES[option]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </FormSectionContent>
           </FormSection>
 

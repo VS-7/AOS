@@ -12,13 +12,28 @@ func errNotFound(id string) error {
 		CTA(apperr.CallToAction{Label: "list configured templates", Tool: "templates_list"})
 }
 
-// errIDRequired fires when Create is asked to write a template with no ID.
+// errIDRequired fires when Create is given neither an ID nor a Name with
+// anything in it to derive one from.
 func errIDRequired() error {
 	return apperr.New("TEMPLATE_ID_REQUIRED").
 		Causer("template.Service.Create").
-		Msgf("a template needs an id").
+		Msgf("a template needs an id, or a name with a letter or digit to derive one from").
 		Status(apperr.StatusBadRequest).
 		CTA(apperr.CallToAction{Label: "name the template before creating it"})
+}
+
+// errAlreadyExists fires when Create would write over a template that is
+// already there — the id is the file name, so two cannot share one.
+func errAlreadyExists(id string) error {
+	return apperr.New("TEMPLATE_ALREADY_EXISTS").
+		Causer("template.Service.Create").
+		Msgf("a template %q already exists", id).
+		Issue("id", id).
+		Status(apperr.StatusConflict).
+		CTA(apperr.CallToAction{
+			Label: "update the existing template instead, or choose a different name",
+			Tool:  "templates_update",
+		})
 }
 
 // errContentInvalid fires when Create or Update is given Liquid content that

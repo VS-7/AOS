@@ -888,3 +888,100 @@ func TestReferencedIsStableAcrossReads(t *testing.T) {
 		t.Errorf("referenced = %v, want each variable once", first)
 	}
 }
+
+// --- listing a toolset's tools ----------------------------------------------
+
+// closeRecorder is okAdapter that remembers being closed, and which Toolset it
+// was connected with.
+type closeRecorder struct {
+	okAdapter
+	closed    int
+	connected toolset.Toolset
+}
+
+func (a *closeRecorder) Connect(_ context.Context, ts toolset.Toolset) error {
+	a.connected = ts
+	return nil
+}
+
+func (a *closeRecorder) Close() error {
+	a.closed++
+	return nil
+}
+
+// Nothing could say what a toolset offers: the desktop's Tools tab read a
+// `tools` field no toolset has, and toolsets_call wanted a tool name nobody
+// could look up first.
+func TestToolsListsWhatTheConnectedTargetPublishesAndCloses(t *testing.T) {
+	acts := &fakeActivities{}
+	adapter := &closeRecorder{}
+	svc := newService(t,
+		withToolset(toolset.Toolset{
+			ID: "gh", Type: toolset.MCPStdio, Status: toolset.StatusEnabled,
+			Command: "gh-mcp", Env: map[string]string{"TOKEN": "${env.GH}"},
+		}),
+		withAdapter("gh", adapter), withActivities(acts),
+		withEnv(envOf(map[string]string{"GH": "resolved"})),
+	)
+
+	out, err := svc.Tools(ctx(), toolset.GetInput{ID: "gh"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Tools) != 1 || out.Tools[0].Name != "create_issue" {
+		t.Fatalf("tools = %+v", out.Tools)
+	}
+	if adapter.closed != 1 {
+		t.Fatalf("the connection was closed %d times, want 1", adapter.closed)
+	}
+	// The same road as Call: variables resolved before connecting.
+	if adapter.connected.Env["TOKEN"] != "resolved" {
+		t.Fatalf("connected with env %v", adapter.connected.Env)
+	}
+	// Listing runs no tool, so there is nothing to audit.
+	if len(acts.published) != 0 {
+		t.Fatalf("listing tools published %d activities", len(acts.published))
+	}
+}
+
+func TestToolsRefusesWhatCallWouldRefuse(t *testing.T) {
+	disabled := newService(t, withToolset(toolset.Toolset{ID: "gh", Type: toolset.MCPStdio, Status: toolset.StatusDisabled}))
+	if _, err := disabled.Tools(ctx(), toolset.GetInput{ID: "gh"}); codeOf(t, err) != "AOS_TOOLSET_DISABLED" {
+		t.Fatalf("disabled: code = %q", codeOf(t, err))
+	}
+
+	missing := newService(t)
+	if _, err := missing.Tools(ctx(), toolset.GetInput{ID: "nope"}); codeOf(t, err) != "AOS_TOOLSET_NOT_FOUND" {
+		t.Fatalf("missing: code = %q", codeOf(t, err))
+	}
+
+	unavailable := newService(t)
+	if _, err := unavailable.Tools(ctx(), toolset.GetInput{ID: "cli-thing"}); codeOf(t, err) != "AOS_TOOLSET_TYPE_NOT_AVAILABLE" {
+		t.Fatalf("no adapter: code = %q", codeOf(t, err))
+	}
+
+	unreachable := newService(t, withAdapter("gh", failingAdapter{}))
+	if _, err := unreachable.Tools(ctx(), toolset.GetInput{ID: "gh"}); codeOf(t, err) != "AOS_TOOLSET_CONNECT_FAILED" {
+		t.Fatalf("unreachable: code = %q", codeOf(t, err))
+	}
+
+	guarded := newService(t, withToolset(toolset.Toolset{
+		ID: "api", Skill: "crm", Type: toolset.RESTAPI, Status: toolset.StatusEnabled, BaseURL: "https://api.example.com",
+	}), withAdapter("api", okAdapter{}))
+	if _, err := guarded.Tools(ctx(), toolset.GetInput{ID: "api"}); codeOf(t, err) != "AOS_TOOLSET_NETWORK_GUARD_UNAVAILABLE" {
+		t.Fatalf("no network guard: code = %q", codeOf(t, err))
+	}
+}
+
+// connectOKListFails connects and then cannot list — a server that is up but
+// does not speak the listing half of the protocol.
+type connectOKListFails struct{ failingAdapter }
+
+func (connectOKListFails) Connect(context.Context, toolset.Toolset) error { return nil }
+
+func TestToolsSaysWhenTheTargetConnectedButCouldNotList(t *testing.T) {
+	svc := newService(t, withAdapter("gh", connectOKListFails{}))
+	if _, err := svc.Tools(ctx(), toolset.GetInput{ID: "gh"}); codeOf(t, err) != "AOS_TOOLSET_LIST_TOOLS_FAILED" {
+		t.Fatalf("code = %q", codeOf(t, err))
+	}
+}

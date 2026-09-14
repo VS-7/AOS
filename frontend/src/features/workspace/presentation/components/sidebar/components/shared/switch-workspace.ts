@@ -1,6 +1,7 @@
 import { aos } from "@/app/aos";
 import { toast } from "sonner";
 import { reloadAt } from "@/lib/wails";
+import { t } from "@/lib/i18n";
 
 /**
  * Switches the active workspace, syncs the cookie via the store action,
@@ -25,7 +26,7 @@ export async function switchWorkspace(id: string): Promise<boolean> {
   const result = await aos.stores.workspace.actions.switch(id);
 
   if (result.error) {
-    toast.error(result.error.message || "Failed to switch workspace");
+    toast.error(t("Failed to switch workspace"), { description: result.error.message || undefined });
     return false;
   }
 

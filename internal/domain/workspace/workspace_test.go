@@ -716,3 +716,52 @@ func TestUpdateTrimsTheNameAndJudgesOnlyWhatChanged(t *testing.T) {
 		t.Fatalf("update = %q / %q", got.Name, got.Color)
 	}
 }
+
+// The task-type editor stops an empty label, but the daemon took whatever it
+// was sent: a type with no id, one with a blank label, or two sharing an id —
+// the last makes a task's type ambiguous and injects the wrong instructions.
+func TestUpdateRefusesTaskTypesItCouldNotTellApart(t *testing.T) {
+	bug := map[string]any{"id": "bug", "label": "Bug", "color": "#ef4444"}
+	for name, tasks := range map[string][]any{
+		"a type with no id":     {bug, map[string]any{"id": "  ", "label": "Research", "color": "#6366f1"}},
+		"a type with no label":  {bug, map[string]any{"id": "research", "label": "", "color": "#6366f1"}},
+		"two types with one id": {bug, map[string]any{"id": "bug", "label": "Defect", "color": "#6366f1"}},
+		"no types at all":       {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t)
+			h.create(t, workspace.CreateInput{Name: "Project Alpha", Path: repoRoot})
+
+			_, err := h.svc.Update(ctx(), workspace.UpdateInput{Workspace: "project-alpha", Set: map[string]any{"tasks": tasks}})
+			app, ok := apperr.As(err)
+			if !ok || app.Code != "AOS_WORKSPACE_INVALID_TASK_TYPE" || app.HTTPStatus != apperr.StatusBadRequest || len(app.Actions) == 0 {
+				t.Fatalf("err = %v, want AOS_WORKSPACE_INVALID_TASK_TYPE with a next step", err)
+			}
+			stored, err := h.svc.Get(ctx(), workspace.GetInput{Workspace: "project-alpha"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(stored.Tasks) != len(workspace.DefaultTaskTypes) {
+				t.Errorf("the refused task types were stored: %+v", stored.Tasks)
+			}
+		})
+	}
+}
+
+// Spaces around an id or a label are not part of it, and a list that passes
+// is stored as sent.
+func TestUpdateKeepsTaskTypesAsMeant(t *testing.T) {
+	h := newHarness(t)
+	h.create(t, workspace.CreateInput{Name: "Project Alpha", Path: repoRoot})
+
+	got, err := h.svc.Update(ctx(), workspace.UpdateInput{Workspace: "project-alpha", Set: map[string]any{"tasks": []any{
+		map[string]any{"id": " bug ", "label": " Bug ", "color": "#ef4444", "instructions": "Reproduce first."},
+		map[string]any{"id": "docs", "label": "Docs", "color": "#10b981"},
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tasks) != 2 || got.Tasks[0].ID != "bug" || got.Tasks[0].Label != "Bug" || got.Tasks[0].Instructions != "Reproduce first." {
+		t.Fatalf("tasks = %+v", got.Tasks)
+	}
+}

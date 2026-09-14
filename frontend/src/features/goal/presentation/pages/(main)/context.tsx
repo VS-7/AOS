@@ -6,7 +6,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import type {
   Goal,
   GoalPriority,
@@ -76,7 +76,6 @@ interface GoalsProviderProps {
 
 export function GoalsProvider({ children, goals, search }: GoalsProviderProps) {
   const navigate = useNavigate();
-  const router = useRouter();
   const [searchDraft, setSearchDraft] = useState(search.query ?? "");
 
   useEffect(() => {
@@ -139,11 +138,16 @@ export function GoalsProvider({ children, goals, search }: GoalsProviderProps) {
     [filteredGoals],
   );
 
+  // A text search is a filter too: without it, a search that matched nothing
+  // left no Clear button to undo it.
   const activeFilterCount =
     selectedStatuses.length +
     selectedPriorities.length +
-    selectedProjects.length;
+    selectedProjects.length +
+    (searchDraft.trim() ? 1 : 0);
 
+  // The filters only change the URL: the list is filtered here, from goals
+  // loaded unfiltered, so there is nothing to reload.
   const updateSearch = useCallback(
     (next: Partial<GoalsPageSearchSchema>) => {
       navigate({
@@ -153,9 +157,8 @@ export function GoalsProvider({ children, goals, search }: GoalsProviderProps) {
           ...next,
         }),
       });
-      router.invalidate();
     },
-    [navigate, router],
+    [navigate],
   );
 
   const handleSearchChange = useCallback(

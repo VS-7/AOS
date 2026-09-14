@@ -10,6 +10,7 @@ type PublicUser struct {
 	Name     string `json:"name"`
 	Username string `json:"username"`
 	Email    string `json:"email"`
+	Image    string `json:"image,omitempty"`
 	Role     string `json:"role"`
 }
 

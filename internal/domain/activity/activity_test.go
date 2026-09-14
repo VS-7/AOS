@@ -2,9 +2,11 @@ package activity
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -283,6 +285,70 @@ func TestReadStateIsPerActor(t *testing.T) {
 	}
 	if theirs.Unread != 2 {
 		t.Fatalf("nova has %d unread, want 2 — read state leaked between actors", theirs.Unread)
+	}
+}
+
+// TestEachEntrySaysWhetherTheReaderHasSeenIt. The count alone could not tell the
+// desktop which lines to show as unread, so every line kept its unread dot
+// after "mark all as read", and after a reload, for good.
+func TestEachEntrySaysWhetherTheReaderHasSeenIt(t *testing.T) {
+	svc, _, _, _ := newService(t)
+	ctx := asAgent("atlas")
+
+	first, err := svc.Publish(ctx, PublishInput{Namespace: "task", Event: "created", Title: "one"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Publish(ctx, PublishInput{Namespace: "task", Event: "created", Title: "two"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.MarkAsRead(ctx, MarkInput{ID: first.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	readFor := func(out ListOutput) map[string]bool {
+		got := map[string]bool{}
+		for _, entry := range out.Activities {
+			got[entry.Title] = entry.Read
+		}
+		return got
+	}
+
+	mine, err := svc.List(ctx, ListInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := readFor(mine); !got["one"] || got["two"] {
+		t.Fatalf("atlas reads %v, want one read and two unread", got)
+	}
+
+	theirs, err := svc.List(asAgent("nova"), ListInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := readFor(theirs); got["one"] || got["two"] {
+		t.Fatalf("nova reads %v — another actor's read state leaked into the entries", got)
+	}
+
+	if _, err := svc.MarkAllAsRead(ctx, MarkAllInput{}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := svc.List(ctx, ListInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := readFor(after); !got["one"] || !got["two"] {
+		t.Fatalf("after marking all read atlas reads %v", got)
+	}
+
+	// The field is always on the wire, false included: a reader that finds
+	// it missing cannot tell "unread" from "an older daemon".
+	raw, err := json.Marshal(theirs.Activities[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"read":false`) || !strings.Contains(string(raw), `"title":`) {
+		t.Fatalf("an entry encodes as %s", raw)
 	}
 }
 

@@ -977,7 +977,12 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "skill.install": "skills_install",
   "skill.list": "skills_list",
   "skill.update": { key: "skills_update", renameIn: { skill: "id" } },
-  "token.regenerate": null,
+  // The account's API token, through the identity surface for the same reason
+  // as `user.list` below: identity is outside the command registry. `get`
+  // answers `{token: {prefix, createdAt} | null}`; `regenerate` retires the
+  // current one and answers the new value, once.
+  "token.get": () => authApi.apiToken(),
+  "token.regenerate": () => authApi.regenerateApiToken(),
   // task-10: the `toolset` domain is lit — `internal/domain/toolset/
   // commands.go` registers get/get-config/update-config/delete for the UI
   // (list/call are agent/CLI-only, per the closed table).
@@ -1012,6 +1017,10 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // `{toolset, connectionType, requirements}` — the field names this side
   // already read — with each variable marked set or missing and no values.
   "toolset.getConfig": { key: "toolsets_get-config", renameIn: { toolset: "id" } },
+  // What the sheet's Tools tab lists. It read `toolset.tools` off
+  // toolsets_get, a field no toolset has; toolsets_tools connects and asks,
+  // answering `{tools: [{name, description, inputSchema}]}`.
+  "toolset.listTools": { key: "toolsets_tools", renameIn: { toolset: "id" } },
   "toolset.updateConfig": {
     key: "toolsets_update-config",
     renameIn: { toolset: "id" },
@@ -1143,7 +1152,26 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // (workspace home, goal's own (main) page, and the Goals tab inside a
   // project's detail page) all read response.data?.goals and got an empty
   // list regardless of what actually existed.
-  "goal.list": { key: "goals_list", wrapOut: "goals", mapOut: withDeadline },
+  // `coerceIn`: goals_list's Query takes `status` as []Status and `limit` as
+  // int. The Goals page kept its status filter in the URL as one
+  // comma-joined string and the project's Goals tab sent limit "50", and Go
+  // refused both as undecodable — a status filter emptied the list and the
+  // Goals tab never listed the project's goals. `project` is one id in Go.
+  "goal.list": {
+    key: "goals_list",
+    coerceIn: {
+      status: (value) => {
+        const list = (Array.isArray(value) ? value : String(value ?? "").split(","))
+          .map((item) => String(item).trim())
+          .filter(Boolean);
+        return list.length > 0 ? list : undefined;
+      },
+      limit: (value) => (typeof value === "string" && value.trim() !== "" ? Number(value) : value),
+      project: (value) => (Array.isArray(value) ? value[0] : value),
+    },
+    wrapOut: "goals",
+    mapOut: withDeadline,
+  },
   "goal.getById": { key: "goals_get", renameIn: { goal: "id" }, wrapOut: "goal", mapOut: withDeadline },
   // goals_create answers bare too; the live caller (goal/($id)/index.tsx)
   // reads result.data?.goal?.id to navigate to the new goal after creating
@@ -1167,24 +1195,27 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
 
   // `marketplace.list` is the ported UI's name for a search/browse call —
   // maps to `marketplace_discovery`, not a literal `marketplace_list` (no
-  // such command; discovery is the list-equivalent). `getByName` maps to
-  // `marketplace_get`, which takes `source` — `renameIn: { name: "source" }`
-  // is a guess at the UI's own param name, not yet confirmed against the
-  // call site; `install` has no live caller yet.
-  // The marketplace screens read `.items` off the list and `.skill` off the
-  // detail, and sent `query`/`category`/`page`/`pageSize`. Go answers a bare
-  // `[]Listing` and a bare `*Listing`, and its search takes `text`/`tag` —
-  // so the list rendered nothing (`data.items` was undefined on an array)
-  // and the search box filtered nothing. `page`/`pageSize` have no Go
-  // counterpart at all and are dropped rather than sent to be ignored.
+  // such command; discovery is the list-equivalent).
+  // The marketplace screens read `.items` off the list, and sent
+  // `query`/`category`/`page`/`pageSize`. Go answers a bare `[]Listing` and
+  // its search takes `text`/`tag`. `page`/`pageSize` have no Go counterpart
+  // at all and are dropped rather than sent to be ignored. The items stay
+  // Go's Listing: the marketplace feature's `toMarketplaceListing` turns
+  // them into what its cards render, next to the rest of that shape.
   "marketplace.list": {
     key: "marketplace_discovery",
     renameIn: { query: "text", category: "tag" },
     coerceIn: { page: () => ({}), pageSize: () => ({}) },
     wrapOut: "items",
   },
-  "marketplace.getByName": { key: "marketplace_get", renameIn: { name: "source" }, wrapOut: "skill" },
-  "marketplace.install": "marketplace_install",
+  // One listing, by the `source` ("owner/repo") the plugin page routes by.
+  // It was wrapped as `.skill` for a page that also required an `inventory`
+  // Go never sends, so every plugin page was "Page not found".
+  "marketplace.getByName": { key: "marketplace_get", renameIn: { name: "source" }, wrapOut: "listing" },
+  // What the Install button calls: a registry package by its source and the
+  // registry that listed it. The button used to call skills_install with a
+  // made-up "aos/registry" source, which is not a package anywhere.
+  "marketplace.install": { key: "marketplace_install", wrapOut: "skill" },
 
   // Same bug class as goal.* just above: projects_list/-get/-create all
   // answer bare (internal/domain/project/service.go). Three live readers
@@ -1221,7 +1252,7 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
 
 /** The domains the Go backend does not have yet, whole. */
 export const DORMANT_DOMAINS: ReadonlySet<string> = new Set([
-  "token", "user",
+  "user",
 ]);
 
 /** Whether the whole domain is dormant — what the route shows as a panel. */

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/domain/agent"
@@ -229,6 +230,9 @@ func (m models) For(ctx context.Context, a *agent.Agent) (agentloop.LLMProvider,
 	if err != nil {
 		return nil, agentloop.ModelRef{}, err
 	}
+	if keyedProviders[ref.Provider] && !connected(current, ref.Provider) {
+		return nil, agentloop.ModelRef{}, errProviderNotConnected(ref.Provider, a, slot.Provider)
+	}
 
 	provider, err := providers.Build(ref.Provider, providers.Config{
 		APIKey: keyFor(current, ref.Provider),
@@ -238,6 +242,52 @@ func (m models) For(ctx context.Context, a *agent.Agent) (agentloop.LLMProvider,
 		return nil, agentloop.ModelRef{}, err
 	}
 	return provider, ref, nil
+}
+
+// keyedProviders are the providers that authenticate only with a key this
+// installation holds.
+//
+// For these, no entry in agents.providers means no credential, and building
+// the adapter anyway sent the request out unauthenticated: a Default slot left
+// pointing at a disconnected Anthropic came back as Anthropic's own 401 about
+// a missing x-api-key header, which says nothing about why. The providers
+// whose credential is another tool's login file (codex, gemini-cli,
+// antigravity), and the gateways whose key is optional (crof, opencode), are
+// reachable without an entry and stay out of this list.
+var keyedProviders = map[string]bool{
+	"anthropic":  true,
+	"openai":     true,
+	"google":     true,
+	"openrouter": true,
+}
+
+func connected(c config.Config, provider string) bool {
+	for _, p := range c.Agents.Providers {
+		if p.ID == provider {
+			return true
+		}
+	}
+	return false
+}
+
+// errProviderNotConnected says which provider, and where it was chosen —
+// the agent's own model or the Default slot — because those are fixed in two
+// different places.
+func errProviderNotConnected(provider string, a *agent.Agent, slotProvider string) error {
+	where := "the Default model slot"
+	if a.Provider == provider || slotProvider != provider {
+		where = a.DisplayName() + "'s own model"
+	}
+	return apperr.New("AGENT_PROVIDER_NOT_CONNECTED").
+		Causer("app.models.For").
+		Msgf("the %s provider is not connected, and %s uses it", provider, where).
+		Issue("provider", provider).
+		Issue("agent", a.ID).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{
+			Label: "connect " + provider + " in Settings → AI providers, or choose a model from a connected provider",
+			Tool:  "config_get",
+		})
 }
 
 // keyFor finds the credential for a provider.

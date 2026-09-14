@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,10 +22,26 @@ import { t } from "@/lib/i18n";
 
 // The label is what the id is slugged from, so an empty one saved a task
 // type with no label and an empty id — which the daemon accepted — the
-// first time "Create task type" actually submitted.
-const taskTypeFormSchema = WorkspaceTaskTypeSchema.extend({
-  label: z.string().trim().min(1, "Label is required"),
-});
+// first time "Create task type" actually submitted. Built when the view
+// renders, so the message is in the language on screen.
+//
+// `takenIds` are the ids of the other types: the id is slugged from the label,
+// so a second "Docs" asked the daemon to store two types named "docs" and
+// only its refusal said so.
+function buildTaskTypeFormSchema(takenIds: string[]) {
+  return WorkspaceTaskTypeSchema.extend({
+    label: z.string().trim().min(1, t("Label is required")),
+  }).superRefine((values, ctx) => {
+    const id = values.id || Slug.generate(values.label);
+    if (id && takenIds.includes(id)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["label"],
+        message: t("Another task type already uses the id {{id}}.", { id }),
+      });
+    }
+  });
+}
 
 interface UpsertTaskTypeViewProps {
   open: boolean;
@@ -33,6 +49,8 @@ interface UpsertTaskTypeViewProps {
   taskType?: WorkspaceTaskType;
   index?: number;
   onSave: (data: WorkspaceTaskType, index?: number) => void;
+  /** The ids of every other task type, which this one may not reuse. */
+  takenIds: string[];
 }
 
 export function UpsertTaskTypeView({
@@ -41,7 +59,11 @@ export function UpsertTaskTypeView({
   taskType,
   index,
   onSave,
+  takenIds,
 }: UpsertTaskTypeViewProps) {
+  const takenKey = takenIds.join("\n");
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the ids' content, not the array's identity
+  const taskTypeFormSchema = useMemo(() => buildTaskTypeFormSchema(takenIds), [takenKey]);
   const form = aos.useForm({
     schema: taskTypeFormSchema,
     values: {

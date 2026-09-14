@@ -33,6 +33,12 @@ type User struct {
 	Username string `json:"username"`
 	Email    string `json:"email"`
 
+	// Image is the avatar, as a small inline data URI. Inline rather than a
+	// file: it is drawn wherever the account is, in a window that reads the
+	// daemon only through its bridge, and a URL would need a file route of its
+	// own to be reachable there.
+	Image string `json:"image,omitempty"`
+
 	// PasswordHash is argon2id, never plain text. The parameters are the
 	// original's, which are sound.
 	PasswordHash string `json:"password" secret:"true"`
@@ -93,12 +99,13 @@ type Public struct {
 	Name     string `json:"name"`
 	Username string `json:"username"`
 	Email    string `json:"email"`
+	Image    string `json:"image,omitempty"`
 	Role     Role   `json:"role"`
 }
 
 // ToPublic strips everything that authenticates.
 func (u User) ToPublic() Public {
-	return Public{ID: u.ID, Name: u.Name, Username: u.Username, Email: u.Email, Role: u.Role}
+	return Public{ID: u.ID, Name: u.Name, Username: u.Username, Email: u.Email, Image: u.Image, Role: u.Role}
 }
 
 // IsSuper reports whether the account administers the installation.

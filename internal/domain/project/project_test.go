@@ -369,3 +369,89 @@ func requireCode(t *testing.T, err error, code string) {
 		t.Fatalf("code = %q, want %q", got, code)
 	}
 }
+
+// A project named with accents used to get an id with the accented letters
+// dropped and a hyphen in their place ("Ação Rápida Área" → a-o-r-pida-rea),
+// while a goal of the same title got acao-rapida-area: two slug rules for one
+// kind of identity. Both derive it through internal/core/slug now.
+func TestCreateDerivesTheIDTheWayEveryOtherNativeDoes(t *testing.T) {
+	svc, _ := newService(t)
+	created, err := svc.Create(context.Background(), project.CreateInput{Name: "Ação Rápida Área"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.ID != "acao-rapida-area" {
+		t.Fatalf("id = %q, want acao-rapida-area", created.ID)
+	}
+}
+
+// A name made only of symbols has nothing to derive an id from. It reached
+// the repository with an empty key and came back as a 500 "could not save",
+// with a call to action that called it a bug.
+func TestCreateRefusesANameWithNothingToDeriveAnIDFrom(t *testing.T) {
+	svc, _ := newService(t)
+	_, err := svc.Create(context.Background(), project.CreateInput{Name: "!!!"})
+	requireCode(t, err, "PROJECT_NAME_REQUIRED")
+	if status := apperr.StatusOf(err); status != 400 {
+		t.Fatalf("status = %d, want 400", status)
+	}
+}
+
+// Creating a second project under a name the first already took is the
+// person's to fix — choose another name — not a failed write to retry.
+func TestCreateRefusesADuplicateAsAConflict(t *testing.T) {
+	svc, _ := newService(t)
+	ctx := context.Background()
+	if _, err := svc.Create(ctx, project.CreateInput{Name: "API de teste"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := svc.Create(ctx, project.CreateInput{Name: "API DE TESTE"})
+	requireCode(t, err, "PROJECT_ALREADY_EXISTS")
+	if status := apperr.StatusOf(err); status != 409 {
+		t.Fatalf("status = %d, want 409", status)
+	}
+}
+
+// Clearing a field is an empty string, not an omitted one: the form that
+// empties Description and Source must be able to say so.
+func TestUpdateClearsDescriptionSourceAndContentWithEmptyStrings(t *testing.T) {
+	dir := "/some/dir"
+	svc := project.NewService(project.Deps{
+		Repo:  fakes.NewRepo[project.Project]("projects"),
+		Clock: clockx.Fixed{At: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+		Stat:  fakePathStat{dirs: map[string]bool{dir: true}},
+	})
+	ctx := context.Background()
+	created, err := svc.Create(ctx, project.CreateInput{Name: "Bound", Description: "d", Source: dir, Content: "c"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := ""
+	updated, err := svc.Update(ctx, project.UpdateInput{ID: created.ID, Description: &empty, Source: &empty, Content: &empty})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Description != "" || updated.Source != "" || updated.Content != "" {
+		t.Fatalf("got %+v, want description, source and content cleared", updated)
+	}
+}
+
+// blindRepository never finds a record, the way a repository looks to a
+// Create racing another writer for the same id: the lookup misses, and the
+// write is what reports the collision.
+type blindRepository struct{ *fakes.Repo[project.Project] }
+
+func (blindRepository) Get(context.Context, collections.Key) (*project.Project, error) {
+	return nil, errors.New("not found")
+}
+
+func TestCreateReportsARacedDuplicateAsAConflict(t *testing.T) {
+	repo := blindRepository{fakes.NewRepo[project.Project]("projects")}
+	svc := project.NewService(project.Deps{Repo: repo, Clock: clockx.Fixed{At: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}, Stat: fakePathStat{}})
+	ctx := context.Background()
+	if _, err := svc.Create(ctx, project.CreateInput{Name: "Twice"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := svc.Create(ctx, project.CreateInput{Name: "Twice"})
+	requireCode(t, err, "PROJECT_ALREADY_EXISTS")
+}

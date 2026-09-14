@@ -67,7 +67,7 @@ export function ImageUpload({
       onChange(dataUrl);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to process image.";
+        error instanceof Error ? error.message : t("Failed to process image.");
       toast.error(message);
     } finally {
       setBusy(false);
@@ -100,7 +100,7 @@ export function ImageUpload({
           data-icon="inline-start"
         >
           <ImagePlus />
-          {busy ? "Processing…" : value ? "Change" : "Upload"}
+          {busy ? t("Processing…") : value ? t("Change") : t("Upload")}
         </Button>
 
         {value && onRemove ? (
@@ -150,7 +150,7 @@ export async function resizeImageToDataUrl(
   const context = canvas.getContext("2d");
   if (!context) {
     bitmap.close();
-    throw new Error("Could not process image.");
+    throw new Error(t("Could not process image."));
   }
 
   context.drawImage(bitmap, 0, 0, width, height);
@@ -175,9 +175,7 @@ export async function resizeImageToDataUrl(
     }
   }
 
-  throw new Error(
-    "Image is too large after compression. Try a smaller file (under ~400KB).",
-  );
+  throw new Error(t("Image is too large after compression. Try a smaller file."));
 }
 
 function estimateDataUrlBytes(dataUrl: string): number {

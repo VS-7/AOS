@@ -51,6 +51,7 @@ export function AgentsSidebar() {
             variant="ghost"
             className="rounded-md"
             onClick={startCreate}
+            aria-label={t("New agent")}
           >
             <PlusSquareIcon />
           </Button>
@@ -67,8 +68,8 @@ export function AgentsSidebar() {
                 </AnimatedEmptyState.Title>
                 <AnimatedEmptyState.Description>
                   {searchQuery
-                    ? `No results for "${searchQuery}"`
-                    : "Create a new agent to add a specialized workspace companion."}
+                    ? t('No results for "{{query}}"', { query: searchQuery })
+                    : t("Create a new agent to add a specialized workspace companion.")}
                 </AnimatedEmptyState.Description>
               </AnimatedEmptyState.Content>
             </AnimatedEmptyState>
@@ -79,7 +80,7 @@ export function AgentsSidebar() {
               return (
                 <SplitPageLayout.SidebarGroup key={skill} id={`skill-${skill}`}>
                   <SplitPageLayout.SidebarGroupHeader
-                    label={skill === "general" ? "General" : skill}
+                    label={skill === "general" ? t("General") : skill}
                     count={items.length}
                   />
                   <SplitPageLayout.SidebarGroupContent variant="grouped">
@@ -102,7 +103,7 @@ export function AgentsSidebar() {
                               {agent.role ||
                                 agent.description ||
                                 agent.provider ||
-                                "General agent"}
+                                t("General agent")}
                             </p>
                           </div>
                         </div>
@@ -119,7 +120,9 @@ export function AgentsSidebar() {
       <SplitPageLayout.SidebarFooter>
         <span className="inline-flex items-center gap-2">
           <Bot className="size-3.5 text-muted-foreground" />
-          {agents.length} agent{agents.length !== 1 ? "s" : ""}
+          {agents.length === 1
+            ? t("1 agent")
+            : t("{{count}} agents", { count: agents.length })}
         </span>
       </SplitPageLayout.SidebarFooter>
     </>

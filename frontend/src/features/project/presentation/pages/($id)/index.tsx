@@ -34,14 +34,25 @@ import { aos } from "@/app/aos";
 import { isDormant } from "@/lib/command-map";
 import { DormantGate } from "@/components/DormantDomain";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
-import type { Project } from "@/features/project/interfaces/project.interfaces";
+import {
+  ProjectStatusSchema,
+  type Project,
+} from "@/features/project/interfaces/project.interfaces";
 import { ProjectIconPicker } from "@/features/project/presentation/components/project-icon-picker";
 import { ProjectDetailsSidebar } from "./components/details";
 import { ProjectOverviewTab } from "./components/main/components/tabs/overview";
 import { ProjectTasksTab } from "./components/main/components/tabs/tasks";
 import { ProjectGoalsTab } from "./components/main/components/tabs/goals";
 import { ProjectFilesTab } from "./components/main/components/tabs/files";
-import { t } from "@/lib/i18n";
+import { t, useTranslation } from "@/lib/i18n";
+import { shareableLink } from "@/features/goal/presentation/helpers/goal-link";
+import {
+  hasSluggableCharacter,
+  isAbsoluteSource,
+  projectCreateBody,
+  projectIdPreview,
+  projectUpdateBody,
+} from "@/features/project/presentation/helpers/project-form";
 import {
   Copy,
   FileText,
@@ -54,12 +65,39 @@ import {
   Trash2,
 } from "lucide-react";
 
+// The messages are resolved when the schema validates, so they follow the
+// language of that moment. Both rules are the daemon's: it derives the id from
+// the name, and binds a project only to an absolute directory — the form says
+// so on the field instead of sending what will be refused.
 const projectFormSchema = z.object({
-  name: z.string().trim().min(1, "Name is required"),
+  name: z
+    .string()
+    .trim()
+    .superRefine((value, ctx) => {
+      if (!value) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: t("Name is required") });
+      } else if (!hasSluggableCharacter(value)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: t("Use at least one letter or number in the name"),
+        });
+      }
+    }),
   icon: z.string().optional(),
   description: z.string().optional(),
   content: z.string().optional(),
-  source: z.string().optional(),
+  source: z
+    .string()
+    .optional()
+    .superRefine((value, ctx) => {
+      if (value?.trim() && !isAbsoluteSource(value.trim())) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: t("Use an absolute path, such as /Users/you/project"),
+        });
+      }
+    }),
+  status: ProjectStatusSchema.optional(),
 });
 
 type ProjectFormValues = z.infer<typeof projectFormSchema>;
@@ -81,6 +119,7 @@ function HeaderIconButton({
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
+          type="button"
           variant="ghost"
           size="icon"
           className="size-8 rounded-md"
@@ -100,7 +139,7 @@ function HeaderIconButton({
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
-  return "Unable to save this project.";
+  return t("Unable to save this project.");
 }
 
 function buildFormValues(project: Project | null): ProjectFormValues {
@@ -111,6 +150,7 @@ function buildFormValues(project: Project | null): ProjectFormValues {
       description: "",
       content: "",
       source: "",
+      status: "active",
     };
   }
 
@@ -120,27 +160,7 @@ function buildFormValues(project: Project | null): ProjectFormValues {
     description: project.description ?? "",
     content: project.content ?? "",
     source: project.source ?? "",
-  };
-}
-
-function buildPreviewProjectId(name: string) {
-  const previewId = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-  return previewId || "project-id";
-}
-
-function buildProjectPayload(values: ProjectFormValues) {
-  return {
-    name: values.name.trim(),
-    // Empty string clears a previous custom icon/image on update.
-    icon: (values.icon ?? "").trim(),
-    description: values.description?.trim() || undefined,
-    content: values.content?.trim() || undefined,
-    source: values.source?.trim() || undefined,
+    status: project.status ?? "active",
   };
 }
 
@@ -149,7 +169,7 @@ interface ProjectCreateSidebarProps {
 }
 
 function ProjectCreateSidebar({ values }: ProjectCreateSidebarProps) {
-  const previewId = buildPreviewProjectId(values.name);
+  const previewId = projectIdPreview(values.name ?? "");
 
   return (
     <SplitPageLayout.DetailTabs defaultValue="overview">
@@ -243,6 +263,7 @@ export const ProjectDetailsPage = aos
   .withComponent(({ route }) => {
     const router = useRouter();
     const navigate = useNavigate();
+    const { t } = useTranslation();
     const { mode, project } = route.useLoaderData();
     const projectId = route.useParams().id;
     const isEditMode = mode === "edit";
@@ -256,16 +277,42 @@ export const ProjectDetailsPage = aos
       schema: projectFormSchema,
       values: buildFormValues(project),
       onSubmit: async (values: ProjectFormValues) => {
-        const body = buildProjectPayload(values);
+        // A refusal about one field belongs on that field, where the person
+        // will fix it; anything else is a toast carrying the daemon's reason.
+        const placeOnField = (error: unknown) => {
+          const code = (error as { code?: string } | undefined)?.code;
+          if (code === "AOS_PROJECT_ALREADY_EXISTS") {
+            form.setError("name", {
+              message: t("A project with this name already exists. Choose another name."),
+            });
+            return true;
+          }
+          if (code === "AOS_PROJECT_NAME_REQUIRED") {
+            form.setError("name", { message: t("Use at least one letter or number in the name") });
+            return true;
+          }
+          if (code === "AOS_PROJECT_SOURCE_INVALID") {
+            form.setError("source", {
+              message: t("This directory does not exist on this machine, or is not a directory."),
+            });
+            return true;
+          }
+          return false;
+        };
 
         if (isEditMode && project) {
           const result = await aos.client.project.update.mutate({
             params: { project: projectId },
-            body,
+            // Cleared fields go as "", which Go reads as clear; they used to
+            // go as undefined, and the source could never be unbound.
+            body: projectUpdateBody(values),
           });
 
           if (result?.error) {
-            toast.error(getErrorMessage(result.error));
+            if (placeOnField(result.error)) return;
+            toast.error(t("Could not save the project"), {
+              description: getErrorMessage(result.error),
+            });
             return;
           }
 
@@ -275,10 +322,15 @@ export const ProjectDetailsPage = aos
           return;
         }
 
-        const result = await aos.client.project.create.mutate({ body });
+        const result = await aos.client.project.create.mutate({
+          body: projectCreateBody(values),
+        });
 
         if (result?.error || !result.data?.project?.id) {
-          toast.error(getErrorMessage(result?.error));
+          if (placeOnField(result?.error)) return;
+          toast.error(t("Could not create the project"), {
+            description: getErrorMessage(result?.error),
+          });
           return;
         }
 
@@ -304,12 +356,16 @@ export const ProjectDetailsPage = aos
       aos.client.project.delete.useMutation({
         onSuccess: async () => {
           toast.success(t("Project deleted."));
+          // Leave first. Invalidating while still on /projects/$id reran this
+          // page's loader for the project just removed, which answered
+          // PROJECT_NOT_FOUND before the navigation happened.
+          await navigate({ to: "/projects", replace: true });
           void aos.stores.projects.actions.refresh();
-          await router.invalidate();
-          await navigate({ to: "/projects" });
         },
         onError: (error: unknown) => {
-          toast.error(getErrorMessage(error));
+          toast.error(t("Could not delete the project"), {
+            description: getErrorMessage(error),
+          });
         },
       });
 
@@ -324,22 +380,16 @@ export const ProjectDetailsPage = aos
         description: watchedValues.description?.trim() || undefined,
         content: watchedValues.content?.trim() || undefined,
         source: watchedValues.source?.trim() || undefined,
+        status: watchedValues.status ?? project.status,
       };
     }, [project, watchedValues]);
 
-    const projectLink =
-      isEditMode && project
-        ? typeof window === "undefined"
-          ? `/projects/${project.id}`
-          : new URL(
-              `/projects/${project.id}`,
-              window.location.origin,
-            ).toString()
-        : null;
+    const link =
+      isEditMode && project ? shareableLink(`/projects/${project.id}`) : null;
 
-    async function copyToClipboard(value: string, label: string) {
+    async function copyToClipboard(value: string, message: string) {
       await navigator.clipboard.writeText(value);
-      toast.success(`${label} copied`);
+      toast.success(message);
     }
 
     const editProject = liveProject ?? project;
@@ -365,20 +415,20 @@ export const ProjectDetailsPage = aos
                         disabled={form.isLoading}
                       />
                       <SplitPageLayout.ContentTitle>
-                        {isEditMode ? editProject?.name : "New Project"}
+                        {isEditMode ? editProject?.name : t("New Project")}
                       </SplitPageLayout.ContentTitle>
                     </SplitPageLayout.ContentHeaderMain>
 
                     <SplitPageLayout.ContentHeaderActions>
                       <TooltipProvider>
                         <div className="flex items-center gap-2">
-                          {isEditMode && projectLink && project ? (
+                          {isEditMode && link && project ? (
                             <>
                               <HeaderIconButton
-                                label={t("Copy project link")}
+                                label={link.label}
                                 shortcut="L"
                                 onClick={() =>
-                                  copyToClipboard(projectLink, "Project link")
+                                  copyToClipboard(link.value, link.copied)
                                 }
                               >
                                 <Link2 />
@@ -387,7 +437,7 @@ export const ProjectDetailsPage = aos
                                 label={t("Copy project ID")}
                                 shortcut="I"
                                 onClick={() =>
-                                  copyToClipboard(project.id, "Project ID")
+                                  copyToClipboard(project.id, t("Project ID copied"))
                                 }
                               >
                                 <Copy />
@@ -424,8 +474,9 @@ export const ProjectDetailsPage = aos
                                     {t("Delete this project?")}
                                   </AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    {t("This action removes")}{" "}
-                                    <strong>{project.name}</strong> permanently.
+                                    {t("This permanently removes {{name}}. Its tasks and goals are kept, without the project.", {
+                                      name: project.name,
+                                    })}
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
@@ -442,8 +493,8 @@ export const ProjectDetailsPage = aos
                                     }
                                   >
                                     {isDeleting
-                                      ? "Deleting..."
-                                      : "Delete project"}
+                                      ? t("Deleting...")
+                                      : t("Delete project")}
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
@@ -459,10 +510,10 @@ export const ProjectDetailsPage = aos
                           >
                             <Save />
                             {form.isLoading
-                              ? "Saving..."
+                              ? t("Saving...")
                               : isEditMode
-                                ? "Save changes"
-                                : "Create project"}
+                                ? t("Save changes")
+                                : t("Create project")}
                           </Button>
                         </div>
                       </TooltipProvider>
@@ -549,7 +600,7 @@ export const ProjectDetailsPage = aos
 
               <SplitPageLayout.Detail>
                 {isEditMode && editProject ? (
-                  <ProjectDetailsSidebar project={editProject} />
+                  <ProjectDetailsSidebar project={editProject} form={form} />
                 ) : (
                   <ProjectCreateSidebar values={watchedValues} />
                 )}

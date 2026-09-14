@@ -18,7 +18,10 @@ func errNoRegistriesConfigured() error {
 		Causer("marketplace.Service").
 		Msgf("no marketplace registries are configured").
 		Status(apperr.StatusPreconditionFailed).
-		CTA(apperr.CallToAction{Label: "add a registry under marketplace.registries in the workspace config"})
+		// The registries live in the installation's config.json, not in a
+		// workspace's, and are read when the daemon starts — the label used to
+		// send people to the wrong file and leave out the restart.
+		CTA(apperr.CallToAction{Label: "add a registry under marketplace.registries in AOS's config.json, then restart the daemon"})
 }
 
 // errRegistryUnknown fires when a caller names a registry id that is not

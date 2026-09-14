@@ -1,41 +1,28 @@
-import { t } from "@/lib/i18n";
 import * as React from "react"
 import { motion } from "framer-motion"
+import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { InboxHeader } from "./components/inbox-header.component"
 import { InboxNotificationItem } from "./components/inbox-notification-item.component"
 import { InboxEmpty } from "./components/inbox-empty.component"
 import { aos } from "@/app/aos"
 import { cn } from "@/lib/utils"
-import { NotificationPayload } from "@/core/builders/notification"
+import { errorMessage } from "@/lib/aos-facade"
+import { useTranslation } from "@/lib/i18n"
+import type { ActivityEntry } from "@/features/activity/interfaces/activity.interfaces"
+import { activityDayLabel } from "@/features/activity/presentation/helpers/activity-presentation.helper"
 
 type InboxNotificationGroup = {
   label: string
-  notifications: NotificationPayload[]
+  notifications: ActivityEntry[]
 }
 
-function formatInboxDate(dateValue: string) {
-  const date = new Date(dateValue)
-  const today = new Date()
-
-  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-  const startOfItemDay = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-  const diffDays = Math.round((startOfToday.getTime() - startOfItemDay.getTime()) / (1000 * 60 * 60 * 24))
-
-  if (diffDays === 0) return "Today"
-  if (diffDays === 1) return "Yesterday"
-
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  })
-}
-
-function groupNotificationsByDay(notifications: NotificationPayload[]) {
+function groupNotificationsByDay(notifications: ActivityEntry[]) {
+  const now = new Date()
   return notifications.reduce<InboxNotificationGroup[]>((groups, notification) => {
-    const label = formatInboxDate(notification.createdAt)
+    const label = activityDayLabel(notification.createdAt, now)
     const group = groups[groups.length - 1]
 
     if (group?.label === label) {
@@ -49,18 +36,36 @@ function groupNotificationsByDay(notifications: NotificationPayload[]) {
 }
 
 export function InboxPanel({ className }: { className?: string }) {
+  const { t } = useTranslation()
   const activities = aos.stores.activity.useState((s) => s.activities)
+  const total = aos.stores.activity.useState((s) => s.total)
+  const { loadMore } = aos.stores.activity.useActions()
+  const [isLoadingMore, setIsLoadingMore] = React.useState(false)
   const grouped = groupNotificationsByDay(activities)
+  // "No more" only once there is no more: the list used to end with it after
+  // the daemon's first page, with older entries out of reach.
+  const hasMore = activities.length < total
+
+  const handleLoadMore = React.useCallback(async () => {
+    setIsLoadingMore(true)
+    try {
+      await loadMore()
+    } catch (error) {
+      toast.error(t("Failed to load activities"), { description: errorMessage(error) })
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }, [loadMore, t])
 
   return (
     <motion.div
-      className={cn("grid grid-rows-[auto_1fr] w-96", className)}
+      className={cn("grid grid-rows-[auto_1fr] w-96 min-h-0", className)}
       animate={{ x: 0, opacity: 1 }}
       transition={{ duration: 0.2, ease: "easeInOut" }}
     >
       <InboxHeader />
 
-      <div className="flex flex-col px-6 h-full overflow-y-auto">
+      <div className="flex flex-col px-6 pb-6 h-full min-h-0 overflow-y-auto">
         {activities.length === 0 ? (
           <InboxEmpty />
         ) : (
@@ -80,9 +85,23 @@ export function InboxPanel({ className }: { className?: string }) {
             ))}
 
             <div className="flex justify-center pb-1 pt-2">
-              <Badge variant="outline" className="rounded-full border-dashed text-[11px] font-medium text-muted-foreground">
-                {t("No more notifications")}
-              </Badge>
+              {hasMore ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full text-[11px]"
+                  onClick={() => void handleLoadMore()}
+                  disabled={isLoadingMore}
+                  aria-busy={isLoadingMore}
+                >
+                  {isLoadingMore ? <Spinner /> : null}
+                  {t("Load more")}
+                </Button>
+              ) : (
+                <Badge variant="outline" className="rounded-full border-dashed text-[11px] font-medium text-muted-foreground">
+                  {t("No more notifications")}
+                </Badge>
+              )}
             </div>
           </div>
         )}

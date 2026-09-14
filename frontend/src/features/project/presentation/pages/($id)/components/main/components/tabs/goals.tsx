@@ -10,21 +10,17 @@ import {
   GOAL_STATUS_ORDER,
 } from "@/features/goal/presentation/consts/goal";
 import { GoalHelper } from "@/features/goal/presentation/helpers/goal.helper";
+import { useStatusTabs } from "@/features/goal/presentation/helpers/status-tabs";
 import { aos } from "@/app/aos";
 import { Plus, ArrowUpRight, CalendarDays } from "lucide-react";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading.hook";
 import type { Goal } from "@/features/goal/interfaces/goal.interfaces";
 import type { Project } from "@/features/project/interfaces/project.interfaces";
-import { t } from "@/lib/i18n";
+import { useTranslation } from "@/lib/i18n";
 
 interface ProjectGoalsTabProps {
   project: Project;
 }
-
-const GOAL_TABS = GOAL_STATUS_ORDER.map((status) => ({
-  status,
-  ...GOAL_STATUS_CONFIG[status],
-}));
 
 interface GoalRowProps {
   goal: Goal;
@@ -123,16 +119,21 @@ function GoalsSection({ title, subtitle, action, children }: SectionProps) {
 
 export function ProjectGoalsTab({ project }: ProjectGoalsTabProps) {
   const navigate = useNavigate();
-  const [selectedStatus, setSelectedStatus] =
-    React.useState<Goal["status"]>("active");
+  // Subscribing re-renders the tab labels when the language changes. They
+  // were spread out of GOAL_STATUS_CONFIG once, when this module loaded, and
+  // stayed in that language for the rest of the session.
+  const { t } = useTranslation();
 
+  // limit is an int to goals_list: the quoted "50" this sent was refused as
+  // undecodable, so the tab never listed a single goal.
   const goalQuery = aos.client.goal.list.useQuery({
-    query: { project: project.id, limit: "50" },
+    query: { project: project.id, limit: 50 },
     staleTime: 5 * 60 * 1000,
   });
 
-  const goals: Goal[] = goalQuery.data?.goals ?? [];
+  const goals: Goal[] = React.useMemo(() => goalQuery.data?.goals ?? [], [goalQuery.data]);
   const isLoading = useDelayedLoading(goalQuery.isLoading);
+  const { selected: selectedStatus, select, counts } = useStatusTabs(GOAL_STATUS_ORDER, goals);
 
   const filteredGoals = React.useMemo(
     () => goals.filter((g) => g.status === selectedStatus),
@@ -145,10 +146,16 @@ export function ProjectGoalsTab({ project }: ProjectGoalsTabProps) {
         title={t("Goals")}
         action={
           <Button
+            type="button"
             size="sm"
             variant="outline"
             onClick={() =>
-              void navigate({ to: "/goals/$id", params: { id: "new" } })
+              void navigate({
+                to: "/goals/$id",
+                params: { id: "new" },
+                // Created from here, the goal belongs here.
+                search: { project: project.id },
+              })
             }
           >
             <Plus className="size-4" />
@@ -159,14 +166,15 @@ export function ProjectGoalsTab({ project }: ProjectGoalsTabProps) {
         <TabsSubtle
           activeLabel
           selectedIndex={GOAL_STATUS_ORDER.indexOf(selectedStatus)}
-          onSelect={(index) => setSelectedStatus(GOAL_STATUS_ORDER[index])}
+          onSelect={(index) => select(GOAL_STATUS_ORDER[index])}
         >
-          {GOAL_TABS.map((tab, index) => (
+          {GOAL_STATUS_ORDER.map((status, index) => (
             <TabsSubtleItem
-              key={tab.status}
+              key={status}
               index={index}
-              label={tab.label}
-              icon={tab.icon}
+              label={GOAL_STATUS_CONFIG[status].label}
+              icon={GOAL_STATUS_CONFIG[status].icon}
+              count={counts[status] || undefined}
             />
           ))}
         </TabsSubtle>

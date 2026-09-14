@@ -3,7 +3,6 @@ import {
   BookOpen01Icon,
   Copy01Icon,
   Key01Icon,
-  LinkSquare02Icon,
   RefreshIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -38,7 +37,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-const API_DOCS_URL = "http://localhost:5326/api/docs";
+// The reference a person can actually open. This linked
+// http://localhost:5326/api/docs, which answers 404: the daemon mounts its
+// docs only outside production, behind a bearer an external browser does not
+// have, and not necessarily on that port. The terminal prints the same surface
+// — every command, its documentation and its input schema — wherever the
+// daemon runs.
+const API_REFERENCE_COMMAND = "aos self llms";
 
 interface DevelopersRestApiSectionProps {
   /** Full API token when revealed after regenerate. */
@@ -47,8 +52,8 @@ interface DevelopersRestApiSectionProps {
   maskedToken: string | null;
   /** Whether the account has an API token configured. */
   hasToken: boolean;
-  /** Called after generate/regenerate with the full token once. */
-  onTokenRevealed: (fullToken: string, maskedToken: string) => void;
+  /** Called after generate/regenerate with the full token, once. */
+  onTokenRevealed: (fullToken: string) => void;
 }
 
 /**
@@ -70,9 +75,7 @@ export function DevelopersRestApiSection({
     }
     try {
       await navigator.clipboard.writeText(apiToken ?? value);
-      toast.success(
-        apiToken ? "Full token copied to clipboard" : "Token preview copied",
-      );
+      toast.success(apiToken ? t("Full token copied to clipboard") : t("Token preview copied"));
     } catch {
       toast.error(t("Failed to copy"));
     }
@@ -83,23 +86,30 @@ export function DevelopersRestApiSection({
     try {
       const result = await aos.stores.auth.actions.regenerateToken();
       if (!result.success || !result.token) {
-        toast.error(result.error?.message || "Failed to regenerate API token");
+        toast.error(result.error?.message || t("Failed to regenerate API token"));
         return;
       }
 
-      const masked = `aos_...${result.token.slice(-4)}`;
-      onTokenRevealed(result.token, masked);
-      toast.success(t("API token regenerated successfully!"));
+      onTokenRevealed(result.token);
+      toast.success(t("API token generated. Copy it now: it is not shown again."));
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to regenerate API token";
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : t("Failed to regenerate API token"));
     } finally {
       setIsRegenerating(false);
     }
   };
 
-  const displayToken = maskedToken ?? (hasToken ? "aos_..." : "No token configured");
+  // The full value only right after it was generated; afterwards, the prefix.
+  const displayToken = apiToken ?? maskedToken ?? t("No token configured");
+
+  const handleCopyReference = async () => {
+    try {
+      await navigator.clipboard.writeText(API_REFERENCE_COMMAND);
+      toast.success(t("Command copied"));
+    } catch {
+      toast.error(t("Failed to copy"));
+    }
+  };
 
   return (
     <FormSection>
@@ -123,8 +133,8 @@ export function DevelopersRestApiSection({
               <p className="text-sm font-medium text-foreground">{t("API Token")}</p>
               <p className="text-sm text-muted-foreground">
                 {hasToken
-                  ? "Use this token for REST and MCP authentication."
-                  : "No token configured. Generate one to start using the API."}
+                  ? t("Use this token for REST and MCP authentication.")
+                  : t("No token configured. Generate one to start using the API.")}
               </p>
             </div>
           </div>
@@ -146,9 +156,7 @@ export function DevelopersRestApiSection({
                       size="icon"
                       className="size-8 shrink-0"
                       disabled={isRegenerating}
-                      aria-label={
-                        hasToken ? "Regenerate API token" : "Generate API token"
-                      }
+                      aria-label={hasToken ? t("Regenerate API token") : t("Generate API token")}
                     >
                       <HugeiconsIcon
                         icon={RefreshIcon}
@@ -158,33 +166,33 @@ export function DevelopersRestApiSection({
                   </AlertDialogTrigger>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {hasToken ? "Regenerate token" : "Generate token"}
+                  {hasToken ? t("Regenerate token") : t("Generate token")}
                 </TooltipContent>
               </Tooltip>
 
               <AlertDialogContent size="sm">
                 <AlertDialogHeader>
                   <AlertDialogTitle>
-                    {hasToken ? "Regenerate API Token?" : "Generate API Token?"}
+                    {hasToken ? t("Regenerate API Token?") : t("Generate API Token?")}
                   </AlertDialogTitle>
                   <AlertDialogDescription>
                     {hasToken
-                      ? "This will invalidate the current token immediately. Any integrations using it will stop working until updated."
-                      : "This will create a new API token for programmatic access."}
+                      ? t("This will invalidate the current token immediately. Any integrations using it will stop working until updated.")
+                      : t("This will create a new API token for programmatic access.")}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
                   <AlertDialogAction
-                    variant="destructive"
+                    variant={hasToken ? "destructive" : "default"}
                     disabled={isRegenerating}
                     onClick={() => void handleRegenerate()}
                   >
                     {isRegenerating
-                      ? "Generating..."
+                      ? t("Generating...")
                       : hasToken
-                        ? "Regenerate"
-                        : "Generate"}
+                        ? t("Regenerate")
+                        : t("Generate")}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -197,14 +205,14 @@ export function DevelopersRestApiSection({
                   variant="outline"
                   size="icon"
                   className="size-8 shrink-0"
-                  disabled={!hasToken && !apiToken}
+                  disabled={!apiToken && !maskedToken}
                   onClick={() => void handleCopyToken()}
                   aria-label={t("Copy API token")}
                 >
                   <HugeiconsIcon icon={Copy01Icon} className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{t("Copy full token")}</TooltipContent>
+              <TooltipContent>{apiToken ? t("Copy full token") : t("Copy token preview")}</TooltipContent>
             </Tooltip>
           </div>
         </FormSectionItem>
@@ -222,15 +230,13 @@ export function DevelopersRestApiSection({
                 {t("API Documentation")}
               </p>
               <p className="text-sm text-muted-foreground">
-                {t("Open the interactive OpenAPI docs for this AOS instance.")}
+                {t("Every command, with its documentation and input schema, printed by the terminal.")}
               </p>
             </div>
           </div>
-          <Button type="button" variant="ghost" size="sm" asChild>
-            <a href={API_DOCS_URL} target="_blank" rel="noopener noreferrer">
-              {t("Open docs")}
-              <HugeiconsIcon icon={LinkSquare02Icon} className="size-3.5" />
-            </a>
+          <Button type="button" variant="outline" size="sm" onClick={() => void handleCopyReference()}>
+            <HugeiconsIcon icon={Copy01Icon} className="size-3.5" />
+            <span className="font-mono text-xs">{API_REFERENCE_COMMAND}</span>
           </Button>
         </FormSectionItem>
       </FormSectionContent>
