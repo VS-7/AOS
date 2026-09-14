@@ -11,6 +11,7 @@ import (
 
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/collections"
+	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/core/env"
 	"github.com/OWNER/aos/internal/domain/activity"
 	"github.com/OWNER/aos/internal/domain/fakes"
@@ -983,5 +984,67 @@ func TestToolsSaysWhenTheTargetConnectedButCouldNotList(t *testing.T) {
 	svc := newService(t, withAdapter("gh", connectOKListFails{}))
 	if _, err := svc.Tools(ctx(), toolset.GetInput{ID: "gh"}); codeOf(t, err) != "AOS_TOOLSET_LIST_TOOLS_FAILED" {
 		t.Fatalf("code = %q", codeOf(t, err))
+	}
+}
+
+// toolsets_tools spawns the configured stdio command or opens a connection to
+// the configured host, exactly as toolsets_call does, and it was announced
+// read-only and idempotent: the flat MCP surface hands those hints to external
+// clients, and some of them approve a read-only tool without asking.
+func TestListingAToolsetsToolsIsAnnouncedAsTheReachItIs(t *testing.T) {
+	reg := command.NewRegistry()
+	toolset.Register(reg, newService(t))
+	tools, _, ok := reg.Lookup("toolsets_tools")
+	if !ok {
+		t.Fatal("toolsets_tools is not registered")
+	}
+	call, _, _ := reg.Lookup("toolsets_call")
+
+	got := tools.Annotations()
+	if got.ReadOnlyHint || got.IdempotentHint {
+		t.Errorf("toolsets_tools is announced read-only=%v idempotent=%v; it starts a process or opens a connection", got.ReadOnlyHint, got.IdempotentHint)
+	}
+	if !got.OpenWorldHint {
+		t.Error("toolsets_tools is not announced as reaching outside the process")
+	}
+	if got.DestructiveHint != call.Annotations().DestructiveHint {
+		t.Errorf("toolsets_tools destructive=%v, toolsets_call destructive=%v; they reach the target the same way", got.DestructiveHint, call.Annotations().DestructiveHint)
+	}
+}
+
+// A refusal on the way to listing a toolset's tools named toolsets_call's
+// service method as its cause, which sent whoever read it to the wrong place.
+func TestToolsNamesItselfAsTheCauseOfWhatItRefuses(t *testing.T) {
+	causerOf := func(err error) string {
+		t.Helper()
+		e, ok := apperr.As(err)
+		if !ok {
+			t.Fatalf("err is not *apperr.Error: %v", err)
+		}
+		return e.CauserName
+	}
+	disabled := newService(t, withToolset(toolset.Toolset{ID: "gh", Type: toolset.MCPStdio, Status: toolset.StatusDisabled}))
+	unreachable := newService(t, withAdapter("gh", failingAdapter{}))
+	guarded := newService(t, withToolset(toolset.Toolset{
+		ID: "api", Skill: "crm", Type: toolset.RESTAPI, Status: toolset.StatusEnabled, BaseURL: "https://api.example.com",
+	}), withAdapter("api", okAdapter{}))
+	cases := map[string]struct {
+		svc *toolset.Service
+		id  string
+	}{
+		"disabled":    {disabled, "gh"},
+		"unavailable": {newService(t), "cli-thing"},
+		"unreachable": {unreachable, "gh"},
+		"unguarded":   {guarded, "api"},
+	}
+	for name, tc := range cases {
+		_, err := tc.svc.Tools(ctx(), toolset.GetInput{ID: tc.id})
+		if got := causerOf(err); got != "toolset.Service.Tools" {
+			t.Errorf("Tools, %s: causer = %q, want toolset.Service.Tools", name, got)
+		}
+		_, err = tc.svc.Call(ctx(), toolset.CallInput{ID: tc.id, Tool: "whoami"})
+		if got := causerOf(err); got != "toolset.Service.Call" {
+			t.Errorf("Call, %s: causer = %q, want toolset.Service.Call", name, got)
+		}
 	}
 }

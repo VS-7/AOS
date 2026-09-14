@@ -30,9 +30,9 @@ func errTypeUnknown(raw string) error {
 // errTypeUnknown: a caller reading "not available in this build" knows the
 // configuration is fine and the binary is behind, where a decode error would
 // send them chasing a typo that is not there.
-func errTypeNotAvailable(t Type) error {
+func errTypeNotAvailable(op string, t Type) error {
 	return apperr.New("TOOLSET_TYPE_NOT_AVAILABLE").
-		Causer("toolset.Service.Call").
+		Causer("toolset.Service."+op).
 		Msgf("connection type %q is not available in this build", t).
 		Issue("type", string(t)).
 		Status(apperr.StatusNotImplemented).
@@ -88,18 +88,18 @@ func errConnectionLocked(id, field string) error {
 		})
 }
 
-// errDisabled fires when Call targets a toolset whose Status is
+// errDisabled fires when Call or Tools targets a toolset whose Status is
 // StatusDisabled. Disabling keeps the configuration — deleting a misbehaving
 // toolset would lose work someone spent time getting right — while refusing
 // the calls that configuration would otherwise make.
-func errDisabled(id string) error {
+func errDisabled(op, id string) error {
 	return apperr.New("TOOLSET_DISABLED").
-		Causer("toolset.Service.Call").
+		Causer("toolset.Service."+op).
 		Msgf("toolset %q is disabled", id).
 		Issue("id", id).
 		Status(apperr.StatusForbidden).
 		CTA(apperr.CallToAction{
-			Label: "enable it before calling it",
+			Label: "enable it before calling it or listing its tools",
 			Tool:  "toolsets_update-config",
 		})
 }
@@ -111,9 +111,9 @@ func errDisabled(id string) error {
 // reasoning errConnectionLocked already applies to Command and BaseURL — so
 // this refuses instead, the same fail-closed choice cliclient makes when no
 // sandbox is attached to ctx.
-func errNetworkGuardUnavailable(id string) error {
+func errNetworkGuardUnavailable(op, id string) error {
 	return apperr.New("TOOLSET_NETWORK_GUARD_UNAVAILABLE").
-		Causer("toolset.Service.Call").
+		Causer("toolset.Service."+op).
 		Msgf("toolset %q was installed by a skill; this build cannot verify its permissions.network allowlist", id).
 		Issue("id", id).
 		Status(apperr.StatusInternalServerError).
@@ -125,9 +125,9 @@ func errNetworkGuardUnavailable(id string) error {
 // zero or more hosts. The call refuses rather than treating a failed lookup
 // as "no restriction", for the same reason a failed permission check should
 // never resolve to "allow".
-func errNetworkLookupFailed(id, skillID string, cause error) error {
+func errNetworkLookupFailed(op, id, skillID string, cause error) error {
 	return apperr.New("TOOLSET_NETWORK_LOOKUP_FAILED").
-		Causer("toolset.Service.Call").
+		Causer("toolset.Service."+op).
 		Msgf("could not resolve toolset %q's permissions.network allowlist from skill %q: %v", id, skillID, cause).
 		Issue("id", id).
 		Issue("skill", skillID).
@@ -155,9 +155,9 @@ func errCallIncomplete(id, tool string) error {
 // underlying error comes from the adapter, never from this package echoing
 // back the resolved configuration — a Toolset's Env and Headers may hold a
 // secret that was just interpolated, and it must not travel in this message.
-func errConnectFailed(id string, cause error) error {
+func errConnectFailed(op, id string, cause error) error {
 	return apperr.New("TOOLSET_CONNECT_FAILED").
-		Causer("toolset.Service.Call").
+		Causer("toolset.Service."+op).
 		Msgf("could not connect to toolset %q: %v", id, cause).
 		Issue("id", id).
 		Status(apperr.StatusBadGateway).
