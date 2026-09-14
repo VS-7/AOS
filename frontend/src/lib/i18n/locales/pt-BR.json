@@ -432,7 +432,7 @@
   "Failed to finish task": "Falha ao concluir a tarefa",
   "Failed to mark activities as read": "Falha ao marcar as atividades como lidas",
   "Failed to open workspace in Finder": "Falha ao abrir o workspace no Finder",
-  "Failed to process image.": "Não foi possível processar a imagem.",
+  "Failed to process image.": "Falha ao processar a imagem.",
   "Failed to save model preference.": "Falha ao salvar a preferência de modelo.",
   "Failed to save tunnel credentials": "Falha ao salvar as credenciais do túnel",
   "Failed to start routine": "Falha ao iniciar a rotina",
