@@ -29,7 +29,15 @@ interface AgentsContextType {
   selectedAgentId: string | null;
   selectedAgent: Agent | undefined;
   isCreateMode: boolean;
+  /** The selected agent's instructions have not arrived yet. */
   isLoadingContent: boolean;
+  /**
+   * The selected agent's instructions could not be read, so the form holds
+   * none: editing them would save that nothing over AGENT.md.
+   */
+  contentLoadFailed: boolean;
+  /** Reads the selected agent again after a failed load. */
+  retryContentLoad: () => void;
   isDeleting: boolean;
   /** Whether the form holds edits that have not been saved. */
   isDirty: boolean;
@@ -59,12 +67,12 @@ interface AgentsProviderProps {
   requestedAgentId?: string;
 }
 
-function getAgentErrorMessage(error: unknown) {
+function getAgentErrorMessage(error: unknown, fallback = t("Unable to save this agent.")) {
   if (error && typeof error === "object" && "message" in error) {
     const message = (error as { message?: unknown }).message;
     if (typeof message === "string" && message) return message;
   }
-  return t("Unable to save this agent.");
+  return fallback;
 }
 
 /** Thrown out of `onSubmit` so `aos.useForm` leaves the typed values alone. */
@@ -74,6 +82,7 @@ export function AgentsProvider({ children, agents, requestedAgentId }: AgentsPro
   const [selectedAgentId, setSelectedAgentIdState] = useState<string | null>(null);
   const [selectedAgentFull, setSelectedAgentFull] = useState<Agent | undefined>(undefined);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
+  const [contentLoadFailed, setContentLoadFailed] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingSelection, setPendingSelection] = useState<string | null>(null);
 
@@ -96,6 +105,12 @@ export function AgentsProvider({ children, agents, requestedAgentId }: AgentsPro
   // Whether the selected id has been seen in a roster, which is what makes
   // its absence from a later one mean "deleted" rather than "not listed yet".
   const seenInRoster = useRef<string | null>(null);
+  // The roster version a re-read is already fetching: two refreshes that
+  // announce the same change ask the daemon once.
+  const rereading = useRef<string | null>(null);
+  // Whether the form holds the selected agent's own instructions, rather than
+  // the roster entry's empty ones. Read by the save, outside any render.
+  const contentLoaded = useRef(false);
 
   const form = aos.useForm({
     schema: agentFormSchema,
@@ -139,6 +154,9 @@ export function AgentsProvider({ children, agents, requestedAgentId }: AgentsPro
       if (!id) throw new SubmitRefused();
 
       const body = buildUpdatePayload(values, form.formState.dirtyFields);
+      // Instructions that never loaded are not an edit: whatever the field
+      // holds would replace the whole of AGENT.md.
+      if (!contentLoaded.current) delete body.content;
       if (Object.keys(body).length === 0) return values;
 
       const result = await aos.client.agent.update.mutate({ params: { agent: id }, body });
@@ -164,28 +182,52 @@ export function AgentsProvider({ children, agents, requestedAgentId }: AgentsPro
   const isDirty = form.formState.isDirty;
   void form.formState.dirtyFields;
 
+  /**
+   * Reads the agent, instructions included.
+   *
+   * Only a load that has nothing to show yet marks the content as loading —
+   * that is what disables Instructions. A re-read of an agent already on
+   * screen (changed elsewhere) leaves the field alone: disabling it took the
+   * caret out mid-sentence and dropped the next keys.
+   */
   const loadAgent = useCallback(
     async (id: string) => {
       const seq = ++loadSeq.current;
-      setIsLoadingContent(true);
+      const first = !contentLoaded.current;
+      if (first) {
+        setIsLoadingContent(true);
+        setContentLoadFailed(false);
+      }
+      const failed = (message: string) => {
+        toast.error(message);
+        // A failed re-read keeps the instructions already on screen; a failed
+        // first read has none to keep.
+        if (first) setContentLoadFailed(true);
+      };
       try {
         const response = await aos.client.agent.getById.query({ params: { agent: id } });
         if (seq !== loadSeq.current) return;
         const agent = response?.data?.agent as Agent | undefined;
         if (response?.error || !agent) {
-          if (response?.error) toast.error(getAgentErrorMessage(response.error));
+          failed(getAgentErrorMessage(response?.error, t("Could not load this agent.")));
           return;
         }
+        contentLoaded.current = true;
+        setContentLoadFailed(false);
         setSelectedAgentFull(agent);
         // Whatever the person typed while this was in flight stays; only
         // the untouched fields take the daemon's values.
         form.reset(buildAgentFormValues(agent), { keepDirtyValues: true });
       } catch (error) {
-        // A transport failure, not a refusal: without this it would surface
-        // as a spinner that never stops, with no visible cause.
+        if (seq !== loadSeq.current) return;
+        // A transport failure, not a refusal.
         console.error("[AgentsContext] failed to load agent", error);
+        failed(getAgentErrorMessage(error, t("Could not load this agent.")));
       } finally {
-        if (seq === loadSeq.current) setIsLoadingContent(false);
+        if (seq === loadSeq.current) {
+          setIsLoadingContent(false);
+          rereading.current = null;
+        }
       }
     },
     [form],
@@ -194,8 +236,12 @@ export function AgentsProvider({ children, agents, requestedAgentId }: AgentsPro
   // A new selection — and only a new selection — replaces the form.
   useEffect(() => {
     loadSeq.current++;
+    rereading.current = null;
+    setContentLoadFailed(false);
 
     if (!selectedAgentId || selectedAgentId === NEW_AGENT_ID) {
+      // A new agent's instructions are whatever is typed: nothing to lose.
+      contentLoaded.current = true;
       setSelectedAgentFull(undefined);
       setIsLoadingContent(false);
       form.reset(EMPTY_AGENT_FORM);
@@ -205,11 +251,14 @@ export function AgentsProvider({ children, agents, requestedAgentId }: AgentsPro
     const known = knownRecord.current;
     knownRecord.current = null;
     if (known?.id === selectedAgentId) {
+      contentLoaded.current = true;
       seenInRoster.current = null;
       setIsLoadingContent(false);
       form.reset(buildAgentFormValues(known));
       return;
     }
+
+    contentLoaded.current = false;
 
     const listed = agentsRef.current.find((agent) => agent.id === selectedAgentId);
     seenInRoster.current = listed ? selectedAgentId : null;
@@ -234,9 +283,11 @@ export function AgentsProvider({ children, agents, requestedAgentId }: AgentsPro
 
     const current = fullRef.current;
     if (!current || listed.updatedAt === current.updatedAt) return;
+    if (rereading.current === (listed.updatedAt ?? "")) return;
     // Changed elsewhere. Unsaved edits win: the person is looking at them,
     // and a reload under their cursor is the defect this replaced.
     if (form.formState.isDirty) return;
+    rereading.current = listed.updatedAt ?? "";
     void loadAgent(id);
   }, [agents, form, loadAgent]);
 
@@ -300,6 +351,11 @@ export function AgentsProvider({ children, agents, requestedAgentId }: AgentsPro
         selectedAgent: selectedAgentFull,
         isCreateMode,
         isLoadingContent,
+        contentLoadFailed,
+        retryContentLoad: () => {
+          const id = selectedIdRef.current;
+          if (id && id !== NEW_AGENT_ID && !contentLoaded.current) void loadAgent(id);
+        },
         isDeleting,
         isDirty,
         searchQuery,
