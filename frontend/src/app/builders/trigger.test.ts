@@ -1,9 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, renderHook } from "@testing-library/react";
 
+const host = vi.hoisted(() => ({ platform: "darwin" }));
+vi.mock("@/lib/wails", () => ({ platform: () => host.platform }));
+
 import { AosTrigger, AosTriggerGroup, keybindMatches, useGlobalKeybindings } from "./trigger";
 
-function press(key: string, mods: { meta?: boolean; shift?: boolean; alt?: boolean; ctrl?: boolean } = {}) {
+function press(
+  key: string,
+  mods: { meta?: boolean; shift?: boolean; alt?: boolean; ctrl?: boolean } = {},
+  target: EventTarget = window,
+) {
   const event = new KeyboardEvent("keydown", {
     key,
     metaKey: !!mods.meta,
@@ -11,14 +18,17 @@ function press(key: string, mods: { meta?: boolean; shift?: boolean; alt?: boole
     altKey: !!mods.alt,
     ctrlKey: !!mods.ctrl,
     cancelable: true,
+    bubbles: true,
   });
-  window.dispatchEvent(event);
+  target.dispatchEvent(event);
   return event;
 }
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  host.platform = "darwin";
+  document.body.innerHTML = "";
 });
 
 describe("the palette's list", () => {
@@ -50,13 +60,29 @@ describe("a keybind", () => {
   it("matches only the modifiers it names", () => {
     const event = (key: string, mods: KeyboardEventInit) => new KeyboardEvent("keydown", { key, ...mods });
     expect(keybindMatches("mod+n", event("n", { metaKey: true }))).toBe(true);
-    expect(keybindMatches("mod+n", event("n", { ctrlKey: true }))).toBe(true);
     // ⌘⇧N is New Chat; it must not also open the New Task dialog.
     expect(keybindMatches("mod+n", event("N", { metaKey: true, shiftKey: true }))).toBe(false);
     expect(keybindMatches("mod+shift+n", event("N", { metaKey: true, shiftKey: true }))).toBe(true);
     expect(keybindMatches("mod+shift+n", event("n", { metaKey: true }))).toBe(false);
     expect(keybindMatches("mod+n", event("n", {}))).toBe(false);
     expect(keybindMatches("mod+left", event("ArrowLeft", { metaKey: true }))).toBe(true);
+  });
+
+  // "mod" was ⌘ or Control on every platform. On macOS Control is text
+  // editing — ^N moves down a line, ^K deletes to its end, ^B moves back — so
+  // typing in a title field and pressing ^N opened Create Task.
+  it("reads mod as the platform's command key: ⌘ on macOS, Control elsewhere", () => {
+    const event = (key: string, mods: KeyboardEventInit) => new KeyboardEvent("keydown", { key, ...mods });
+    expect(keybindMatches("mod+n", event("n", { ctrlKey: true }), true)).toBe(false);
+    expect(keybindMatches("mod+n", event("n", { metaKey: true }), true)).toBe(true);
+    expect(keybindMatches("mod+n", event("n", { ctrlKey: true }), false)).toBe(true);
+    expect(keybindMatches("mod+n", event("n", { metaKey: true }), false)).toBe(false);
+    expect(keybindMatches("ctrl+n", event("n", { ctrlKey: true }), true)).toBe(true);
+
+    host.platform = "windows";
+    expect(keybindMatches("mod+n", event("n", { ctrlKey: true }))).toBe(true);
+    host.platform = "darwin";
+    expect(keybindMatches("mod+n", event("n", { ctrlKey: true }))).toBe(false);
   });
 });
 
@@ -84,6 +110,40 @@ describe("the application's keybindings", () => {
 
     expect(run).toHaveBeenCalledWith("goals.new");
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("leaves Control alone in a text field on macOS", () => {
+    const built = registry(() => {});
+    const run = vi.fn();
+    renderHook(() => useGlobalKeybindings(built, run));
+    const input = document.body.appendChild(document.createElement("input"));
+    input.focus();
+
+    const control = press("G", { ctrl: true, shift: true }, input);
+    expect(run).not.toHaveBeenCalled();
+    expect(control.defaultPrevented).toBe(false);
+
+    press("G", { meta: true, shift: true }, input);
+    expect(run).toHaveBeenCalledWith("goals.new");
+  });
+
+  // ⌘← and ⌘→ (Control on other systems) move the caret to the line's ends
+  // or by word: in a field, that is what the person means, not Go Back.
+  it("lets a text field keep the caret keys", () => {
+    const back = vi.fn();
+    const built = AosTrigger.create()
+      .addGroup(AosTriggerGroup.create("Tabs").addTrigger({ id: "tabs.back", label: "Go Back", keybind: "mod+left", handler: back }))
+      .build();
+    const run = vi.fn();
+    renderHook(() => useGlobalKeybindings(built, run));
+    const editor = document.body.appendChild(document.createElement("div"));
+    editor.setAttribute("contenteditable", "true");
+
+    expect(press("ArrowLeft", { meta: true }, editor).defaultPrevented).toBe(false);
+    expect(run).not.toHaveBeenCalled();
+
+    press("ArrowLeft", { meta: true });
+    expect(run).toHaveBeenCalledWith("tabs.back");
   });
 
   it("leaves hidden triggers and keybinds another component owns alone", () => {

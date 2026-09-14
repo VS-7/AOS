@@ -2,6 +2,7 @@ import { DefaultContext, AosAppTriggerOnSearchCallback, AosTriggerDef, IAosTrigg
 import z from "zod";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AosResponse } from "./response";
+import { commandKeyIsMeta } from "@/lib/command-key";
 
 /**
  * Triggers whose keybind a mounted component has taken, by how many of them.
@@ -25,29 +26,53 @@ const KEY_ALIASES: Record<string, string> = {
   space: " ",
 };
 
+/** Keys a text field moves its caret with, whatever modifier comes along. */
+const CARET_KEYS = new Set(["arrowleft", "arrowright", "arrowup", "arrowdown", "home", "end", "backspace", "delete"]);
+
 /**
  * Whether a key press is exactly this keybind (`mod+shift+g`).
  *
  * Exactly: a modifier the keybind does not name must not be held. Matching
  * only the named ones meant ⌘⇧N — New Chat — also fired ⌘N, New Task,
  * because nothing checked that Shift was *not* part of it.
+ *
+ * `mod` is the platform's command key: ⌘ on macOS, Control elsewhere. It
+ * used to be either, everywhere — and on macOS Control is text editing (^N
+ * next line, ^K delete to the end, ^B back a character), so typing in a field
+ * and pressing ^N opened Create Task.
  */
 export function keybindMatches(
   keybind: string,
   event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">,
+  mac: boolean = commandKeyIsMeta(),
 ): boolean {
   const keys = keybind.toLowerCase().split("+").map((k) => k.trim());
-  const requiresMod = keys.includes("mod");
-  const requiresCtrl = keys.includes("ctrl");
   const main = keys.find((k) => !MODIFIERS.includes(k));
   if (!main) return false;
 
-  const commandHeld = event.metaKey || event.ctrlKey;
-  if (requiresMod ? !commandHeld : requiresCtrl ? !event.ctrlKey || event.metaKey : commandHeld) return false;
+  const wantsMeta = keys.includes("mod") && mac;
+  const wantsCtrl = keys.includes("ctrl") || (keys.includes("mod") && !mac);
+  if (wantsMeta !== event.metaKey || wantsCtrl !== event.ctrlKey) return false;
   if (keys.includes("alt") !== event.altKey) return false;
   if (keys.includes("shift") !== event.shiftKey) return false;
 
   return event.key.toLowerCase() === (KEY_ALIASES[main] ?? main);
+}
+
+/**
+ * Whether this key press belongs to the text field it was typed in: a
+ * keybind on a caret key (⌘← is the line's start, Control← a word back) moves
+ * the caret there, not the tab's history.
+ */
+function belongsToTextField(keybind: string, event: KeyboardEvent): boolean {
+  const target = event.target;
+  if (!(target instanceof Element)) return false;
+  const editable =
+    target.matches("input, textarea, select, [role='textbox']") ||
+    target.closest("[contenteditable]:not([contenteditable='false'])") !== null;
+  if (!editable) return false;
+  const main = keybind.toLowerCase().split("+").map((k) => k.trim()).find((k) => !MODIFIERS.includes(k));
+  return main !== undefined && CARET_KEYS.has(KEY_ALIASES[main] ?? main);
 }
 
 /**
@@ -80,6 +105,7 @@ export function useGlobalKeybindings(
       for (const def of bound) {
         if (claimedKeybinds.has(def.id)) continue;
         if (!keybindMatches(def.keybind!, event)) continue;
+        if (belongsToTextField(def.keybind!, event)) return;
         event.preventDefault();
         runRef.current(def.id);
         return;
@@ -307,7 +333,7 @@ export class AosTrigger<
             if (!keybind) return;
 
             const handleKeyDown = (e: KeyboardEvent) => {
-              if (keybindMatches(keybind!, e)) {
+              if (keybindMatches(keybind!, e) && !belongsToTextField(keybind!, e)) {
                 e.preventDefault();
                 if (onPressKey) {
                   onPressKey(e);
