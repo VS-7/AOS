@@ -485,7 +485,7 @@ var Catalog = []Entry{
 	{Code: "AOS_WORKSPACE_RECORD_UNWRITABLE", Package: "internal/adapters/fsworkspace", File: "internal/adapters/fsworkspace/store.go", Line: 230, Status: 500, Causer: "fsworkspace.Store", CTA: false, Issues: []string{"path"}},
 	{Code: "AOS_WORKSPACE_SCAFFOLD_FAILED", Package: "internal/domain/workspace", File: "internal/domain/workspace/errors.go", Line: 83, Status: 500, Causer: "workspace.Service.scaffold", CTA: false, Issues: []string{"path"}},
 	{Code: "AOS_WORKSPACE_STORE_FAILED", Package: "internal/domain/workspace", File: "internal/domain/workspace/errors.go", Line: 92, Status: 500, Causer: "<dynamic>", CTA: false},
-	{Code: "AOS_WORKSPACE_UNAVAILABLE", Package: "internal/app", File: "internal/app/workspaces.go", Line: 225, Status: 500, Causer: "app.scopes.forID", CTA: true, Issues: []string{"path", "workspace"}},
+	{Code: "AOS_WORKSPACE_UNAVAILABLE", Package: "internal/app", File: "internal/app/workspaces.go", Line: 286, Status: 500, Causer: "app.scopes.forID", CTA: true, Issues: []string{"path", "workspace"}},
 	{Code: "AOS_WORKSPACE_UNKNOWN_FIELD", Package: "internal/domain/workspace", File: "internal/domain/workspace/errors.go", Line: 109, Status: 400, Causer: "workspace.Service.Update", CTA: true, Issues: []string{"field"}},
 	{Code: "AOS_WORKSPACE_UNSAFE_ID", Package: "internal/adapters/fsworkspace", File: "internal/adapters/fsworkspace/store.go", Line: 242, Status: 400, Causer: "fsworkspace.Store", CTA: true, Issues: []string{"id"}},
 }
