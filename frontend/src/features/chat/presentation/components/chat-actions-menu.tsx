@@ -31,19 +31,30 @@ import {
 
 interface ChatActionsMenuProps {
   chat: ChatActionsTarget;
+  /**
+   * False for a DM with an agent: that conversation is named after the
+   * agent — header, tab and the Team list all read the agent's name — so a
+   * new title would be stored and shown nowhere.
+   */
+  canRename?: boolean;
   /** Takes the server's transcript whole after a clear — see useChatActions. */
   onCleared?: () => void;
 }
 
 /**
- * The conversation's own menu, in its header: rename, clear, delete.
+ * The conversation's own menu, in its header: rename (unless it is named
+ * after an agent), clear, delete.
  *
  * It exists for every kind of conversation because the sidebar only ever had
  * one for channels. A DM, a task thread or a run transcript could be opened
  * and never renamed or removed — a conversation somebody opened with
  * themselves by mistake stayed in the workspace for good.
  */
-export function ChatActionsMenu({ chat, onCleared }: ChatActionsMenuProps) {
+export function ChatActionsMenu({
+  chat,
+  canRename = true,
+  onCleared,
+}: ChatActionsMenuProps) {
   const [renaming, setRenaming] = React.useState(false);
   const [draft, setDraft] = React.useState(chat.title ?? "");
   const actions = useChatActions(chat, {
@@ -76,10 +87,12 @@ export function ChatActionsMenu({ chat, onCleared }: ChatActionsMenuProps) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuItem onSelect={openRename}>
-            <HugeiconsIcon icon={PencilIcon} />
-            {t("Rename")}
-          </DropdownMenuItem>
+          {canRename ? (
+            <DropdownMenuItem onSelect={openRename}>
+              <HugeiconsIcon icon={PencilIcon} />
+              {t("Rename")}
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem onSelect={() => void actions.clear()}>
             <HugeiconsIcon icon={EraserIcon} />
             {t("Clear messages")}
