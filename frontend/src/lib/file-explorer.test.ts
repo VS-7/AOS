@@ -223,6 +223,8 @@ describe("readForEditor()", () => {
     const binary = await readForEditor("blob");
     expect(binary.editable).toBe(false);
     expect(binary.content).toBe("");
+    // Said so, so the editor can say it rather than show an empty buffer.
+    expect(binary.binary).toBe(true);
   });
 
   it("keeps an empty file editable — empty is content, not a failure", async () => {
@@ -230,6 +232,7 @@ describe("readForEditor()", () => {
     const answer = await readForEditor("empty.md");
     expect(answer.content).toBe("");
     expect(answer.editable).toBe(true);
+    expect(answer.binary).toBe(false);
   });
 });
 

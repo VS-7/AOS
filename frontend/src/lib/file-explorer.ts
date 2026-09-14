@@ -230,6 +230,8 @@ export interface EditorRead {
   content: string;
   file: WorkspaceFile;
   truncated: boolean;
+  /** Bytes that are not text: there is nothing to show in an editor. */
+  binary: boolean;
   /**
    * Whether saving this buffer back is safe. Not for a truncated read — the
    * save would cut the file at the read limit — and not for a binary, whose
@@ -265,6 +267,7 @@ export async function readForEditor(path: string): Promise<EditorRead> {
     content: binary ? "" : (answered.text ?? ""),
     file,
     truncated: answered.truncated,
+    binary,
     editable: !binary && !answered.truncated,
   };
 }

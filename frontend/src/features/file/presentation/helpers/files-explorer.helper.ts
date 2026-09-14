@@ -61,10 +61,20 @@ export function formatExplorerContextLabel(
   return task?.title || context.taskId;
 }
 
+/**
+ * Whether two explorer contexts name the same tree.
+ *
+ * A missing context is the main workspace. The daemon's change events carry
+ * none — its file API serves only the main workspace — and comparing that
+ * `undefined` threw inside every open text file's realtime handler, which
+ * also cut delivery to every listener registered after it.
+ */
 export function explorerContextsEqual(
-  left: FileExplorerContext,
-  right: FileExplorerContext,
+  leftContext: FileExplorerContext | undefined,
+  rightContext: FileExplorerContext | undefined,
 ): boolean {
+  const left = leftContext ?? { type: "main" as const };
+  const right = rightContext ?? { type: "main" as const };
   if (left.type !== right.type) return false;
   if (left.type === "task" && right.type === "task") {
     return left.taskId === right.taskId;
@@ -73,6 +83,14 @@ export function explorerContextsEqual(
     return left.branch === right.branch;
   }
   return true;
+}
+
+/**
+ * Whether a path names a folder as git reports one: an untracked directory is
+ * listed once, its path ending in "/", rather than file by file.
+ */
+export function isDirectoryEntry(path: string): boolean {
+  return path.endsWith("/");
 }
 
 export function getAncestorPaths(filePath: string): string[] {

@@ -8,6 +8,8 @@ import {
   formatChangeStatusLabel,
   type ChangesPanelPreferences,
 } from "@/features/file/presentation/helpers/changes.helper";
+import { isDirectoryEntry } from "@/features/file/presentation/helpers/files-explorer.helper";
+import { t } from "@/lib/i18n";
 import { ChangesFileDiff } from "./changes-file-diff";
 
 interface ChangesFileItemProps {
@@ -57,13 +59,13 @@ export function ChangesFileItem({
 
         {file.oldPath ? (
           <span className="hidden max-w-[30%] truncate text-xs text-muted-foreground sm:inline">
-            from {file.oldPath}
+            {t("from {{path}}", { path: file.oldPath })}
           </span>
         ) : null}
 
         <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
           {file.isBinary ? (
-            "binary"
+            t("binary")
           ) : (
             <>
               {(file.additions ?? 0) > 0 ? (
@@ -81,7 +83,13 @@ export function ChangesFileItem({
         </span>
       </button>
 
-      {expanded ? (
+      {expanded && isDirectoryEntry(file.path) ? (
+        // git reports an untracked folder as one entry. There is no file to
+        // diff, and asking for one answered the daemon's I/O error.
+        <div className="px-4 py-6 text-sm text-muted-foreground">
+          {t("A new folder. Its files are not tracked yet; open them from Files.")}
+        </div>
+      ) : expanded ? (
         <ChangesFileDiff
           path={file.path}
           explorerContext={explorerContext}

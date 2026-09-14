@@ -164,6 +164,8 @@ export function FilesContent({
     "files:changed",
     (payload) => {
       if (!activeFilePath || !shouldReadTextContent) return
+      // `payload.context` is absent on every event the daemon sends; the
+      // helper reads that as the main workspace instead of throwing on it.
       if (!explorerContextsEqual(payload.context, explorerContext)) return
 
       const touched = payload.changes.some(
@@ -312,6 +314,7 @@ export function FilesContent({
           {read?.truncated ? (
             <Badge variant="secondary">{t("Too large to edit — showing the beginning")}</Badge>
           ) : null}
+          {read?.binary ? <Badge variant="secondary">{t("Binary")}</Badge> : null}
           {readQuery.isError ? (
             <Badge variant="destructive" title={errorMessage(readQuery.error) ?? undefined}>
               {t("Load failed")}
@@ -357,6 +360,19 @@ export function FilesContent({
                 <AnimatedEmptyState.Title>{t("Unable to open this file")}</AnimatedEmptyState.Title>
                 <AnimatedEmptyState.Description>
                   {errorMessage(readQuery.error) ?? t("The daemon did not return its content.")}
+                </AnimatedEmptyState.Description>
+              </AnimatedEmptyState.Content>
+            </AnimatedEmptyState>
+          </div>
+        ) : read?.binary ? (
+          // Its bytes are not in the buffer at all. An empty read-only editor
+          // looked like an empty file that refused edits.
+          <div className="flex h-full items-center justify-center p-8">
+            <AnimatedEmptyState className="border-none shadow-none">
+              <AnimatedEmptyState.Content>
+                <AnimatedEmptyState.Title>{t("This file is not text")}</AnimatedEmptyState.Title>
+                <AnimatedEmptyState.Description>
+                  {t("Its contents are binary and cannot be shown or edited here.")}
                 </AnimatedEmptyState.Description>
               </AnimatedEmptyState.Content>
             </AnimatedEmptyState>
