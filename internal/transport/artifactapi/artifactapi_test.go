@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -490,6 +491,36 @@ func TestEveryArtifactAnswerRunsInAnOpaqueOrigin(t *testing.T) {
 				t.Errorf("%s %s: sandbox %q stops the artifact's own script", visibility, path, sandbox)
 			}
 		}
+	}
+}
+
+// The sandbox token list is a decision, pinned here whole. Opened at its share
+// link an artifact could use alert/confirm/prompt, <a download> and storage
+// before its answer carried a sandbox; the opaque origin still takes storage
+// (localStorage, sessionStorage and IndexedDB throw), but modals and downloads
+// grant no origin and give the top window nothing, so they stay. Whatever
+// hands the document an origin, the top window, or a popup outside the
+// sandbox stays out.
+func TestTheArtifactSandboxGrantsExactlyWhatAnArtifactIsFor(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "demo/index.html", "x")
+	h := artifactapi.New(artifactapi.Config{
+		Artifacts: &fakeArtifacts{artifact: &artifact.Artifact{ID: "demo", Visibility: artifact.ByPassword, Entrypoint: "index.html"}, authorize: alwaysAllow},
+		Files:     fakeFiles{root: root},
+	})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/artifacts/demo/?password=pw", nil))
+
+	var tokens []string
+	for _, directive := range strings.Split(rec.Header().Get("Content-Security-Policy"), ";") {
+		if fields := strings.Fields(directive); len(fields) > 0 && fields[0] == "sandbox" {
+			tokens = fields[1:]
+		}
+	}
+	slices.Sort(tokens)
+	want := []string{"allow-downloads", "allow-forms", "allow-modals", "allow-popups", "allow-scripts"}
+	if !slices.Equal(tokens, want) {
+		t.Fatalf("sandbox tokens = %v, want %v", tokens, want)
 	}
 }
 
