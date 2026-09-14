@@ -1,6 +1,8 @@
 import * as React from "react";
 import type { BaseComponentProps } from "@json-render/react";
+import { toast } from "sonner";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
 
 type RegistryComponent = (props: BaseComponentProps<any>) => React.ReactNode;
 
@@ -39,6 +41,36 @@ class ElementBoundary extends React.Component<
 }
 
 /**
+ * What json-render rejects an event with when the person answers Cancel to an
+ * action's confirmation — an answer, not a failure.
+ */
+const CANCELLED = "Action cancelled";
+
+/**
+ * Fires an element's event and settles whatever it answers.
+ *
+ * json-render's `emit` is async and rejects when a confirmation is cancelled
+ * or a handler throws; the components that call it (Button, Link, and every
+ * shadcn one) never await it. So each Cancel on a confirmed action was an
+ * uncaught "Action cancelled", and a handler that threw failed silently. A
+ * cancellation now settles quietly, and anything else is said out loud.
+ */
+function settled(fire: () => unknown): Promise<void> {
+  const report = (error: unknown) => {
+    if (error instanceof Error && error.message === CANCELLED) return;
+    toast.error(t("The action failed"), { description: errorMessage(error) ?? String(error) });
+  };
+  // Fired in the same tick as the click, not a microtask later: a handler
+  // that needs the click's user activation still has it.
+  try {
+    return Promise.resolve(fire()).then(() => undefined, report);
+  } catch (error) {
+    report(error);
+    return Promise.resolve();
+  }
+}
+
+/**
  * Wraps every registry component so a failure renders a visible notice.
  *
  * The component is rendered as an element of its own, not called: `defineRegistry`
@@ -50,11 +82,20 @@ export function withElementBoundaries<T extends Record<string, RegistryComponent
     Object.entries(components).map(([name, Component]) => {
       const Inner = (props: BaseComponentProps<any>) => <>{Component(props)}</>;
       Inner.displayName = `View${name}`;
-      const Wrapped = (props: BaseComponentProps<any>) => (
-        <ElementBoundary name={name}>
-          <Inner {...props} />
-        </ElementBoundary>
-      );
+      const Wrapped = (props: BaseComponentProps<any>) => {
+        // Typed as returning void; returning the settled promise costs the
+        // callers nothing and lets whoever wants to wait on it.
+        const emit = (event: string) => settled(() => props.emit(event)) as unknown as void;
+        const on = (event: string) => {
+          const handle = props.on(event);
+          return { ...handle, emit: () => settled(() => handle.emit()) as unknown as void };
+        };
+        return (
+          <ElementBoundary name={name}>
+            <Inner {...props} emit={emit} on={on} />
+          </ElementBoundary>
+        );
+      };
       return [name, Wrapped];
     }),
   ) as T;
