@@ -75,7 +75,7 @@ describe("a browser tab", () => {
     const { view } = await renderAt("/", "");
 
     expect(view.container.querySelector("iframe")).toBeNull();
-    expect(view.getByText("Type an address or a search in the bar above.")).toBeTruthy();
+    expect(view.getByText("Type an address in the bar above. A search opens in your browser.")).toBeTruthy();
   });
 
   it("offers the system browser for an external site", async () => {

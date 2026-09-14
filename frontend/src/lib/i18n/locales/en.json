@@ -1851,7 +1851,7 @@
   "Type": "Type",
   "Type a command or search...": "Type a command or search...",
   "Type a space to insert a literal slash, or keep filtering skills and commands.": "Type a space to insert a literal slash, or keep filtering skills and commands.",
-  "Type an address or a search in the bar above.": "Type an address or a search in the bar above.",
+  "Type an address in the bar above. A search opens in your browser.": "Type an address in the bar above. A search opens in your browser.",
   "Type is required": "Type is required",
   "Type it again to confirm.": "Type it again to confirm.",
   "Type updated": "Type updated",

@@ -1851,7 +1851,7 @@
   "Type": "Tipo",
   "Type a command or search...": "Digite um comando ou busque...",
   "Type a space to insert a literal slash, or keep filtering skills and commands.": "Digite um espaço para inserir uma barra literal, ou continue filtrando skills e comandos.",
-  "Type an address or a search in the bar above.": "Digite um endereço ou uma busca na barra acima.",
+  "Type an address in the bar above. A search opens in your browser.": "Digite um endereço na barra acima. Uma busca abre no seu navegador.",
   "Type is required": "O tipo é obrigatório",
   "Type it again to confirm.": "Digite de novo para confirmar.",
   "Type updated": "Tipo atualizado",

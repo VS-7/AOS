@@ -127,7 +127,7 @@ export function BrowserRenderer({
           <Compass className="size-8 text-muted-foreground/60" aria-hidden />
           <p className="text-sm font-medium text-muted-foreground">{t("New tab")}</p>
           <p className="max-w-sm text-xs text-muted-foreground/80">
-            {t("Type an address or a search in the bar above.")}
+            {t("Type an address in the bar above. A search opens in your browser.")}
           </p>
         </div>
       ) : null}
