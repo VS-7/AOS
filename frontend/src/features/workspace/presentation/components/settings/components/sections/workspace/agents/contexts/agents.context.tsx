@@ -65,6 +65,11 @@ interface AgentsProviderProps {
    * provider only acts on it, so it does not need a router to exist.
    */
   requestedAgentId?: string;
+  /**
+   * Which request this is. The same agent asked for twice reaches the same
+   * URL, so the id alone cannot tell a second "View details" from the first.
+   */
+  requestKey?: string;
 }
 
 function getAgentErrorMessage(error: unknown, fallback = t("Unable to save this agent.")) {
@@ -78,7 +83,7 @@ function getAgentErrorMessage(error: unknown, fallback = t("Unable to save this 
 /** Thrown out of `onSubmit` so `aos.useForm` leaves the typed values alone. */
 class SubmitRefused extends Error {}
 
-export function AgentsProvider({ children, agents, requestedAgentId }: AgentsProviderProps) {
+export function AgentsProvider({ children, agents, requestedAgentId, requestKey }: AgentsProviderProps) {
   const [selectedAgentId, setSelectedAgentIdState] = useState<string | null>(null);
   const [selectedAgentFull, setSelectedAgentFull] = useState<Agent | undefined>(undefined);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
@@ -321,16 +326,17 @@ export function AgentsProvider({ children, agents, requestedAgentId }: AgentsPro
 
   // The requested agent is the one to open: the chat sidebar's "View details"
   // landed here with both agents listed and nothing selected. Applied once the
-  // roster has it, and again only if the request changes, so it never fights a
-  // selection the person makes afterwards. It goes through selectAgent, like a
-  // click, so an unsaved edit to the agent already open is asked about rather
-  // than discarded.
+  // roster has it, and again only for a new request — another agent, or the
+  // same one asked for again (`requestKey`) — so it never fights a selection
+  // the person makes afterwards. It goes through selectAgent, like a click,
+  // so an unsaved edit to the agent already open is asked about rather than
+  // discarded.
   const requestedAgentListed =
     typeof requestedAgentId === "string" &&
     agents.some((agent) => agent.id === requestedAgentId);
   useEffect(() => {
     if (requestedAgentListed) selectAgent(requestedAgentId as string);
-  }, [requestedAgentId, requestedAgentListed, selectAgent]);
+  }, [requestedAgentId, requestKey, requestedAgentListed, selectAgent]);
 
   const filteredAgents = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();

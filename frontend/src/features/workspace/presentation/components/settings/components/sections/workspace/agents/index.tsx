@@ -24,11 +24,17 @@ export function WorkspaceAgentsSection() {
   const requestedAgent = useRouterState({
     select: (state) => (state.location.search as { agent?: unknown }).agent,
   });
+  // A second request for the same agent has the same URL; the history entry
+  // it pushed is what differs (see the viewport store's openSettings).
+  const requestKey = useRouterState({
+    select: (state) => (state.location.state as { settingsSelection?: unknown }).settingsSelection,
+  });
 
   return (
     <AgentsProvider
       agents={agents}
       requestedAgentId={typeof requestedAgent === "string" ? requestedAgent : undefined}
+      requestKey={typeof requestKey === "string" ? requestKey : undefined}
     >
       <WorkspaceAgentsSectionLayout />
     </AgentsProvider>

@@ -76,6 +76,12 @@ const { AgentsProvider, useAgents } = await import("./agents.context");
 
 type Ctx = ReturnType<typeof useAgents>;
 
+const probe: { current: Ctx | null } = { current: null };
+function Probe() {
+  probe.current = useAgents();
+  return null;
+}
+
 function mount(agents: Agent[]) {
   const ref: { current: Ctx | null } = { current: null };
   function Probe() {
@@ -358,6 +364,47 @@ describe("AgentsProvider", () => {
   // #176 / #177: the daemon's answers were '"" is not a usable agent slug'
   // and a storage sentence about a collection — neither says what to change
   // in a form whose only identity field is the name.
+  // W3-12: the request was applied again only when the agent it named
+  // changed. After the person picked someone else, a second "View details"
+  // for the same agent reached the same URL and did not bring her back.
+  it("opens the requested agent again when the same request is made again", async () => {
+    const view = render(
+      <AgentsProvider agents={[builder, luara]} requestedAgentId="luara" requestKey="first">
+        <Probe />
+      </AgentsProvider>,
+    );
+    await waitFor(() => expect(probe.current!.selectedAgentId).toBe("luara"));
+    await act(async () => probe.current!.setSelectedAgentId("api-builder"));
+    expect(probe.current!.selectedAgentId).toBe("api-builder");
+
+    view.rerender(
+      <AgentsProvider agents={[builder, luara]} requestedAgentId="luara" requestKey="second">
+        <Probe />
+      </AgentsProvider>,
+    );
+    await waitFor(() => expect(probe.current!.selectedAgentId).toBe("luara"));
+  });
+
+  // Through the same guard as a click: unsaved edits are asked about.
+  it("asks before a request replaces unsaved edits", async () => {
+    const view = render(
+      <AgentsProvider agents={[builder, luara]} requestedAgentId="api-builder" requestKey="first">
+        <Probe />
+      </AgentsProvider>,
+    );
+    await waitFor(() => expect(probe.current!.isLoadingContent).toBe(false));
+    await waitFor(() => expect(probe.current!.selectedAgentId).toBe("api-builder"));
+    await act(async () => probe.current!.form.setValue("role", "UNSAVED", { shouldDirty: true }));
+
+    view.rerender(
+      <AgentsProvider agents={[builder, luara]} requestedAgentId="luara" requestKey="second">
+        <Probe />
+      </AgentsProvider>,
+    );
+    await waitFor(() => expect(probe.current!.pendingSelection).toBe("luara"));
+    expect(probe.current!.selectedAgentId).toBe("api-builder");
+  });
+
   it("refuses a name that makes no id, before asking the daemon", async () => {
     const { ctx } = mount([builder, luara]);
     await act(async () => ctx().startCreate());
