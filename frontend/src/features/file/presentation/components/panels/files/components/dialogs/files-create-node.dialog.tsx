@@ -35,8 +35,9 @@ import {
   joinWorkspacePath,
 } from "@/features/file/presentation/helpers/files-explorer.helper";
 
-// Built per render rather than once at import, so the message is in the
-// language the person has now, not the one the module was loaded in.
+// Built when the dialog mounts rather than once at import, so the message is
+// in the language the person has now, not the one the module was loaded in; a
+// change of language remounts the whole tree (App.tsx's Localized).
 function createNodeSchema() {
   return z.object({
     name: z.string().trim().min(1, t("Name is required")),
