@@ -468,7 +468,13 @@ func (s *Service) newRun(r *Routine, trigger TriggerType, payload map[string]any
 //
 // Both writes are best-effort and logged: the work already happened, and losing
 // the record of it is bad but refusing to return the result is worse.
+//
+// They are made on a context the run's cancellation does not reach. A daemon
+// shutting down cancels the run it is taking, and on that context both writes
+// failed: the run read as running for good and the routine did not know it
+// had fired.
 func (s *Service) finish(ctx context.Context, r *Routine, run *Run) {
+	ctx = context.WithoutCancel(ctx)
 	ended := s.clock.Now()
 	run.EndedAt = &ended
 

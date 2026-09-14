@@ -79,3 +79,46 @@ func TestADueRoutineStillRunningIsNotHandedOnAgain(t *testing.T) {
 		t.Fatalf("running = %v, want the routine reported as still running", got.Running)
 	}
 }
+
+// cancelling is a runtime whose turn is cut short the way a daemon shutting
+// down cuts it: the context goes while the turn runs.
+type cancelling struct{ cancel context.CancelFunc }
+
+func (c cancelling) Execute(ctx context.Context, _ Execution) (Outcome, error) {
+	c.cancel()
+	<-ctx.Done()
+	return Outcome{}, ctx.Err()
+}
+
+// The worker stops a scheduled run when the daemon shuts down, and fire closed
+// the run record and marked the routine fired on that same cancelled context:
+// both writes failed, the run read as running for good, and the routine did not
+// know it had fired. On instance 41 the run cut short at 21:33:11 still said
+// running after the daemon came back.
+func TestARunCutShortIsStillClosedAndRecordedOnTheRoutine(t *testing.T) {
+	ctx, cancel := context.WithCancel(asAgent("atlas"))
+	defer cancel()
+	h := newHarness(t, func(d *Deps) { d.Executor = cancelling{cancel: cancel} })
+	out := h.create(t, CreateInput{
+		Name:     "Cut short",
+		Triggers: []TriggerInput{{Type: Scheduled, Cron: "* * * * *"}},
+	})
+
+	if _, err := h.svc.Fire(ctx, Firing{Agent: "atlas", Routine: out.Routine.ID, Cron: "* * * * *"}.Input()); err == nil {
+		t.Fatal("a run whose context went reported success")
+	}
+	runs, err := h.svc.Runs(asAgent("atlas"), RunsInput{ID: out.Routine.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs.Runs) != 1 || runs.Runs[0].Status == RunRunning || runs.Runs[0].EndedAt == nil {
+		t.Fatalf("runs = %+v, want the one run closed", runs.Runs)
+	}
+	view, err := h.svc.Get(asAgent("atlas"), GetInput{ID: out.Routine.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.LastFiredAt == nil {
+		t.Fatal("the routine does not know it fired")
+	}
+}
