@@ -3,9 +3,9 @@ package marketplace_test
 import (
 	"context"
 	"errors"
-	"github.com/OWNER/aos/internal/core/apperr"
 	"testing"
 
+	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/domain/marketplace"
 	"github.com/OWNER/aos/internal/domain/skill"
