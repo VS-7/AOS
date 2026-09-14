@@ -4,10 +4,20 @@ The queue of deferred work, and whether it is healthy.
 
 What the daemon has deferred to run later, and whether that work is healthy.
 
-Only work handed to the queue is here. Conversation turns, routine runs and task
-runs start directly and never become jobs, so an empty queue is the ordinary
-state: to learn whether one of those happened, read its conversation (a failed
-turn is recorded on the message that asked for it) or the activity log.
+While it serves, the daemon drains this queue and makes a periodic pass on the
+scheduler's tick (fifteen minutes unless the installation sets another): it
+hands back work whose worker stopped reporting, queues the scheduled routines
+that are due in every workspace it serves, and removes finished jobs older than
+a week. A process that only runs one command does none of that.
+
+Only work handed to the queue is here. A scheduled routine's run is a job on
+the routine queue: tried once, failed with the run's own reason, and not queued
+again while an earlier one for the same routine is still waiting or running.
+Conversation turns, task runs, and routines fired by hand, by a webhook or by an
+activity start directly and never become jobs, so an empty queue is the
+ordinary state: to learn whether one of those happened, read its conversation (a
+failed turn is recorded on the message that asked for it), the routine's runs,
+or the activity log.
 
 ## Commands
 - **list** — the jobs, filtered by queue, status, workspace or kind
@@ -21,8 +31,9 @@ turn is recorded on the message that asked for it) or the activity log.
 - **After a crash:** recover, to return the work its worker was holding
 
 ## When NOT to use
-- Not to find out whether a turn, a routine run or a task run happened; those
-  are not jobs
+- Not to find out whether a turn, a task run or a routine fired by hand
+  happened; those are not jobs, and every routine run, scheduled or not, is in
+  the routine's runs
 - Not to schedule work — work is enqueued by whatever owns it
 - Not as a log of what an agent did; that is the activity log
 

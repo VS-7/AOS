@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/OWNER/aos/internal/domain/task"
 )
@@ -19,6 +20,12 @@ type Worktrees struct {
 
 	// repo is the working tree the checkouts are cut from.
 	repo string
+
+	// folder is where repo sits inside the repository it belongs to, once it
+	// has been asked: a directory does not move inside its repository while
+	// the process runs, and every turn on a task asks for it.
+	folderMu sync.Mutex
+	folder   *string
 }
 
 // NewWorktrees builds the driver for one repository.
@@ -51,10 +58,16 @@ func resolve(path string) string {
 // that was branched, pruned and branched again should return to its own work,
 // not fail because the name is taken.
 func (w *Worktrees) Create(ctx context.Context, spec task.WorktreeSpec) (string, error) {
-	// Never from an enclosing repository: the checkout would hold somebody
-	// else's files, on a branch of somebody else's repository.
-	if err := w.git.ownRepository(ctx, "worktree add", w.repo); err != nil {
+	// From the repository the workspace is in, which is the project it is a
+	// folder of when it is not a repository of its own — the task domain has
+	// already asked Source whether that repository can hold the workspace.
+	// Never from nothing: git would say so less clearly.
+	top, _, err := w.git.topOf(ctx, w.repo)
+	if err != nil {
 		return "", err
+	}
+	if top == "" {
+		return "", errNotOwnRepository("worktree add", w.repo, "")
 	}
 	path := filepath.Clean(spec.Path)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -104,23 +117,48 @@ func (w *Worktrees) Remove(ctx context.Context, path string) error {
 	return nil
 }
 
-// List reports the checkouts that exist, excluding the main working tree.
+// List reports the checkouts that exist under root, excluding the main working
+// tree. An empty root lists every one.
 //
 // A checkout git still has a record of but whose directory is gone is not one
 // that exists: counting it against the limit made room for nothing, and
 // removing it is only forgetting the record, which Create does before it adds.
-func (w *Worktrees) List(ctx context.Context) ([]string, error) {
+//
+// git reports a checkout with every link resolved, and the root the caller
+// placed it under may be spelled through one — a state directory on another
+// volume, or macOS's /var, which is /private/var. Compared as spelled, no
+// checkout was ever under the root and the prune never saw one. So the root is
+// resolved for the comparison and each checkout is handed back spelled under
+// the root as given, the way the caller recorded it.
+func (w *Worktrees) List(ctx context.Context, root string) ([]string, error) {
 	listed, err := w.listed(ctx)
 	if err != nil {
 		return nil, err
 	}
+	realRoot := ""
+	if strings.TrimSpace(root) != "" {
+		realRoot = resolve(root)
+	}
 	var paths []string
-	for _, entry := range listed {
-		// The main working tree is not one of ours to prune.
-		if entry.path == w.repo || entry.prunable || !isDir(entry.path) {
+	for i, entry := range listed {
+		// The main working tree, which git always lists first, is not one of
+		// ours to prune — and it is the project's, not the workspace
+		// directory, when the workspace is a folder inside a project.
+		if i == 0 || entry.prunable || !isDir(entry.path) {
 			continue
 		}
-		paths = append(paths, entry.path)
+		if realRoot == "" {
+			paths = append(paths, entry.path)
+			continue
+		}
+		if !inside(realRoot, entry.path) {
+			continue
+		}
+		rel, err := filepath.Rel(realRoot, entry.path)
+		if err != nil {
+			continue
+		}
+		paths = append(paths, filepath.Join(filepath.Clean(root), rel))
 	}
 	return paths, nil
 }
@@ -130,19 +168,27 @@ func (w *Worktrees) List(ctx context.Context) ([]string, error) {
 //
 // Both are compared once links are resolved, the way git reports the checkout
 // and the way the sandbox roots itself: a link placed under root that leads to
-// a checkout somewhere else is where it leads, not where it is spelled.
+// a checkout somewhere else is where it leads, not where it is spelled. And a
+// link below root is not the checkout it leads to even when that checkout is
+// under root too — root/t-1 leading to root/t-2 would hand task t-1 the
+// checkout of t-2 — so the path has to be the checkout where it is spelled,
+// below root, as well as where it leads.
 func (w *Worktrees) Exists(ctx context.Context, root, path string) bool {
 	want := resolve(path)
-	if !inside(resolve(root), want) {
+	realRoot := resolve(root)
+	if !inside(realRoot, want) {
+		return false
+	}
+	if rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path)); err != nil || filepath.Join(realRoot, rel) != want {
 		return false
 	}
 	listed, err := w.listed(ctx)
 	if err != nil {
 		return false
 	}
-	for _, entry := range listed {
+	for i, entry := range listed {
 		if entry.path == want {
-			return entry.path != w.repo && !entry.prunable && isDir(entry.path)
+			return i != 0 && !entry.prunable && isDir(entry.path)
 		}
 	}
 	return false
@@ -157,8 +203,8 @@ func (w *Worktrees) forgetMissing(ctx context.Context, path, branch string) erro
 		return err
 	}
 	want := resolve(path)
-	for _, entry := range listed {
-		if entry.path == w.repo || (!entry.prunable && isDir(entry.path)) {
+	for i, entry := range listed {
+		if i == 0 || (!entry.prunable && isDir(entry.path)) {
 			continue
 		}
 		if entry.path != want && (branch == "" || entry.branch != "refs/heads/"+branch) {
@@ -228,20 +274,86 @@ func (w *Worktrees) Source(ctx context.Context, spec task.WorktreeSpec) (task.Wo
 		return task.WorktreeSource{}, err
 	}
 	out := task.WorktreeSource{Dir: w.repo, Toplevel: top, Own: own}
-	if !own {
+	if top == "" {
 		return out, nil
 	}
-	if w.hasBranch(ctx, spec.Branch) {
-		out.BaseExists = true
+
+	// What would be checked out: the branch when it exists, the base when it
+	// is a commit. Asked from the workspace directory, which git resolves to
+	// the project above it when the workspace is a folder of one.
+	rev := "refs/heads/" + spec.Branch
+	out.BranchExists = w.hasBranch(ctx, spec.Branch)
+	if !out.BranchExists {
+		rev = strings.TrimSpace(spec.Base)
+		if rev == "" {
+			rev = "HEAD"
+		}
+		if _, err := w.git.run(ctx, w.repo, "rev-parse", "--verify", "--quiet", rev+"^{commit}"); err != nil {
+			return out, nil //nolint:nilerr // no such commit is the answer BaseExists gives
+		}
+	}
+	out.BaseExists = true
+	if own {
 		return out, nil
 	}
-	base := strings.TrimSpace(spec.Base)
-	if base == "" {
-		base = "HEAD"
+
+	rel, err := filepath.Rel(resolve(top), w.repo)
+	if err != nil || !filepath.IsLocal(rel) {
+		return out, nil //nolint:nilerr // a workspace git places outside its own top holds nothing a checkout could
 	}
-	_, err = w.git.run(ctx, w.repo, "rev-parse", "--verify", "--quiet", base+"^{commit}")
-	out.BaseExists = err == nil
+	out.Subdir = rel
+	_, err = w.git.run(ctx, w.repo, "cat-file", "-e", rev+":"+filepath.ToSlash(rel))
+	out.SubdirCommitted = err == nil
 	return out, nil
+}
+
+// WorkspaceIn is the workspace's directory inside one of its checkouts.
+//
+// It is the checkout when the workspace is its repository's top, and the
+// workspace's folder inside it when the workspace is a folder of a project —
+// unless the checkout's branch no longer holds that folder, or holds a link
+// there that leads out of the checkout, when it is the checkout and found is
+// false. Nothing here reads the branch: a renamed one used to stop the lookup
+// before the folder and root the turn in the whole project.
+func (w *Worktrees) WorkspaceIn(ctx context.Context, checkout string) (string, bool, error) {
+	folder, err := w.folderInRepository(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	if folder == "" {
+		return checkout, true, nil
+	}
+	dir := filepath.Join(checkout, folder)
+	if !isDir(dir) || !inside(resolve(checkout), resolve(dir)) {
+		return checkout, false, nil
+	}
+	return dir, true, nil
+}
+
+// folderInRepository is where the workspace sits inside the repository it
+// belongs to, "" when it is that repository's top. It is found once; a
+// workspace that is in no repository right now is asked again next time.
+func (w *Worktrees) folderInRepository(ctx context.Context) (string, error) {
+	w.folderMu.Lock()
+	defer w.folderMu.Unlock()
+	if w.folder != nil {
+		return *w.folder, nil
+	}
+	top, own, err := w.git.topOf(ctx, w.repo)
+	if err != nil {
+		return "", err
+	}
+	if top == "" {
+		return "", nil
+	}
+	folder := ""
+	if !own {
+		if rel, relErr := filepath.Rel(resolve(top), w.repo); relErr == nil && filepath.IsLocal(rel) {
+			folder = rel
+		}
+	}
+	w.folder = &folder
+	return folder, nil
 }
 
 // hasBranch reports whether a branch name already exists.

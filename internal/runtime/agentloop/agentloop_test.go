@@ -752,3 +752,35 @@ func TestOtherRefusalsAreNotBlamedOnTheModel(t *testing.T) {
 		})
 	}
 }
+
+// TestEveryStepReachesTheNextRequestWhenCallIDsRepeat. Google names a call
+// "<tool>-<position in the answer>", so a turn that starts three steps with
+// Read asks for "Read-1" three times. Pairing by first occurrence sent the
+// third request one call for three results, and the model turns in between
+// vanished: Gemini refuses that request, so every tool-using turn there died on
+// its third model call.
+func TestEveryStepReachesTheNextRequestWhenCallIDsRepeat(t *testing.T) {
+	p := &fake.Provider{ProviderName: "google", Script: []fake.Step{
+		{Calls: []agentloop.ToolCall{fake.Call("Read-1", "Read", map[string]any{"n": 1})}},
+		{Calls: []agentloop.ToolCall{fake.Call("Read-1", "Read", map[string]any{"n": 2})}},
+		{Calls: []agentloop.ToolCall{fake.Call("Read-1", "Read", map[string]any{"n": 3})}},
+		{Text: "done"},
+	}}
+	tool := &recording{name: "Read", fn: func(json.RawMessage) (any, error) { return "ok", nil }}
+	if _, err := loop(t, p, toolexec.NewRegistry().Add(tool), agentloop.NoHooks{}).Run(context.Background(), state()); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"u", "uCR", "uCRCR", "uCRCRCR"}
+	requests := p.Requests()
+	if len(requests) != len(want) {
+		t.Fatalf("the loop made %d requests, want %d", len(requests), len(want))
+	}
+	for n, req := range requests {
+		if got := shape(req.Messages); got != want[n] {
+			t.Errorf("request %d sent %s, want %s", n, got, want[n])
+		}
+		if problems := unpaired(req.Messages); len(problems) > 0 {
+			t.Errorf("request %d is one a strict provider refuses: %v", n, problems)
+		}
+	}
+}

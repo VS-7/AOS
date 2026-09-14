@@ -121,7 +121,12 @@ func DueInWindow(s *Schedule, last, now time.Time, tick time.Duration) bool {
 	if !now.After(from) {
 		return false
 	}
-	next, ok := s.Next(from.Add(time.Minute))
+	// The first minute after from, not from plus a minute: Next rounds a time
+	// with seconds up, and a tick lands wherever the daemon's clock started
+	// (18:05:00.3), so from+1m skipped the minute right after from in every
+	// window — a cron at :06 never fired, nor an every-minute one on a
+	// one-minute tick.
+	next, ok := s.Next(from.Truncate(time.Minute).Add(time.Minute))
 	return ok && !next.After(now)
 }
 

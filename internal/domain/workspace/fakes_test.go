@@ -73,6 +73,7 @@ func (s *fakeStore) Delete(_ context.Context, id string) error {
 // fakeGit records what was asked of it.
 type fakeGit struct {
 	repos     map[string]bool
+	enclosing map[string]string
 	origin    string
 	initErr   error
 	checkErr  error
@@ -81,7 +82,19 @@ type fakeGit struct {
 	commits   map[string]int
 }
 
-func newGit() *fakeGit { return &fakeGit{repos: map[string]bool{}, commits: map[string]int{}} }
+func newGit() *fakeGit {
+	return &fakeGit{repos: map[string]bool{}, enclosing: map[string]string{}, commits: map[string]int{}}
+}
+
+func (g *fakeGit) EnclosingRepository(_ context.Context, dir string) (string, error) {
+	if g.checkErr != nil {
+		return "", g.checkErr
+	}
+	if g.repos[dir] {
+		return "", nil
+	}
+	return g.enclosing[dir], nil
+}
 
 func (g *fakeGit) CommitEmpty(_ context.Context, dir, _ string) error {
 	if g.commitErr != nil {

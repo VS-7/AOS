@@ -212,8 +212,18 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 		errs <- nil
 	}()
 
+	// The worker runs for as long as this process is the daemon, and only
+	// then. It was built by New and never started by anything but a test, so
+	// no scheduled routine fired, no retention ran, and work a crashed worker
+	// held was never handed back. Started once the socket is open, so a
+	// daemon that cannot listen leaves nothing running behind the error.
+	stopWorker := a.startWorker(ctx, log)
+
 	select {
 	case err := <-errs:
+		stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+		defer cancel()
+		stopWorker(stopCtx)
 		return err
 	case <-ctx.Done():
 	}
@@ -227,11 +237,40 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 	defer cancel()
 
+	// The requests and the background work wind down together, inside the one
+	// timeout, rather than the worker's wait starting only after the
+	// requests' has used it up.
+	workerStopped := make(chan struct{})
+	go func() {
+		defer close(workerStopped)
+		stopWorker(stopCtx)
+	}()
 	if err := srv.Shutdown(stopCtx); err != nil {
 		log.Warn("in-flight requests did not finish in time", "err", err)
 		_ = srv.Close()
 	}
+	<-workerStopped
 	return <-errs
+}
+
+// startWorker starts the pool that drains the queue and runs the periodic
+// ticks, and returns what stops it. A daemon with no queue — the database
+// would not open — has no pool, and says so where it already said why.
+func (a *App) startWorker(ctx context.Context, log *slog.Logger) func(context.Context) {
+	if a.Worker == nil {
+		return func(context.Context) {}
+	}
+	if err := a.Worker.Start(ctx); err != nil {
+		log.Warn("the background worker did not start: scheduled routines will not fire", "err", err)
+		return func(context.Context) {}
+	}
+	return func(stopCtx context.Context) {
+		if err := a.Worker.Stop(stopCtx); err != nil {
+			// The jobs still running keep their lease, and the next daemon's
+			// first tick hands them back once it lapses.
+			log.Warn("background work did not finish in time", "err", err)
+		}
+	}
 }
 
 // guardExposure refuses to serve beyond loopback without authentication.

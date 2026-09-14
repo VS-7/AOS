@@ -217,49 +217,88 @@ func errWorktreeFailed(id, branch string, cause error) error {
 }
 
 // errWorktreeNoRepository is a workspace checkouts cannot be cut from, because
-// the repository git finds is not the workspace's: either there is none, or it
-// is one the workspace merely sits inside, such as a home directory under
-// version control.
+// it is in no Git repository at all.
 func errWorktreeNoRepository(id string, source WorktreeSource) error {
-	e := apperr.New("TASK_WORKTREE_NO_REPOSITORY").
+	return apperr.New("TASK_WORKTREE_NO_REPOSITORY").
 		Causer("task.Service.Branch").
+		Msgf("the workspace at %s is not in a Git repository, so no isolated checkout can be cut from it", source.Dir).
 		Issue("task", id).
 		Issue("workspace", source.Dir).
 		Status(apperr.StatusConflict).
 		CTA(apperr.CallToAction{
-			Label:   "make the workspace a Git repository of its own and commit once, then branch again",
+			Label:   "make the workspace a Git repository and commit once, then branch again",
 			Command: "git -C " + strconv.Quote(source.Dir) + " init && git -C " + strconv.Quote(source.Dir) + " commit --allow-empty -m \"Start the workspace\"",
 		}, apperr.CallToAction{
 			Label: "or execute the task in the workspace itself, without an isolated checkout",
 		})
-	if source.Toplevel == "" {
-		return e.Msgf("the workspace at %s is not a Git repository, so no isolated checkout can be cut from it", source.Dir)
-	}
-	return e.Issue("enclosingRepository", source.Toplevel).
-		Msgf("the workspace at %s is not a Git repository of its own: it sits inside the repository at %s, and a checkout cut from that one would hold its files, not the workspace's", source.Dir, source.Toplevel)
 }
 
 // errWorktreeBaseMissing is a repository with nothing to check out: the base
-// names no commit. A repository nobody has committed to yet is the usual case.
+// names no commit. A repository nobody has committed to yet is the usual case —
+// and when it is a repository the workspace only sits inside, such as a home
+// directory under version control, it is named, because the fix may be to
+// give the workspace a repository of its own instead.
+//
+// Each case is one whole chain from apperr.New to its CTA: the error catalog
+// is read from the source, and a CTA attached to a builder held in a variable
+// is one it cannot see, so the refusal was catalogued as a 409 with nothing to
+// do about it.
 func errWorktreeBaseMissing(id, base string, source WorktreeSource) error {
 	named := base
 	if named == "" {
 		named = "HEAD"
 	}
+	repo := source.Toplevel
+	if repo == "" {
+		repo = source.Dir
+	}
+	commitOnce := apperr.CallToAction{
+		Label:   "commit once on " + named + " in " + repo + ", then branch again",
+		Command: "git -C " + strconv.Quote(repo) + " commit --allow-empty -m \"Start the workspace\"",
+	}
+	if source.Own || source.Toplevel == "" {
+		return apperr.New("TASK_WORKTREE_BASE_MISSING").
+			Causer("task.Service.Branch").
+			Msgf("there is no commit on %q to cut the task's branch from", named).
+			Issue("task", id).
+			Issue("base", named).
+			Issue("workspace", source.Dir).
+			Status(apperr.StatusConflict).
+			CTA(commitOnce, apperr.CallToAction{
+				Label: "or branch again naming a base that exists",
+				Tool:  "tasks_branch",
+				Input: map[string]any{"id": id},
+			})
+	}
 	return apperr.New("TASK_WORKTREE_BASE_MISSING").
 		Causer("task.Service.Branch").
-		Msgf("there is no commit on %q to cut the task's branch from", named).
+		Msgf("the workspace at %s is a folder of the repository at %s, and there is no commit on %q there to cut the task's branch from", source.Dir, source.Toplevel, named).
 		Issue("task", id).
 		Issue("base", named).
 		Issue("workspace", source.Dir).
+		Issue("enclosingRepository", source.Toplevel).
 		Status(apperr.StatusConflict).
 		CTA(apperr.CallToAction{
-			Label:   "commit once on " + named + " in the workspace, then branch again",
-			Command: "git -C " + strconv.Quote(source.Dir) + " commit --allow-empty -m \"Start the workspace\"",
+			Label:   "give the workspace a repository of its own and commit once, then branch again",
+			Command: "git -C " + strconv.Quote(source.Dir) + " init && git -C " + strconv.Quote(source.Dir) + " commit --allow-empty -m \"Start the workspace\"",
+		}, commitOnce)
+}
+
+// errWorktreeNotCommitted is a workspace that is a folder of a project the
+// project never committed: a checkout of the project would not contain it.
+func errWorktreeNotCommitted(id string, source WorktreeSource) error {
+	return apperr.New("TASK_WORKTREE_NOT_COMMITTED").
+		Causer("task.Service.Branch").
+		Msgf("the workspace at %s is the folder %s of the repository at %s, which has not committed it, so a checkout of that repository would not contain the workspace", source.Dir, source.Subdir, source.Toplevel).
+		Issue("task", id).
+		Issue("workspace", source.Dir).
+		Issue("enclosingRepository", source.Toplevel).
+		Status(apperr.StatusConflict).
+		CTA(apperr.CallToAction{
+			Label:   "commit the workspace's folder in that repository, then branch again",
+			Command: "git -C " + strconv.Quote(source.Toplevel) + " add " + strconv.Quote(source.Subdir) + " && git -C " + strconv.Quote(source.Toplevel) + " commit -m \"Add the workspace\"",
 		}, apperr.CallToAction{
-			Label: "or branch again naming a base that exists",
-			Tool:  "tasks_branch",
-			Input: map[string]any{"id": id},
+			Label: "or execute the task in the workspace itself, without an isolated checkout",
 		})
 }
 

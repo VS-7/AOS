@@ -113,8 +113,12 @@ func Prune(messages []Message, p Policy) []Message {
 // Which is to say: every session long enough to compact stopped answering at
 // all. The saving is not worth a conversation the model cannot be sent.
 //
-// So the window is widened, never narrowed: whatever result is being kept, the
-// call it answers is kept with it.
+// So the window is widened, never narrowed, to the start of the step the cut
+// falls in: the assistant message whose results follow it. It used to widen
+// to the earliest message offering any id a kept result answers, and on
+// Google, which names every step's first Read "Read-1", that was the first
+// step of the turn — nothing was ever pruned, and a long turn there grew until
+// the context ran out.
 func pairedCutoff(messages []Message, cutoff int) int {
 	if cutoff <= 0 {
 		return 0
@@ -122,97 +126,113 @@ func pairedCutoff(messages []Message, cutoff int) int {
 	if cutoff >= len(messages) {
 		return len(messages)
 	}
-
-	// Which calls the kept results still need an offer for.
-	needed := map[string]bool{}
-	for _, m := range messages[cutoff:] {
-		if m.Role == RoleTool && m.CallID != "" {
-			needed[m.CallID] = true
-		}
-	}
-	if len(needed) == 0 {
-		return cutoff
-	}
-
-	// The earliest message that offers any of them becomes the new boundary.
-	for i := 0; i < cutoff; i++ {
-		for _, c := range messages[i].ToolCalls {
-			if needed[c.ID] {
-				return i
-			}
-		}
+	for cutoff > 0 && messages[cutoff].Role == RoleTool {
+		cutoff--
 	}
 	return cutoff
 }
 
 // PairToolMessages returns the history with every tool call and tool result
-// that lacks its counterpart removed: a result is kept only when an earlier
-// message offers its call, and a call only when a later message answers it.
+// that lacks its counterpart removed.
 //
 // Every provider refuses the other shape outright — the Responses API with "No
 // tool call found for function call output", Anthropic with a tool_result that
-// names no tool_use — and refuses the whole request, so one unpaired item makes
-// a conversation unanswerable for good. pairedCutoff keeps a prune from making
-// one; this is what makes a history that already holds one sendable, whatever
-// wrote it. Conversations stored before answers recorded their calls beside
-// their results are the case that exists.
+// names no tool_use, Gemini with a functionResponse turn that does not follow
+// its functionCall turn part for part — and refuses the whole request, so one
+// unpaired item makes a conversation unanswerable for good. pairedCutoff keeps
+// a prune from making one; this is what makes a history that already holds
+// one sendable, whatever wrote it. Conversations stored before answers
+// recorded their calls beside their results are the case that exists.
+//
+// A call and its result pair within one step: the assistant message that asks,
+// and the run of tool messages right after it. Inside the step each result
+// answers the first call with its id that nothing has answered yet. Pairing by
+// id across the whole history is what this used to do, and ids are not unique
+// across it — Google names a call after its position in the answer, and
+// Antigravity does when its API names none — so the first step's "Read-1"
+// claimed every later "Read-1" result and every later step was thrown away.
+// Nor is a result read as an answer to a call made before somebody else spoke:
+// no provider reads it that way.
 //
 // The input is not modified. A history with nothing to repair comes back as it
 // was given.
 func PairToolMessages(messages []Message) []Message {
-	offeredAt := map[string]int{}
-	lastAnswerAt := map[string]int{}
-	for i, m := range messages {
-		for _, c := range m.ToolCalls {
-			if _, seen := offeredAt[c.ID]; !seen {
-				offeredAt[c.ID] = i
+	// Which calls of each asking message are answered, and which results
+	// answer something. Decided before anything is copied, so an intact history
+	// costs two passes and no copy.
+	answered := map[int][]bool{}
+	kept := make([]bool, len(messages))
+	for i := 0; i < len(messages); i++ {
+		m := messages[i]
+		if m.Role == RoleTool || len(m.ToolCalls) == 0 {
+			continue
+		}
+		asking := i
+		open := map[string][]int{}
+		for k, c := range m.ToolCalls {
+			open[c.ID] = append(open[c.ID], k)
+		}
+		calls := make([]bool, len(m.ToolCalls))
+		for i+1 < len(messages) && messages[i+1].Role == RoleTool {
+			i++
+			waiting := open[messages[i].CallID]
+			if len(waiting) == 0 {
+				continue
 			}
+			calls[waiting[0]] = true
+			open[messages[i].CallID] = waiting[1:]
+			kept[i] = true
 		}
-		if m.Role == RoleTool {
-			lastAnswerAt[m.CallID] = i
-		}
+		answered[asking] = calls
 	}
 
-	// Nil until the first message that has to change, so an intact history
-	// costs two passes and no copy.
 	var out []Message
 	for i, m := range messages {
-		kept, drop := m, false
+		next, drop := m, false
 		switch {
 		case m.Role == RoleTool:
-			at, offered := offeredAt[m.CallID]
-			drop = !offered || at >= i
+			drop = !kept[i]
 		case len(m.ToolCalls) > 0:
-			calls := make([]ToolCall, 0, len(m.ToolCalls))
-			for _, c := range m.ToolCalls {
-				if answer, ok := lastAnswerAt[c.ID]; ok && offeredAt[c.ID] == i && answer > i {
-					calls = append(calls, c)
+			calls := answered[i]
+			if n := countTrue(calls); n != len(m.ToolCalls) {
+				next.ToolCalls = make([]ToolCall, 0, n)
+				for k, c := range m.ToolCalls {
+					if calls[k] {
+						next.ToolCalls = append(next.ToolCalls, c)
+					}
 				}
-			}
-			if len(calls) != len(m.ToolCalls) {
-				kept.ToolCalls = calls
-				if len(calls) == 0 {
-					kept.ToolCalls = nil
+				if n == 0 {
+					next.ToolCalls = nil
 					// An assistant message that only asked for what was
 					// removed carries nothing the model could read.
-					drop = isEmpty(kept)
+					drop = isEmpty(next)
 				}
 			}
 		}
 
-		changed := drop || len(kept.ToolCalls) != len(m.ToolCalls)
+		changed := drop || len(next.ToolCalls) != len(m.ToolCalls)
 		if changed && out == nil {
 			out = make([]Message, i, len(messages))
 			copy(out, messages[:i])
 		}
 		if out != nil && !drop {
-			out = append(out, kept)
+			out = append(out, next)
 		}
 	}
 	if out == nil {
 		return messages
 	}
 	return out
+}
+
+func countTrue(v []bool) int {
+	n := 0
+	for _, b := range v {
+		if b {
+			n++
+		}
+	}
+	return n
 }
 
 func isEmpty(m Message) bool {

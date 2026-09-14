@@ -57,6 +57,38 @@ type Outcome struct {
 	Usage  Usage
 }
 
+// Dispatcher hands a scheduled firing on to be run later, off the tick that
+// found it due.
+//
+// A run is a whole turn. The tick used to take it inline, and every other due
+// routine — in this workspace and in the next the tick visits — waited for it,
+// and the ticks that passed meanwhile were lost.
+type Dispatcher interface {
+	// Dispatch hands one firing on. It reports false, having handed nothing
+	// on, when an earlier firing of the same routine is still waiting or
+	// running, so a turn longer than the routine's interval does not pile up
+	// copies of itself.
+	Dispatch(ctx context.Context, f Firing) (bool, error)
+}
+
+// Firing is one scheduled firing handed on. Whoever runs it fires it with
+// Input, which records it as the scheduled run it is.
+type Firing struct {
+	Agent   string `json:"agent"`
+	Routine string `json:"routine"`
+	Cron    string `json:"cron"`
+}
+
+// Input is how the firing is run: Fire, as a scheduled trigger carrying its
+// cron, and never forced — a routine disabled while its firing waited records
+// a skipped run instead.
+func (f Firing) Input() FireInput {
+	return FireInput{
+		ID: f.Routine, Agent: f.Agent, Trigger: Scheduled,
+		Payload: map[string]any{"cron": f.Cron},
+	}
+}
+
 // Tokens mints and verifies webhook secrets.
 //
 // It is a port so the hashing choice lives in an adapter: the domain's rule is

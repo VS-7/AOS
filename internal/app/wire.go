@@ -251,7 +251,11 @@ type App struct {
 
 	// Worker drains the queue and runs the periodic tick. It is not started by
 	// New: a CLI process that runs one command must not begin executing the
-	// daemon's backlog.
+	// daemon's backlog. Serve starts it and stops it on shutdown.
+	//
+	// One for the installation, on the primary: the queue is one database
+	// for every workspace, and its ticks reach every workspace this process
+	// serves (see servedScopes). Nil on a workspace built by another App.
 	Worker *worker.Pool
 
 	// Subconscious is the background observer. Exported so a test can run one
@@ -280,6 +284,12 @@ type App struct {
 	// serving is set by Serve, and shared with every workspace this App
 	// builds — see Options.sharedServing.
 	serving *atomic.Bool
+
+	// workspaceID is the id this set of services was pinned to — a secondary
+	// workspace's own, or the environment's AOS_WORKSPACE_ID — and "" for a
+	// primary nothing pinned. What the periodic ticks act as; see
+	// servedScopes for how an unpinned primary is named.
+	workspaceID string
 }
 
 // Close releases everything the application opened.
@@ -447,6 +457,18 @@ func New(opts Options) (*App, error) {
 		WorkingDir:    root,
 	})
 
+	// A workspace directory this installation made for itself is given a
+	// repository of its own if it was made before creation did that, and
+	// nothing else is touched — see workspace.Service.EnsureManagedRepository.
+	// Here rather than at Create because those workspaces were created long
+	// ago: the one this was found on sits inside a home directory that is a
+	// repository with no commit, and every task branched in it was refused.
+	if info, err := os.Stat(root); err == nil && info.IsDir() {
+		if _, warning := workspaceSvc.EnsureManagedRepository(context.Background(), root); warning != "" {
+			logger.Warn("the workspace has no repository of its own", "path", root, "reason", warning)
+		}
+	}
+
 	// Now that the registry is readable, the scope declared above can answer.
 	// Everything that publishes an event — chat, activity, collections,
 	// approvals — and the turn itself go through this one resolver, so there
@@ -548,7 +570,8 @@ func New(opts Options) (*App, error) {
 		Setup:     setupScript{agents: agentSvc, tmp: paths.Outputs(), log: logger},
 		Policy: taskPolicy{
 			workspaces: workspaceSvc, active: active,
-			root: filepath.Join(paths.Data(), "worktrees"),
+			root:       worktreeRootFor(paths.Data(), root),
+			legacyRoot: filepath.Join(paths.Data(), "worktrees"),
 		},
 		Notifier: taskActivity{activities: activitySvc, log: logger},
 		Clock:    clock,
@@ -922,26 +945,6 @@ func New(opts Options) (*App, error) {
 
 	reg.Freeze()
 
-	var pool *worker.Pool
-	if queue != nil {
-		pool = worker.New(worker.Deps{
-			Queue: queue,
-			Handlers: map[string]job.Handler{
-				kindTurn: turnHandler{runtime: runtime},
-			},
-			Ticks: []worker.Tick{
-				{Name: "routines", Run: routineTick(routineSvc, active)},
-				{Name: "activity-retention", Run: activityRetention(activitySvc)},
-				{Name: "job-retention", Run: jobRetention(queue)},
-			},
-			Concurrency: resolver.Int(env.KeyJobsConcurrency, job.DefaultConcurrency),
-			TickRate:    resolver.Duration(env.KeyJobsTick, job.DefaultTick),
-			Lease:       job.DefaultLease,
-			Heartbeat:   job.DefaultHeartbeat,
-			Log:         logger,
-		})
-	}
-
 	built := &App{
 		Paths:      paths,
 		Workspace:  root,
@@ -968,7 +971,6 @@ func New(opts Options) (*App, error) {
 		Jobs:         jobSvc,
 		Themes:       themeSvc,
 		Queue:        queue,
-		Worker:       pool,
 		Subconscious: observer,
 
 		CollectionRegistry: collReg,
@@ -989,10 +991,11 @@ func New(opts Options) (*App, error) {
 		Update:        updateSvc,
 		Bots:          botRegistry,
 
-		Clock:   clock,
-		env:     resolver,
-		closers: closers,
-		serving: serving,
+		Clock:       clock,
+		env:         resolver,
+		closers:     closers,
+		serving:     serving,
+		workspaceID: active,
 	}
 
 	// The workspaces this process serves besides the one it opened.
@@ -1026,6 +1029,31 @@ func New(opts Options) (*App, error) {
 		}
 		built.Registry = built.workspaceRegistry()
 		built.closers = append(built.closers, built.scopes.close)
+
+		// The pool is built here, once the scopes exist, because its ticks
+		// reach through them: a routine is evaluated in the workspace that
+		// holds it, with that workspace's services and identity. A secondary
+		// builds none — a second pool on the shared queue would be a second
+		// drain, and its ticks would only ever see its own directory.
+		if queue != nil {
+			built.Worker = worker.New(worker.Deps{
+				Queue: queue,
+				Handlers: map[string]job.Handler{
+					kindTurn:    turnHandler{runtimeFor: built.runtimeFor},
+					kindRoutine: routineHandler{scopeFor: built.jobScope},
+				},
+				Ticks: []worker.Tick{
+					{Name: "routines", Run: built.everyScope(routineTick(queue, idgen))},
+					{Name: "activity-retention", Run: built.everyScope(activityRetention)},
+					{Name: "job-retention", Run: jobRetention(queue)},
+				},
+				Concurrency: resolver.Int(env.KeyJobsConcurrency, job.DefaultConcurrency),
+				TickRate:    resolver.Duration(env.KeyJobsTick, job.DefaultTick),
+				Lease:       job.DefaultLease,
+				Heartbeat:   job.DefaultHeartbeat,
+				Log:         logger,
+			})
+		}
 	}
 
 	return built, nil

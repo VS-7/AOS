@@ -51,13 +51,15 @@ function statusLabel(status: string): string {
 /**
  * The queue of deferred work, and whether it is healthy.
  *
- * It is not where turns run. Chat turns, routine runs and task runs start
- * directly (`internal/runtime/session`'s Dispatch, the routine executor), and
- * nothing in this build enqueues them — so this page used to say "every turn,
+ * It is not where turns run. Chat turns, task runs and routines fired by hand,
+ * by a webhook or by an activity start directly (`internal/runtime/session`'s
+ * Dispatch, the routine executor) — so this page used to say "every turn,
  * routine and background task runs through this queue" above a list that
  * stayed empty however many turns ran, with a Recover button that could never
- * be pressed and a Purge that always removed nothing. It says what the queue
- * is, and offers an action only when there is something for it.
+ * be pressed and a Purge that always removed nothing. What the queue does hold
+ * is a scheduled routine's run: the daemon's tick queues it and the worker's
+ * slots run it, so one long run does not hold up every other schedule. The
+ * page says that, and offers an action only when there is something for it.
  *
  * `stale` is the one that matters most and the reason `recover` is a button
  * here: a job still marked claimed whose lease has lapsed is not busy, its
@@ -138,7 +140,7 @@ export function WorkspaceJobsSection(): React.JSX.Element {
         <FormSectionHeader>
           <FormSectionTitle>{t("Jobs")}</FormSectionTitle>
           <FormSectionDescription>
-            {t("Work deferred to run later waits here. Chat turns, routine runs and task runs start directly, so they do not appear in this queue.")}
+            {t("Scheduled routine runs wait here until the daemon's worker runs them. Chat turns, task runs and routines fired any other way start directly, so they do not appear in this queue.")}
           </FormSectionDescription>
         </FormSectionHeader>
 
