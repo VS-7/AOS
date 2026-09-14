@@ -2120,7 +2120,7 @@
   "{{provider}} disconnected.": "{{provider}} disconnected.",
   "{{provider}} is not connected in AI providers; this agent relies on the login already on this machine.": "{{provider}} is not connected in AI providers; this agent relies on the login already on this machine.",
   "{{provider}} is not connected, so this agent cannot answer until it is. Connect it in AI providers, or choose another model.": "{{provider}} is not connected, so this agent cannot answer until it is. Connect it in AI providers, or choose another model.",
-  "{{provider}} is removed from this installation's connected providers. Nothing else on this machine is touched.": "{{provider}} is removed from this installation's connected providers. Nothing else on this machine is touched.",
+  "{{provider}} is removed from this installation's connected providers. A login it has outside AOS, such as a CLI's, is left as it is.": "{{provider}} is removed from this installation's connected providers. A login it has outside AOS, such as a CLI's, is left as it is.",
   "{{provider}} is saved, but it did not answer.": "{{provider}} is saved, but it did not answer.",
   "{{provider}} logo": "{{provider}} logo",
   "{{provider}} no longer lists {{model}}, so turns on this slot will be refused. Choose another model.": "{{provider}} no longer lists {{model}}, so turns on this slot will be refused. Choose another model.",

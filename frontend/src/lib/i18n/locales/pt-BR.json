@@ -2120,7 +2120,7 @@
   "{{provider}} disconnected.": "{{provider}} desconectado.",
   "{{provider}} is not connected in AI providers; this agent relies on the login already on this machine.": "{{provider}} não está conectado em Provedores de IA; este agente depende do login já feito nesta máquina.",
   "{{provider}} is not connected, so this agent cannot answer until it is. Connect it in AI providers, or choose another model.": "{{provider}} não está conectado, então este agente não pode responder até que esteja. Conecte-o em Provedores de IA ou escolha outro modelo.",
-  "{{provider}} is removed from this installation's connected providers. Nothing else on this machine is touched.": "{{provider}} é removido dos provedores conectados desta instalação. Nada mais nesta máquina é alterado.",
+  "{{provider}} is removed from this installation's connected providers. A login it has outside AOS, such as a CLI's, is left as it is.": "{{provider}} é removido dos provedores conectados desta instalação. Um login que ele tenha fora do AOS, como o de uma CLI, fica como está.",
   "{{provider}} is saved, but it did not answer.": "{{provider}} foi salvo, mas não respondeu.",
   "{{provider}} logo": "Logo de {{provider}}",
   "{{provider}} no longer lists {{model}}, so turns on this slot will be refused. Choose another model.": "{{provider}} não lista mais {{model}}, então os turnos neste slot serão recusados. Escolha outro modelo.",
