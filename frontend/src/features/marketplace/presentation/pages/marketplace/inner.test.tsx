@@ -101,3 +101,37 @@ describe("the marketplace search box", () => {
     expect(screen.getByTestId("address").textContent).toBe("");
   });
 });
+
+describe("the marketplace with no registry", () => {
+  const demoCrm = { id: "demo-crm", name: "Demo CRM", description: "Contacts and deals." } as InstalledSkillRecord;
+
+  // With no registry the page draws only what is installed, and it drew all
+  // of it under ?category=Development — "1 result in Development" over Demo
+  // CRM, whose category is Other.
+  it("counts and draws only the installed plugins in the chosen category", () => {
+    render(<Page initial={{ category: "Development" }} installed={[demoCrm]} />);
+
+    expect(screen.getByText("0 results in Development")).toBeTruthy();
+    expect(screen.queryByText("Demo CRM")).toBeNull();
+  });
+
+  it("still draws them in their own category", () => {
+    render(<Page initial={{ category: "Other" }} installed={[demoCrm]} />);
+
+    expect(screen.getByText("1 result in Other")).toBeTruthy();
+    expect(screen.getByText("Demo CRM")).toBeTruthy();
+  });
+});
+
+describe("the Installed view under a category", () => {
+  // A category that hides every installed plugin is a filter to clear, not a
+  // workspace with nothing installed.
+  it("says the filter matched nothing rather than that nothing is installed", () => {
+    const demoCrm = { id: "demo-crm", name: "Demo CRM", description: "Contacts and deals." } as InstalledSkillRecord;
+    render(<Page initial={{ category: "Development" }} installed={[demoCrm]} />);
+    fireEvent.click(screen.getByRole("button", { name: /Installed/ }));
+
+    expect(screen.getByText("No installed plugins matched your search.")).toBeTruthy();
+    expect(screen.queryByText(/No plugins installed yet/)).toBeNull();
+  });
+});

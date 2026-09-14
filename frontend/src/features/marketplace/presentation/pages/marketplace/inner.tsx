@@ -160,8 +160,13 @@ export function MarketplacePageInner({
     }))
     .filter((section) => section.listings.length > 0);
 
-  const filteredInstalledListings = installedListings.filter((listing) =>
-    matchesInstalled(listing, normalizedQuery),
+  // The summary names the chosen category, so what is installed answers to it
+  // as well: with no registry these are the only cards drawn, and they were
+  // counted "in Development" whatever their own category was.
+  const filteredInstalledListings = installedListings.filter(
+    (listing) =>
+      (!search.category || listing.category === search.category) &&
+      matchesInstalled(listing, normalizedQuery),
   );
 
   const installedNames = React.useMemo(
@@ -249,7 +254,7 @@ export function MarketplacePageInner({
           <MarketplaceUnavailable code={installedError.code} message={installedError.message} />
         ) : installedSection ?? (
           <p className="text-sm text-muted-foreground">
-            {trimmedQuery
+            {isFiltered && installedListings.length > 0
               ? t("No installed plugins matched your search.")
               : t("No plugins installed yet. Browse the marketplace to install plugins.")}
           </p>
