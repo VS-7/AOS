@@ -7,6 +7,7 @@ import {
   GitBranch,
   TagIcon,
   UserIcon,
+  FolderIcon,
   ChevronDown,
   Check
 } from "lucide-react"
@@ -29,6 +30,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
+import { ProjectSelectorDropdown } from "@/components/ui/project-selector-dropdown"
 import {
   Popover,
   PopoverContent,
@@ -117,6 +119,7 @@ export function TaskDialog() {
         priority: values.priority,
         status: values.status,
         assigned: values.assigned,
+        project: aos.stores.viewport.state.tasks.dialog.project,
         worktree: values.worktree.enabled
           ? {
             enabled: true,
@@ -142,6 +145,18 @@ export function TaskDialog() {
       router.invalidate();
     }
   });
+
+  // The project the task is filed under. A project's Tasks tab opens this
+  // dialog with its own (`tasks.new` with { project }); it had no project at
+  // all, so a task created there landed outside the project. Cleared when
+  // the dialog closes, however it closes, so the next task does not inherit
+  // it.
+  const project = aos.stores.viewport.useState(state => state.tasks.dialog.project)
+  const projects = aos.stores.projects.useState(state => state.items)
+  const projectLabel = projects.find((item) => item.id === project)?.name || project || t("No project")
+  React.useEffect(() => {
+    if (!open && project) aos.stores.viewport.actions.setTaskDialogProject(undefined)
+  }, [open, project])
 
   function onOpenChange(isOpen: boolean) {
     aos.stores.viewport.actions.toggle('tasks.dialog.visible', isOpen)
@@ -238,8 +253,10 @@ export function TaskDialog() {
             </FieldGroup>
           </div>
 
-          <div className="flex items-center justify-between px-4 py-3 bg-muted/30 border-t">
-            <div className="flex items-center gap-2">
+          {/* Wraps: with the project picker the pickers no longer fit one
+              row of the dialog, and Create was pushed out of it. */}
+          <div className="flex items-center justify-between gap-2 px-4 py-3 bg-muted/30 border-t">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -313,6 +330,27 @@ export function TaskDialog() {
                   <SetAssigneeDropdown
                     currentAssignee={selectedAssignee}
                     onAssigneeChange={(assignee) => form.setValue("assigned", assignee)}
+                  />
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    className="h-8 gap-2 px-2 text-muted-foreground hover:text-foreground"
+                  >
+                    <FolderIcon data-icon="inline-start" className="size-4" />
+                    <span className="max-w-28 truncate">{projectLabel}</span>
+                    <ChevronDown data-icon="inline-end" className="size-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-64">
+                  <ProjectSelectorDropdown
+                    currentProject={project}
+                    onProjectChange={(next) => aos.stores.viewport.actions.setTaskDialogProject(next)}
                   />
                 </DropdownMenuContent>
               </DropdownMenu>

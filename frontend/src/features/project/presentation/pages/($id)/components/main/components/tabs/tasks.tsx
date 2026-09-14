@@ -94,7 +94,7 @@ export function ProjectTasksTab({ project }: ProjectTasksTabProps) {
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => (aos.triggers as { dispatch: (id: string, input?: unknown) => Promise<unknown> }).dispatch("tasks.new")}
+            onClick={() => (aos.triggers as { dispatch: (id: string, input?: unknown) => Promise<unknown> }).dispatch("tasks.new", { project: project.id })}
           >
             <Plus className="size-4" />
             {t("New Task")}
