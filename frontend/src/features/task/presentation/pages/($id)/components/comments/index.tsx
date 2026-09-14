@@ -5,7 +5,6 @@ import {
   ChevronDown,
   CornerDownRight,
   MessageSquare,
-  Paperclip,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -22,14 +21,12 @@ import { Form, FormControl, FormField } from "@/components/ui/form";
 import { cn } from "@/lib/utils";
 import type { TaskComment } from "@/features/task/interfaces/comment.interfaces";
 import { t } from "@/lib/i18n";
+import { useAssigneeDirectory } from "@/features/task/presentation/hooks/assignee-directory.hook";
+import { resolveAssignee } from "@/features/task/presentation/helpers/assignee.helper";
 import {
   CommentItem,
   type CommentThreadNode,
 } from "./components/item.component";
-
-const commentSchema = z.object({
-  body: z.string().min(1, "Comment cannot be empty"),
-});
 
 function getMentionLabel(author: string) {
   return `@${author.trim().replace(/^@+/, "").replace(/\s+/g, "_")}`;
@@ -134,6 +131,18 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
   // (`[feature, action, flattenArgs(opts)]`, see `lib/aos-facade.ts`) is
   // the direct equivalent.
   const queryClient = aos.useQueryClient();
+  const refreshComments = () =>
+    void queryClient.invalidateQueries({ queryKey: ["comment", "list", { taskId }] });
+
+  // A comment's author is an agent slug or a user id, and the thread printed
+  // either as written: the person's own comments were signed with a UUID.
+  const directory = useAssigneeDirectory();
+  const authorName = (author: string) => resolveAssignee(directory, author)?.name || author;
+
+  const commentSchema = React.useMemo(
+    () => z.object({ body: z.string().trim().min(1, t("Comment cannot be empty")) }),
+    [],
+  );
 
   const form = aos.useForm({
     schema: commentSchema,
@@ -146,9 +155,8 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
       body: {
         body:
           replyTarget && replyTarget.depth >= 2
-            ? ensureMentionPrefix(values.body, replyTarget.comment.author)
+            ? ensureMentionPrefix(values.body, authorName(replyTarget.comment.author))
             : values.body,
-        attachments: [],
         ...(replyTarget
           ? { replyToId: getReplyTargetParentId(replyTarget) }
           : {}),
@@ -156,10 +164,10 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
     }),
     onResponse: ({ error }) => {
       if (error) {
-        toast.error(error.message || "Failed to add comment");
+        toast.error(t("Failed to add comment"), { description: error.message });
         return;
       }
-      toast.success(replyTarget ? "Reply added" : "Comment added");
+      toast.success(replyTarget ? t("Reply added") : t("Comment added"));
       form.reset();
       setReplyTarget(null);
       // Query key shape is the facade's own: `[feature, action,
@@ -167,7 +175,7 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
       // payload the ported code passed, matching the `useQuery` call
       // above (`params: { taskId }`) exactly. The `task`/`taskId` rename
       // itself lives in `command-map.ts` now, not here.
-      void queryClient.invalidateQueries({ queryKey: ["comment", "list", { taskId }] });
+      refreshComments();
     },
   });
 
@@ -176,8 +184,9 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <CollapsibleTrigger className="text-sm font-semibold flex items-center gap-1.5 text-foreground/70 hover:text-foreground transition-colors">
+            {/* Down when collapsed was up, and up when open was down. */}
             <ChevronDown
-              className={`size-4 transition-transform duration-200 ${isOpen ? "rotate-0" : "rotate-180"}`}
+              className={`size-4 transition-transform duration-200 ${isOpen ? "rotate-180" : "rotate-0"}`}
             />
             {t("Comments")}{" "}
             <Badge
@@ -210,9 +219,13 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
             {thread.map((node) => (
               <CommentItem
                 key={node.comment.id}
+                taskId={taskId}
                 node={node}
                 onReply={setReplyTarget}
+                onChanged={refreshComments}
                 replyTargetId={replyTarget?.comment.id}
+                authorName={authorName}
+                selfId={directory.self?.id}
               />
             ))}
           </div>
@@ -227,7 +240,7 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
                     <div className="flex items-center justify-between text-sm border-b bg-background px-4 py-3">
                       <div className="flex items-center gap-2 font-medium text-foreground">
                         <CornerDownRight className="size-4 text-muted-foreground" />
-                        {t("Replying to")} {replyTarget.comment.author}
+                        {t("Replying to")} {authorName(replyTarget.comment.author)}
                       </div>
                       <Button
                         variant="ghost"
@@ -259,8 +272,8 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
                         {...field}
                         placeholder={
                           replyTarget
-                            ? "Write a reply..."
-                            : "Leave a comment..."
+                            ? t("Write a reply...")
+                            : t("Leave a comment...")
                         }
                         className={cn(
                           "min-h-16 w-full resize-none bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none",
@@ -275,17 +288,10 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
                       />
                     </FormControl>
                     <div className="mt-3 flex items-center justify-end gap-2">
+                      {/* The paperclip that sat here was disabled for good:
+                          a comment has no attachments (comments_create takes
+                          a body and a parent). */}
                       <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 text-muted-foreground"
-                          type="button"
-                          disabled
-                        >
-                          <Paperclip className="size-4" />
-                          <span className="sr-only">{t("Attach file")}</span>
-                        </Button>
                         <Button
                           size="icon"
                           className="size-8 rounded-lg"
@@ -293,6 +299,7 @@ export function TaskComments({ taskId }: TaskCommentsProps) {
                           disabled={!field.value.trim() || form.isLoading}
                         >
                           <ArrowUp className="size-4" />
+                          <span className="sr-only">{t("Send comment")}</span>
                         </Button>
                       </div>
                     </div>

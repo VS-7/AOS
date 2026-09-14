@@ -565,10 +565,13 @@ function DetailTab(_props: DetailTabProps) {
 // ─── Widget Components ────────────────────────────────────────────────────────
 
 function Widget({ children, className }: WidgetProps) {
+  // shrink-0: widgets sit in the detail tab's scrolling column, and
+  // `overflow-hidden` gives a flex item a zero minimum height, so a tall
+  // sidebar squeezed each widget and clipped its rows instead of scrolling.
   return (
     <div
       className={cn(
-        "flex flex-col overflow-hidden text-sm",
+        "flex shrink-0 flex-col overflow-hidden text-sm",
         className,
       )}
     >

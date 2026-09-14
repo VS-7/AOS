@@ -7,14 +7,11 @@ import { TasksListSection } from "./components/list/components/task-list-section
 import { TaskKanbanColumn } from "./components/kanban/components/task-kanban-column.component";
 import { TaskKanbanCard } from "./components/kanban/components/task-kanban-card.component";
 import { TaskListRow } from "./components/list/components/task-list-row.component";
-import { toast } from "sonner";
-import { TasksFinishWorkflowDialog } from "../../components/dialogs/finish";
 import { cn } from "@/lib/utils";
 import { TASK_STATUS_ORDER } from "@/features/task/presentation/consts/task";
 import { useTasksContext, useDragContext } from "./context";
 import { TasksFilter } from "./components/header/filter";
 import { TasksViewToggle } from "./components/header/view-toggle";
-import { useRouter } from "@tanstack/react-router";
 import { Input } from "@/components/ui/input";
 import { t } from "@/lib/i18n";
 import {
@@ -71,8 +68,39 @@ const TasksHeader = React.memo(function TasksHeader() {
   );
 });
 
+/**
+ * What a search or filter that matches nothing shows.
+ *
+ * The list and the board used to render every status section with a 0 and
+ * nothing else, which reads as "the workspace has no tasks", not "nothing
+ * matches what you typed".
+ */
+function TasksNoResults() {
+  const { clearFilters, activeFilterCount, handleSearchChange, search } = useTasksContext();
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center">
+      <p className="text-sm font-medium">{t("No tasks match")}</p>
+      <p className="text-xs text-muted-foreground">
+        {t("Nothing in this workspace matches the search and filters in use.")}
+      </p>
+      <div className="flex items-center gap-2">
+        {search.query?.trim() && (
+          <Button variant="outline" size="sm" onClick={() => handleSearchChange("")}>
+            {t("Clear search")}
+          </Button>
+        )}
+        {activeFilterCount > 0 && (
+          <Button variant="outline" size="sm" onClick={clearFilters}>
+            {t("Clear filters")}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const TasksListView = React.memo(function TasksListView() {
-  const { displayedGroupedTasks, selectedStatuses } = useTasksContext();
+  const { displayedGroupedTasks, selectedStatuses, filteredTasks, isNarrowed } = useTasksContext();
 
   const visibleStatuses = useMemo(
     () =>
@@ -82,6 +110,8 @@ const TasksListView = React.memo(function TasksListView() {
       ),
     [selectedStatuses],
   );
+
+  if (isNarrowed && filteredTasks.length === 0) return <TasksNoResults />;
 
   return (
     <div className="gap-4 p-4">
@@ -97,7 +127,7 @@ const TasksListView = React.memo(function TasksListView() {
 });
 
 const TasksKanbanView = React.memo(function TasksKanbanView() {
-  const { displayedGroupedTasks, selectedStatuses } = useTasksContext();
+  const { displayedGroupedTasks, selectedStatuses, filteredTasks, isNarrowed } = useTasksContext();
   const { activeTaskId, isDragActive, activeDropStatus } = useDragContext();
 
   const visibleStatuses = useMemo(
@@ -108,6 +138,8 @@ const TasksKanbanView = React.memo(function TasksKanbanView() {
       ),
     [selectedStatuses],
   );
+
+  if (isNarrowed && filteredTasks.length === 0) return <TasksNoResults />;
 
   return (
     <div className="h-full overflow-x-auto overflow-y-hidden">
@@ -152,15 +184,13 @@ const TasksDragOverlay = React.memo(function TasksDragOverlay({
 });
 
 export function TasksPageInner() {
-  const { currentView, finishTransition } = useTasksContext();
+  const { currentView } = useTasksContext();
   const {
     handleDragStart,
     handleDragOver,
     handleDragEnd,
     handleDragCancel,
   } = useDragContext();
-
-  const router = useRouter();
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -196,36 +226,6 @@ export function TasksPageInner() {
           </DndContext>
         </PageBody>
       </Page>
-
-      <TasksFinishWorkflowDialog
-        open={finishTransition.state.open}
-        task={finishTransition.state.task}
-        onOpenChange={(open) => {
-          if (!open) finishTransition.close();
-        }}
-        onConfirm={async (input) => {
-          if (!finishTransition.state.task) {
-            finishTransition.close();
-            return;
-          }
-
-          const { error } = await aos.client.task.setStatus.mutate({
-            params: { task: finishTransition.state.task.id },
-            body: input,
-          });
-
-          if (error) {
-            toast.error(
-              error instanceof Error ? error.message : "Failed to finish task",
-            );
-            return;
-          }
-
-          toast.success(`Finished ${finishTransition.state.task.id}`);
-          finishTransition.close();
-          router.invalidate();
-        }}
-      />
     </>
   );
 }

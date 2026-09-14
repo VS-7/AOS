@@ -115,12 +115,9 @@ export const AttachmentSchema = z.object({
  * Todos break down a task into ordered, executable steps that an agent can pick up individually.
  */
 // Go's `Todo` (`internal/domain/todo/entity.go`) has `title`/`content`, not
-// `description`/`instructions` — and no `agent`/`output` field at all (a
-// todo cannot be assigned to a specific agent server-side, and there is no
-// stored "output" of running one). `agent`/`output` are kept, always
-// `undefined` against this backend, so the widget compiles without
-// asserting a capability that doesn't exist; `order`/`evidence` are added
-// because Go actually has them and nothing here read them before.
+// `description`/`instructions`, and no `agent`/`output` field at all. Those
+// two were kept here "so the widget compiles", and the widget went on reading
+// `output` where the daemon's `evidence` was; they are gone so nothing can.
 export const TaskTodoSchema = z.object({
   id: z
     .string()
@@ -149,23 +146,11 @@ export const TaskTodoSchema = z.object({
     .string()
     .optional()
     .describe("What was actually verified, concretely."),
-  agent: z
-    .string()
-    .optional()
-    .describe(
-      "Not a real Go field — see this schema's doc comment. Always undefined against this backend.",
-    ),
   content: z
     .string()
     .optional()
     .describe(
       "Notes on this step, in Markdown.",
-    ),
-  output: z
-    .any()
-    .optional()
-    .describe(
-      "Not a real Go field — see this schema's doc comment. Always undefined against this backend.",
     ),
 });
 
@@ -213,9 +198,15 @@ export const CommentSchema = z.object({
     .describe(
       "ID of the parent comment for threaded replies. Use to create conversation threads within a task.",
     ),
+  // Optional, not `.default([])`: nothing parses a fetched comment through
+  // this schema, so a default never runs, and Go's `Comment`
+  // (internal/domain/comment/entity.go) has no attachments at all. The type
+  // claimed the array was always there, and the comment item read
+  // `.length` off it — which took the whole task page down the first time a
+  // task with comments had its thread opened.
   attachments: z
     .array(AttachmentSchema)
-    .default([])
+    .optional()
     .describe(
       "List of file or URL attachments for this comment. Use to link relevant resources.",
     ),
@@ -397,25 +388,18 @@ export const TaskSchema = z.object({
     .describe(
       "Where an interrupted run stopped (Go's task.Checkpoint), present when status is 'stopped'. Field names match the Go struct's `json` tags exactly — NOT the richer {summary, at, actor, execution, resume} shape `($id)/components/main/index.tsx`'s original checkpoint banner assumed; that render was adapted to these real fields (see the port's hand-edit notes).",
     ),
-  /**
-   * `dependencies` (plural, resolved task summaries) is what
-   * `dependencies-widget/index.tsx` reads for its "already linked" list —
-   * distinct from `dependsOn` (id strings, real, above). The Go side has
-   * no resolved-dependencies projection, only `DependsOn` and a computed
-   * `Blocked []string` (unfinished subset) — neither is an array of full
-   * task objects. Typed here only so the widget compiles; it will always
-   * be `undefined` against this backend, so that list renders empty. A
-   * real fix needs either a Go projection or the widget resolving each id
-   * itself against `task.list`, out of scope for this port.
-   *
-   * Not `z.lazy(() => TaskSchema)`: a self-reference inside this
-   * same `z.object({...})` risks `TaskSchema`'s inferred type
-   * becoming circular (TS7022). The widget only reads `.id`, `.name`, and
-   * `.status` off each entry, so that minimal shape is enough.
-   */
-  dependencies: z
-    .array(z.object({ id: z.string(), name: z.string(), status: TaskStatusSchema }))
-    .optional(),
+  blocked: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Dependencies that are not finished yet (Go's task.View.Blocked). Absent when nothing blocks the task.",
+    ),
+  nextStates: z
+    .array(TaskStatusSchema)
+    .optional()
+    .describe(
+      "Statuses tasks_set-status accepts from where the task stands (Go's task.View.NextStates), before its guards run.",
+    ),
 });
 
 /**

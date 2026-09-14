@@ -18,7 +18,6 @@ import {
   Form,
   FormMessage,
 } from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -26,23 +25,33 @@ import { aos } from "@/app/aos"
 import { toast } from "sonner"
 import type { Todo } from "@/features/task/interfaces/todo.interfaces"
 
-const formSchema = z.object({
-  description: z.string().min(1, "Description is required"),
-  agent: z.string().optional(),
-  instructions: z.string().optional(),
-})
-
 interface TodoDialogUpsertProps {
   taskId: string
   todo?: Todo
   onCreated?: () => void
+  /** The trigger. Left out, the dialog is driven by `open`/`onOpenChange`. */
   children?: React.ReactNode
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function TodoDialogUpsert({ taskId, todo, onCreated, children }: TodoDialogUpsertProps) {
-  const ref = React.useRef<HTMLDivElement | null>(null)
+export function TodoDialogUpsert({ taskId, todo, onCreated, children, open: controlledOpen, onOpenChange }: TodoDialogUpsertProps) {
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false)
+  const open = controlledOpen ?? uncontrolledOpen
+  const setOpen = (next: boolean) => {
+    if (controlledOpen === undefined) setUncontrolledOpen(next)
+    onOpenChange?.(next)
+  }
 
   const isEdit = !!todo
+
+  // Built per render rather than at module load, so the validation message is
+  // in the language the interface is in when the dialog opens.
+  const formSchema = React.useMemo(() => z.object({
+    description: z.string().trim().min(1, t("Description is required")),
+    instructions: z.string().optional(),
+    evidence: z.string().optional(),
+  }), [])
 
   // Reads `todo.title`/`todo.content` — Go's real `Todo` field names (see
   // `interfaces/task.interfaces.ts`'s `TaskTodoSchema` doc comment)
@@ -52,8 +61,8 @@ export function TodoDialogUpsert({ taskId, todo, onCreated, children }: TodoDial
   // entries, not here.
   const initialValues = React.useMemo(() => ({
     description: todo?.title || "",
-    agent: todo?.agent || "",
     instructions: todo?.content || "",
+    evidence: todo?.evidence || "",
   }), [todo])
 
   const form = aos.useForm({
@@ -61,23 +70,24 @@ export function TodoDialogUpsert({ taskId, todo, onCreated, children }: TodoDial
     mutation: isEdit ? "todo.update" : "todo.create",
     values: initialValues,
     onSubmit: (values) => {
-      const body: Record<string, unknown> = {
-        description: values.description,
-      }
-      if (values.agent) body.agent = values.agent
-      if (values.instructions) body.instructions = values.instructions
-
       if (isEdit) {
+        // Every field goes, emptied ones as "": todos_update reads a missing
+        // key as "leave it", so clearing the notes used to save nothing.
         return {
           params: { taskId, id: todo!.id },
-          body,
+          body: {
+            description: values.description,
+            instructions: values.instructions ?? "",
+            evidence: values.evidence ?? "",
+          },
         }
       }
 
-      return {
-        params: { taskId },
-        body,
-      }
+      // The todo agent field is gone: Go's `Todo` has no agent, and the
+      // disabled input only said so.
+      const body: Record<string, unknown> = { description: values.description }
+      if (values.instructions) body.instructions = values.instructions
+      return { params: { taskId }, body }
     },
     onResponse: ({ error }) => {
       // Create/Update never submitted before, so a refusal had nowhere to go.
@@ -85,22 +95,18 @@ export function TodoDialogUpsert({ taskId, todo, onCreated, children }: TodoDial
         toast.error(error.message || t("Could not save the todo."))
         return
       }
-      ref.current?.click()
+      setOpen(false)
       form.reset()
       onCreated?.()
     },
   })
 
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <div ref={ref}>
-          {children}
-        </div>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={setOpen}>
+      {children && <DialogTrigger asChild>{children}</DialogTrigger>}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit Todo" : "Create Todo"}</DialogTitle>
+          <DialogTitle>{isEdit ? t("Edit Todo") : t("Create Todo")}</DialogTitle>
         </DialogHeader>
         <Form form={form}>
           <FieldGroup>
@@ -139,30 +145,30 @@ export function TodoDialogUpsert({ taskId, todo, onCreated, children }: TodoDial
                 </Field>
               )}
             />
-            {/*
-              C5 of the final review ("honest empty state" policy, R26):
-              `agent` is in this form's own schema and gets read from
-              `todo?.agent` on edit, but there was no control for it at all
-              — a user could never see or set it. There is also no Go field
-              to hold it (`command-map.ts`'s `todo.create`/`.update` entries:
-              "no Go equivalent for `agent` at all... sent and silently
-              ignored"). Two silent gaps stacked; this makes both visible
-              instead of pretending the field doesn't exist.
-            */}
-            <Field>
-              <Label htmlFor="agent">{t("Agent")}</Label>
-              <FormControl>
-                <Input id="agent" value={form.watch("agent") ?? ""} disabled placeholder={t("Not assignable yet")} />
-              </FormControl>
-              <p className="text-xs text-muted-foreground">
-                {t("Assigning a todo to a specific agent isn't saved by the backend yet.")}
-              </p>
-            </Field>
+            {isEdit && (
+              <FormField
+                control={form.control}
+                name="evidence"
+                render={({ field }) => (
+                  <Field>
+                    <Label htmlFor="evidence">{t("Evidence (optional)")}</Label>
+                    <FormControl>
+                      <Textarea
+                        {...field}
+                        id="evidence"
+                        placeholder={t("What was verified, concretely.")}
+                        className="min-h-16 resize-none"
+                      />
+                    </FormControl>
+                  </Field>
+                )}
+              />
+            )}
           </FieldGroup>
           <DialogFooter className="mt-6">
             <Button variant="outline" type="button" onClick={() => {
               form.reset()
-              ref.current?.click()
+              setOpen(false)
             }}>
               {t("Cancel")}
             </Button>
