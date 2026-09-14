@@ -2,6 +2,7 @@ package routine
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"testing"
 )
@@ -129,7 +130,7 @@ func TestAChainOfDistinctRoutinesIsBounded(t *testing.T) {
 
 	ctx := asAgent("atlas")
 	for i := 0; i < MaxChain; i++ {
-		ctx = withFiring(ctx, &Routine{Agent: "atlas", ID: "outer-" + string(rune('a'+i))})
+		ctx = withFiring(ctx, &Routine{Agent: "atlas", ID: "outer-" + string(rune('a'+i))}, "")
 	}
 	h.svc.OnActivity(ctx, "task", "status_changed", map[string]any{"to": "in_review"})
 	if got := exec.count(); got != 0 {
@@ -150,5 +151,57 @@ func TestACancelledCallerStopsTheReaction(t *testing.T) {
 
 	if got := h.executor.count(); got != 0 {
 		t.Fatalf("a cancelled caller started %d runs", got)
+	}
+}
+
+// TestRoutineFiringsAreReactedToOneLevelDeep. Every routine listening for
+// routine.fired heard the firing that started a chain, and then each one's own
+// firing too, all but the routines already in that branch: k listeners made
+// k + k(k-1) + k(k-1)(k-2) runs of one Run now — four for two, fifteen for
+// three, a hundred and fifty-six paid turns for six. Hearing that a routine
+// ran is one level of reaction; a reaction's own firing sets nothing else off.
+func TestRoutineFiringsAreReactedToOneLevelDeep(t *testing.T) {
+	for _, listeners := range []int{2, 3} {
+		t.Run(strconv.Itoa(listeners)+" listeners", func(t *testing.T) {
+			h := newHarness(t)
+			withPublishing(h)
+			for i := range listeners {
+				h.create(t, CreateInput{
+					Name:     "Tell me when anything ran " + strconv.Itoa(i),
+					Triggers: []TriggerInput{{Type: Activity, Namespace: "routine", Event: "fired"}},
+				})
+			}
+			sweep := h.create(t, CreateInput{Name: "The nightly sweep"})
+
+			if _, err := h.svc.Fire(asAgent("atlas"), FireInput{ID: sweep.Routine.ID}); err != nil {
+				t.Fatal(err)
+			}
+			if got, want := h.executor.count(), 1+listeners; got != want {
+				t.Fatalf("one firing with %d listeners set off %d runs, want %d: the sweep and each listener once",
+					listeners, got, want)
+			}
+		})
+	}
+}
+
+// TestAFiringAnotherActivitySetOffIsStillHeard. The bound is on reacting to a
+// reaction to a routine firing, not on a routine that ran because a task moved:
+// "tell me when anything ran" still hears that one.
+func TestAFiringAnotherActivitySetOffIsStillHeard(t *testing.T) {
+	h := newHarness(t)
+	withPublishing(h)
+	h.create(t, CreateInput{
+		Name:     "Tell me when anything ran",
+		Triggers: []TriggerInput{{Type: Activity, Namespace: "routine", Event: "fired"}},
+	})
+	h.create(t, CreateInput{
+		Name:     "Check the evidence",
+		Triggers: []TriggerInput{{Type: Activity, Namespace: "task", Event: "status_changed"}},
+	})
+
+	h.svc.OnActivity(asAgent("atlas"), "task", "status_changed", map[string]any{"to": "in_review"})
+
+	if got := h.executor.count(); got != 2 {
+		t.Fatalf("a task change set off %d runs, want the checker and the listener that heard it", got)
 	}
 }

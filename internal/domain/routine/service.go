@@ -321,13 +321,15 @@ func (s *Service) authenticateWebhook(ctx context.Context, in WebhookInput) (*Ro
 // whose status changed.
 //
 // An activity published while routines are firing — by a run, or by a firing
-// announcing itself — fires no routine already in that chain, and nothing at
-// all once the chain is MaxChain long. See MaxChain for the loop this closes.
+// announcing itself — fires no routine already in that chain, nothing at all
+// once the chain is MaxChain long, and nothing through the routine namespace
+// once a firing in it reacted to a routine's. See Chain for the loops and the
+// fan-out this closes.
 func (s *Service) OnActivity(ctx context.Context, namespace, event string, data map[string]any) {
 	chain := chainOf(ctx)
-	if len(chain) >= MaxChain {
+	if why := chain.stops(namespace); why != "" {
 		s.log.Warn("an activity published by a chain of routine firings fired no further routine",
-			"namespace", namespace, "event", event, "chain", chain, "limit", MaxChain)
+			"namespace", namespace, "event", event, "chain", chain.Firings, "reason", why, "limit", MaxChain)
 		return
 	}
 	found, err := s.repo.List(ctx, collections.Query{IncludeContent: true})
@@ -338,7 +340,7 @@ func (s *Service) OnActivity(ctx context.Context, namespace, event string, data 
 	}
 	for i := range found {
 		r := &found[i]
-		if r.Status != Enabled || inChain(chain, r) {
+		if r.Status != Enabled || chain.includes(r) {
 			continue
 		}
 		// Each firing is a whole turn. A caller that went away while an
@@ -439,8 +441,13 @@ func (s *Service) scheduled(ctx context.Context, now time.Time, fire func(contex
 // leaving one.
 func (s *Service) fire(ctx context.Context, r *Routine, trigger TriggerType, payload map[string]any, force bool) (*Run, error) {
 	// Everything below — the run, and the routine.fired it publishes — happens
-	// on behalf of this firing, and OnActivity must be able to tell.
-	ctx = withFiring(ctx, r)
+	// on behalf of this firing, and OnActivity must be able to tell, down to
+	// whether an activity of the routine namespace set it off.
+	namespace := ""
+	if trigger == Activity {
+		namespace, _ = payload["namespace"].(string)
+	}
+	ctx = withFiring(ctx, r, namespace)
 
 	if r.Status != Enabled && !force {
 		run := s.newRun(r, trigger, payload)
