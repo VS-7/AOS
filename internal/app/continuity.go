@@ -801,7 +801,7 @@ func routineTick(queue job.Queue, idgen ids.Generator) scopeTick {
 		if err != nil {
 			return err
 		}
-		if len(out.Fired) > 0 || len(out.Failed) > 0 || len(out.Broken) > 0 {
+		if len(out.Fired) > 0 || len(out.Failed) > 0 || len(out.Running) > 0 || len(out.Broken) > 0 {
 			slog.Default().Info("the scheduler evaluated the routines",
 				"workspace", workspaceID, "queued", len(out.Fired), "failed", len(out.Failed),
 				"stillRunning", len(out.Running), "broken", len(out.Broken))
