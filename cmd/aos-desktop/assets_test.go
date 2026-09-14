@@ -197,6 +197,47 @@ func TestOnlyTheWindowCanOpenAnArtifactAndOnlyThatOne(t *testing.T) {
 	}
 }
 
+// A frame address names an artifact in the workspace the window addressed when
+// it handed the address out. Artifact ids are caller-chosen ("sales-dashboard"
+// in two workspaces is two artifacts), and the forward goes out under whatever
+// workspace the Go client holds by then: a frame still mounted after the window
+// switched workspace served the other workspace's artifact of the same name, to
+// any origin. The address now opens only while the window addresses that
+// workspace, and the forward is sent under it.
+func TestAFrameAddressOpensOnlyInTheWorkspaceItWasIssuedIn(t *testing.T) {
+	var got seen
+	srv := proxyDaemon(t, &got)
+	daemon := daemonclient.New(daemonclient.Options{BaseURL: srv.URL, Token: "window-token", Workspace: "vs"})
+	proxy := bridgeDaemon(daemon, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	inVS := frameAddress(t, proxy, "/v/artifacts/sales/")
+	open := func() int {
+		got = seen{}
+		rec, reached := serveWith(proxy, httptest.NewRequestWithContext(t.Context(), http.MethodGet, inVS+"data.json", nil))
+		if reached {
+			t.Fatal("the frame request fell through to the interface's own assets")
+		}
+		return rec.Code
+	}
+
+	if code := open(); code != http.StatusOK || got.workspace != "vs" {
+		t.Fatalf("in the workspace it was issued in: status %d, daemon saw workspace %q", code, got.workspace)
+	}
+
+	daemon.SetWorkspace("atelier")
+	if code := open(); code != http.StatusNotFound || got.path != "" {
+		t.Errorf("after switching workspace the address still opened: status %d, daemon saw %s in %q", code, got.path, got.workspace)
+	}
+	if inAtelier := frameAddress(t, proxy, "/v/artifacts/sales/"); inAtelier == inVS {
+		t.Errorf("the same address was handed out for sales in two workspaces: %s", inAtelier)
+	}
+
+	daemon.SetWorkspace("vs")
+	if code := open(); code != http.StatusOK || got.workspace != "vs" {
+		t.Errorf("back in the workspace it was issued in: status %d, workspace %q", code, got.workspace)
+	}
+}
+
 // Without an opened address, what the window forwards answers the window's own
 // origin only: the Files panel's <img> and <video> are same-origin and load,
 // and nothing else embeds a workspace file with this window's credential.

@@ -323,11 +323,17 @@ describe("the sandbox a browser tab's frame gets", () => {
     expect(wails.frameSandbox(other)).toContain("allow-same-origin");
   });
 
-  // Not safe, latent: see frameSandbox. Changing it alone breaks what a
-  // browser tab can show today.
-  it("changes nothing in a browser tab", async () => {
+  // In a browser tab the page's own origin is the API's, and a same-origin
+  // frame with allow-same-origin reached window.parent and /api with the
+  // session cookie. The daemon now sandboxes every artifact answer itself, so
+  // an opaque frame no longer costs an artifact its files — and the frame no
+  // longer hands anything else of this origin the same reach.
+  it("drops same-origin for the page's own content in a browser tab too", async () => {
     const wails = await loadAt("");
-    expect(wails.frameSandbox("/v/artifacts/sales/")).toContain("allow-same-origin");
+    expect(wails.frameSandbox("/v/artifacts/sales/?password=pw")).not.toContain("allow-same-origin");
+    expect(wails.frameSandbox(`${window.location.origin}/api/file/content?path=a.html`)).not.toContain("allow-same-origin");
+    expect(wails.frameSandbox("/v/artifacts/sales/")).toContain("allow-scripts");
+    expect(wails.frameSandbox("https://example.com/")).toContain("allow-same-origin");
   });
 });
 

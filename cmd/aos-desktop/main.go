@@ -110,7 +110,8 @@ func main() {
 	// signing in and out — see windowSession for why the terminal's
 	// credential and the window's own session are kept apart.
 	session := newWindowSession(
-		filepath.Join(paths.Root, desktopTokenFile),
+		// Audited at boot with the other secret files (Paths.SecretFiles).
+		paths.DesktopToken(),
 		localToken(resolver, paths),
 		strings.TrimSpace(resolver.String("TOKEN", "")) != "",
 		log,
@@ -306,16 +307,24 @@ func main() {
 			// artifact here needs. See bridgeDaemon.
 			Middleware: bridgeDaemon(daemon, log),
 		},
+		Server:   serverOptions(),
 		LogLevel: slog.LevelWarn,
 	})
 
 	window := desktop.Window.NewWithOptions(windowOptions(address))
 	platform.window = window
 	// The menu's Reload goes through the page, which keeps the parameters the
-	// window was opened with — see applicationMenu, and hasMenuBar for why
-	// only macOS has one.
+	// window was opened with, and falls back to the window's own reload at
+	// its original URL for a page that never answers — see applicationMenu
+	// and pageReload, and hasMenuBar for why only macOS has one.
 	if hasMenuBar(runtime.GOOS) {
-		desktop.Menu.Set(applicationMenu(func() { window.EmitEvent(ReloadEventName) }))
+		reloads := &pageReload{
+			emit:     func() { window.EmitEvent(ReloadEventName) },
+			fallback: func() { window.SetURL(windowOptions(address).URL) },
+			wait:     reloadAckWait,
+		}
+		desktop.Event.On(ReloadAckEventName, func(*application.CustomEvent) { reloads.acknowledged() })
+		desktop.Menu.Set(applicationMenu(reloads.reload))
 	}
 	emitRealtime = func(event any) { window.EmitEvent(RealtimeEventName, event) }
 	emitDaemon = func(event any) { window.EmitEvent(DaemonEventName, event) }
@@ -380,6 +389,20 @@ func main() {
 		log.Error("the window closed with an error", "err", err)
 		exitCode = 1
 	}
+}
+
+// serverOptions is the HTTP server a `-tags server` build serves the window
+// from; any other build ignores it.
+//
+// Wails gives that server a thirty-second write deadline by default, which
+// bounds every bridge call's answer. A call that took longer had its answer
+// refused, the connection closed with nothing written, and the browser —
+// which resends a request whose kept-alive connection closed before any
+// answer — sent the same POST /wails/runtime again, so the command ran twice.
+// How long a call may wait is decided by daemonclient, while the daemon is
+// alive; a stream from /api/file/content lasts as long as somebody watches.
+func serverOptions() application.ServerOptions {
+	return application.ServerOptions{WriteTimeout: 24 * time.Hour}
 }
 
 // localToken is the credential this installation already holds — the shared

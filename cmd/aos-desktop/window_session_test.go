@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 
+	corecfg "github.com/OWNER/aos/internal/core/config"
 	"github.com/OWNER/aos/internal/transport/daemonclient"
 )
 
@@ -48,7 +48,7 @@ func (a *authDaemon) revocations() []string {
 
 func newTestSession(t *testing.T, root, shared string, explicit bool, base string) (*windowSession, *daemonclient.Client) {
 	t.Helper()
-	session := newWindowSession(filepath.Join(root, desktopTokenFile), shared, explicit, nil)
+	session := newWindowSession(corecfg.Paths{Root: root}.DesktopToken(), shared, explicit, nil)
 	client := daemonclient.New(daemonclient.Options{BaseURL: base, Token: session.Initial()})
 	return session, client
 }
@@ -103,7 +103,7 @@ func TestASignInOutlivesTheWindow(t *testing.T) {
 	if got := next.Initial(); got != "window-session" {
 		t.Errorf("next launch token = %q, want the session the window signed in with", got)
 	}
-	info, err := os.Stat(filepath.Join(root, desktopTokenFile))
+	info, err := os.Stat(corecfg.Paths{Root: root}.DesktopToken())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestLoggingOutRevokesTheWindowsOwnSession(t *testing.T) {
 // anything the window remembers, and it is not the window's to revoke.
 func TestAnExplicitTokenIsNeitherReplacedNorRevoked(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, desktopTokenFile), []byte("remembered"), 0o600); err != nil {
+	if err := os.WriteFile(corecfg.Paths{Root: root}.DesktopToken(), []byte("remembered"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	daemon := &authDaemon{}

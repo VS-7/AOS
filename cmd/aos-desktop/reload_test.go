@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -33,6 +34,54 @@ func TestTheViewMenuReloadsThroughThePage(t *testing.T) {
 	// Wails' own View menu has Open DevTools there, and so should this one.
 	if view.FindByRole(application.OpenDevTools) == nil {
 		t.Error("a development build's View menu lost Open DevTools")
+	}
+}
+
+// The menu's Reload used to depend on the page entirely: it sent aos:reload and
+// the page's own listener reloaded. A bundle that failed before installing that
+// listener — a module error, a white window — left Cmd+R doing nothing, and the
+// application had to be restarted. The window now reloads itself, at the URL
+// it was opened with, when the page does not say it heard.
+func TestAReloadThePageDoesNotAnswerIsDoneByTheWindow(t *testing.T) {
+	emitted := make(chan struct{}, 2)
+	fellBack := make(chan struct{}, 2)
+	reloads := &pageReload{
+		emit:     func() { emitted <- struct{}{} },
+		fallback: func() { fellBack <- struct{}{} },
+		wait:     30 * time.Millisecond,
+	}
+
+	reloads.reload()
+	select {
+	case <-fellBack:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the page never answered and the window did not reload")
+	}
+	if len(emitted) != 1 {
+		t.Errorf("the page was asked %d times", len(emitted))
+	}
+}
+
+// A page that answers reloads itself, keeping its route and the window's
+// parameters; the window reloading as well would throw the route away.
+func TestAReloadThePageAnswersIsLeftToThePage(t *testing.T) {
+	fellBack := make(chan struct{}, 2)
+	reloads := &pageReload{emit: func() {}, fallback: func() { fellBack <- struct{}{} }, wait: 30 * time.Millisecond}
+
+	reloads.reload()
+	reloads.acknowledged()
+	time.Sleep(150 * time.Millisecond)
+	if len(fellBack) != 0 {
+		t.Fatal("the window reloaded over a page that had answered")
+	}
+
+	// An answer with nothing pending, and a second Reload after it, behave.
+	reloads.acknowledged()
+	reloads.reload()
+	select {
+	case <-fellBack:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a later Reload the page did not answer was not done by the window")
 	}
 }
 

@@ -114,6 +114,11 @@ export const UNAUTHENTICATED_EVENT = "aos:unauthenticated";
  * saying no, and a connection that never completed is the system being
  * absent. The layout draws them differently, which it could not do while one
  * of them arrived as a bare TypeError.
+ *
+ * It also means the request never reached the daemon, which is what makes it
+ * the one failure worth sending again. A command the daemon received and did
+ * not answer is AOS_DAEMON_TIMEOUT or AOS_DAEMON_ANSWER_LOST
+ * (internal/transport/daemonclient's send), and is never repeated.
  */
 export const DAEMON_UNREACHABLE_CODE = "AOS_DAEMON_UNREACHABLE";
 
@@ -228,17 +233,24 @@ export function bridgeAnswer(err: unknown): DomainError | null {
 function bridgeUnavailable(method: string, cause: unknown): DomainError {
   return new DomainError({
     code: "TRANSPORT_UNREACHABLE",
-    message: "the desktop bridge did not answer",
+    message: "the desktop bridge did not answer; the call may or may not have been carried out",
     status: 503,
     issues: { method, cause: cause instanceof Error ? cause.message : String(cause) },
   });
 }
 
 /**
- * Calls a bound Go method, waiting out a bridge that is still warming up and
- * nothing else.
+ * Calls a bound Go method, and calls it again only when its answer proves the
+ * call went nowhere.
  *
- * `retryAnswer` names the answers worth asking again for; by default none is.
+ * `retryAnswer` names those answers; by default there are none. A rejection
+ * with no answer at all is not one of them, though it used to be retried as a
+ * bridge still warming up: the runtime's request failed, so whether Go ran the
+ * method is unknown, and a command sent twice can run twice. The bridge is
+ * this window's own process, served from the same host as the page, so there
+ * is nothing to wait out — `Call` needs no window to be registered
+ * (`messageprocessor.go` in wails/v3@v3.0.0-beta.8).
+ *
  * What this never does is fall back to HTTP. Inside the desktop window the
  * credential lives in the Go process, so a plain request from the page is
  * cross-origin and anonymous, and its failure — a 401, a refused connection —
@@ -258,21 +270,23 @@ export async function callBridge(
       return raw;
     } catch (err) {
       const answer = bridgeAnswer(err);
+      if (!answer) throw bridgeUnavailable(method, err);
       // An answer of any kind proves the bridge is there.
-      if (answer) markDesktopConfirmed();
-      if (answer && !retryAnswer(answer)) throw answer;
+      markDesktopConfirmed();
       const delay = delays[attempt];
-      if (delay === undefined) throw answer ?? bridgeUnavailable(method, err);
+      if (!retryAnswer(answer) || delay === undefined) throw answer;
       await sleep(delay);
     }
   }
 }
 
 /**
- * The answers from DomainService.Invoke worth asking again for: a daemon the
- * window started moments ago that has not finished starting, and an argument
- * mixup in the bridge under concurrency. Not found, validation, a refusal —
- * none of those is fixed by repeating it.
+ * The answers from DomainService.Invoke worth asking again for, each one a
+ * call that never reached the daemon: a daemon the window started moments ago
+ * that is not listening yet, and an argument mixup in the bridge under
+ * concurrency. Not found, validation, a refusal — none of those is fixed by
+ * repeating it — and a command the daemon received but did not answer
+ * (AOS_DAEMON_TIMEOUT, AOS_DAEMON_ANSWER_LOST) may be running still.
  */
 function retryInvokeAnswer(answer: DomainError): boolean {
   return answer.code === DAEMON_UNREACHABLE_CODE || answer.code === "AOS_DESKTOP_NO_COMMAND_NAMED";
@@ -294,9 +308,8 @@ function retryInvokeAnswer(answer: DomainError): boolean {
  * string into Go value of type ...". Handing over the object lets that one
  * encoding pass do the job once, correctly.
  *
- * Waits out a bridge that is still warming up, and asks again only for the
- * answers retryInvokeAnswer names — see callBridge. The daemon's own refusal
- * arrives inside the envelope and is thrown as it is.
+ * Asks again only for the answers retryInvokeAnswer names — see callBridge.
+ * The daemon's own refusal arrives inside the envelope and is thrown as it is.
  */
 const desktop: Client = {
   async invoke(key, input) {

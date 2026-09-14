@@ -9,6 +9,11 @@
 // bearerOf), this one reads only a deliberately presented credential — an
 // Authorization header, or, for a by_password artifact, the password
 // itself — never whatever the browser happened to attach automatically.
+//
+// Not reading the cookie here was not enough on its own: the browser still
+// attaches it to whatever /api request the artifact's own script makes, from
+// the same origin. So every answer is also sandboxed into an opaque origin —
+// see sandbox.
 package artifactapi
 
 import (
@@ -17,8 +22,10 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -147,7 +154,7 @@ func (s *server) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setArtifactHeaders(w, target)
+	setArtifactHeaders(w, target, ownDirectory(r, id), a.Visibility == artifact.ByPassword)
 	http.ServeFile(w, r, target)
 }
 
@@ -184,25 +191,105 @@ func bearerHeader(r *http.Request) string {
 	return strings.TrimSpace(r.Header.Get("X-Auth-Token"))
 }
 
-// csp is the fixed, restrictive policy every artifact is served under: no
-// external network, no inline script, no framing by a third-party page. An
-// artifact is generated content served from this daemon's own origin, and
-// without this a script inside one could call this system's own /api/*
-// endpoints or exfiltrate data to an attacker-controlled host. The design
-// doc's own sketch anticipates a per-artifact opt-in to relax this; no such
-// opt-in field exists on the entity yet, so every artifact gets the strict
-// policy today — a smaller, disclosed limitation, not a silent one.
-const csp = "default-src 'self'; script-src 'self'; style-src 'self'; " +
-	"img-src 'self' data:; font-src 'self' data:; connect-src 'self'; " +
-	"object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'"
+// sandbox gives every artifact document an opaque origin, wherever it is
+// opened: framed by the window or a browser tab, or on its own at a share link.
+//
+// 'self' in the policy below kept an artifact's script on this origin, which
+// is exactly the problem: this origin is the API's. A browser signed in to it
+// attaches the session cookie to every same-origin request, so a by_password
+// artifact whose page loaded `probe.js?password=pw`, opened at its share link,
+// ran as the signed-in person — /api/auth/session answered with the user,
+// /api/tasks/list with the workspace, and localStorage was the interface's.
+// The frame's own sandbox attribute cannot be the whole answer: a share link
+// has no frame, and a browser tab framed artifacts with allow-same-origin.
+//
+// Sandboxed without allow-same-origin, a request the page makes to /api is
+// cross-site: the Lax session cookie stays behind, and the answer is not
+// readable. Scripts, forms and popups (which inherit the sandbox) are what an
+// artifact is for; the top window is never its to navigate. Sent on every
+// answer, not only on HTML: an SVG or an XML file opened on its own is a
+// document that runs script too, and on a subresource the directive is
+// ignored.
+const sandbox = "sandbox allow-scripts allow-forms allow-popups"
+
+// csp is the fixed, restrictive policy every artifact is served under: an
+// opaque origin (sandbox above), no external network, no inline script, no
+// framing by a third-party page. An artifact is generated content served from
+// this daemon's own origin, and without this a script inside one could call
+// this system's own /api/* endpoints or exfiltrate data to an
+// attacker-controlled host. The design doc's own sketch anticipates a
+// per-artifact opt-in to relax this; no such opt-in field exists on the entity
+// yet, so every artifact gets the strict policy today — a smaller, disclosed
+// limitation, not a silent one.
+//
+// connectTo, when not empty, is the artifact's own directory as an absolute
+// address (see ownDirectory), added to connect-src.
+func csp(connectTo string) string {
+	connect := "connect-src 'self'"
+	if connectTo != "" {
+		connect += " " + connectTo
+	}
+	return sandbox + "; default-src 'self'; script-src 'self'; style-src 'self'; " +
+		"img-src 'self' data:; font-src 'self' data:; " + connect + "; " +
+		"object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'"
+}
+
+// ownDirectory is the address of the artifact's own directory, as the request
+// reached it, for connect-src — or "" when the request does not say it plainly.
+//
+// WebKit stops counting an opaque page's own URL as connect-src 'self' (its
+// scripts, styles and images still match; in Chromium everything does), so a
+// shared artifact's fetch of its own data.json was refused before it was sent.
+// Naming the directory lets exactly that through, and /api stays out of reach
+// there. The host is the one the request was addressed to, and a scheme a
+// proxy in front says it was reached by (a tunnel serves https); anything that
+// is not a plain host and port adds nothing, since a CSP would read a stray
+// ";" or "," as another directive or source.
+func ownDirectory(r *http.Request, id string) string {
+	if !plainHost.MatchString(r.Host) {
+		return ""
+	}
+	scheme := "http"
+	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		scheme = "https"
+	}
+	// The mount point is the caller's (httpapi mounts this at /v), so it is
+	// read back from the path the request actually carries.
+	mount, _, found := strings.Cut(r.URL.Path, "/artifacts/"+id+"/")
+	if !found {
+		return ""
+	}
+	return scheme + "://" + r.Host + (&url.URL{Path: mount}).EscapedPath() + "/artifacts/" + url.PathEscape(id) + "/"
+}
+
+// plainHost is a host name or address with an optional port.
+var plainHost = regexp.MustCompile(`^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(:[0-9]{1,5})?$`)
 
 // setArtifactHeaders applies the policy that keeps generated content from
 // reaching back into the workspace it was generated in, and from being
 // mistaken for something this daemon vouches for.
-func setArtifactHeaders(w http.ResponseWriter, path string) {
-	w.Header().Set("Content-Security-Policy", csp)
+//
+// passwordRead says the request was authorised by the artifact's password,
+// which it presented itself. The page is opaque (see sandbox), so everything
+// it loads of its own is a cross-origin request: a same-origin resource policy
+// cancelled its stylesheet, script and image, and its fetch of its own data
+// needed Access-Control-Allow-Origin. Whoever holds the password can read the
+// file from anywhere already, so those answers go to any origin — without
+// credentials, since nothing here is read with one the browser attaches. What
+// is read on any other ground (a bearer header, or security switched off) is
+// not the requester's to share, and still answers this origin only: a page
+// elsewhere must not be able to embed it. The desktop window frames those at
+// an address of its own that answers the opaque page (cmd/aos-desktop's
+// artifactFrames).
+func setArtifactHeaders(w http.ResponseWriter, path, connectTo string, passwordRead bool) {
+	w.Header().Set("Content-Security-Policy", csp(connectTo))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
+	if passwordRead {
+		w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	} else {
+		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
+	}
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	if ct := mime.TypeByExtension(filepath.Ext(path)); ct != "" {
 		w.Header().Set("Content-Type", ct)

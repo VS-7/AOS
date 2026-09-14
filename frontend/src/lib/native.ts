@@ -32,6 +32,29 @@ import {
  */
 export const RELOAD_EVENT = "aos:reload";
 
+/**
+ * What the page answers RELOAD_EVENT with before it reloads itself. The window
+ * reloads itself when this does not arrive — see cmd/aos-desktop's pageReload.
+ */
+export const RELOAD_ACK_EVENT = "aos:reload-ack";
+
+/**
+ * The page's side of the menu's Reload: say it was heard, then reload.
+ *
+ * Said first, while the bridge is still there to carry it; a reload that went
+ * first would take the acknowledgement down with the page, and the window
+ * would reload a second time at the URL it was opened with. A bridge that
+ * cannot carry it changes nothing here: the page reloads either way.
+ */
+async function acknowledgeAndReload(): Promise<void> {
+  try {
+    await Events.Emit(RELOAD_ACK_EVENT);
+  } catch {
+    // The window will reload itself as well, which is still a reload.
+  }
+  reloadHere();
+}
+
 const WAILSVC_PKG = "github.com/OWNER/aos/internal/transport/wailsvc";
 
 export { isDesktopWindow };
@@ -66,9 +89,9 @@ export function installNativeBridge(): void {
   installExternalLinkHandler();
   installClipboardFallback();
 
-  // Reload keeps the window's parameters only when the page does it; the
-  // webview's own reload re-runs the bundle at the URL the router left behind.
-  Events.On(RELOAD_EVENT, () => reloadHere());
+  // Reload keeps the window's route and parameters when the page does it; the
+  // window only reloads itself for a page that never got this far.
+  Events.On(RELOAD_EVENT, () => void acknowledgeAndReload());
 
   window.aos = {
     instructions: {
