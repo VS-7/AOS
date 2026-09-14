@@ -238,6 +238,11 @@ func errWorktreeNoRepository(id string, source WorktreeSource) error {
 // and when it is a repository the workspace only sits inside, such as a home
 // directory under version control, it is named, because the fix may be to
 // give the workspace a repository of its own instead.
+//
+// Each case is one whole chain from apperr.New to its CTA: the error catalog
+// is read from the source, and a CTA attached to a builder held in a variable
+// is one it cannot see, so the refusal was catalogued as a 409 with nothing to
+// do about it.
 func errWorktreeBaseMissing(id, base string, source WorktreeSource) error {
 	named := base
 	if named == "" {
@@ -247,26 +252,32 @@ func errWorktreeBaseMissing(id, base string, source WorktreeSource) error {
 	if repo == "" {
 		repo = source.Dir
 	}
-	e := apperr.New("TASK_WORKTREE_BASE_MISSING").
-		Causer("task.Service.Branch").
-		Issue("task", id).
-		Issue("base", named).
-		Issue("workspace", source.Dir).
-		Status(apperr.StatusConflict)
 	commitOnce := apperr.CallToAction{
 		Label:   "commit once on " + named + " in " + repo + ", then branch again",
 		Command: "git -C " + strconv.Quote(repo) + " commit --allow-empty -m \"Start the workspace\"",
 	}
 	if source.Own || source.Toplevel == "" {
-		return e.Msgf("there is no commit on %q to cut the task's branch from", named).
+		return apperr.New("TASK_WORKTREE_BASE_MISSING").
+			Causer("task.Service.Branch").
+			Msgf("there is no commit on %q to cut the task's branch from", named).
+			Issue("task", id).
+			Issue("base", named).
+			Issue("workspace", source.Dir).
+			Status(apperr.StatusConflict).
 			CTA(commitOnce, apperr.CallToAction{
 				Label: "or branch again naming a base that exists",
 				Tool:  "tasks_branch",
 				Input: map[string]any{"id": id},
 			})
 	}
-	return e.Issue("enclosingRepository", source.Toplevel).
+	return apperr.New("TASK_WORKTREE_BASE_MISSING").
+		Causer("task.Service.Branch").
 		Msgf("the workspace at %s is a folder of the repository at %s, and there is no commit on %q there to cut the task's branch from", source.Dir, source.Toplevel, named).
+		Issue("task", id).
+		Issue("base", named).
+		Issue("workspace", source.Dir).
+		Issue("enclosingRepository", source.Toplevel).
+		Status(apperr.StatusConflict).
 		CTA(apperr.CallToAction{
 			Label:   "give the workspace a repository of its own and commit once, then branch again",
 			Command: "git -C " + strconv.Quote(source.Dir) + " init && git -C " + strconv.Quote(source.Dir) + " commit --allow-empty -m \"Start the workspace\"",
