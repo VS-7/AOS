@@ -95,5 +95,5 @@ func errDueAtInvalid(causer, raw string) error {
 		Msgf("%q is not an RFC3339 instant", raw).
 		Issue("dueAt", raw).
 		Status(apperr.StatusBadRequest).
-		CTA(apperr.CallToAction{Label: "send an RFC3339 instant such as 2026-09-20T00:00:00Z, or an empty string to clear the deadline"})
+		CTA(apperr.CallToAction{Label: "send an RFC3339 instant such as 2026-09-20T00:00:00Z, or an empty string for no deadline"})
 }
