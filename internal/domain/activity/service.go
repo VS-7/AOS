@@ -150,7 +150,7 @@ func (s *Service) List(ctx context.Context, in ListInput) (ListOutput, error) {
 	}
 	viewer := s.viewer(ctx, in.Actor)
 
-	matched := make([]Activity, 0, len(entries))
+	matched := make([]Entry, 0, len(entries))
 	unread := 0
 	for _, a := range entries {
 		if in.Namespace != "" && !strings.EqualFold(in.Namespace, a.Namespace) {
@@ -166,7 +166,7 @@ func (s *Service) List(ctx context.Context, in ListInput) (ListOutput, error) {
 		if in.Unread && seen {
 			continue
 		}
-		matched = append(matched, a)
+		matched = append(matched, Entry{Activity: a, Read: seen})
 	}
 
 	// Newest first: an inbox is read from the top.

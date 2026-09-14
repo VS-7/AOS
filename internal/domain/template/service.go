@@ -7,6 +7,7 @@ import (
 
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/command"
+	"github.com/OWNER/aos/internal/core/slug"
 )
 
 // Service is the template aggregate: persistence (List, Get, Create, Update,
@@ -106,10 +107,11 @@ func (s *Service) Get(ctx context.Context, in GetInput) (*Template, error) {
 }
 
 // CreateInput composes a new template. Content is validated as Liquid before
-// anything is written — see validateContent.
+// anything is written — see validateContent. ID is optional: left empty, it
+// is the slug of Name, the same derivation instructions_create uses.
 type CreateInput struct {
-	ID          string     `json:"id" jsonschema:"Identifier for the template. Also its file name: lowercase, digits, hyphen and underscore only." validate:"required,notblank"`
-	Name        string     `json:"name" jsonschema:"Human name of the template." validate:"required,notblank"`
+	ID          string     `json:"id,omitempty" jsonschema:"Identifier for the template. Also its file name: lowercase, digits, hyphen and underscore only. Derived from Name when omitted."`
+	Name        string     `json:"name" jsonschema:"Human name of the template. The id is derived from it when none is given." validate:"required,notblank"`
 	Description string     `json:"description,omitempty" jsonschema:"What this template produces and when to use it."`
 	Skill       string     `json:"skill,omitempty" jsonschema:"The skill this template ships with, when Scope is skill."`
 	Variables   []Variable `json:"variables,omitempty" jsonschema:"The variables this template's body expects."`
@@ -122,13 +124,24 @@ type CreateInput struct {
 // Create validates Content as Liquid before writing anything — a broken
 // template is refused here, never the thing an agent discovers by rendering
 // it later.
+//
+// The id is the slug of Name when none is given: the settings screen asks for
+// a name, as a person would, and every create it sent was refused for the id
+// it never collected. An id already taken is a conflict to rename around,
+// not a write failure.
 func (s *Service) Create(ctx context.Context, in CreateInput) (*Template, error) {
 	id := strings.TrimSpace(in.ID)
+	if id == "" {
+		id = slug.Generate(in.Name)
+	}
 	if id == "" {
 		return nil, errIDRequired()
 	}
 	if err := s.validateContent(id, in.Content); err != nil {
 		return nil, err
+	}
+	if _, err := s.repo.Get(ctx, collections.Key{"id": id}); err == nil {
+		return nil, errAlreadyExists(id)
 	}
 
 	now := s.clock.Now()

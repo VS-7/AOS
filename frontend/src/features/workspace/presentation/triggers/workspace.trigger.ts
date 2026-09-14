@@ -13,13 +13,16 @@ export const workspaceGroup = AosTriggerGroup.create("Workspaces")
   .withOrder(6)
   .withLoader(async ({ stores }) => {
     const options: WorkspaceContext[] = stores.workspace.state.options;
+    // A workspace carries no `active` flag of its own; the one this window
+    // addresses is the store's `current`, so that is what gets the check.
+    const currentId: string | undefined = stores.workspace.state.current?.id;
 
     return options.map((workspace: WorkspaceContext) => ({
       id: `workspace.switch.${workspace.id}`,
-      label: `Switch to ${workspace.name}`,
+      label: t("Switch to {{name}}", { name: workspace.name }),
       icon: "RotateCw",
       group: "Workspaces",
-      metadata: { active: workspace.active },
+      metadata: { active: workspace.id === currentId },
       handler: async ({ stores }) => {
         const result = await stores.workspace.actions.switch(workspace.id);
         if (result.error) {

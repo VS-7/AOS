@@ -6,7 +6,7 @@ import { String } from "@/core/helpers/string";
 export const artifactGroup = AosTriggerGroup.create("Artifacts")
   .withOrder(6)
   .withLoader(({ query, stores }) => {
-    const artifacts: ArtifactListItem[] = stores.artifacts.state.items;
+    const artifacts: ArtifactListItem[] = stores.artifact.state.items;
 
     const items = !query
       ? artifacts

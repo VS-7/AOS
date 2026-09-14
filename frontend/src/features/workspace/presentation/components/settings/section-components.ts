@@ -1,6 +1,5 @@
-import * as React from "react";
+import type * as React from "react";
 import type { SettingsSectionId } from "./constants";
-import { DormantGate } from "@/components/DormantDomain";
 import { UserGeneralSection } from "./components/sections/user/general";
 import { UserAgentsSection } from "./components/sections/user/agents";
 import { UserAppearanceSection } from "./components/sections/user/appearance";
@@ -20,41 +19,12 @@ import { WorkspaceGitSection } from "./components/sections/workspace/git";
 import { WorkspaceWorktreesSection } from "./components/sections/workspace/worktrees";
 
 /**
- * Task 10: four settings sections surface a domain `lib/command-map.ts`
- * marks dormant (`DORMANT_DOMAINS`) — `/settings/$group/$section` is one
- * route shared by every section (`SettingsSectionPage`, `../($group)/
- * ($section)/index.tsx`), so there is no single route to wrap for these;
- * gating the leaf component here, before it ever mounts (and so before it
- * runs its own dormant `client.*` calls), has the same effect. `<Suspense
- * fallback>`-free: `DormantGate` renders synchronously, no data fetch of
- * its own.
+ * No section here is gated on a dormant domain any more. Every domain these
+ * screens read is published; where a section depends on calls that are not
+ * (Members' membership calls, Users' account writes), the section says so in
+ * its own words instead of the generic "Domain not available yet" panel,
+ * which spoke about the Go backend to whoever was using the app.
  */
-function dormant(feature: string, Section: React.ComponentType): React.ComponentType {
-  // `React.createElement`, not JSX: this file is `.ts` (matching the
-  // pristine original, which has no reason for JSX — AOS's own
-  // backend has no dormant domains), and `.ts` files cannot contain JSX
-  // syntax regardless of the `jsx` compiler option.
-  return function DormantSection() {
-    return React.createElement(DormantGate, { feature, children: React.createElement(Section) });
-  };
-}
-
-/**
- * C6 of the final review: `WorkspaceMembersSection` isn't in a dormant
- * *domain* the way the four `dormant(...)`-wrapped sections below are —
- * `workspace.create`/`.update`/`.list` are real — but every command this
- * one section actually calls is individually `null`
- * (`workspace.addMember`/`.listMembers`/`.removeMember`/`.updateMember`,
- * `user.list`). Ungated, it rendered a functional-looking member form that
- * silently no-op'd on every action. `DormantGate`'s `commands` prop (added
- * for exactly this) gates on those five paths instead of the domain.
- */
-function dormantCommands(feature: string, commands: string[], Section: React.ComponentType): React.ComponentType {
-  return function DormantSection() {
-    return React.createElement(DormantGate, { feature, commands, children: React.createElement(Section) });
-  };
-}
-
 /**
  * Map of settings section ids to their page components.
  * Kept as a single source of truth for the settings shell and routes.
@@ -68,29 +38,21 @@ export const SETTINGS_SECTION_COMPONENTS: Record<
   "user.appearance": UserAppearanceSection,
   "user.profile": UserProfileSection,
   "user.developers": UserDevelopersSection,
-  "user.users": dormant("user", UserUsersSection),
+  // Ungated: the roster is readable, and the section itself says what cannot
+  // be done from it (see its own doc comment). `tunnel` was never dormant.
+  "user.users": UserUsersSection,
   "user.updates": UserUpdatesSection,
-  "user.tunnel": dormant("tunnel", WorkspaceTunnelSection),
+  "user.tunnel": WorkspaceTunnelSection,
   "workspace.profile": WorkspaceProfileSection,
-  // The four membership calls, and not `user.list`.
-  //
-  // `user.list` was in this list, and the gate only fires when *every* listed
-  // path is dormant — so the day `user.list` was lit up against the identity
-  // HTTP surface, this gate silently stopped firing and the section began
-  // rendering a member form over four commands that do nothing. That is the
-  // "Members shows an empty list forever" defect.
-  //
-  // `user.list` is not what this section is for: it fills the picker in the
-  // add-member dialog. The four that decide whether the section can work at
-  // all are the ones gating it.
-  "workspace.members": dormantCommands(
-    "workspace",
-    ["workspace.addMember", "workspace.listMembers", "workspace.removeMember", "workspace.updateMember"],
-    WorkspaceMembersSection,
-  ),
+  // Ungated. The section renders its own "membership is not available in this
+  // build yet" state from the four dormant membership calls, in words meant
+  // for whoever uses it; the gate pre-empted that with a panel about the Go
+  // backend, assembled from fragments that read "O workspace a interface já
+  // existe" in Portuguese.
+  "workspace.members": WorkspaceMembersSection,
   "workspace.agents": WorkspaceAgentsSection,
-  "workspace.instructions": dormant("instruction", WorkspaceInstructionsSection),
-  "workspace.templates": dormant("template", WorkspaceTemplatesSection),
+  "workspace.instructions": WorkspaceInstructionsSection,
+  "workspace.templates": WorkspaceTemplatesSection,
   "workspace.tasks": WorkspaceTasksSection,
   "workspace.git": WorkspaceGitSection,
   "workspace.worktrees": WorkspaceWorktreesSection,

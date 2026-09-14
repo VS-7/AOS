@@ -59,15 +59,25 @@ function apiKeyAuth(opts: {
   };
 }
 
+/**
+ * A provider whose credential is another tool's login file.
+ *
+ * There is no key to enter. This used to offer a "Key (optional override)"
+ * that none of the three adapters reads — `openai.newCodex` replaces the
+ * client's auth with the token file, `google` always uses the Gemini CLI
+ * store, and `antigravity` accepts `APIKey` and ignores it on purpose — so a
+ * key typed there was saved, ignored, and the connection still failed for
+ * want of the login.
+ */
 function oauthFileAuth(path: string, tool: string): ModelProvider["auth"] {
   return {
     mode: "oauth-file",
     connectionType: "local",
-    label: "Key (optional override)",
+    label: "",
     placeholder: "",
-    description: `Uses the ${tool} login already on this machine (${path}) — nothing to enter here unless you want to override it with an API key.`,
+    description: "Uses the {{tool}} login already on this machine ({{path}}). There is nothing to enter here: sign in with {{tool}} first, then connect.",
     required: false,
-    masked: true,
+    login: { tool, path },
   };
 }
 
@@ -156,6 +166,9 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     name: "Gemini (CLI login)",
     description:
       "Retired. Google shut the Gemini CLI down for personal accounts on 18 June 2026 — use Antigravity below instead.",
+    // Kept so an installation that already has it can see it and disconnect
+    // it; the Connect menu no longer offers it as if it still worked.
+    retired: true,
     logo: { light: "", dark: "" },
     default: false,
     auth: oauthFileAuth("~/.gemini/oauth_creds.json", "Gemini CLI"),

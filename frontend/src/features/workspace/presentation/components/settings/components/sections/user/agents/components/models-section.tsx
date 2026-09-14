@@ -4,7 +4,6 @@ import * as React from "react";
 
 import {
   AgentModelSelect,
-  type AgentModelReasoning,
   type AgentModelSelectProvider,
   type AgentModelSelectValue,
 } from "@/components/ui/agent-model-select";
@@ -12,44 +11,66 @@ import type { ModelProvider } from "@/features/model/interfaces/model.interfaces
 import { t } from "@/lib/i18n";
 import { useProviderLogo } from "../hooks/use-provider-logo";
 import { unlistedModel } from "./unlisted-model";
+import { SLOT_KEYS, type SlotKey } from "../hooks/use-model-slots";
 
-type SlotKey = "default" | "subconscious" | "realtime" | "voice" | "image" | "video";
+type Capability = "fast" | "reasoning" | "vision" | "realtime" | "voice" | "image" | "video";
 
-const SLOT_META: Record<
-  SlotKey,
-  { title: string; description: string; capability: "fast" | "reasoning" | "vision" | "realtime" | "voice" | "image" | "video" }
-> = {
-  default: {
-    title: "Default",
-    description: "The agent's core reasoning — used for every task.",
-    capability: "fast",
-  },
-  subconscious: {
-    title: "Subconscious",
-    description: "Background work: context compaction and memory dreaming.",
-    capability: "fast",
-  },
-  realtime: {
-    title: "Realtime",
-    description: "Live voice and streaming sessions with the agent.",
-    capability: "realtime",
-  },
-  voice: {
-    title: "Voice",
-    description: "Outbound voice messages from the agent to the user.",
-    capability: "voice",
-  },
-  image: {
-    title: "Image",
-    description: "Image generation from text prompts with the agent.",
-    capability: "image",
-  },
-  video: {
-    title: "Video",
-    description: "Video generation from text prompts with the agent.",
-    capability: "video",
-  },
-};
+/**
+ * What each slot is for. Built at render, not at module load, so the words
+ * follow the interface's language.
+ *
+ * `reasoning` marks the slots whose model is asked to think — the ones the
+ * runtime reads a reasoning level for. The control used to wait for a model
+ * to declare a reasoning capability, which nothing populates on purpose
+ * (`discovered-models.ts`), so it never appeared at all.
+ */
+function slotMeta(): Record<SlotKey, { title: string; description: string; capability: Capability; reasoning: boolean; empty: string }> {
+  const noneFor = (what: string) => t("No connected provider supports {{capability}} yet.", { capability: what });
+  return {
+    default: {
+      title: t("Default"),
+      description: t("The agent's core reasoning — used for every task."),
+      capability: "fast",
+      reasoning: true,
+      empty: t("No providers connected yet."),
+    },
+    subconscious: {
+      title: t("Subconscious"),
+      description: t("Background work: context compaction and memory dreaming."),
+      capability: "fast",
+      reasoning: true,
+      empty: t("No providers connected yet."),
+    },
+    realtime: {
+      title: t("Realtime"),
+      description: t("Live voice and streaming sessions with the agent."),
+      capability: "realtime",
+      reasoning: false,
+      empty: noneFor(t("realtime sessions")),
+    },
+    voice: {
+      title: t("Voice"),
+      description: t("Outbound voice messages from the agent to the user."),
+      capability: "voice",
+      reasoning: false,
+      empty: noneFor(t("voice")),
+    },
+    image: {
+      title: t("Image"),
+      description: t("Image generation from text prompts with the agent."),
+      capability: "image",
+      reasoning: false,
+      empty: noneFor(t("image generation")),
+    },
+    video: {
+      title: t("Video"),
+      description: t("Video generation from text prompts with the agent."),
+      capability: "video",
+      reasoning: false,
+      empty: noneFor(t("video generation")),
+    },
+  };
+}
 
 interface ModelsSectionProps {
   providers: ModelProvider[];
@@ -59,7 +80,7 @@ interface ModelsSectionProps {
 
 function modelHasCapability(
   model: ModelProvider["models"][number],
-  capability: "fast" | "reasoning" | "vision" | "realtime" | "voice" | "image" | "video",
+  capability: Capability,
 ): boolean {
   if (capability === "fast") return true;
   if (capability === "vision") return !!model.capabilities?.vision;
@@ -73,7 +94,7 @@ function modelHasCapability(
 
 function toSelectProviders(
   providers: ModelProvider[],
-  capability: "fast" | "reasoning" | "vision" | "realtime" | "voice" | "image" | "video",
+  capability: Capability,
 ): AgentModelSelectProvider[] {
   return providers
     .filter((p) => p.configured)
@@ -102,7 +123,7 @@ function ProviderLogo({ provider }: { provider: ModelProvider }) {
   return (
     <img
       src={src}
-      alt={`${provider.name} logo`}
+      alt={t("{{provider}} logo", { provider: provider.name })}
       className="size-3.5 shrink-0 rounded"
     />
   );
@@ -141,19 +162,12 @@ function resolveSlotValue(
 }
 
 export function ModelsSection({ providers, value, onChange }: ModelsSectionProps) {
+  const meta = slotMeta();
   return (
     <div className="rounded-xl border border-border bg-secondary/50 overflow-hidden divide-y divide-border">
-      {(Object.keys(SLOT_META) as SlotKey[]).map((slot) => {
-        const meta = SLOT_META[slot];
-        const selectProviders = toSelectProviders(providers, meta.capability);
+      {SLOT_KEYS.map((slot) => {
+        const selectProviders = toSelectProviders(providers, meta[slot].capability);
         const current = resolveSlotValue(providers, value[slot]);
-
-        const currentModel = providers
-          .find((p) => p.id === current.provider)
-          ?.models.find((m) => m.id === current.model);
-        const hasReasoning =
-          meta.capability === "reasoning" ||
-          currentModel?.capabilities?.reasoning === true;
         const unlisted = unlistedModel(providers, current);
         const providerName = providers.find((p) => p.id === current.provider)?.name ?? current.provider;
 
@@ -163,9 +177,9 @@ export function ModelsSection({ providers, value, onChange }: ModelsSectionProps
             className="flex items-center gap-3 p-4 min-h-16"
           >
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium leading-tight">{meta.title}</p>
+              <p className="text-sm font-medium leading-tight">{meta[slot].title}</p>
               <p className="text-xs text-muted-foreground leading-tight">
-                {meta.description}
+                {meta[slot].description}
               </p>
               {unlisted ? (
                 <p className="mt-1 text-xs leading-tight text-destructive" role="alert">
@@ -181,7 +195,8 @@ export function ModelsSection({ providers, value, onChange }: ModelsSectionProps
                 providers={selectProviders}
                 value={current}
                 onChange={(next: AgentModelSelectValue) => onChange(slot, next)}
-                showReasoning={hasReasoning}
+                showReasoning={meta[slot].reasoning && !!current.model}
+                emptyLabel={meta[slot].empty}
               />
             </div>
           </div>
@@ -191,9 +206,4 @@ export function ModelsSection({ providers, value, onChange }: ModelsSectionProps
   );
 }
 
-export type { SlotKey };
 export type ModelsValue = Partial<Record<SlotKey, AgentModelSelectValue>>;
-
-export function emptyModelsValue(): ModelsValue {
-  return {};
-}

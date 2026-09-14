@@ -13,7 +13,15 @@ import { WorkspaceGate } from "@/features/workspace/WorkspaceGate";
 import { useRealtime } from "@/lib/realtime";
 import { t } from "@/lib/i18n";
 import { router } from "@/app/router";
+import { aos } from "@/app/aos";
+import { ThemeProvider } from "@/components/ui/theme-provider";
 import { I18nProvider, useTranslation } from "@/lib/i18n";
+
+// The theme is applied above the router (see the ThemeProvider below), and the
+// router's root loader is what initialises every store — too late for the
+// sign-in screens drawn before it. The theme store has no preload, so this
+// reads the persisted appearance synchronously, before the first render.
+void aos.stores.theme.init();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -165,13 +173,17 @@ export function App(): JSX.Element {
           <div className="bg-background text-foreground text-xs min-h-screen">
             <Toaster position="top-center" />
             <TooltipProvider>
-              <Localized>
-                <AuthGate>
-                  <WorkspaceGate>
-                    <RouterProvider router={router} />
-                  </WorkspaceGate>
-                </AuthGate>
-              </Localized>
+              {/* Above AuthGate, so Login and Onboarding are drawn in the
+                  person's theme rather than on tokens.css's dark defaults. */}
+              <ThemeProvider>
+                <Localized>
+                  <AuthGate>
+                    <WorkspaceGate>
+                      <RouterProvider router={router} />
+                    </WorkspaceGate>
+                  </AuthGate>
+                </Localized>
+              </ThemeProvider>
             </TooltipProvider>
           </div>
         </AppStateProvider>

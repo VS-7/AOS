@@ -69,7 +69,7 @@ export const LoginPage = aos.page("/login")
         <PageBody className="h-screen">
           <div className="flex h-screen w-full flex-col items-center justify-center p-8">
             <div className="flex w-full max-w-[400px] flex-col items-center gap-8 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full text-primary-foreground shadow-sm">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full text-foreground shadow-sm">
                 <Logo className="h-10 w-10" />
               </div>
 

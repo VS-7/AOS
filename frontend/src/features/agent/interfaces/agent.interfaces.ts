@@ -31,6 +31,19 @@ export const AgentChannelSchema = z.object({
     .describe("Provider-specific configuration payload for the channel."),
 });
 
+/** Go's `agent.Sandbox`: what an agent may reach (ADR-0006). */
+export const AgentSandboxSchema = z.object({
+  permissions: z.array(z.string()).optional(),
+  exec: z
+    .object({
+      policy: z.string().optional(),
+      allow: z.array(z.string()).optional(),
+      denyArgs: z.array(z.string()).optional(),
+      allowShell: z.boolean().optional(),
+    })
+    .optional(),
+});
+
 /**
  * AgentSchema: Primary schema for a AOS Agent record.
  * @description Defines the complete structure of a AOS Agent, including its identity, AI configuration, and system instructions.
@@ -115,6 +128,21 @@ export const AgentSchema = z.object({
     .describe(
       "Marks the agent as the workspace orchestrator fallback for non-direct chats without explicit mentions.",
     ),
+
+  // The fields below are on Go's `agent.Agent` and were never declared here,
+  // so the settings screen could not show an agent's reasoning level or what
+  // it may reach, and could not tell a changed record from an unchanged one.
+  reasoning: z
+    .string()
+    .optional()
+    .describe("How hard this agent thinks: none, low, medium or high. Empty means the installation's setting."),
+
+  sandbox: AgentSandboxSchema.optional().describe("Filesystem and execution policy for this agent."),
+
+  createdAt: z.string().optional(),
+
+  /** When the record last changed: how a refresh tells an edit elsewhere from nothing new. */
+  updatedAt: z.string().optional(),
 });
 
 /**

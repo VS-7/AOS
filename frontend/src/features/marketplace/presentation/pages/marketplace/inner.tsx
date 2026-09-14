@@ -1,8 +1,10 @@
 import * as React from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 
-import type { MarketplaceSkillListing } from "@/features/marketplace/interfaces/marketplace.interfaces";
-import type { Skill } from "@/features/skill/interfaces/skill.interfaces";
+import type {
+  InstalledSkillRecord,
+  MarketplaceSkillListing,
+} from "@/features/marketplace/interfaces/marketplace.interfaces";
 import {
   MarketplaceSidebar,
   type MarketplaceSidebarView,
@@ -10,115 +12,154 @@ import {
 import { MarketplaceSearch } from "@/features/marketplace/presentation/components/marketplace-search.component";
 import { MarketplaceShell } from "@/features/marketplace/presentation/components/marketplace-shell.component";
 import { PluginSection } from "@/features/marketplace/presentation/components/plugin-section.component";
-import { t } from "@/lib/i18n";
+import { MarketplaceUnavailable } from "@/features/marketplace/presentation/components/marketplace-unavailable.component";
+import { useTranslation } from "@/lib/i18n";
 import {
   MARKETPLACE_ALLOWED_CATEGORIES,
   MARKETPLACE_FEATURED_SECTION_ID,
   MARKETPLACE_INSTALLED_SECTION_ID,
 } from "@/features/marketplace/presentation/consts/marketplace";
 import {
+  MARKETPLACE_OTHER_CATEGORY,
   filterListings,
   groupListingsByCategory,
+  listingForInstalled,
   marketplaceSectionId,
-  mergeListingsWithInstalled,
   pickFeaturedListings,
-  resolveInstalledListing,
 } from "@/features/marketplace/presentation/helpers/marketplace.helper";
+import type { MarketplaceLoadError } from "./index";
 
 interface MarketplacePageInnerProps {
   marketplacePlugins: MarketplaceSkillListing[];
-  installedPlugins: Skill[];
+  installedPlugins: InstalledSkillRecord[];
+  marketplaceError: MarketplaceLoadError | null;
+  installedError: MarketplaceLoadError | null;
   search: {
     category?: string;
     query?: string;
   };
 }
 
+function matchesInstalled(listing: MarketplaceSkillListing, query: string): boolean {
+  if (!query) return true;
+  return [listing.name, listing.displayName, listing.description].join(" ").toLowerCase().includes(query);
+}
+
 export function MarketplacePageInner({
   marketplacePlugins,
   installedPlugins,
+  marketplaceError,
+  installedError,
   search,
 }: MarketplacePageInnerProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [activeView, setActiveView] =
     React.useState<MarketplaceSidebarView>("marketplace");
   const [searchQuery, setSearchQuery] = React.useState(search.query ?? "");
+  const trimmedQuery = searchQuery.trim();
 
+  // The query the box and the address last agreed on. Each side below only
+  // acts on a change of its own; comparing each against the other's latest
+  // value instead made them chase each other the moment both changed at once.
+  const lastSynced = React.useRef(search.query ?? "");
+
+  // The address is the source of truth for the query: a link to /marketplace
+  // (the sidebar, Clear filters) resets what the box holds. It used to be
+  // local state seeded once, so clearing the URL left the old search on
+  // screen, "0 results for …" included.
   React.useEffect(() => {
+    const query = search.query ?? "";
+    lastSynced.current = query;
+    setSearchQuery((current) => (current.trim() === query ? current : query));
+  }, [search.query]);
+
+  // …and the box writes to the address only when it says something new. This
+  // navigated on mount too, which dropped ?category= before it could apply
+  // and re-ran the loader, so every visit searched every registry twice.
+  React.useEffect(() => {
+    if (trimmedQuery === lastSynced.current) return;
+    lastSynced.current = trimmedQuery;
     void navigate({
       to: "/marketplace",
       search: (prev: { category?: string; query?: string }) => ({
         ...prev,
-        query: searchQuery.trim() || undefined,
+        query: trimmedQuery || undefined,
+      }),
+      replace: true,
+    });
+  }, [trimmedQuery, navigate]);
+
+  // Through the address only: the effect above then empties the box, so the
+  // two cannot disagree and the loader runs once.
+  const clearFilters = () => {
+    void navigate({
+      to: "/marketplace",
+      search: (prev: { category?: string; query?: string }) => ({
+        ...prev,
+        query: undefined,
         category: undefined,
       }),
     });
-  }, [searchQuery, navigate]);
+  };
 
-  const isFiltered = Boolean(searchQuery.trim() || search.category);
+  const isFiltered = Boolean(trimmedQuery || search.category);
+  const normalizedQuery = trimmedQuery.toLowerCase();
+
+  const installedListings = React.useMemo(
+    () => installedPlugins.map((skill) => listingForInstalled(skill, marketplacePlugins)),
+    [installedPlugins, marketplacePlugins],
+  );
 
   const filteredMarketplace = filterListings(marketplacePlugins, {
     query: searchQuery,
     category: search.category,
   });
 
-  const listings = isFiltered
-    ? mergeListingsWithInstalled(
-        filteredMarketplace,
-        installedPlugins,
-        marketplacePlugins,
-        searchQuery,
-      )
-    : filteredMarketplace;
+  // A search also finds what is installed and not in any registry.
+  const listings = React.useMemo(() => {
+    if (!isFiltered) return filteredMarketplace;
+    const byName = new Map(filteredMarketplace.map((listing) => [listing.name, listing]));
+    for (const listing of installedListings) {
+      if (byName.has(listing.name)) continue;
+      if (search.category && listing.category !== search.category) continue;
+      if (!matchesInstalled(listing, normalizedQuery)) continue;
+      byName.set(listing.name, listing);
+    }
+    return [...byName.values()];
+  }, [filteredMarketplace, installedListings, isFiltered, normalizedQuery, search.category]);
 
-  const featured = pickFeaturedListings(
-    isFiltered ? listings : marketplacePlugins,
-  );
-  const featuredNames = React.useMemo(
-    () => new Set(featured.map((listing) => listing.name)),
-    [featured],
-  );
+  const featured = pickFeaturedListings(listings);
+  const featuredNames = new Set(featured.map((listing) => listing.name));
   const grouped = groupListingsByCategory(listings);
-  const categorySections = MARKETPLACE_ALLOWED_CATEGORIES.map(
-    (categoryName) => ({
+  // "Other" is a section like the rest: it used to be counted in "1 result"
+  // and never drawn, leaving the count above an empty page.
+  const categorySections = [...MARKETPLACE_ALLOWED_CATEGORIES, MARKETPLACE_OTHER_CATEGORY]
+    .map((categoryName) => ({
       id: marketplaceSectionId(categoryName),
-      title: categoryName,
+      title: t(categoryName),
       listings: (grouped[categoryName] ?? []).filter(
         (listing) => !featuredNames.has(listing.name),
       ),
-    }),
-  ).filter((section) => section.listings.length > 0);
+    }))
+    .filter((section) => section.listings.length > 0);
 
-  const filteredInstalledListings = (
-    searchQuery.trim()
-      ? installedPlugins.filter((plugin) => {
-          const query = searchQuery.toLowerCase();
-          return (
-            plugin.id.toLowerCase().includes(query) ||
-            plugin.name.toLowerCase().includes(query) ||
-            plugin.description.toLowerCase().includes(query)
-          );
-        })
-      : installedPlugins
-  ).map((plugin) =>
-    resolveInstalledListing(
-      plugin.id,
-      plugin.description,
-      marketplacePlugins,
-    ),
+  const filteredInstalledListings = installedListings.filter((listing) =>
+    matchesInstalled(listing, normalizedQuery),
   );
 
   const installedNames = React.useMemo(
     () =>
-      new Set(
-        installedPlugins.flatMap((plugin) => [plugin.id, plugin.name]),
-      ),
-    [installedPlugins],
+      new Set([
+        ...installedPlugins.flatMap((plugin) => [plugin.id, plugin.name, plugin.source ?? ""]),
+        ...installedListings.map((listing) => listing.name),
+      ].filter(Boolean)),
+    [installedPlugins, installedListings],
   );
 
   const sidebarLinks = [
     ...(featured.length > 0
-      ? [{ id: MARKETPLACE_FEATURED_SECTION_ID, label: "Featured Plugins" }]
+      ? [{ id: MARKETPLACE_FEATURED_SECTION_ID, label: t("Featured Plugins") }]
       : []),
     ...categorySections.map((section) => ({
       id: section.id,
@@ -132,11 +173,30 @@ export function MarketplacePageInner({
     target.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  // What is actually drawn below: with no registry to search, only the
+  // installed plugins are.
+  const shownCount =
+    activeView === "installed" || marketplaceError ? filteredInstalledListings.length : listings.length;
+  let summary = shownCount === 1 ? t("1 result") : t("{{count}} results", { count: shownCount });
+  if (trimmedQuery) summary = t("{{summary}} for “{{query}}”", { summary, query: trimmedQuery });
+  if (search.category) summary = t("{{summary}} in {{category}}", { summary, category: t(search.category) });
+
+  const installedSection =
+    filteredInstalledListings.length > 0 ? (
+      <PluginSection
+        id={MARKETPLACE_INSTALLED_SECTION_ID}
+        title={t("Installed Plugins")}
+        listings={filteredInstalledListings}
+        installedNames={installedNames}
+        previewLimit={filteredInstalledListings.length}
+      />
+    ) : null;
+
   return (
     <MarketplaceShell
       rail={
         <MarketplaceSidebar
-          links={sidebarLinks}
+          links={marketplaceError ? [] : sidebarLinks}
           activeView={activeView}
           installedCount={installedPlugins.length}
           onSelectView={setActiveView}
@@ -157,40 +217,37 @@ export function MarketplacePageInner({
 
       {isFiltered ? (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[13px] text-muted-foreground">
-            {listings.length} result{listings.length === 1 ? "" : "s"}
-            {searchQuery ? ` for “${searchQuery}”` : ""}
-            {search.category ? ` in ${search.category}` : ""}
-          </span>
-          <Link
-            to="/marketplace"
-            search={{}}
+          <span className="text-[13px] text-muted-foreground">{summary}</span>
+          <button
+            type="button"
+            onClick={clearFilters}
             className="text-[13px] font-medium text-foreground underline underline-offset-4"
           >
             {t("Clear filters")}
-          </Link>
+          </button>
         </div>
       ) : null}
 
       {activeView === "installed" ? (
-        filteredInstalledListings.length > 0 ? (
-          <PluginSection
-            id={MARKETPLACE_INSTALLED_SECTION_ID}
-            title={t("Installed Plugins")}
-            listings={filteredInstalledListings}
-            installedNames={installedNames}
-            previewLimit={filteredInstalledListings.length}
-          />
-        ) : (
+        installedError ? (
+          <MarketplaceUnavailable code={installedError.code} message={installedError.message} />
+        ) : installedSection ?? (
           <p className="text-sm text-muted-foreground">
-            {searchQuery.trim()
-              ? "No installed plugins matched your search."
-              : "No plugins installed yet. Browse the marketplace to install plugins."}
+            {trimmedQuery
+              ? t("No installed plugins matched your search.")
+              : t("No plugins installed yet. Browse the marketplace to install plugins.")}
           </p>
         )
+      ) : marketplaceError ? (
+        <>
+          <MarketplaceUnavailable code={marketplaceError.code} message={marketplaceError.message} />
+          {installedSection}
+        </>
       ) : listings.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          {t("No plugins matched your search. Try another query or browse all categories.")}
+          {isFiltered
+            ? t("No plugins matched your search. Try another query or browse all categories.")
+            : t("The configured registries list no plugins yet.")}
         </p>
       ) : (
         <>

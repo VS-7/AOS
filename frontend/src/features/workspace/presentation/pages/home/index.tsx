@@ -43,17 +43,14 @@ import { InboxPanel } from "../../components/panels/inbox";
 import { TaskListRow } from "@/features/task/presentation/pages/(main)/components/list/components/task-list-row.component";
 import { GoalListRow } from "@/features/goal/presentation/pages/(main)/components/list/components/goal-list-row.component";
 import { WelcomeDialog } from "../../components/dialogs/welcome/welcome-dialog";
-import { t } from "@/lib/i18n";
+import { useTranslation } from "@/lib/i18n";
 
-const TASK_TABS = TASK_STATUS_ORDER.map((status) => ({
-  status,
-  ...TASK_STATUS_CONFIG[status],
-}));
-
-const GOAL_TABS = GOAL_STATUS_ORDER.map((status) => ({
-  status,
-  ...GOAL_STATUS_CONFIG[status],
-}));
+/**
+ * How many view and artifact cards Home shows before "the rest is elsewhere".
+ * The rows wrap, so this bounds the height, not the width — they used to be
+ * one unwrapped flex row that pushed the whole column sideways past ~7 cards.
+ */
+const CARD_LIMIT = 12;
 
 export const HomePage = aos
   .page("/")
@@ -89,12 +86,41 @@ export const HomePage = aos
       projects,
       views,
       artifacts,
-      user: context.config.user,
     };
   })
   .withComponent(({ route }) => {
-    const { tasks, goals, projects, views, artifacts, user } = route.useLoaderData();
+    const { tasks, goals, projects, views, artifacts } = route.useLoaderData();
     const navigate = useNavigate();
+    const { t, locale } = useTranslation();
+    // Who is signed in — the session's account. `config.user` is an
+    // installation block nothing in the product writes, so the greeting read
+    // "Hello," and stopped.
+    const user = aos.stores.auth.useState((state) => state.user) as { name?: string; username?: string } | null;
+    const greetingName = user?.name?.trim() || user?.username?.trim() || "";
+
+    // Built at render, not at import: the status configs translate their
+    // labels through getters, and spreading them into a module constant froze
+    // them in whatever language the module happened to load in.
+    const taskTabs = TASK_STATUS_ORDER.map((status) => ({
+      status,
+      label: TASK_STATUS_CONFIG[status].label,
+      icon: TASK_STATUS_CONFIG[status].icon,
+    }));
+    const goalTabs = GOAL_STATUS_ORDER.map((status) => ({
+      status,
+      label: GOAL_STATUS_CONFIG[status].label,
+      icon: GOAL_STATUS_CONFIG[status].icon,
+    }));
+
+    // Most recently changed first, so the row shows what is being worked on
+    // rather than whatever order the directory listing came back in.
+    const recentArtifacts = useMemo(
+      () =>
+        [...artifacts]
+          .sort((a, b) => String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? "")))
+          .slice(0, CARD_LIMIT),
+      [artifacts],
+    );
     const [selectedStatus, setSelectedStatus] =
       useState<Task["status"]>("suggestion");
     const [selectedGoalStatus, setSelectedGoalStatus] =
@@ -140,13 +166,18 @@ export const HomePage = aos
     return (
       <Page>
         <PageBody className="overflow-hidden p-0">
-          <div className="grid h-full min-h-0 grid-cols-[1fr_auto]">
+          {/* minmax(0,1fr): a bare 1fr track never shrinks below its content's
+              min-content width, so the fixed-width column kept the track at
+              1024px and pushed the Activity panel past the window's edge at
+              any width under ~1710px. Below xl there is no room for both;
+              the panel is one click away in the top bar. */}
+          <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_auto]">
             <div className="mx-auto flex max-w-full w-5xl min-h-0 flex-col gap-6 overflow-y-auto px-6 py-8">
               <section className="space-y-6">
                 <div className="flex flex-wrap items-end justify-between gap-4">
                   <div className="space-y-2">
                     <p className="text-sm text-muted-foreground">
-                      {new Intl.DateTimeFormat("en-US", {
+                      {new Intl.DateTimeFormat(locale, {
                         weekday: "long",
                         day: "numeric",
                         month: "short",
@@ -155,16 +186,25 @@ export const HomePage = aos
                     </p>
 
                     <h1 className="text-xl font-semibold tracking-tight">
-                      <span className="text-muted-foreground">{t("Hello,")}</span>{" "}
-                      {user.name}
+                      {greetingName ? (
+                        <>
+                          <span className="text-muted-foreground">{t("Hello,")}</span>{" "}
+                          {greetingName}
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">{t("Hello")}</span>
+                      )}
                     </h1>
                   </div>
                 </div>
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex w-fit overflow-hidden rounded-md border bg-card backdrop-blur divide-x">
+                {/* The column is only as wide as the window leaves it now, so
+                    the tiles scroll within themselves and Create wraps below
+                    them rather than either being clipped. */}
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex w-fit min-w-0 max-w-full overflow-x-auto rounded-md border bg-card backdrop-blur divide-x">
                     {[
                       {
-                        label: "Tasks shipped",
+                        label: t("Tasks shipped"),
                         value: String(
                           tasks.filter((task) => task.status === "finished")
                             .length,
@@ -172,7 +212,7 @@ export const HomePage = aos
                         icon: CheckCircle2,
                       },
                       {
-                        label: "In progress",
+                        label: t("In progress"),
                         value: String(
                           tasks.filter((task) => task.status === "in_progress")
                             .length,
@@ -180,22 +220,22 @@ export const HomePage = aos
                         icon: CirclePlayIcon,
                       },
                       {
-                        label: "Views",
+                        label: t("Views"),
                         value: String(views.length),
                         icon: LayoutGrid,
                       },
                       {
-                        label: "Artifacts",
+                        label: t("Artifacts"),
                         value: String(artifacts.length),
                         icon: AppWindow,
                       },
                       {
-                        label: "Goals",
+                        label: t("Goals"),
                         value: String(goals.length),
                         icon: Flag,
                       },
                       {
-                        label: "Projects",
+                        label: t("Projects"),
                         value: String(projects.length),
                         icon: Folder,
                       },
@@ -205,13 +245,13 @@ export const HomePage = aos
                       return (
                         <div
                           key={metric.label}
-                          className="flex h-8 items-center gap-3 px-3"
+                          className="flex h-8 shrink-0 items-center gap-3 px-3"
                         >
                           <MetricIcon className="size-4" />
                           <div className="text-sm font-medium">
                             {metric.value}
                           </div>
-                          <div className="text-xs text-muted-foreground">
+                          <div className="whitespace-nowrap text-xs text-muted-foreground">
                             {metric.label}
                           </div>
                         </div>
@@ -244,22 +284,20 @@ export const HomePage = aos
                       <div className="grid gap-1">
                         {[
                           {
-                            label: "Task",
-                            description: "Capture work, bugs, or next actions.",
+                            label: t("Task"),
+                            description: t("Capture work, bugs, or next actions."),
                             icon: CheckCircle2,
                             action: "task" as const,
                           },
                           {
-                            label: "Goal",
-                            description:
-                              "Define an outcome to track over time.",
+                            label: t("Goal"),
+                            description: t("Define an outcome to track over time."),
                             icon: Flag,
                             action: "goal" as const,
                           },
                           {
-                            label: "Project",
-                            description:
-                              "Group related work under one initiative.",
+                            label: t("Project"),
+                            description: t("Group related work under one initiative."),
                             icon: Folder,
                             action: "project" as const,
                           },
@@ -268,7 +306,7 @@ export const HomePage = aos
 
                           return (
                             <button
-                              key={item.label}
+                              key={item.action}
                               type="button"
                               onClick={() => openCreate(item.action)}
                               className="flex items-start gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-accent/50"
@@ -298,7 +336,7 @@ export const HomePage = aos
                   <header className="flex items-center justify-between gap-4 py-4">
                     <h2 className="text-md">{t("Views")}</h2>
                   </header>
-                  <main className="flex gap-3">
+                  <main className="flex flex-wrap gap-3">
                     {views.length === 0 && (
                       <div className="flex h-12 w-full items-center justify-center rounded-md border-2 border-dotted">
                         <span className="text-muted-foreground/60">
@@ -307,10 +345,12 @@ export const HomePage = aos
                       </div>
                     )}
 
-                    {views.slice(0, 12).map((view) => (
+                    {views.slice(0, CARD_LIMIT).map((view) => (
                       <button
                         key={view.id}
-                        onClick={() => openView(view.name)}
+                        // The id: `/views/$id` looks a view up by id, and the
+                        // display name opened "Page not found".
+                        onClick={() => openView(view.id)}
                         className="group w-32 rounded-md border bg-background/70 p-4 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-accent/30"
                       >
                         <div className="mb-6 flex items-start justify-between gap-3">
@@ -326,7 +366,7 @@ export const HomePage = aos
                           </div>
                           <div className="line-clamp-2 text-xs text-muted-foreground">
                             {view.description ||
-                              "Open the view page and continue working from its dedicated layout."}
+                              t("Open the view page and continue working from its dedicated layout.")}
                           </div>
                         </div>
                       </button>
@@ -338,7 +378,7 @@ export const HomePage = aos
                   <header className="flex items-center justify-between gap-4 py-4">
                     <h2 className="text-md">{t("Artifacts")}</h2>
                   </header>
-                  <main className="flex gap-3">
+                  <main className="flex flex-wrap gap-3">
                     {artifacts.length === 0 && (
                       <div className="flex h-12 w-full items-center justify-center rounded-md border-2 border-dotted">
                         <span className="text-muted-foreground/60">
@@ -347,7 +387,7 @@ export const HomePage = aos
                       </div>
                     )}
 
-                    {artifacts.slice(0, 12).map((artifact) => (
+                    {recentArtifacts.map((artifact) => (
                       <button
                         key={artifact.id}
                         onClick={() => openArtifact(artifact)}
@@ -367,7 +407,7 @@ export const HomePage = aos
                           </div>
                           <div className="line-clamp-2 text-xs text-muted-foreground">
                             {artifact.description ||
-                              "Open the artifact in a browser tab and continue working from its hosted app."}
+                              t("Open the artifact in a browser tab and continue working from its hosted app.")}
                           </div>
                         </div>
                       </button>
@@ -394,7 +434,7 @@ export const HomePage = aos
                         setSelectedStatus(TASK_STATUS_ORDER[index])
                       }
                     >
-                      {TASK_TABS.map((status, index) => (
+                      {taskTabs.map((status, index) => (
                         <TabsSubtleItem
                           key={status.status}
                           index={index}
@@ -443,7 +483,7 @@ export const HomePage = aos
                         setSelectedGoalStatus(GOAL_STATUS_ORDER[index])
                       }
                     >
-                      {GOAL_TABS.map((status, index) => (
+                      {goalTabs.map((status, index) => (
                         <TabsSubtleItem
                           key={status.status}
                           index={index}
@@ -473,7 +513,7 @@ export const HomePage = aos
               </div>
             </div>
 
-            <InboxPanel className="h-full min-h-0" />
+            <InboxPanel className="hidden h-full min-h-0 xl:grid" />
           </div>
           <WelcomeDialog />
         </PageBody>

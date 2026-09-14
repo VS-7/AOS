@@ -6,7 +6,7 @@ vi.mock("@wailsio/runtime", () => ({
   Call: { ByName: () => Promise.reject(new Error("no wails host")) },
 }));
 
-import { changePassword, updateProfile, session, PublicUser } from "./auth";
+import { apiToken, changePassword, regenerateApiToken, updateProfile, session, PublicUser } from "./auth";
 
 type Recorded = { url: string; init: RequestInit | undefined };
 
@@ -57,6 +57,19 @@ describe("changePassword", () => {
 });
 
 describe("updateProfile", () => {
+  // The Profile page's avatar picker toasted success and the image never left
+  // the page: this sent only the name and the email.
+  it("sends the avatar when one is given, and leaves it out when not", async () => {
+    stubFetch({ data: { user: { id: "u-1", name: "V", username: "v", email: "v@x.test", role: "super", image: "data:image/png;base64,AA==" } } });
+
+    const result = await updateProfile("V", "v@x.test", "data:image/png;base64,AA==");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ name: "V", email: "v@x.test", image: "data:image/png;base64,AA==" });
+    expect(result.user.image).toBe("data:image/png;base64,AA==");
+
+    await updateProfile("V", "v@x.test");
+    expect(JSON.parse(String(calls[1].init?.body))).toEqual({ name: "V", email: "v@x.test" });
+  });
+
   it("posts the name and email and returns the account", async () => {
     const user: PublicUser = {
       id: "u-1",
@@ -100,5 +113,21 @@ describe("session", () => {
 
     expect(user.name).toBe("Vitor");
     expect(user.role).toBe("super");
+  });
+});
+
+// Settings > Developers: "Generate API Token" answered "isn't wired up in this
+// build yet" because nothing reached the daemon's token issuance.
+describe("API token", () => {
+  it("asks which token is configured, and issues a new one", async () => {
+    stubFetch({ data: { token: { prefix: "aos_abcd", createdAt: "2026-09-13T00:00:00Z" } } });
+    expect(await apiToken()).toEqual({ token: { prefix: "aos_abcd", createdAt: "2026-09-13T00:00:00Z" } });
+    expect(calls[0].url).toContain("/api/auth/api-token");
+    expect(calls[0].init?.method ?? "GET").toBe("GET");
+
+    stubFetch({ data: { token: "aos_abcdsecret", prefix: "aos_abcd", createdAt: "2026-09-13T00:00:00Z" } });
+    expect((await regenerateApiToken()).token).toBe("aos_abcdsecret");
+    expect(calls[1].url).toContain("/api/auth/api-token");
+    expect(calls[1].init?.method).toBe("POST");
   });
 });

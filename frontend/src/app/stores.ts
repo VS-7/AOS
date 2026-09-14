@@ -1,4 +1,5 @@
 import { AosStore } from "./builders/store";
+import { replacing } from "./builders/replace-state";
 import { client, rememberedWorkspace, setWorkspace } from "@/lib/client";
 import {
   AUTHENTICATED_EVENT,
@@ -9,6 +10,7 @@ import {
   logout,
   updateProfile,
   changePassword,
+  regenerateApiToken,
 } from "@/lib/auth";
 import type {
   WorkspaceDirectoryAgent,
@@ -180,8 +182,30 @@ async function resolveWorkspaces(
   const workspaces = listed?.workspaces ?? [];
   if (workspaces.length === 0) return null;
 
+  // With nothing remembered and more than one to choose from, the workspace
+  // the request already addresses: in the desktop window, the one the window
+  // adopted for the directory it was launched in. The list is sorted by id, so
+  // its first entry was simply the alphabetically first workspace — a fresh
+  // window opened "Harness Two" instead of the one it was started in. With a
+  // single workspace there is nothing to ask, which also keeps a first run
+  // (nothing adopted yet) from collecting a refusal; a refusal otherwise just
+  // leaves the first entry as the answer.
+  let adoptedId: string | undefined;
+  if (!preferredId && workspaces.length > 1) {
+    try {
+      const adopted = (await client.invoke("workspace_get", {
+        _reasoning: "finding the workspace this window was opened for, before choosing one to address",
+      })) as { id?: string } | undefined;
+      adoptedId = adopted?.id;
+    } catch {
+      adoptedId = undefined;
+    }
+  }
+
   const current =
-    workspaces.find((workspace) => workspace.id === preferredId) ?? workspaces[0];
+    workspaces.find((workspace) => workspace.id === (preferredId || undefined)) ??
+    workspaces.find((workspace) => workspace.id === adoptedId) ??
+    workspaces[0];
 
   // Awaited: inside the desktop window this is what points the bridge at the
   // workspace, and a scoped call made before it lands addresses whichever one
@@ -283,12 +307,35 @@ const workspaceStore = AosStore.create("workspace")
           if (!resolved) return;
           ctx.state.set((state) => ({
             ...state,
-            current: resolved.current,
+            current: replacing(state.current, resolved.current),
             options: resolved.options,
           }));
         } catch {
           // Keep the last known snapshot on a transient failure.
         }
+      },
+  )
+  .addAction(
+    "adopt",
+    (ctx) =>
+      /**
+       * Takes the workspace a `workspace_update` answered with as the
+       * snapshot, without asking again.
+       *
+       * The Git, Worktrees and Tasks settings read this snapshot and saved
+       * without ever writing back to it, so leaving a section and returning
+       * showed the values from before the save — and the next autosave sent
+       * them, undoing it. `replacing`, because the answer omits a field that
+       * was emptied, and a merge would have kept the old text.
+       */
+      (workspace: CurrentWorkspaceState | null | undefined) => {
+        if (!workspace?.id) return;
+        const next: CurrentWorkspaceState = { ...workspace, tasks: workspace.tasks ?? [] };
+        ctx.state.set((state) => ({
+          ...state,
+          current: state.current?.id === next.id ? replacing(state.current, next) : state.current,
+          options: state.options.map((option) => (option.id === next.id ? next : option)),
+        }));
       },
   )
   .addAction(
@@ -503,10 +550,14 @@ const authStore = AosStore.create("auth")
        */
       async (params: { name: string; email: string; image?: string }) => {
         try {
-          const { user } = await updateProfile(params.name, params.email);
+          // `image` goes too: it was dropped here, so the avatar picker said
+          // "Profile updated successfully!" over an image nobody kept.
+          const { user } = await updateProfile(params.name, params.email, params.image);
           ctx.state.set((state) => ({
             ...state,
-            user: { ...(state.user ?? {}), ...user } as unknown as AuthSelfProfile,
+            // `image` named even when absent: a removed avatar is missing from
+            // the answer, and the store's merge would otherwise keep the old one.
+            user: { ...(state.user ?? {}), ...user, image: user.image } as unknown as AuthSelfProfile,
           }));
           return { error: undefined as Error | undefined };
         } catch (err) {
@@ -543,12 +594,19 @@ const authStore = AosStore.create("auth")
   .addAction(
     "regenerateToken",
     () =>
-      /** Disclosed stub — same reasoning as `updateProfile` above. */
-      async () => ({
-        success: false,
-        token: undefined as string | undefined,
-        error: new Error("API token regeneration isn't wired up in this build yet."),
-      }),
+      /**
+       * Replaces the account's API token. It was a disclosed stub that
+       * answered "isn't wired up in this build yet" behind a dialog promising
+       * a new token; `/api/auth/api-token` issues one now.
+       */
+      async () => {
+        try {
+          const issued = await regenerateApiToken();
+          return { success: true, token: issued.token as string | undefined, prefix: issued.prefix, error: undefined as Error | undefined };
+        } catch (err) {
+          return { success: false, token: undefined as string | undefined, prefix: undefined as string | undefined, error: asError(err, "Could not generate an API token.") };
+        }
+      },
   )
   .build();
 

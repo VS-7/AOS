@@ -2,7 +2,6 @@ import * as React from "react";
 import { aos } from "@/app/aos";
 import { Page, PageSecondaryHeader } from "@/components/ui/page";
 import type { ViewportTabState } from "@/features/workspace/presentation/stores/viewport.store";
-import { BROWSER_HOME_URL } from "@/features/workspace/presentation/stores/browser.store";
 import { BrowserToolbar } from "./components/toolbar.component";
 import { BrowserViewport } from "./components/viewport.component";
 import { cn } from "@/lib/utils";
@@ -33,6 +32,13 @@ export const BrowserPanel = () => {
     if (!activeTab || activeTab.type !== 'browser') return;
     aos.stores.browser.actions.setAddressBarValue(activeTab.url || "");
   }, [activeTab?.id, activeTab?.url]);
+
+  // A tab with no address yet is asking for one: put the caret where it goes,
+  // whichever way the tab was opened (+, ⌘T, the palette).
+  React.useEffect(() => {
+    if (activeTab?.type !== 'browser' || activeTab.url) return;
+    aos.stores.browser.actions.focusAddressBar();
+  }, [activeTab?.id, activeTab?.type, activeTab?.url]);
 
   React.useEffect(() => {
     if (!shouldFocusAddressBar) return;
@@ -88,7 +94,7 @@ export const BrowserPanel = () => {
             onAddressBarChange={(value) => aos.stores.browser.actions.setAddressBarValue(value)}
             onAddressBarFocus={(focused) => aos.stores.browser.actions.setAddressBarFocused(focused)}
             onGoHome={() => {
-              void (aos.triggers as { dispatch: (id: string, input?: unknown) => Promise<unknown> }).dispatch("tabs.navigate", { url: BROWSER_HOME_URL });
+              if (activeTab) aos.stores.viewport.actions.updateTab(activeTab.id, { url: undefined, error: null });
             }}
           />
         </div>

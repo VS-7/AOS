@@ -1,23 +1,48 @@
 import { FormProvider } from "react-hook-form";
+import { useRouterState } from "@tanstack/react-router";
 import { aos } from "@/app/aos";
 import { AgentsProvider, useAgents } from "./contexts/agents.context";
 import { AgentsSidebar } from "./components/sidebar";
 import { SelectedAgentContent } from "./components/content";
 import { SelectedAgentDetail } from "./components/details";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { t } from "@/lib/i18n";
 
 export function WorkspaceAgentsSection() {
   const agents = aos.stores.agent.useState((state) => state.items);
+  // `?agent=luara` names the agent to open; see AgentsProvider's requestedAgentId.
+  const requestedAgent = useRouterState({
+    select: (state) => (state.location.search as { agent?: unknown }).agent,
+  });
 
   return (
-    <AgentsProvider agents={agents}>
+    <AgentsProvider
+      agents={agents}
+      requestedAgentId={typeof requestedAgent === "string" ? requestedAgent : undefined}
+    >
       <WorkspaceAgentsSectionLayout />
     </AgentsProvider>
   );
 }
 
 function WorkspaceAgentsSectionLayout() {
-  const { selectedAgentId, form } = useAgents();
+  const {
+    selectedAgentId,
+    form,
+    pendingSelection,
+    confirmPendingSelection,
+    cancelPendingSelection,
+  } = useAgents();
 
   // A provider, not a <Form>: the Channels tab renders a <Form> of its own
   // inside this layout, and a <form> nested in another makes Blink and
@@ -39,6 +64,30 @@ function WorkspaceAgentsSectionLayout() {
           </SplitPageLayout.Detail>
         </SplitPageLayout>
       </div>
+
+      {/* Switching agents replaces the form; unsaved edits used to go
+          with it, silently. */}
+      <AlertDialog
+        open={pendingSelection !== null}
+        onOpenChange={(open) => {
+          if (!open) cancelPendingSelection();
+        }}
+      >
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("Discard unsaved changes?")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("This agent has edits that were not saved. Leaving it discards them.")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("Keep editing")}</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmPendingSelection}>
+              {t("Discard")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </FormProvider>
   );
 }

@@ -6,6 +6,7 @@ import {
   type SettingsSectionId,
 } from "@/features/workspace/presentation/components/settings/constants";
 import { SettingsRouteHelper } from "@/features/workspace/presentation/helpers/settings-route.helper";
+import { t } from "@/lib/i18n";
 
 export type ViewportTabType = "in-app" | "browser" | "file" | "changes" | "chat";
 export type WorkspaceSidebarMenu = "main" | "files" | "settings";
@@ -69,7 +70,7 @@ export interface ViewportVisibilityState {
   };
   agent: { history: { visible: boolean }; panel: { visible: boolean } };
   inbox: { panel: { visible: boolean } };
-  tasks: { dialog: { visible: boolean } };
+  tasks: { dialog: { visible: boolean; project?: string } };
   project: { dialog: { visible: boolean } };
   goal: { dialog: { visible: boolean } };
   settings: { dialog: { visible: boolean; section: SettingsSectionId } };
@@ -96,7 +97,10 @@ export const ViewportStore = AosStore.create("viewport")
     },
     agent: { history: { visible: false }, panel: { visible: true } },
     inbox: { panel: { visible: false } },
-    tasks: { dialog: { visible: false } },
+    // `project`: what the create-task dialog files the new task under — set
+    // by whoever opens it for a project (a project's Tasks tab), cleared when
+    // it closes.
+    tasks: { dialog: { visible: false, project: undefined as string | undefined } },
     project: { dialog: { visible: false } },
     goal: { dialog: { visible: false } },
     settings: { dialog: { visible: false, section: DEFAULT_SETTINGS_SECTION } },
@@ -125,6 +129,11 @@ export const ViewportStore = AosStore.create("viewport")
       current[lastKey] = visible ?? !current[lastKey];
       return newState;
     });
+  })
+  .addAction("setTaskDialogProject", (ctx) => (project?: string) => {
+    ctx.state.set((state) => ({
+      tasks: { ...state.tasks, dialog: { ...state.tasks.dialog, project } },
+    }));
   })
   .addAction(
     "updateInAppMetadata",
@@ -295,11 +304,14 @@ export const ViewportStore = AosStore.create("viewport")
   .addAction("createTab", (ctx) => (input?: Partial<ViewportTabState>) => {
     const id = input?.id || generateId();
 
+    // No address: the tab opens on its own start page with the address bar
+    // focused (browser/index.tsx). The default used to be a site that refuses
+    // to be framed, so a new tab was always a broken page.
     const newTab: ViewportTabState = {
       id,
       type: input?.type ?? "browser",
-      title: "New tab",
-      url: "https://duckduckgo.com/",
+      title: t("New tab"),
+      url: undefined,
       status: "idle",
       canGoBack: false,
       canGoForward: false,

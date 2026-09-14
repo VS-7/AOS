@@ -37,6 +37,19 @@ import { toast } from "sonner";
 import { ColorPickerPopover } from "@/components/ui/color-picker";
 import { t } from "@/lib/i18n";
 import { errorMessage } from "@/lib/aos-facade";
+import { changedSettings } from "../../../../helpers/changed-settings";
+import { saveWorkspaceSettings } from "../../../../helpers/save-workspace-settings";
+
+type WorkspaceSnapshot = typeof aos.stores.workspace.state.current;
+
+/** What the form shows for a workspace — also what a change is measured against. */
+function profileFormValues(workspace: WorkspaceSnapshot) {
+  return {
+    name: workspace?.name || "",
+    logo: workspace?.logo || "",
+    color: workspace?.color || "",
+  };
+}
 
 /**
  * Workspace branding (name, logo, color) and danger-zone delete.
@@ -52,43 +65,25 @@ export function WorkspaceProfileSection() {
   const form = aos.useForm({
     schema: WorkspaceUpdateInputSchema,
     mode: "onChange",
-    mutation: "workspace.update",
-    values: {
-      name: currentWorkspace?.name || "",
-      logo: currentWorkspace?.logo || "",
-      color: currentWorkspace?.color || "",
+    values: profileFormValues(currentWorkspace),
+    // Go's `workspace_update` takes one dotted-path `set`, so the three
+    // top-level fields go in as their own paths — only those that changed,
+    // measured against the snapshot the save answers with (see
+    // `saveWorkspaceSettings`).
+    onSubmit: async (values) => {
+      const saved = aos.stores.workspace.state.current;
+      if (await saveWorkspaceSettings(saved?.id, changedSettings("", values, profileFormValues(saved)))) {
+        toast.success(t("Workspace profile updated successfully!"));
+      }
+      return values;
     },
-    // task-12 disclosed divergence: Go's `workspace_update` (`UpdateInput`,
-    // `internal/domain/workspace/schema.go`) takes a single dotted-path
-    // `set: map[string]any`, not top-level `name`/`logo`/`color` fields.
-    // `command-map.ts`'s `coerceIn` can't build this up across three
-    // independent scalar fields in one call (each field's transform result
-    // gets shallow-merged — see that file's `workspace.update` comment) —
-    // this form is the one place the dotted `set` object is built directly.
-    onSubmit: (values) => ({
-      body: {
-        set: {
-          name: values.name,
-          logo: values.logo,
-          color: values.color,
-        },
-      },
-      params: { id: currentWorkspace?.id },
-    }),
     onResponse: ({ error }) => {
-      if (error) {
-        if (error instanceof AppError) {
-          toast.error(error.message);
-          return;
-        }
-
-        console.error(error);
-        toast.error(error.message || "Failed to update workspace profile");
+      if (!error) return;
+      if (error instanceof AppError) {
+        toast.error(error.message);
         return;
       }
-
-      toast.success(t("Workspace profile updated successfully!"));
-      void aos.stores.workspace.actions.refresh();
+      toast.error(error.message || t("Failed to update workspace profile"));
     },
   });
 
@@ -123,8 +118,11 @@ export function WorkspaceProfileSection() {
     }
   };
 
+  // `disableLoadingState`: this form saves itself while the person is still
+  // typing, and disabling its fields for each save took the focus out of the
+  // one being typed in — the keystrokes after it went nowhere.
   return (
-    <Form form={form} className="flex h-full flex-1 flex-col overflow-y-auto">
+    <Form form={form} disableLoadingState className="flex h-full flex-1 flex-col overflow-y-auto">
       <SettingsSectionShell>
         <FormSection>
             <FormSectionHeader>
@@ -239,11 +237,9 @@ export function WorkspaceProfileSection() {
                   <AlertDialogHeader>
                     <AlertDialogTitle>{t("Delete Workspace")}</AlertDialogTitle>
                     <AlertDialogDescription>
-                      {t("Are you sure you want to delete")}{" "}
-                      <span className="font-semibold">
-                        {currentWorkspace?.name}
-                      </span>
-                      {t("? This will permanently remove the workspace and all its configuration. This action cannot be undone.")}
+                      {t("Are you sure you want to delete {{name}}? This will permanently remove the workspace and all its configuration. This action cannot be undone.", {
+                        name: currentWorkspace?.name ?? "",
+                      })}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -251,11 +247,11 @@ export function WorkspaceProfileSection() {
                       {t("Cancel")}
                     </AlertDialogCancel>
                     <AlertDialogAction
+                      variant="destructive"
                       disabled={deleting}
                       onClick={handleDelete}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                     >
-                      {deleting ? "Deleting..." : "Delete"}
+                      {deleting ? t("Deleting...") : t("Delete")}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>

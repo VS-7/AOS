@@ -396,6 +396,9 @@ const TabsSubtleItem = forwardRef<HTMLButtonElement, TabsSubtleItemProps>(
         aria-selected={isSelected}
         aria-controls={`${idPrefix}-panel-${index}`}
         aria-label={collapseLabel && !showLabel ? label : undefined}
+        // An icon-only tab has nothing on screen to say what it is until it is
+        // picked, and two statuses can share a glyph; hovering has to tell.
+        title={collapseLabel && !showLabel ? label : undefined}
         type="button"
         tabIndex={isSelected ? 0 : -1}
         onClick={() => onSelect(index)}

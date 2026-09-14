@@ -1,7 +1,6 @@
 import * as React from "react";
-import { useRouter } from "@tanstack/react-router";
 import * as z from "zod";
-import { Copy, Check, ExternalLink, Loader2, CircleCheck, CircleDot, Circle } from "lucide-react";
+import { Copy, Check, ExternalLink, Info, Loader2, CircleCheck, CircleDot, Circle } from "lucide-react";
 import { toast } from "sonner";
 import { openExternal } from "@/lib/wails";
 
@@ -30,6 +29,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TunnelUrlHelper } from "@/features/tunnel/presentation/helpers/tunnel-url.helper";
 import { t } from "@/lib/i18n";
+import type { Config } from "@/features/config/interfaces/config.interfaces";
+import { changedSettings } from "../../../../helpers/changed-settings";
 
 const tunnelEnableFormSchema = z.object({
   enabled: z.boolean(),
@@ -41,13 +42,10 @@ const tunnelCredentialsFormSchema = z.object({
 });
 
 export function WorkspaceTunnelSection() {
-  const router = useRouter();
-  
-  // `aos.useContext()` is AOS's global route context (`withContext(...)`),
-  // which this port's `app/aos.tsx` never wires -- `DefaultContext` (`app/
-  // builders/types.ts`) is deliberately loose (`Record<string, any>`) for
-  // exactly this unset case, so no per-call-site cast is needed here.
-  const context = aos.useContext();
+  // The configuration store, not the route context: the context is a copy
+  // taken when the route loaded, and no save reached it, so this page
+  // reopened with the hostname and switch it had before the last save.
+  const config = aos.stores.config.useState();
   const tunnelStatusQuery = aos.client.tunnel.getStatus.useQuery();
   const tunnelStatus = tunnelStatusQuery.data;
   const [copied, setCopied] = React.useState(false);
@@ -56,10 +54,11 @@ export function WorkspaceTunnelSection() {
     schema: tunnelEnableFormSchema,
     mode: "onChange",
     values: {
-      enabled: context.config?.tunnel?.enabled ?? false,
+      enabled: config?.tunnel?.enabled ?? false,
     },
     onSubmit: async (values) => {
-      const previousEnabled = context.config?.tunnel?.enabled ?? false;
+      const previousEnabled = aos.stores.config.state?.tunnel?.enabled ?? false;
+      if (values.enabled === previousEnabled) return values;
 
       // `mutateOrThrow` throughout: this is written as try/catch, and `mutate`
       // resolves a refusal as a value. With `mutate` the catch — and the
@@ -68,13 +67,11 @@ export function WorkspaceTunnelSection() {
       // and `tunnel.enabled` stayed saved as true over a tunnel that was not
       // running.
       try {
-        await api.config.update.mutateOrThrow({
-          body: {
-            tunnel: {
-              enabled: values.enabled,
-            },
-          },
-        });
+        aos.stores.config.actions.adopt(
+          await api.config.update.mutateOrThrow<Config>({
+            body: { set: { "tunnel.enabled": values.enabled } },
+          }),
+        );
 
         if (values.enabled) {
           const started = await api.tunnel.start.mutateOrThrow<{ url?: string }>();
@@ -87,17 +84,14 @@ export function WorkspaceTunnelSection() {
         }
 
         await tunnelStatusQuery.refetch();
-        router.invalidate();
+        return values;
       } catch (error) {
         // Best effort: the refusal is what the person needs to read, and a
         // rollback that also fails must not replace it.
-        await api.config.update.mutate({
-          body: {
-            tunnel: {
-              enabled: previousEnabled,
-            },
-          },
+        const rolledBack = await api.config.update.mutate<Config>({
+          body: { set: { "tunnel.enabled": previousEnabled } },
         });
+        if (!rolledBack.error) aos.stores.config.actions.adopt(rolledBack.data);
 
         activationForm.reset({ enabled: previousEnabled });
         toast.error(
@@ -113,8 +107,8 @@ export function WorkspaceTunnelSection() {
   const credentialsForm = aos.useForm({
     schema: tunnelCredentialsFormSchema,
     values: {
-      hostname: context.config?.tunnel?.hostname ?? "",
-      token: context.config?.tunnel?.token ?? "",
+      hostname: config?.tunnel?.hostname ?? "",
+      token: config?.tunnel?.token ?? "",
     },
     onSubmit: async (values) => {
       const enabled = activationForm.getValues("enabled");
@@ -124,14 +118,19 @@ export function WorkspaceTunnelSection() {
       // The same try/catch shape as the switch above, with the same trap:
       // `mutate` never throws, so a refused save or start reported success.
       try {
-        await api.config.update.mutateOrThrow({
-          body: {
-            tunnel: {
-              hostname,
-              token,
-            },
-          },
-        });
+        // Only what changed. The token comes back from the daemon as a
+        // fingerprint ("***…a1b2"), never in full, and that is what this
+        // field holds until somebody types a new one: sending it back with
+        // every hostname edit replaced the real token with its fingerprint.
+        const saved = aos.stores.config.state?.tunnel;
+        const set = changedSettings(
+          "tunnel",
+          { hostname, token },
+          { hostname: saved?.hostname ?? "", token: saved?.token ?? "" },
+        );
+        if (Object.keys(set).length > 0) {
+          aos.stores.config.actions.adopt(await api.config.update.mutateOrThrow<Config>({ body: { set } }));
+        }
 
         if (enabled && hostname && token) {
           const started = await api.tunnel.start.mutateOrThrow<{ url?: string }>();
@@ -145,7 +144,7 @@ export function WorkspaceTunnelSection() {
         }
 
         await tunnelStatusQuery.refetch();
-        router.invalidate();
+        return { hostname, token };
       } catch (error) {
         toast.error(t("Failed to save tunnel credentials"), { description: errorMessage(error) });
         await tunnelStatusQuery.refetch();
@@ -170,7 +169,7 @@ export function WorkspaceTunnelSection() {
   // (AOS_TUNNEL_INSECURE_EXPOSURE). The redacted configuration still says
   // whether a token is set — an unset secret stays empty — so the switch can
   // say so before it is flipped, rather than after a refusal.
-  const security = context.config?.security as { enabled?: boolean; apiToken?: string } | undefined;
+  const security = config?.security as { enabled?: boolean; apiToken?: string } | undefined;
   const lacksAuthentication = !security?.enabled || !security?.apiToken;
   const isBusy = activationForm.isLoading || credentialsForm.isLoading || tunnelStatusQuery.isFetching;
 
@@ -210,18 +209,18 @@ export function WorkspaceTunnelSection() {
                   <FormLabel>{t("Status")}</FormLabel>
                   <FormDescription>
                     {isBusy
-                      ? "Applying tunnel settings..."
+                      ? t("Applying tunnel settings...")
                       : isTunnelOnline
-                        ? "Your instance is accessible from the internet."
+                        ? t("Your instance is accessible from the internet.")
                         : tunnelError
                           ? tunnelError
                           : isTunnelStarting
-                            ? "Tunnel is enabled and waiting to connect."
+                            ? t("Tunnel is enabled and waiting to connect.")
                             : isTunnelEnabled && isTunnelConfigured
                               ? t("Tunnel is enabled but not running.")
                               : isTunnelEnabled
-                                ? "Tunnel is enabled, but hostname or token is missing."
-                                : "Tunnel is disabled. Your instance is only accessible locally."}
+                                ? t("Tunnel is enabled, but hostname or token is missing.")
+                                : t("Tunnel is disabled. Your instance is only accessible locally.")}
                   </FormDescription>
                 </div>
                 {isBusy || isTunnelStarting ? (
@@ -351,6 +350,7 @@ export function WorkspaceTunnelSection() {
                       size="icon"
                       onClick={handleCopyUrl}
                       className="shrink-0"
+                      aria-label={t("Copy URL")}
                     >
                       {copied ? (
                         <Check className="size-4" />
@@ -364,13 +364,16 @@ export function WorkspaceTunnelSection() {
                       size="icon"
                       onClick={handleOpenUrl}
                       className="shrink-0"
+                      aria-label={t("Open URL")}
                     >
                       <ExternalLink className="size-4" />
                     </Button>
                   </div>
                 ) : (
+                  // A static icon: this is an empty state waiting on the person,
+                  // and a spinner here read as something loading forever.
                   <div className="flex items-center gap-2 text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin" />
+                    <Info className="size-4" />
                     <span className="text-sm">{t("Add a hostname to generate the public URL.")}</span>
                   </div>
                 )}
@@ -394,7 +397,7 @@ export function WorkspaceTunnelSection() {
                 type="submit"
                 disabled={isBusy}
               >
-                {credentialsForm.isLoading ? "Saving..." : "Save Changes"}
+                {credentialsForm.isLoading ? t("Saving...") : t("Save changes")}
               </Button>
             </FormSectionFooter>
           </FormSection>

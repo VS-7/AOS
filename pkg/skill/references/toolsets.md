@@ -79,6 +79,19 @@ Every toolset configured in this workspace, with its type and lifecycle status.
 
 - everything configured
 
+### `toolsets_tools`
+
+List the tools a toolset publishes.
+
+Connects to the toolset, asks what it publishes, and closes: each tool's name,
+description and argument schema — what toolsets_call needs to be called right.
+
+It reaches the target exactly as toolsets_call does — a disabled toolset
+refuses, variables are resolved, a skill's network allowlist applies — but runs
+no tool, so it records no activity.
+
+- see what a toolset offers before calling it
+
 ### `toolsets_update-config`
 
 Reconfigure a toolset.

@@ -40,7 +40,7 @@ export const AgentStore = AosStore.create("agents")
   })
   .withPreload(async () => {
     const [items, occupancy] = await Promise.all([fetchAgents(), fetchOccupancy()]);
-    return { items, occupancy };
+    return { items: items ?? [], occupancy };
   })
   .addAction(
     "setProcessing",
@@ -62,7 +62,10 @@ export const AgentStore = AosStore.create("agents")
     },
   )
   .addAction("refresh", (ctx) => async () => {
-    const items = await fetchAgents();
+    // A roster that could not be read is not an empty roster. Replacing the
+    // agents with [] on a failed read made every screen that follows the
+    // store — the agent editor included — act as if they had been deleted.
+    const items = (await fetchAgents()) ?? ctx.state.get().items;
     // Occupancy is deliberately not re-read here. A refresh runs on any
     // record change — an agent created, a project renamed — and the server's
     // answer is a snapshot taken before whatever realtime has delivered
@@ -95,21 +98,30 @@ async function fetchOccupancy(): Promise<Record<string, string[]>> {
   return response.data?.active ?? {};
 }
 
-async function fetchAgents(): Promise<Agent[]> {
+/**
+ * The roster, as `agents_list` answers it — every field it carries.
+ *
+ * This used to keep six of them (id, name, image, role, description,
+ * orchestrator). Everything else a screen asked of an agent was therefore
+ * always undefined: searching by provider or model never matched, grouping by
+ * skill put every agent under "General", and the editor could not tell a
+ * changed record from an unchanged one because `updatedAt` was dropped too.
+ *
+ * `undefined` when the roster could not be read, so a caller can keep what it
+ * has instead of mistaking a failure for "no agents".
+ */
+async function fetchAgents(): Promise<Agent[] | undefined> {
   const response = await api.agent!.list!.query<{ agents?: Array<Record<string, unknown>> }>();
   if (response.error) {
     console.error("[AgentStore] agent.list failed", response.error);
+    return undefined;
   }
   const agents = response.data?.agents ?? [];
 
   return agents.map(
     (agent) =>
       ({
-        id: agent["id"],
-        name: agent["name"],
-        image: agent["image"],
-        role: agent["role"],
-        description: agent["description"],
+        ...agent,
         orchestrator: Boolean(agent["orchestrator"]),
       }) as Agent,
   );

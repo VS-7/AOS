@@ -72,7 +72,8 @@ export function WorkspaceMembersSection() {
   const members = membersUnavailable
     ? []
     : ((membersQuery.data as WorkspaceMember[] | undefined) ?? []);
-  const users = (usersQuery.data as UserPublic[] | undefined) ?? [];
+  // `{users: [...]}`, not a bare list — the same answer Settings > Users reads.
+  const users = (usersQuery.data as { users?: UserPublic[] } | undefined)?.users ?? [];
 
   const usersById = React.useMemo(
     () => new Map(users.map((user) => [user.id, user])),

@@ -63,3 +63,39 @@ describe("an artifact's frame", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * A new tab used to open https://duckduckgo.com/, which refuses to be framed:
+ * every new tab was the browser's broken-page icon with nothing said. And no
+ * external site that refuses framing can be told apart from one that loaded —
+ * a blocked frame still fires `load` — so the way out has to be always there.
+ */
+describe("a browser tab", () => {
+  it("starts on a page of its own when it has no address yet", async () => {
+    const { view } = await renderAt("/", "");
+
+    expect(view.container.querySelector("iframe")).toBeNull();
+    expect(view.getByText("Type an address or a search in the bar above.")).toBeTruthy();
+  });
+
+  it("offers the system browser for an external site", async () => {
+    const { view } = await renderAt("/", "https://example.com/docs");
+    // After renderAt, which resets the module graph: the same instance the
+    // renderer imported.
+    const wails = await import("@/lib/wails");
+    const openExternal = vi.spyOn(wails, "openExternal").mockResolvedValue();
+
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    view.getByRole("button", { name: "Open in your browser" }).click();
+    expect(openExternal).toHaveBeenCalledWith("https://example.com/docs");
+  });
+
+  it("does not offer it for the window's own content", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const { view } = await renderAt("/", "/v/artifacts/sales/");
+
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    expect(view.queryByRole("button", { name: "Open in your browser" })).toBeNull();
+  });
+});
+

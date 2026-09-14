@@ -569,8 +569,8 @@ export interface CommandMap {
     "content"?: string;
     /** One line summarising the outcome. */
     "description"?: string;
-    /** When this goal is due, if it has a deadline. */
-    "dueAt"?: unknown;
+    /** When this goal is due, if it has a deadline: an RFC3339 instant. */
+    "dueAt"?: string;
     /** How to tell this goal was actually served. */
     "measure"?: string;
     /** How urgent this goal is. Defaults to no_priority. */
@@ -617,13 +617,13 @@ export interface CommandMap {
     "_reasoning": string;
     /** New body content, in Markdown. Omit to leave unchanged. */
     "content"?: unknown;
-    /** New one-line summary of the outcome. Omit to leave unchanged. */
+    /** New one-line summary of the outcome. Empty string clears it. Omit to leave unchanged. */
     "description"?: unknown;
-    /** New due date. Omit to leave unchanged. */
+    /** New due date, an RFC3339 instant. Empty string clears it. Omit to leave unchanged. */
     "dueAt"?: unknown;
     /** Identifier of the goal to update. */
     "id": string;
-    /** New measure that makes this goal checkable rather than aspirational. Omit to leave unchanged. */
+    /** New measure that makes this goal checkable rather than aspirational. Empty string clears it. Omit to leave unchanged. */
     "measure"?: unknown;
     /** New priority: no_priority, urgent, high, medium or low. Omit to leave unchanged. */
     "priority"?: "no_priority" | "urgent" | "high" | "medium" | "low";
@@ -1218,9 +1218,9 @@ export interface CommandMap {
     "content": string;
     /** What this template produces and when to use it. */
     "description"?: string;
-    /** Identifier for the template. Also its file name: lowercase, digits, hyphen and underscore only. */
-    "id": string;
-    /** Human name of the template. */
+    /** Identifier for the template. Also its file name: lowercase, digits, hyphen and underscore only. Derived from Name when omitted. */
+    "id"?: string;
+    /** Human name of the template. The id is derived from it when none is given. */
     "name": string;
     /** Suggested relative output path for a render of this template. */
     "output"?: string;
@@ -1439,6 +1439,13 @@ export interface CommandMap {
   "toolsets_list": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
+  }; output: unknown };
+  /** List the tools a toolset publishes. */
+  "toolsets_tools": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the toolset. */
+    "id": string;
   }; output: unknown };
   /** Reconfigure a toolset. */
   "toolsets_update-config": { input: {
@@ -1816,6 +1823,7 @@ export const COMMAND_KEYS = [
   "toolsets_get",
   "toolsets_get-config",
   "toolsets_list",
+  "toolsets_tools",
   "toolsets_update-config",
   "tunnel_start",
   "tunnel_status",
