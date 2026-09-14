@@ -51,6 +51,21 @@ type scopes struct {
 	// substitute a cheaper one, and so the recursion is obvious: it is New,
 	// called again with a different root.
 	build func(id, root string) (*App, error)
+
+	// opening is the directories being built right now, so a second caller
+	// for one waits for that build instead of starting another, and nobody
+	// else waits at all. closed is set once close has run: a build that
+	// finishes after it is closed rather than kept.
+	opening map[string]*opening
+	closed  bool
+}
+
+// opening is one directory's build in progress; done closes when app and err
+// are set.
+type opening struct {
+	done chan struct{}
+	app  *App
+	err  error
 }
 
 // workspaceRegistry wraps a registry so every call reaches the workspace it
@@ -182,31 +197,77 @@ func (s *scopes) forID(ctx context.Context, registry *workspace.Service, id stri
 	root := filepath.Clean(found.Path)
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if s.primary != nil && filepath.Clean(s.primary.Workspace) == root {
+		s.mu.Unlock()
 		return s.primary, nil
 	}
 	if already, ok := s.byPath[root]; ok {
+		s.mu.Unlock()
 		return already, nil
 	}
+	if s.closed {
+		s.mu.Unlock()
+		return nil, errWorkspaceUnavailable(id, root, errScopesClosed)
+	}
+	// Somebody is already opening it: wait for that one.
+	if inFlight, ok := s.opening[root]; ok {
+		s.mu.Unlock()
+		select {
+		case <-inFlight.done:
+			return inFlight.app, inFlight.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+
+	// Built outside the lock. It is a whole New — scaffold, index, reconcile,
+	// a repository for a workspace this installation made — and every routed
+	// request takes this lock, for whichever workspace it names. Held across
+	// the build, the worker's first pass, which opens every registered
+	// workspace right after the daemon starts, kept all of them waiting.
+	mine := &opening{done: make(chan struct{})}
+	if s.opening == nil {
+		s.opening = map[string]*opening{}
+	}
+	s.opening[root] = mine
+	s.mu.Unlock()
 
 	built, err := s.build(id, root)
-	if err != nil {
-		return nil, errWorkspaceUnavailable(id, root, err)
+
+	s.mu.Lock()
+	delete(s.opening, root)
+	switch {
+	case err != nil:
+		mine.err = errWorkspaceUnavailable(id, root, err)
+	case s.closed:
+		// The process closed its workspaces while this one was being opened.
+		// Handing it out would leave it open behind them.
+		_ = built.Close()
+		mine.err = errWorkspaceUnavailable(id, root, errScopesClosed)
+	default:
+		if s.byPath == nil {
+			s.byPath = map[string]*App{}
+		}
+		s.byPath[root] = built
+		mine.app = built
 	}
-	if s.byPath == nil {
-		s.byPath = map[string]*App{}
-	}
-	s.byPath[root] = built
-	return built, nil
+	close(mine.done)
+	s.mu.Unlock()
+	return mine.app, mine.err
 }
+
+// errScopesClosed is why a workspace asked for during shutdown is not opened.
+var errScopesClosed = errors.New("this process has closed its workspaces")
 
 // close releases every workspace opened after the primary. The primary is
 // closed by whoever built it.
+//
+// A workspace still being opened is not waited for — a build that hangs would
+// hold the shutdown with it — and closes itself when it finishes.
 func (s *scopes) close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.closed = true
 
 	var errs []error
 	for path, opened := range s.byPath {
