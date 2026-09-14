@@ -184,3 +184,48 @@ func TestThePruneTakesAFinishedTasksCheckoutUnderTheSharedRoot(t *testing.T) {
 		t.Fatalf("the pruned checkout is still recorded: %q", stored.Worktree.Path)
 	}
 }
+
+// A task's branch is named after its slug, and a repository can already have
+// a branch of that name that is not the task's: another workspace's in the
+// same monorepo — both folders name their branches aos/<slug> — or a deleted
+// task's. Branching checked that branch out as the task's own: the new task
+// went on from somebody else's commits, or failed because git had it checked
+// out elsewhere. A name the task never had and that is taken gets the task's
+// id after it.
+func TestANewTaskDoesNotTakeOverABranchThatIsNotItsOwn(t *testing.T) {
+	h := newHarness(t)
+	h.worktrees.branches = map[string]bool{"aos/fix-the-login": true}
+	task := h.create(t, CreateInput{Name: "Fix the login", Status: Todo, Worktree: true})
+
+	tree, err := h.svc.Branch(ctx(), BranchInput{ID: task.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "aos/fix-the-login-" + task.ID; tree.Branch != want || h.worktrees.created[0].Branch != want {
+		t.Fatalf("branched on %q (created %+v), want its own %q", tree.Branch, h.worktrees.created, want)
+	}
+}
+
+// A branch the task asked for by name, or recorded as its own, is the one it
+// gets whether or not it exists: that is how a task comes back to its work.
+func TestABranchTheTaskNamesOrRecordedIsTakenAsItIs(t *testing.T) {
+	h := newHarness(t)
+	h.worktrees.branches = map[string]bool{"aos/fix-the-login": true, "feature/mine": true}
+	named := h.create(t, CreateInput{Name: "Fix the login", Status: Todo, Worktree: true})
+	if tree, err := h.svc.Branch(ctx(), BranchInput{ID: named.ID, Branch: "feature/mine"}); err != nil || tree.Branch != "feature/mine" {
+		t.Fatalf("branching on a named branch = %+v, %v; want feature/mine", tree, err)
+	}
+
+	recorded := h.create(t, CreateInput{Name: "Fix the login again", Status: Todo, Worktree: true})
+	stored, err := h.repo.Get(ctx(), collections.Key{"id": recorded.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored.Worktree = Worktree{Enabled: true, Branch: "aos/fix-the-login"}
+	if err := h.repo.Update(ctx(), stored, collections.Version{}); err != nil {
+		t.Fatal(err)
+	}
+	if tree, err := h.svc.Branch(ctx(), BranchInput{ID: recorded.ID}); err != nil || tree.Branch != "aos/fix-the-login" {
+		t.Fatalf("branching on the recorded branch = %+v, %v; want aos/fix-the-login", tree, err)
+	}
+}

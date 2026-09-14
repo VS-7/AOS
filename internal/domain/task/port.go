@@ -97,6 +97,11 @@ type WorktreeSource struct {
 	// repository nobody has committed to has neither.
 	BaseExists bool
 
+	// BranchExists reports whether the repository already has the branch, in
+	// which case a checkout goes on from its commits rather than cutting it
+	// from the base.
+	BranchExists bool
+
 	// Subdir is where the workspace sits inside Toplevel when that repository
 	// is not its own, as a relative path; "" when it is.
 	Subdir string

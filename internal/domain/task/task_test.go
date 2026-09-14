@@ -72,6 +72,9 @@ type worktrees struct {
 	folder  string
 	gone    bool
 	sourced int
+
+	// branches are the branch names the repository already has.
+	branches map[string]bool
 }
 
 func (w *worktrees) Create(_ context.Context, spec WorktreeSpec) (string, error) {
@@ -124,12 +127,14 @@ func (w *worktrees) WorkspaceIn(_ context.Context, checkout string) (string, boo
 	return filepath.Join(checkout, w.folder), true, nil
 }
 
-func (w *worktrees) Source(context.Context, WorktreeSpec) (WorktreeSource, error) {
+func (w *worktrees) Source(_ context.Context, spec WorktreeSpec) (WorktreeSource, error) {
 	w.sourced++
+	out := WorktreeSource{Dir: "/w", Toplevel: "/w", Own: true, BaseExists: true}
 	if w.source != nil {
-		return *w.source, nil
+		out = *w.source
 	}
-	return WorktreeSource{Dir: "/w", Toplevel: "/w", Own: true, BaseExists: true}, nil
+	out.BranchExists = w.branches[spec.Branch]
+	return out, nil
 }
 
 // setup records that the script ran and under whose policy.

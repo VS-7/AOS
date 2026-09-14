@@ -282,7 +282,8 @@ func (w *Worktrees) Source(ctx context.Context, spec task.WorktreeSpec) (task.Wo
 	// is a commit. Asked from the workspace directory, which git resolves to
 	// the project above it when the workspace is a folder of one.
 	rev := "refs/heads/" + spec.Branch
-	if !w.hasBranch(ctx, spec.Branch) {
+	out.BranchExists = w.hasBranch(ctx, spec.Branch)
+	if !out.BranchExists {
 		rev = strings.TrimSpace(spec.Base)
 		if rev == "" {
 			rev = "HEAD"

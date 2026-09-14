@@ -54,6 +54,12 @@ func TestATaskInAWorkspaceInsideAProjectIsCutFromTheProject(t *testing.T) {
 	if trees.Exists(ctx(), filepath.Dir(outer), outer) {
 		t.Error("the project's own working tree counts as a task's checkout")
 	}
+	if source.BranchExists {
+		t.Error("a branch was reported before it was cut")
+	}
+	if again, err := trees.Source(ctx(), spec); err != nil || !again.BranchExists {
+		t.Errorf("source once the branch is cut = %+v, %v; want the branch reported", again, err)
+	}
 	if err := trees.Remove(ctx(), path); err != nil {
 		t.Fatal(err)
 	}

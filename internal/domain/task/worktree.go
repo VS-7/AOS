@@ -53,7 +53,8 @@ func (s *Service) Branch(ctx context.Context, in BranchInput) (*Worktree, error)
 	if branch == "" {
 		branch = current.Worktree.Branch
 	}
-	if branch == "" {
+	derived := branch == ""
+	if derived {
 		branch = BranchNameFor(policy.BranchPrefix, current)
 	}
 	base := strings.TrimSpace(in.Base)
@@ -81,6 +82,19 @@ func (s *Service) Branch(ctx context.Context, in BranchInput) (*Worktree, error)
 	source, err := s.worktrees.Source(ctx, spec)
 	if err != nil {
 		return nil, errWorktreeFailed(current.ID, branch, err)
+	}
+	// A name made up just now from the task's slug that the repository
+	// already has is somebody else's branch: another workspace's that is a
+	// folder of the same project — both name theirs <prefix>/<slug> — or a
+	// deleted task's. Checked out as this task's, the task went on from their
+	// commits, or failed because git had it checked out elsewhere. The task's
+	// id makes the name its own.
+	if derived && source.BranchExists {
+		branch = branch + "-" + current.ID
+		spec.Branch = branch
+		if source, err = s.worktrees.Source(ctx, spec); err != nil {
+			return nil, errWorktreeFailed(current.ID, branch, err)
+		}
 	}
 	if source.Toplevel == "" {
 		return nil, errWorktreeNoRepository(current.ID, source)
