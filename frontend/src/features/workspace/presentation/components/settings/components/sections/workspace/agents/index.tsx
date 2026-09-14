@@ -1,4 +1,5 @@
 import { FormProvider } from "react-hook-form";
+import { useRouterState } from "@tanstack/react-router";
 import { aos } from "@/app/aos";
 import { AgentsProvider, useAgents } from "./contexts/agents.context";
 import { AgentsSidebar } from "./components/sidebar";
@@ -19,9 +20,16 @@ import { t } from "@/lib/i18n";
 
 export function WorkspaceAgentsSection() {
   const agents = aos.stores.agent.useState((state) => state.items);
+  // `?agent=luara` names the agent to open; see AgentsProvider's requestedAgentId.
+  const requestedAgent = useRouterState({
+    select: (state) => (state.location.search as { agent?: unknown }).agent,
+  });
 
   return (
-    <AgentsProvider agents={agents}>
+    <AgentsProvider
+      agents={agents}
+      requestedAgentId={typeof requestedAgent === "string" ? requestedAgent : undefined}
+    >
       <WorkspaceAgentsSectionLayout />
     </AgentsProvider>
   );

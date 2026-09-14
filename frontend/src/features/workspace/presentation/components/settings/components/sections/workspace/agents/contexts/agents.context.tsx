@@ -7,7 +7,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useRouterState } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { aos } from "@/app/aos";
 import type { Agent } from "@/features/agent/interfaces/agent.interfaces";
@@ -52,6 +51,12 @@ const AgentsContext = createContext<AgentsContextType | null>(null);
 interface AgentsProviderProps {
   children: React.ReactNode;
   agents: Agent[];
+  /**
+   * An agent to open, named by whatever led here (the chat sidebar's "View
+   * details" sends `?agent=luara`). The page reads it from the URL; the
+   * provider only acts on it, so it does not need a router to exist.
+   */
+  requestedAgentId?: string;
 }
 
 function getAgentErrorMessage(error: unknown) {
@@ -65,7 +70,7 @@ function getAgentErrorMessage(error: unknown) {
 /** Thrown out of `onSubmit` so `aos.useForm` leaves the typed values alone. */
 class SubmitRefused extends Error {}
 
-export function AgentsProvider({ children, agents }: AgentsProviderProps) {
+export function AgentsProvider({ children, agents, requestedAgentId }: AgentsProviderProps) {
   const [selectedAgentId, setSelectedAgentIdState] = useState<string | null>(null);
   const [selectedAgentFull, setSelectedAgentFull] = useState<Agent | undefined>(undefined);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
@@ -263,21 +268,18 @@ export function AgentsProvider({ children, agents }: AgentsProviderProps) {
     [form],
   );
 
-  // An agent named in the URL (`?agent=luara`) is the one to open: the chat
-  // sidebar's "View details" landed here with both agents listed and nothing
-  // selected. Applied once the roster has it, and again only if the URL
-  // changes, so it never fights a selection the person makes afterwards. It
-  // goes through selectAgent, like a click, so an unsaved edit to the agent
-  // already open is asked about rather than discarded.
-  const requestedAgent = useRouterState({
-    select: (state) => (state.location.search as { agent?: unknown }).agent,
-  });
+  // The requested agent is the one to open: the chat sidebar's "View details"
+  // landed here with both agents listed and nothing selected. Applied once the
+  // roster has it, and again only if the request changes, so it never fights a
+  // selection the person makes afterwards. It goes through selectAgent, like a
+  // click, so an unsaved edit to the agent already open is asked about rather
+  // than discarded.
   const requestedAgentListed =
-    typeof requestedAgent === "string" &&
-    agents.some((agent) => agent.id === requestedAgent);
+    typeof requestedAgentId === "string" &&
+    agents.some((agent) => agent.id === requestedAgentId);
   useEffect(() => {
-    if (requestedAgentListed) selectAgent(requestedAgent as string);
-  }, [requestedAgent, requestedAgentListed, selectAgent]);
+    if (requestedAgentListed) selectAgent(requestedAgentId as string);
+  }, [requestedAgentId, requestedAgentListed, selectAgent]);
 
   const filteredAgents = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
