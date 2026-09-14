@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -174,5 +175,82 @@ func TestTheWebhookRouteIsAbsentWhenUnconfigured(t *testing.T) {
 	srv := newHarness(t)
 	if res := hookRequest(t, srv, http.MethodPost, "/api/hooks/routines/r-1", `{}`, "hook-token"); res.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d", res.StatusCode)
+	}
+}
+
+// webhookRefusal posts to the routine's webhook with header set as given and
+// answers the status and the error code.
+func webhookRefusal(t *testing.T, srv *harness, body string, set func(*http.Request)) (int, string) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.server.URL+"/api/hooks/routines/r-1?workspace=vs", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	set(req)
+	res, err := srv.server.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	var envelope struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	raw, _ := io.ReadAll(res.Body)
+	_ = json.Unmarshal(raw, &envelope)
+	return res.StatusCode, envelope.Error.Code
+}
+
+// The token is documented as coming from Authorization: Bearer, and only
+// there. The route read whatever the middleware had found, so X-Auth-Token or
+// the daemon's own session cookie was hashed and compared as a webhook token:
+// the daemon's credential offered to a surface strangers reach.
+func TestAWebhookTokenIsReadFromTheAuthorizationHeaderOnly(t *testing.T) {
+	h := newHooks()
+	srv := newHarness(t, withHooks(h))
+
+	others := map[string]func(*http.Request){
+		"X-Auth-Token":         func(r *http.Request) { r.Header.Set("X-Auth-Token", "hook-token") },
+		"session cookie":       func(r *http.Request) { r.AddCookie(&http.Cookie{Name: "sessionToken", Value: "hook-token"}) },
+		"Authorization, Basic": func(r *http.Request) { r.Header.Set("Authorization", "Basic aG9vay10b2tlbg==") },
+	}
+	for name, set := range others {
+		status, code := webhookRefusal(t, srv, `{}`, set)
+		if status != http.StatusUnauthorized || code != "AOS_HTTP_WEBHOOK_NO_TOKEN" {
+			t.Errorf("%s: %d %s, want 401 AOS_HTTP_WEBHOOK_NO_TOKEN", name, status, code)
+		}
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.verified) != 0 {
+		t.Errorf("a token from somewhere other than Authorization was verified: %+v", h.verified)
+	}
+}
+
+// A stranger reaches this route with nothing. Nothing may be buffered for
+// them, and no workspace opened on their say-so, before the token is checked:
+// the body was read first, so a 2 MiB post with no token was answered 413
+// after the daemon had held a megabyte of it, and a wrong token opened the
+// workspace ?workspace= named before it was refused.
+func TestAWebhookIsRefusedBeforeItsBodyIsRead(t *testing.T) {
+	h := newHooks()
+	srv := newHarness(t, withHooks(h))
+	huge := `{"x":"` + strings.Repeat("x", 2<<20) + `"}`
+
+	status, code := webhookRefusal(t, srv, huge, func(*http.Request) {})
+	if status != http.StatusUnauthorized || code != "AOS_HTTP_WEBHOOK_NO_TOKEN" {
+		t.Errorf("no token: %d %s, want 401 AOS_HTTP_WEBHOOK_NO_TOKEN", status, code)
+	}
+	h.mu.Lock()
+	verified := len(h.verified)
+	h.mu.Unlock()
+	if verified != 0 {
+		t.Errorf("a request with no token reached the workspace's routines %d time(s)", verified)
+	}
+
+	status, code = webhookRefusal(t, srv, huge, func(r *http.Request) { r.Header.Set("Authorization", "Bearer guessed") })
+	if status != http.StatusUnauthorized || code != "AOS_ROUTINE_FIRE_INVALID_TOKEN" {
+		t.Errorf("wrong token: %d %s, want 401 AOS_ROUTINE_FIRE_INVALID_TOKEN", status, code)
 	}
 }

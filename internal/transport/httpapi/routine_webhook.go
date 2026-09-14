@@ -36,15 +36,34 @@ type RoutineWebhooks interface {
 // It is not a command route, and cannot be one: every command answers to the
 // session or API token authenticate checks, and a deploy script or a form
 // service holds neither. The routine's own webhook token is the only
-// credential, verified in constant time by the domain, and it is read from the
-// Authorization header — never the query string, for the reason
-// ambientIdentity gives.
+// credential, verified in constant time by the domain.
+//
+// It is read from the Authorization header and nowhere else — not the query
+// string, for the reason ambientIdentity gives, and not the X-Auth-Token header
+// or the session cookie the rest of the API accepts, which would offer the
+// daemon's own credential to the one surface a stranger reaches. And it is
+// checked before anything is done for the caller: no token is refused before
+// a byte of the body is buffered, and a wrong one before the body is read at
+// all. Verifying opens the workspace the request names.
 //
 // The answer is 202 as soon as the token is good. A run is a whole model turn,
 // and a sender kept waiting that long times out and delivers again, which is
 // a second run. The run is recorded like any other and appears in the
 // routine's history.
 func (s *Server) routineWebhook(w http.ResponseWriter, r *http.Request) {
+	in := routine.WebhookInput{
+		ID:    chi.URLParam(r, "id"),
+		Token: webhookToken(r),
+	}
+	if in.Token == "" {
+		writeError(w, r, errWebhookNoToken())
+		return
+	}
+	if err := s.cfg.RoutineWebhooks.VerifyWebhook(r.Context(), in); err != nil {
+		writeError(w, r, err)
+		return
+	}
+
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBytes))
 	if err != nil {
 		var tooLarge *http.MaxBytesError
@@ -55,20 +74,7 @@ func (s *Server) routineWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, errWebhookUnreadable(err))
 		return
 	}
-
-	in := routine.WebhookInput{
-		ID:      chi.URLParam(r, "id"),
-		Token:   presentedToken(r.Context()),
-		Payload: webhookPayload(raw),
-	}
-	if strings.TrimSpace(in.Token) == "" {
-		writeError(w, r, errWebhookNoToken())
-		return
-	}
-	if err := s.cfg.RoutineWebhooks.VerifyWebhook(r.Context(), in); err != nil {
-		writeError(w, r, err)
-		return
-	}
+	in.Payload = webhookPayload(raw)
 
 	// Detached from the request's cancellation, which comes with this answer,
 	// but not from its values: the workspace the run belongs to rides on them.
@@ -86,6 +92,15 @@ func (s *Server) routineWebhook(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]any{
 		"data": map[string]any{"accepted": true, "routine": in.ID},
 	})
+}
+
+// webhookToken is the bearer credential in r's Authorization header, or "".
+func webhookToken(r *http.Request) string {
+	rest, ok := cutPrefixFold(r.Header.Get("Authorization"), "bearer ")
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(rest)
 }
 
 // webhookPayload is what the routine is handed. A JSON object arrives as its
