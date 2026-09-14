@@ -38,6 +38,12 @@ type Executor interface {
 type Execution struct {
 	Agent   string
 	Routine string
+
+	// Name is the routine's, for whatever the runtime shows the run as. The
+	// id is a UUID, and a transcript titled with one tells nobody which
+	// routine ran.
+	Name string
+
 	RunID   string
 	Trigger TriggerType
 	Payload map[string]any

@@ -4,6 +4,11 @@
 // publishing a capability publishes its route — the original maintains 26
 // controllers by hand, and the drift between them and the tools is the reason
 // this layer generates instead.
+//
+// One route is written by hand: a routine's webhook (routine_webhook.go). It
+// cannot be a command, because every command answers to a session or API
+// token and the sender of a webhook holds neither — the routine's own token is
+// its credential, and the route exists to check exactly that one.
 package httpapi
 
 import (
@@ -93,6 +98,12 @@ type Config struct {
 	// Nil leaves it unmounted.
 	Bot http.Handler
 
+	// RoutineWebhooks fires a routine from outside, at RoutineWebhookPath,
+	// outside the authenticated group for the reason Bot is: the sender proves
+	// itself with the routine's webhook token and nothing else. Nil leaves it
+	// unmounted.
+	RoutineWebhooks RoutineWebhooks
+
 	// Artifacts serves generated static applications at /v/artifacts/{id}/*,
 	// outside /api entirely — it is not a command surface and it authorises
 	// itself per artifact, per visibility, never against the guarded group's
@@ -159,6 +170,9 @@ func New(cfg Config) *Server {
 		}
 		if cfg.Bot != nil {
 			api.Mount("/bot", cfg.Bot)
+		}
+		if cfg.RoutineWebhooks != nil {
+			api.Post(strings.TrimPrefix(RoutineWebhookPath, "/api"), s.routineWebhook)
 		}
 
 		api.Group(func(guarded chi.Router) {

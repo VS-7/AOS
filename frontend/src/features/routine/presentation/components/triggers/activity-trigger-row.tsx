@@ -1,16 +1,14 @@
 import * as React from "react";
-import { ActivityIcon, PlusIcon } from "lucide-react";
+import { ActivityIcon, PlusIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import type { ActivityEventDefinition } from "@/features/activity/interfaces/activity.interfaces";
 import { ActivityEventHelper } from "@/features/activity/presentation/helpers/activity-event.helper";
 import type { RoutineActivityFilter } from "@/features/routine/interfaces/routine.interfaces";
 import type { RoutineTriggerFormValue } from "@/features/routine/presentation/consts/routine-triggers";
-import { ButtonGroup } from "@/components/ui/button-group";
+import { RoutineTriggersHelper } from "@/features/routine/presentation/helpers/routine-triggers.helper";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Trash2Icon } from "lucide-react";
 import { t } from "@/lib/i18n";
 
 interface ActivityTriggerRowProps {
@@ -34,64 +32,58 @@ export function ActivityTriggerRow({
     value.config.event,
   );
 
-
   const filters = value.config.filters ?? [];
-  const filterableFields =
-    ActivityEventHelper.getFilterableFields(eventDefinition);
+  // A filter loaded from a routine written elsewhere may name a key the
+  // catalogue does not list; it stays selectable rather than showing blank.
+  const filterableFields = Array.from(
+    new Set([
+      ...ActivityEventHelper.getFilterableFields(eventDefinition),
+      ...filters.map((filter) => filter.field).filter(Boolean),
+    ]),
+  );
 
-  const handleAddFilter = () => {
+  const setFilters = (next: RoutineActivityFilter[]) => {
     onChange({
       type: "activity",
-      config: {
-        ...value.config,
-        filters: [...(value.config.filters ?? []), { path: "", operator: "eq", value: "" }],
-      },
+      config: { ...value.config, filters: next },
     });
+  };
+
+  const handleAddFilter = () => {
+    setFilters([...filters, { field: "", operator: "eq", value: "" }]);
   };
 
   const handleUpdateFilter = (
     index: number,
     patch: Partial<RoutineActivityFilter>,
   ) => {
-    const current = filters[index];
-    if (!current) return;
-    const filter: RoutineActivityFilter = { ...current, ...patch };
-    onChange({
-      type: "activity",
-      config: {
-        ...value.config,
-        filters: value.config.filters?.map((f, i) => i === index ? filter : f) ?? [],
-      },
-    });
+    setFilters(filters.map((filter, i) => (i === index ? { ...filter, ...patch } : filter)));
   };
 
   const handleRemoveFilter = (index: number) => {
-    onChange({
-      type: "activity",
-      config: {
-        ...value.config,
-        filters: value.config.filters?.filter((_, i) => i !== index) ?? [],
-      },
-    });
+    setFilters(filters.filter((_, i) => i !== index));
   };
 
   return (
-    <div className="flex flex-col gap-3 px-3 py-3">
+    <div className="group flex flex-col gap-3 px-3 py-3">
       <div className="flex items-center gap-3">
         <div className="flex h-7 shrink-0 items-center justify-center">
           <ActivityIcon className="size-4 text-muted-foreground" />
         </div>
 
-        <div className="min-w-0 flex-1 flex items-center gap-2">
-          <span>{t("When")}</span>
-          <p className="text-xs text-muted-foreground">
-            {eventDefinition
-              ? ActivityEventHelper.getDisplayLabel(eventDefinition)
-              : "On activity"}
-          </p>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="shrink-0 text-sm">{t("When")}</span>
+          <span className="truncate text-sm font-medium">
+            {RoutineTriggersHelper.eventTitle(eventDefinition, value.config.namespace, value.config.event)}
+          </span>
+          {eventDefinition?.description ? (
+            <span className="hidden truncate text-xs text-muted-foreground sm:inline">
+              {RoutineTriggersHelper.eventDescription(eventDefinition)}
+            </span>
+          ) : null}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <Button
             type="button"
             variant="ghost"
@@ -106,24 +98,28 @@ export function ActivityTriggerRow({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="self-center text-muted-foreground hover:text-destructive"
+            size="icon"
+            className="size-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
             onClick={onRemove}
           >
-            {t("Remove")}
+            <Trash2Icon className="size-3.5" />
+            <span className="sr-only">{t("Remove activity trigger")}</span>
           </Button>
         </div>
       </div>
 
       {filters.length > 0 && (
-        <div className="flex flex-col border border-border/70 rounded-md bg-card/30 divide-y divide-border/70">
+        <div className="flex flex-col divide-y divide-border/70 rounded-md border border-border/70 bg-card/30">
           {filters.map((filter, index) => (
-            <div key={`${filter.path}-${index}`} className="flex flex-wrap items-center p-2">
+            <div key={index} className="flex flex-wrap items-center gap-1 p-2">
               <Select
-                value={filter.path}
-                onValueChange={(path) => handleUpdateFilter(index, { path })}
+                value={filter.field}
+                onValueChange={(field) => handleUpdateFilter(index, { field })}
               >
-                <SelectTrigger className="!h-7 w-[128px] rounded-md border-border/70 bg-background/70 px-2 text-xs">
+                <SelectTrigger
+                  className="!h-7 w-[128px] rounded-md border-border/70 bg-background/70 px-2 text-xs"
+                  aria-label={t("Field")}
+                >
                   <SelectValue placeholder={t("Field")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -143,13 +139,16 @@ export function ActivityTriggerRow({
                   })
                 }
               >
-                <SelectTrigger className="!h-7 w-[100px] rounded-md border-border/70 bg-background/70 px-2 text-xs">
+                <SelectTrigger
+                  className="!h-7 w-[110px] rounded-md border-border/70 bg-background/70 px-2 text-xs"
+                  aria-label={t("Operator")}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="eq">equals</SelectItem>
+                  <SelectItem value="eq">{t("equals")}</SelectItem>
                   <SelectItem value="neq">{t("not equals")}</SelectItem>
-                  <SelectItem value="contains">contains</SelectItem>
+                  <SelectItem value="contains">{t("contains")}</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -170,6 +169,7 @@ export function ActivityTriggerRow({
                 onClick={() => handleRemoveFilter(index)}
               >
                 <Trash2Icon className="size-3.5" />
+                <span className="sr-only">{t("Remove filter")}</span>
               </Button>
             </div>
           ))}

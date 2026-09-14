@@ -3,6 +3,7 @@ import {
   ArrowUpRightIcon,
   CheckIcon,
   CopyIcon,
+  RotateCwIcon,
   Trash2Icon,
   WebhookIcon,
 } from "lucide-react";
@@ -16,22 +17,36 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 
+/** What the webhook row knows about the routine it belongs to. */
+export interface WebhookTriggerState {
+  /** The fire URL, once the routine is saved with its webhook. */
+  fireUrl: string | null;
+  /** Mints a new token, invalidating the old one. Absent until saved. */
+  onRotate?: () => void;
+  rotating?: boolean;
+}
+
 interface WebhookTriggerRowProps {
-  fireUrl?: string | null;
+  webhook?: WebhookTriggerState;
   onRemove: () => void;
 }
 
 export function WebhookTriggerRow({
-  fireUrl,
+  webhook,
   onRemove,
 }: WebhookTriggerRowProps) {
   const [copied, setCopied] = React.useState(false);
+  const fireUrl = webhook?.fireUrl ?? null;
 
-  function handleCopy() {
+  async function handleCopy() {
     if (!fireUrl) return;
-    navigator.clipboard.writeText(fireUrl);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(fireUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can be refused; the URL stays selectable.
+    }
   }
 
   return (
@@ -59,7 +74,7 @@ export function WebhookTriggerRow({
                 <InputGroupButton
                   type="button"
                   size="icon-xs"
-                  onClick={handleCopy}
+                  onClick={() => void handleCopy()}
                   aria-label={t("Copy webhook URL")}
                 >
                   {copied ? (
@@ -72,17 +87,36 @@ export function WebhookTriggerRow({
             </InputGroup>
           ) : (
             <p className="text-xs text-muted-foreground">
-              {t("Save this routine to generate the public fire URL.")}
+              {t("Save this routine to get its fire URL and token.")}
             </p>
           )}
+
+          {fireUrl && webhook?.onRotate ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+              disabled={webhook.rotating}
+              onClick={webhook.onRotate}
+            >
+              <RotateCwIcon className="size-3.5" />
+              {t("New token")}
+            </Button>
+          ) : null}
         </div>
+        {fireUrl ? (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t("POST to this address with the header \"Authorization: Bearer <token>\". The token was shown once, when the webhook was added.")}
+          </p>
+        ) : null}
       </div>
 
       <Button
         type="button"
         variant="ghost"
         size="icon"
-        className="size-7 shrink-0 self-center opacity-0 transition-opacity group-hover:opacity-100"
+        className="size-7 shrink-0 self-center opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
         onClick={onRemove}
       >
         <Trash2Icon className="size-3.5" />

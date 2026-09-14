@@ -1,10 +1,10 @@
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
+import type { RoutineStatus } from "@/features/routine/interfaces/routine.interfaces";
 import { ROUTINE_STATUS_CONFIG, ROUTINE_STATUS_ORDER } from "@/features/routine/presentation/consts/routine";
 
 interface SetRoutineStatusDropdownProps {
-  currentStatus: Routine["status"];
-  onStatusChange: (status: Routine["status"]) => void;
+  currentStatus: RoutineStatus;
+  onStatusChange: (status: RoutineStatus) => void;
 }
 
 export function SetRoutineStatusDropdown({

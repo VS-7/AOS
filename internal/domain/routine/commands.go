@@ -44,7 +44,10 @@ cron of "* * * * *" fires once per tick, not once a minute — get reports the
 effective interval next to what you declared.
 
 A webhook token is shown once, at creation. Only a hash is stored. Rotating is
-the only way to get another.
+the only way to get another. Saving a routine keeps its token. To fire it, POST
+to /api/hooks/routines/{id}?workspace={workspace} on the daemon with the header
+"Authorization: Bearer <token>" and any body; the answer is 202, and the run
+appears in runs.
 
 Scope is what the routine may do while it runs. Without it a routine cannot
 create tasks or reach outside the machine — the tool registry is filtered before
@@ -136,7 +139,8 @@ A webhook trigger mints a token, returned once. Store it now.`,
 
 Triggers are replaced whole rather than merged, because a partial update of a
 discriminated union is how you end up with a scheduled trigger holding a stale
-webhook hash. A webhook among the new triggers mints a new token.`,
+webhook hash. A webhook the routine already had keeps its token; one added
+where there was none mints a token, returned once. Rotate replaces a token.`,
 		Examples: []command.Example{
 			{Description: "switch one off without deleting it", Input: UpdateInput{
 				ID: "r-1", Status: ptr(Disabled),

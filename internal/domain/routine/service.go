@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/identity"
 	"github.com/OWNER/aos/internal/core/safe"
@@ -150,7 +151,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (CreateOutput, err
 		return CreateOutput{}, errInvalidStatus(string(status))
 	}
 
-	triggers, token, err := s.buildTriggers(in.Triggers)
+	triggers, token, err := s.buildTriggers(in.Triggers, "")
 	if err != nil {
 		return CreateOutput{}, err
 	}
@@ -201,7 +202,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (CreateOutput, err
 		current.Content = strings.TrimLeft(*in.Content, " \t\n\r")
 	}
 	if in.Triggers != nil {
-		built, minted, err := s.buildTriggers(*in.Triggers)
+		built, minted, err := s.buildTriggers(*in.Triggers, webhookHash(current.Triggers))
 		if err != nil {
 			return CreateOutput{}, err
 		}
@@ -271,16 +272,42 @@ func (s *Service) Fire(ctx context.Context, in FireInput) (*Run, error) {
 
 // FireWebhook authenticates a token and fires the routine it belongs to.
 func (s *Service) FireWebhook(ctx context.Context, in WebhookInput) (*Run, error) {
-	current, err := s.load(ctx, in.Agent, in.ID)
+	current, err := s.authenticateWebhook(ctx, in)
 	if err != nil {
 		return nil, err
 	}
+	return s.fire(ctx, current, Webhook, in.Payload, false)
+}
+
+// VerifyWebhook answers whether a token fires a routine, without firing it.
+//
+// The HTTP route answers a caller as soon as its token is good and runs the
+// routine afterwards: a run is a whole model turn, and a sender that waits
+// that long for its answer gives up and delivers again.
+func (s *Service) VerifyWebhook(ctx context.Context, in WebhookInput) error {
+	_, err := s.authenticateWebhook(ctx, in)
+	return err
+}
+
+// authenticateWebhook finds the routine a token fires.
+//
+// A routine that is not there is refused exactly like a wrong token. This is
+// the one surface a stranger reaches, and "no such routine" would tell them
+// which identifiers exist.
+func (s *Service) authenticateWebhook(ctx context.Context, in WebhookInput) (*Routine, error) {
 	if s.tokens == nil {
 		return nil, errTokensUnavailable()
 	}
+	current, err := s.load(ctx, in.Agent, in.ID)
+	if err != nil {
+		if errors.Is(err, apperr.ErrNotFound) {
+			return nil, errInvalidToken(in.ID)
+		}
+		return nil, err
+	}
 	for _, t := range current.Triggers {
 		if t.Type == Webhook && s.tokens.Verify(in.Token, t.Config.TokenHash) {
-			return s.fire(ctx, current, Webhook, in.Payload, false)
+			return current, nil
 		}
 	}
 	return nil, errInvalidToken(current.ID)
@@ -292,7 +319,17 @@ func (s *Service) FireWebhook(ctx context.Context, in WebhookInput) (*Run, error
 // It never returns an error to its caller. It is wired as a sink of the
 // activity aggregate, and a routine that fails must not roll back the task
 // whose status changed.
+//
+// An activity published while routines are firing — by a run, or by a firing
+// announcing itself — fires no routine already in that chain, and nothing at
+// all once the chain is MaxChain long. See MaxChain for the loop this closes.
 func (s *Service) OnActivity(ctx context.Context, namespace, event string, data map[string]any) {
+	chain := chainOf(ctx)
+	if len(chain) >= MaxChain {
+		s.log.Warn("an activity published by a chain of routine firings fired no further routine",
+			"namespace", namespace, "event", event, "chain", chain, "limit", MaxChain)
+		return
+	}
 	found, err := s.repo.List(ctx, collections.Query{IncludeContent: true})
 	if err != nil {
 		s.log.Error("could not read the routines to react to an activity",
@@ -301,8 +338,15 @@ func (s *Service) OnActivity(ctx context.Context, namespace, event string, data 
 	}
 	for i := range found {
 		r := &found[i]
-		if r.Status != Enabled {
+		if r.Status != Enabled || inChain(chain, r) {
 			continue
+		}
+		// Each firing is a whole turn. A caller that went away while an
+		// earlier one ran is not a reason to start the next.
+		if ctx.Err() != nil {
+			s.log.Warn("stopped reacting to an activity: the caller is gone",
+				"namespace", namespace, "event", event, "err", ctx.Err())
+			return
 		}
 		for _, t := range r.Triggers {
 			if !t.Matches(namespace, event, data) {
@@ -394,6 +438,10 @@ func (s *Service) scheduled(ctx context.Context, now time.Time, fire func(contex
 // fire is the single place a run is recorded, so no trigger can fire without
 // leaving one.
 func (s *Service) fire(ctx context.Context, r *Routine, trigger TriggerType, payload map[string]any, force bool) (*Run, error) {
+	// Everything below — the run, and the routine.fired it publishes — happens
+	// on behalf of this firing, and OnActivity must be able to tell.
+	ctx = withFiring(ctx, r)
+
 	if r.Status != Enabled && !force {
 		run := s.newRun(r, trigger, payload)
 		run.Status = RunSkipped
@@ -429,7 +477,7 @@ func (s *Service) fire(ctx context.Context, r *Routine, trigger TriggerType, pay
 	err := safe.Do(runCtx, "routine.execute", func(ctx context.Context) error {
 		var execErr error
 		outcome, execErr = s.executor.Execute(ctx, Execution{
-			Agent: r.Agent, Routine: r.ID, RunID: run.ID,
+			Agent: r.Agent, Routine: r.ID, Name: r.Name, RunID: run.ID,
 			Trigger: trigger, Payload: payload,
 			Prompt: r.Content, Scope: r.Scope,
 		})
@@ -530,7 +578,13 @@ func (s *Service) Runs(ctx context.Context, in RunsInput) (RunsOutput, error) {
 
 // buildTriggers validates the union and mints a webhook token when one is
 // declared. It returns the token exactly once, to be shown and then forgotten.
-func (s *Service) buildTriggers(in []TriggerInput) ([]Trigger, string, error) {
+//
+// keep is the hash of the webhook the routine already has, if any. Triggers
+// are replaced whole and an editor resends them on every save, so a webhook
+// among them is the same webhook, not a request for a new secret: minting
+// there rotated the token on a rename, and whatever held the old one stopped
+// working with nobody told. Rotate is the way to ask for a new one.
+func (s *Service) buildTriggers(in []TriggerInput, keep string) ([]Trigger, string, error) {
 	out := make([]Trigger, 0, len(in))
 	var token string
 
@@ -551,6 +605,13 @@ func (s *Service) buildTriggers(in []TriggerInput) ([]Trigger, string, error) {
 				return nil, "", errFiltersNotApplicable(string(t.Type))
 			}
 		case Webhook:
+			if len(t.Filters) > 0 {
+				return nil, "", errFiltersNotApplicable(string(t.Type))
+			}
+			if keep != "" {
+				built.Config.TokenHash = keep
+				break
+			}
 			if s.tokens == nil {
 				return nil, "", errTokensUnavailable()
 			}
@@ -560,9 +621,6 @@ func (s *Service) buildTriggers(in []TriggerInput) ([]Trigger, string, error) {
 			}
 			built.Config.TokenHash = hash
 			token = minted
-			if len(t.Filters) > 0 {
-				return nil, "", errFiltersNotApplicable(string(t.Type))
-			}
 		case Activity:
 			if strings.TrimSpace(t.Namespace) == "" {
 				return nil, "", errActivityNamespaceRequired()
@@ -582,6 +640,16 @@ func (s *Service) buildTriggers(in []TriggerInput) ([]Trigger, string, error) {
 		out = append(out, built)
 	}
 	return out, token, nil
+}
+
+// webhookHash is the stored hash of a routine's webhook trigger, or "".
+func webhookHash(triggers []Trigger) string {
+	for _, t := range triggers {
+		if t.Type == Webhook && t.Config.TokenHash != "" {
+			return t.Config.TokenHash
+		}
+	}
+	return ""
 }
 
 // view adds what the file does not hold: the effective resolution of each
