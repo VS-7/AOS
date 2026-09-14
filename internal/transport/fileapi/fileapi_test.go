@@ -765,3 +765,54 @@ func TestContentReportsAMissingFile(t *testing.T) {
 		t.Fatalf("status = %d, want %d", res.StatusCode, http.StatusNotFound)
 	}
 }
+
+// An agent writes workspace files, and this route served its HTML as a
+// document of the API's own origin: opened in a browser signed in to the
+// daemon, a page whose script fetched /api/auth/session was answered with the
+// person. Every answer that could be a document running script comes back
+// sandboxed into an opaque origin, with no scripts at all, and never sniffed
+// into one.
+func TestContentSandboxesEveryDocumentThatCouldRunScript(t *testing.T) {
+	probe := []byte(`<script>fetch('/api/auth/session')</script>`)
+	fs := newFakeFS()
+	names := []string{"probe.html", "probe.htm", "probe.xhtml", "probe.svg", "probe.xml", "probe.txt", "probe.json", "probe.js", "probe"}
+	for _, name := range names {
+		fs.put(root+"/"+name, probe)
+	}
+	srv := newServer(t, fs, fakeGit{}, fixedWorkspace{root: root})
+
+	for _, name := range names {
+		res, _ := do(t, srv, http.MethodGet, "/content?path="+name, nil)
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("%s: status = %d, want %d", name, res.StatusCode, http.StatusOK)
+		}
+		if got := res.Header.Get("Content-Security-Policy"); got != "sandbox" {
+			t.Errorf("%s (%s): Content-Security-Policy = %q, want sandbox", name, res.Header.Get("Content-Type"), got)
+		}
+		if got := res.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("%s: X-Content-Type-Options = %q, want nosniff", name, got)
+		}
+	}
+}
+
+// What the Files panel's viewers load is left to render: a sandboxed PDF is
+// refused by the browser's own viewer, and a policy on an image changes
+// nothing but the header count.
+func TestContentLeavesPassiveMediaUnsandboxed(t *testing.T) {
+	fs := newFakeFS()
+	names := []string{"logo.png", "photo.jpg", "report.pdf"}
+	for _, name := range names {
+		fs.put(root+"/"+name, []byte("bytes"))
+	}
+	srv := newServer(t, fs, fakeGit{}, fixedWorkspace{root: root})
+
+	for _, name := range names {
+		res, _ := do(t, srv, http.MethodGet, "/content?path="+name, nil)
+		if got := res.Header.Get("Content-Security-Policy"); got != "" {
+			t.Errorf("%s: Content-Security-Policy = %q, want none", name, got)
+		}
+		if got := res.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("%s: X-Content-Type-Options = %q, want nosniff", name, got)
+		}
+	}
+}

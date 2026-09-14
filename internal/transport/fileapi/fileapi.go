@@ -19,6 +19,7 @@ import (
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/domain/file"
+	"github.com/OWNER/aos/internal/transport/fileapi/contentpolicy"
 )
 
 // maxBodyBytes bounds a write body. A file the UI edits is text a person is
@@ -86,6 +87,9 @@ func (s *server) read(w http.ResponseWriter, r *http.Request) {
 // an <img> cannot decode one. http.ServeContent does the rest — Range (so a
 // video can seek), 304 against If-Modified-Since, and the Content-Length the
 // player needs to draw a scrub bar.
+//
+// The bytes are the workspace's, and agents write them: anything that could
+// be a document running script goes out sandboxed — see contentpolicy.
 func (s *server) content(w http.ResponseWriter, r *http.Request) {
 	out, err := s.svc.Content(r.Context(), file.ReadInput{Path: r.URL.Query().Get("path")})
 	if err != nil {
@@ -98,6 +102,7 @@ func (s *server) content(w http.ResponseWriter, r *http.Request) {
 	// the domain already knows the type from the extension, and sniffing
 	// reads the first 512 bytes back off the handle to guess it again.
 	w.Header().Set("Content-Type", out.MediaType)
+	contentpolicy.Apply(w.Header())
 	http.ServeContent(w, r, out.Name, out.ModTime, out.Body)
 }
 
