@@ -57,6 +57,25 @@ describe("domain commands", () => {
     expect(AgentToolThinkingHelper.getToolConfig("Bash").title).toBe("Run command");
   });
 
+  // The verb alone decided: "read" is a read, so marking the inbox as read —
+  // a row titled "Activity · Mark as read" — was counted among the reads, and
+  // registering a repository ("introspect") as one too.
+  it("counts a command that changes records as a write, whatever its verb", () => {
+    expect(AgentToolThinkingHelper.getToolConfig("activity_read").action).toBe("write");
+    expect(AgentToolThinkingHelper.getToolConfig("activity_read-all").action).toBe("write");
+    expect(AgentToolThinkingHelper.getToolConfig("workspace_introspect").action).toBe("write");
+    expect(AgentToolThinkingHelper.getToolConfig("memories_reflect").action).toBe("read");
+    expect(AgentToolThinkingHelper.getToolConfig("activity_get").action).toBe("read");
+  });
+
+  // Ten registered verbs ("decide", "call", "check", "runs", …) were in no
+  // group, so their rows fell into "other actions" with a generic description.
+  it("classifies every command the daemon registers", () => {
+    const schema = readFileSync("src/lib/schema.ts", "utf8");
+    const commands = [...schema.matchAll(/^  "([a-z][a-z0-9-]*_[a-z0-9_-]+)": \{/gm)].map((m) => m[1]);
+    expect(commands.filter((name) => AgentToolThinkingHelper.getToolConfig(name).action === "other")).toEqual([]);
+  });
+
   it("counts every call in the summary", () => {
     const summary = AgentToolThinkingHelper.getSummary(
       message(tool("projects_get"), tool("tasks_list"), tool("comments_create"), tool("tasks_branch", { state: "output-error" }), tool("mystery_thing")),
@@ -101,6 +120,20 @@ describe("a daemon command's title", () => {
     // A title key names its group, so it can never be a generic word another
     // screen translates with a different meaning.
     expect(titles.filter((key) => !key.includes(" · "))).toEqual([]);
+  });
+
+  // The group half is the screen's own name for those records: toolset rows
+  // read "Conjuntos de ferramentas" while the marketplace and settings call
+  // them "Toolsets". "Update" is the verb elsewhere, so it has no noun to match.
+  it("names its group the way the rest of the app does", () => {
+    const catalogue = ptBR as Record<string, string>;
+    const mismatched = Object.values(DOMAIN_COMMAND_TITLES).flatMap((key) => {
+      const [group] = key.split(" · ");
+      const noun = group === "Update" ? undefined : catalogue[group];
+      const shown = catalogue[key]?.split(" · ")[0];
+      return noun !== undefined && shown !== noun ? [`${key}: ${shown} ≠ ${noun}`] : [];
+    });
+    expect(mismatched).toEqual([]);
   });
 
   it("falls back to the command's own words for a tool the registry does not know", () => {

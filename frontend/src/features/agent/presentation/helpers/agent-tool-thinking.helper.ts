@@ -21,8 +21,13 @@ const DOMAIN_VERB_ACTIONS: Record<string, AgentThinkingActionKind> = {
   stats: "read",
   me: "read",
   inventory: "read",
-  introspect: "read",
   graph: "read",
+  reflect: "read",
+  events: "read",
+  runs: "read",
+  tools: "read",
+  components: "read",
+  check: "read",
   diff: "read",
   "get-config": "read",
   "records-get": "read",
@@ -32,6 +37,7 @@ const DOMAIN_VERB_ACTIONS: Record<string, AgentThinkingActionKind> = {
   query: "search",
   recall: "search",
   discover: "search",
+  discovery: "search",
   create: "write",
   update: "write",
   delete: "write",
@@ -53,6 +59,8 @@ const DOMAIN_VERB_ACTIONS: Record<string, AgentThinkingActionKind> = {
   scaffold: "write",
   plan: "write",
   "update-config": "write",
+  introspect: "write",
+  decide: "write",
   "set-password": "write",
   "records-create": "write",
   "records-update": "write",
@@ -64,11 +72,22 @@ const DOMAIN_VERB_ACTIONS: Record<string, AgentThinkingActionKind> = {
   restart: "execute",
   send: "execute",
   render: "execute",
-  reflect: "execute",
+  call: "execute",
+  apply: "execute",
+  download: "execute",
   recover: "execute",
   retry: "execute",
   cancel: "execute",
   "execute-action": "execute",
+};
+
+/**
+ * Commands whose verb names the wrong action: activity's "read" marks an
+ * entry as read, which changes it.
+ */
+const DOMAIN_COMMAND_ACTIONS: Record<string, AgentThinkingActionKind> = {
+  activity_read: "write",
+  "activity_read-all": "write",
 };
 
 const DOMAIN_ACTION_ICONS: Record<AgentThinkingActionKind, IconName> = {
@@ -592,7 +611,8 @@ export class AgentToolThinkingHelper {
   private static getDomainToolConfig(toolName: string): AgentToolThinkingConfig {
     const [group, ...rest] = toolName.split("_");
     const verb = rest.join("-");
-    const action = DOMAIN_VERB_ACTIONS[verb] ?? (verb.startsWith("set-") ? "write" : "other");
+    const action =
+      DOMAIN_COMMAND_ACTIONS[toolName] ?? DOMAIN_VERB_ACTIONS[verb] ?? (verb.startsWith("set-") ? "write" : "other");
     const title = DOMAIN_COMMAND_TITLES[toolName];
 
     return {
