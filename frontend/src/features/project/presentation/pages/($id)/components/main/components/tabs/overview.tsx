@@ -17,7 +17,7 @@ import { useDelayedLoading } from "@/hooks/use-delayed-loading.hook";
 import { aos } from "@/app/aos";
 import type { Project } from "@/features/project/interfaces/project.interfaces";
 import type { Task } from "@/features/task/interfaces/task.interfaces";
-import { t } from "@/lib/i18n";
+import { t, useTranslation } from "@/lib/i18n";
 
 interface ProjectOverviewTabProps {
   form: any;
@@ -25,16 +25,19 @@ interface ProjectOverviewTabProps {
 }
 
 // ─── Apple-accent palette (macOS 26) ─────────────────────────────────────
+// Labels are getters so they are translated when a card renders; as plain
+// strings they reached the screen in English whatever the language.
 const CARD_ACCENTS = [
   {
+    key: "total",
     icon: "ClipboardList",
-    label: "Total Tasks",
+    get label() { return t("Total Tasks"); },
     color: "oklch(0.62 0.16 258)",
   },
-  { icon: "CircleDot", label: "Open", color: "oklch(0.72 0.17 72)" },
-  { icon: "Timer", label: "In Progress", color: "oklch(0.66 0.16 202)" },
-  { icon: "CheckCircle2", label: "Done", color: "oklch(0.70 0.18 146)" },
-] as const;
+  { key: "open", icon: "CircleDot", get label() { return t("Open tasks"); }, color: "oklch(0.72 0.17 72)" },
+  { key: "in-progress", icon: "Timer", get label() { return t("In Progress"); }, color: "oklch(0.66 0.16 202)" },
+  { key: "done", icon: "CheckCircle2", get label() { return t("Done"); }, color: "oklch(0.70 0.18 146)" },
+];
 
 function tint(color: string, amount: number): string {
   return `color-mix(in srgb, ${color} ${Math.round(amount * 100)}%, transparent)`;
@@ -102,8 +105,10 @@ interface ProjectKpiCardsProps {
 }
 
 function ProjectKpiCards({ projectId }: ProjectKpiCardsProps) {
+  // Subscribing re-renders the card labels when the language changes.
+  useTranslation();
   const taskQuery = aos.client.task.list.useQuery({
-    query: { project: [projectId], limit: "200" },
+    query: { project: projectId, limit: 200 },
     staleTime: 5 * 60 * 1000,
   });
 
@@ -130,7 +135,9 @@ function ProjectKpiCards({ projectId }: ProjectKpiCardsProps) {
   );
   const cardProgress = React.useMemo(
     () => [
-      100,
+      // A full bar over "0 tasks" read as a project with all its work in
+      // place; with nothing to count there is nothing to fill.
+      metrics.total > 0 ? 100 : 0,
       metrics.total > 0 ? (metrics.open / metrics.total) * 100 : 0,
       metrics.total > 0 ? (metrics.inProgress / metrics.total) * 100 : 0,
       metrics.total > 0 ? (metrics.done / metrics.total) * 100 : 0,
@@ -144,7 +151,7 @@ function ProjectKpiCards({ projectId }: ProjectKpiCardsProps) {
     <div className="grid grid-cols-4 bg-card/5 rounded-2xl border divide-x">
       {CARD_ACCENTS.map((card, i) => (
         <KpiCard
-          key={card.label}
+          key={card.key}
           icon={card.icon}
           label={card.label}
           value={cardValues[i]}
@@ -208,7 +215,7 @@ export function ProjectOverviewTab({ form, project }: ProjectOverviewTabProps) {
               <FormLabel className="opacity-60">{t("Source")}</FormLabel>
               <FormControl>
                 <FolderInput
-                  placeholder="/absolute/path/to/project"
+                  placeholder={t("/absolute/path/to/project")}
                   inputClassName="border-0 rounded-none p-0 outline-0"
                   {...field}
                 />
@@ -225,10 +232,11 @@ export function ProjectOverviewTab({ form, project }: ProjectOverviewTabProps) {
         render={({ field }) => (
           <FormItem>
             <FormLabel className="opacity-60">{t("Content")}</FormLabel>
+            {/* No `title`: the FormLabel above already names the field, and the
+                editor's own heading repeated it ("Content | Content"). */}
             <MarkdownEditor
               value={field.value ?? ""}
               onValueChange={field.onChange}
-              title={t("Content")}
               placeholder={t("Add context, notes, or documentation for this project...")}
             />
             <FormMessage />

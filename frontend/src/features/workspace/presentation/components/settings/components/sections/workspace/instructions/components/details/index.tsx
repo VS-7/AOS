@@ -67,7 +67,7 @@ export function SelectedInstructionDetail() {
                           type="button"
                           className="rounded px-1.5 py-0.5 text-xs hover:bg-accent"
                         >
-                          {field.value || "Select type"}
+                          {field.value || t("Select type")}
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start">
@@ -93,9 +93,11 @@ export function SelectedInstructionDetail() {
                 {t("Scope")}
               </span>
               <span className="text-xs text-foreground">
-                {pathCount
-                  ? `${pathCount} path${pathCount !== 1 ? "s" : ""}`
-                  : "Global"}
+                {pathCount === 1
+                  ? t("1 path")
+                  : pathCount
+                    ? t("{{count}} paths", { count: pathCount })
+                    : t("Global")}
               </span>
             </SplitPageLayout.WidgetItem>
 
@@ -122,7 +124,9 @@ export function SelectedInstructionDetail() {
               control={form.control}
               name="pathsText"
               render={({ field }) => (
-                <FormItem className="w-full space-y-2">
+                // Padded like every other widget row: straight in the unpadded
+                // widget body, the label sat on the card's border.
+                <FormItem className="w-full space-y-2 p-3">
                   <FormLabel className="text-xs text-muted-foreground">
                     {t("One glob per line")}
                   </FormLabel>

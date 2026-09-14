@@ -26,6 +26,8 @@ import { t } from "@/lib/i18n";
 // placeholder until the product is named (ADR-0000), and `go install` of it
 // would fail on every machine. Windows downloads from the Releases page.
 const CLI_INSTALL_COMMAND = "curl -fsSL https://raw.githubusercontent.com/VS-7/AOS/main/install.sh | sh";
+// Labels are catalogue keys, translated where they render: this table is
+// built when the module loads, before the language is known.
 const CLI_VERSION_LABEL = "AOS CLI, installed with the application (macOS, Linux).";
 
 const CLI_CAPABILITIES: {
@@ -164,25 +166,29 @@ export function DevelopersCliSection() {
               {t("Browse and run AOS from the command line. Works directly with Codex, Claude Code, and more.")}
             </p>
             <p className="text-sm font-semibold text-foreground">
-              {CLI_VERSION_LABEL}
+              {t(CLI_VERSION_LABEL)}
             </p>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <CliCommandInput
                 command={CLI_INSTALL_COMMAND}
                 className="min-w-0 w-full flex-1 sm:w-auto"
                 onCopy={() =>
-                  void copyText(CLI_INSTALL_COMMAND, "Install command copied")
+                  void copyText(CLI_INSTALL_COMMAND, t("Install command copied"))
                 }
               />
+              {/* It copies, so it says so: labelled "Install", it installed
+                  nothing and put the curl line on the clipboard. The window
+                  has no way to run an installer for the person. */}
               <Button
                 type="button"
                 size="sm"
                 className="h-7 shrink-0"
                 onClick={() =>
-                  void copyText(CLI_INSTALL_COMMAND, "Install command copied")
+                  void copyText(CLI_INSTALL_COMMAND, t("Install command copied"))
                 }
               >
-                {t("Install")}
+                <HugeiconsIcon icon={Copy01Icon} className="size-3.5" />
+                {t("Copy install command")}
               </Button>
             </div>
           </div>
@@ -201,10 +207,10 @@ export function DevelopersCliSection() {
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground">
-                  {capability.title}
+                  {t(capability.title)}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {capability.description}
+                  {t(capability.description)}
                 </p>
               </div>
             </div>
@@ -212,7 +218,7 @@ export function DevelopersCliSection() {
               command={capability.command}
               className="w-fit max-w-full"
               onCopy={() =>
-                void copyText(capability.command, "Command copied")
+                void copyText(capability.command, t("Command copied"))
               }
             />
           </FormSectionItem>

@@ -9,20 +9,29 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { aos } from "@/app/aos";
 import type { Template } from "@/features/template/interfaces/template.interfaces";
+import { errorMessage } from "@/lib/aos-facade";
 import { t } from "@/lib/i18n";
+import {
+  templateCreatePayload,
+  templateUpdatePayload,
+  type TemplateFormValues,
+} from "../helpers/template-payload";
 
 const NEW_TEMPLATE_ID = "__new_template__";
 
-const templateFormSchema = z.object({
-  name: z.string().trim().min(1, "Name is required"),
-  skill: z.string().optional(),
-  description: z.string().trim().min(1, "Description is required"),
-  output: z.string().optional(),
-  variablesText: z.string().optional(),
-  content: z.string().optional(),
-});
-
-type TemplateFormValues = z.infer<typeof templateFormSchema>;
+/** Built when the provider renders, so its messages are in the language on screen. */
+function buildTemplateFormSchema() {
+  return z.object({
+    name: z.string().trim().min(1, t("Name is required")),
+    skill: z.string().optional(),
+    description: z.string().trim().min(1, t("Description is required")),
+    output: z.string().optional(),
+    variablesText: z.string().optional(),
+    // Required, as templates_create requires it — said here, next to the
+    // field, rather than as the daemon's "the payload is not valid".
+    content: z.string().refine((value) => value.trim().length > 0, t("Content is required")),
+  });
+}
 
 interface TemplatesContextType {
   templates: Omit<Template, "schema" | "content">[];
@@ -50,7 +59,7 @@ interface TemplatesProviderProps {
 
 function buildTemplateFormValues(
   template?: Template | null,
-): TemplateFormValues {
+): TemplateFormValues & { content: string } {
   return {
     name: template?.name ?? "",
     skill: template?.skill ?? "",
@@ -63,44 +72,8 @@ function buildTemplateFormValues(
   };
 }
 
-/**
- * The declared variables, as the daemon stores them.
- *
- * This textarea used to be labelled "JSON schema" and sent under a `schema`
- * key — a field `templates_create`/`templates_update` do not have, so the
- * decoder dropped it and nothing a person wrote here was ever saved. Go's
- * template carries `variables`: a list of `{name, type, description,
- * required, default}`, which is also what the Liquid body reads by name.
- *
- * Anything that is not a list is refused here rather than sent to be ignored
- * — the failure a person can act on is "this is not a list of variables",
- * not a save that quietly does nothing.
- */
-function parseTemplateVariables(variablesText?: string) {
-  const trimmed = variablesText?.trim();
-  if (!trimmed) return undefined;
-
-  const parsed = JSON.parse(trimmed);
-  if (!Array.isArray(parsed)) {
-    throw new Error(t("Variables are a list, such as [{ \"name\": \"title\", \"type\": \"string\" }]."));
-  }
-  return parsed;
-}
-
-function getTemplatePayload(values: TemplateFormValues) {
-  return {
-    name: values.name.trim(),
-    skill: values.skill?.trim() || undefined,
-    description: values.description.trim(),
-    output: values.output?.trim() || undefined,
-    variables: parseTemplateVariables(values.variablesText),
-    content: values.content?.trim() || undefined,
-  };
-}
-
 function getTemplateErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message;
-  return "Unable to save this template.";
+  return errorMessage(error) ?? t("Unable to save this template.");
 }
 
 export function TemplatesProvider({
@@ -119,22 +92,21 @@ export function TemplatesProvider({
 
   const isCreateMode = selectedTemplateId === NEW_TEMPLATE_ID;
 
+  const templateFormSchema = useMemo(buildTemplateFormSchema, []);
   const form = aos.useForm({
     schema: templateFormSchema,
     values: buildTemplateFormValues(null),
     onSubmit: async (values: TemplateFormValues) => {
-      let body: ReturnType<typeof getTemplatePayload>;
-
-      try {
-        body = getTemplatePayload(values);
-      } catch {
-        toast.error(t("Template schema must be valid JSON."));
-        return;
-      }
-
       if (isCreateMode) {
-        const result = await aos.client.template.create.mutate({ body });
+        let body: ReturnType<typeof templateCreatePayload>;
+        try {
+          body = templateCreatePayload(values);
+        } catch (error) {
+          toast.error(getTemplateErrorMessage(error));
+          return;
+        }
 
+        const result = await aos.client.template.create.mutate({ body });
         const createdTemplate = result?.data;
 
         if (result?.error || !createdTemplate?.id) {
@@ -152,15 +124,17 @@ export function TemplatesProvider({
 
       if (!selectedTemplateId) return;
 
+      let body: ReturnType<typeof templateUpdatePayload>;
+      try {
+        body = templateUpdatePayload(values);
+      } catch (error) {
+        toast.error(getTemplateErrorMessage(error));
+        return;
+      }
+
       const result = await aos.client.template.update.mutate({
         params: { template: selectedTemplateId },
-        body: {
-          skill: body.skill,
-          description: body.description,
-          output: body.output,
-          variables: body.variables,
-          content: body.content,
-        },
+        body,
       });
 
       const updatedTemplate = result?.data;

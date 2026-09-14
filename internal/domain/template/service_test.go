@@ -146,11 +146,60 @@ func TestUpdateRefusesNewContentThatDoesNotParseAsLiquid(t *testing.T) {
 	}
 }
 
-func TestCreateWithoutAnIDIsRefused(t *testing.T) {
+// Settings > Workspace > Templates collects a name and never an id, so every
+// "Create template" there was refused as an invalid payload. The id is the
+// slug of the name when none is given, the way instructions_create derives
+// its own; only a name with nothing to slug is refused.
+func TestCreateDerivesTheIDFromTheName(t *testing.T) {
 	svc := newService(t)
-	_, err := svc.Create(ctx(), template.CreateInput{Name: "no id", Content: "x"})
+	created, err := svc.Create(ctx(), template.CreateInput{Name: "Release Notes", Content: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.ID != "release-notes" || created.Name != "Release Notes" {
+		t.Fatalf("created = %+v", created)
+	}
+
+	_, err = svc.Create(ctx(), template.CreateInput{Name: "!!!", Content: "x"})
 	if code := codeOf(t, err); code != "AOS_TEMPLATE_ID_REQUIRED" {
 		t.Fatalf("code = %q", code)
+	}
+}
+
+// A second template with the same id is a conflict the person can resolve by
+// renaming — not a 500 "could not save the template".
+func TestCreateRefusesATemplateThatAlreadyExists(t *testing.T) {
+	svc := newService(t)
+	if _, err := svc.Create(ctx(), template.CreateInput{Name: "Plan", Content: "first"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := svc.Create(ctx(), template.CreateInput{Name: "plan", Content: "second"})
+	if code := codeOf(t, err); code != "AOS_TEMPLATE_ALREADY_EXISTS" {
+		t.Fatalf("code = %q", code)
+	}
+	got, _ := svc.Get(ctx(), template.GetInput{ID: "plan"})
+	if got.Content != "first" {
+		t.Fatalf("the existing template was overwritten: %q", got.Content)
+	}
+}
+
+// Clearing an optional field is sent as "" (or an empty list) and must stick:
+// only an absent field means "leave it as it is".
+func TestUpdateClearsWhatIsSentEmpty(t *testing.T) {
+	svc := newService(t)
+	if _, err := svc.Create(ctx(), template.CreateInput{
+		Name: "Plan", Description: "How we plan", Output: "plans/{{ name }}.md", Content: "body",
+		Variables: []template.Variable{{Name: "name", Type: "string"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	empty := ""
+	got, err := svc.Update(ctx(), template.UpdateInput{ID: "plan", Description: &empty, Output: &empty, Variables: []template.Variable{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Description != "" || got.Output != "" || len(got.Variables) != 0 || got.Content != "body" {
+		t.Fatalf("updated = %+v", got)
 	}
 }
 

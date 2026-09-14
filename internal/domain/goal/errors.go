@@ -70,3 +70,30 @@ func errWriteFailed(op string, cause error) error {
 		Wrap(cause).
 		CTA(apperr.CallToAction{Label: "retry; if it persists, this is a bug"})
 }
+
+// errAlreadyExists fires when the id Create derives from a title is one
+// another goal already has — two titles can differ only in case or
+// punctuation and still slug alike. It used to surface as GOAL_WRITE_FAILED,
+// a 500 telling the person to retry.
+func errAlreadyExists(id string) error {
+	return apperr.New("GOAL_ALREADY_EXISTS").
+		Causer("goal.Service.Create").
+		Msgf("a goal %q already exists", id).
+		Issue("id", id).
+		Status(apperr.StatusConflict).
+		CTA(apperr.CallToAction{
+			Label: "choose a different title, or update the existing goal instead",
+			Tool:  "goals_update",
+		})
+}
+
+// errDueAtInvalid fires when a create's or an update's due date is neither
+// empty nor an RFC3339 instant.
+func errDueAtInvalid(causer, raw string) error {
+	return apperr.New("GOAL_DUE_AT_INVALID").
+		Causer(causer).
+		Msgf("%q is not an RFC3339 instant", raw).
+		Issue("dueAt", raw).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{Label: "send an RFC3339 instant such as 2026-09-20T00:00:00Z, or an empty string for no deadline"})
+}

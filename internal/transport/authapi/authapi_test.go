@@ -385,6 +385,38 @@ func TestProfileChangesTheNameEveryScreenShows(t *testing.T) {
 	}
 }
 
+// TestProfileCarriesTheAvatar: the route decoded only a name and an email, so
+// the image the Profile page sent was dropped before it reached the account.
+func TestProfileCarriesTheAvatar(t *testing.T) {
+	srv := newServer(t)
+	_, env := post(t, srv, "/onboarding", map[string]string{
+		"name": "Vitor", "email": "vitor@example.test", "password": goodPassword,
+	}, "")
+	var onboarded struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(env.Data, &onboarded)
+
+	image := "data:image/png;base64,iVBORw0KGgo="
+	res, _ := post(t, srv, "/profile", map[string]string{"name": "Vitor", "image": image}, onboarded.Token)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("profile status = %d", res.StatusCode)
+	}
+
+	var body struct {
+		User struct {
+			Image string `json:"image"`
+		} `json:"user"`
+	}
+	_, after := get(t, srv, "/session", onboarded.Token)
+	if err := json.Unmarshal(after.Data, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.User.Image != image {
+		t.Errorf("the session reports image %q", body.User.Image)
+	}
+}
+
 // TestProfileNeedsASession. It edits an account, so it may not be reachable by
 // anyone who has not proved which account is theirs.
 func TestProfileNeedsASession(t *testing.T) {
@@ -481,5 +513,53 @@ func TestLoggingOutDoesNotRevokeTheTerminalsCredential(t *testing.T) {
 	}
 	if res, _ := get(t, srv, "/session", cliToken); res.StatusCode != http.StatusOK {
 		t.Errorf("the terminal's credential was revoked by the window's logout: %d", res.StatusCode)
+	}
+}
+
+// TestAPITokenIsIssuedOnceAndDescribedAfter: the Developers page shows which
+// token is configured (its prefix) and can hand out a new one, whose value is
+// in the answer once and never again.
+func TestAPITokenIsIssuedOnceAndDescribedAfter(t *testing.T) {
+	srv := newServer(t)
+	_, env := post(t, srv, "/onboarding", map[string]string{
+		"name": "Vitor", "email": "vitor@example.test", "password": goodPassword,
+	}, "")
+	var onboarded struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(env.Data, &onboarded)
+
+	var described struct {
+		Token *struct {
+			Prefix string `json:"prefix"`
+		} `json:"token"`
+	}
+	_, before := get(t, srv, "/api-token", onboarded.Token)
+	if err := json.Unmarshal(before.Data, &described); err != nil || described.Token != nil {
+		t.Fatalf("before = %s (%v)", before.Data, err)
+	}
+
+	res, issued := post(t, srv, "/api-token", map[string]string{}, onboarded.Token)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", res.StatusCode)
+	}
+	var answer struct {
+		Token  string `json:"token"`
+		Prefix string `json:"prefix"`
+	}
+	if err := json.Unmarshal(issued.Data, &answer); err != nil || answer.Token == "" || !strings.HasPrefix(answer.Token, answer.Prefix) {
+		t.Fatalf("issued = %s (%v)", issued.Data, err)
+	}
+
+	_, after := get(t, srv, "/api-token", onboarded.Token)
+	if err := json.Unmarshal(after.Data, &described); err != nil || described.Token == nil || described.Token.Prefix != answer.Prefix {
+		t.Fatalf("after = %s (%v)", after.Data, err)
+	}
+	if strings.Contains(string(after.Data), answer.Token) {
+		t.Error("the token's value was answered a second time")
+	}
+
+	if res, _ := post(t, srv, "/api-token", map[string]string{}, ""); res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("issuing without a session = %d, want 401", res.StatusCode)
 	}
 }

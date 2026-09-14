@@ -8,6 +8,8 @@ export interface PublicUser {
   name: string;
   username: string;
   email: string;
+  /** The avatar, as an inline data URI; absent when the account has none. */
+  image?: string;
   role: string;
 }
 
@@ -180,13 +182,45 @@ export function session(): Promise<{ user: PublicUser }> {
  * reason: AuthService binds five methods over the bridge and this is not one
  * of them.
  */
-export function updateProfile(name: string, email: string): Promise<{ user: PublicUser }> {
+export function updateProfile(name: string, email: string, image?: string): Promise<{ user: PublicUser }> {
+  // `image` only when given: the daemon reads an absent one as "leave the
+  // avatar as it is" and "" as "remove it".
+  const body = image === undefined ? { name, email } : { name, email, image };
   return call<{ user: PublicUser }>(
     null,
     [],
     "/api/auth/profile",
-    { method: "POST", headers: jsonHeaders, body: JSON.stringify({ name, email }) },
+    { method: "POST", headers: jsonHeaders, body: JSON.stringify(body) },
   );
+}
+
+/** What the Developers page is told about an account's API credential. */
+export interface ApiTokenInfo {
+  prefix: string;
+  createdAt: string;
+  lastUsedAt?: string;
+}
+
+/**
+ * Which API token the account has, if any — its prefix, never its value.
+ *
+ * Desktop method `null`: a route AuthService does not bind, reached over the
+ * bridge's Fetch inside the window (see `changePassword`).
+ */
+export function apiToken(): Promise<{ token: ApiTokenInfo | null }> {
+  return call<{ token: ApiTokenInfo | null }>(null, [], "/api/auth/api-token", { method: "GET" });
+}
+
+/**
+ * Replaces the account's API token and returns the new value — the only time
+ * the daemon ever answers it. The previous one stops working at once.
+ */
+export function regenerateApiToken(): Promise<ApiTokenInfo & { token: string }> {
+  return call<ApiTokenInfo & { token: string }>(null, [], "/api/auth/api-token", {
+    method: "POST",
+    headers: jsonHeaders,
+    body: "{}",
+  });
 }
 
 /**

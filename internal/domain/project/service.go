@@ -2,11 +2,14 @@ package project
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 
+	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/command"
+	"github.com/OWNER/aos/internal/core/slug"
 )
 
 // Service is the project aggregate: a durable container, with Delete
@@ -138,7 +141,15 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Project, error) 
 
 	id := strings.TrimSpace(in.ID)
 	if id == "" {
-		id = slugify(name)
+		id = slug.Generate(name)
+	}
+	// A name made only of symbols derives no id at all, and an empty key is
+	// not a write that failed — it is a name that cannot be used.
+	if id == "" {
+		return nil, errNameRequired()
+	}
+	if _, err := s.repo.Get(ctx, collections.Key{"id": id}); err == nil {
+		return nil, errAlreadyExists(id)
 	}
 
 	now := s.clock.Now()
@@ -150,6 +161,12 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Project, error) 
 		Content: in.Content,
 	}
 	if err := s.repo.Create(ctx, &p); err != nil {
+		// The lookup above and this write are not atomic: a second writer
+		// can take the id in between, and the repository says so as a
+		// conflict, which is still the person's name to change.
+		if errors.Is(err, apperr.ErrConflict) {
+			return nil, errAlreadyExists(id)
+		}
 		return nil, errWriteFailed("Create", err)
 	}
 	s.notify(ctx, "created", &p)
@@ -274,24 +291,4 @@ func (s *Service) validateSource(source string) error {
 		return errSourceInvalid(source, "not_directory")
 	}
 	return nil
-}
-
-// slugify derives an id from a name the same coarse way the original's
-// Slug.generate does: lowercase, non-alphanumerics collapsed to a hyphen.
-func slugify(name string) string {
-	var b strings.Builder
-	prevHyphen := false
-	for _, r := range strings.ToLower(name) {
-		switch {
-		case r >= 'a' && r <= 'z' || r >= '0' && r <= '9':
-			b.WriteRune(r)
-			prevHyphen = false
-		default:
-			if !prevHyphen && b.Len() > 0 {
-				b.WriteByte('-')
-				prevHyphen = true
-			}
-		}
-	}
-	return strings.TrimRight(b.String(), "-")
 }

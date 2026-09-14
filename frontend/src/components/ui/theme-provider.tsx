@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useSyncExternalStore } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { aos } from '@/app/aos';
 import { hexToOklch } from '@/lib/utils';
 import { platform } from '@/lib/wails';
@@ -101,7 +101,30 @@ function mixOklch(
  *  ThemeProvider
  *  ───────────────────────────────────────────────────────────── */
 
+/** Whether a provider above has already applied the theme. */
+const ThemeApplied = createContext(false);
+
+/**
+ * Applies the stored theme to the document.
+ *
+ * Mounted above the sign-in screens (App.tsx) as well as inside the workspace
+ * layout. It used to exist only in the layout, so Login and Onboarding — which
+ * AuthGate renders before the router — drew on tokens.css's dark defaults
+ * whatever the mode: an orange accent, and fields nearly invisible on a light
+ * page. Nested, the inner one only renders its children, so the tokens are
+ * written and the native appearance set once.
+ */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const applied = useContext(ThemeApplied);
+  if (applied) return <>{children}</>;
+  return (
+    <ThemeApplied.Provider value={true}>
+      <AppliedTheme>{children}</AppliedTheme>
+    </ThemeApplied.Provider>
+  );
+}
+
+function AppliedTheme({ children }: { children: React.ReactNode }) {
   const state = aos.stores.theme.useState();
   const systemPrefersDark = useSystemPrefersDark();
 

@@ -3,6 +3,11 @@ import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middl
 import { Schema } from "@/core/helpers/schema.helper";
 import { z } from "zod";
 import { DormantGate } from "@/components/DormantDomain";
+import type {
+  InstalledSkillRecord,
+  MarketplaceRegistryListing,
+} from "@/features/marketplace/interfaces/marketplace.interfaces";
+import { toMarketplaceListing } from "@/features/marketplace/presentation/helpers/marketplace.helper";
 import { MarketplacePageInner } from "./inner";
 
 const MarketplacePageSearchSchema = Schema.object({
@@ -10,9 +15,25 @@ const MarketplacePageSearchSchema = Schema.object({
   query: z.string().optional(),
 });
 
+/** A refusal the page shows, kept as plain data so the loader can hand it over. */
+export interface MarketplaceLoadError {
+  code: string;
+  message: string;
+}
+
+function asLoadError(error: unknown): MarketplaceLoadError | null {
+  if (!error) return null;
+  const { code, message } = error as { code?: unknown; message?: unknown };
+  return { code: typeof code === "string" ? code : "", message: typeof message === "string" ? message : "" };
+}
+
 /**
  * MarketplacePage: list route for the Plugin Marketplace.
  * Loads public marketplace plugins and currently installed workspace plugins.
+ *
+ * Both reads keep their refusal. The page used to drop them and render an
+ * empty result — "No plugins matched your search. Try another query" — when
+ * the truth was that no registry is configured at all.
  */
 export const MarketplacePage = aos
   .page("/marketplace")
@@ -35,13 +56,21 @@ export const MarketplacePage = aos
       client.skill.list.query({ query: {} }),
     ]);
 
-    const marketplacePlugins = marketplaceRes.data?.items || [];
-    const installedPlugins = installedRes.data?.skills || [];
+    const registryListings: MarketplaceRegistryListing[] = Array.isArray(marketplaceRes.data?.items)
+      ? marketplaceRes.data.items
+      : [];
+    const marketplacePlugins = registryListings.map(toMarketplaceListing);
+    const installedPlugins: InstalledSkillRecord[] = installedRes.data?.skills || [];
 
-    return { marketplacePlugins, installedPlugins };
+    return {
+      marketplacePlugins,
+      installedPlugins,
+      marketplaceError: asLoadError(marketplaceRes.error),
+      installedError: asLoadError(installedRes.error),
+    };
   })
   .withComponent(({ route }) => {
-    const { marketplacePlugins, installedPlugins } = route.useLoaderData();
+    const { marketplacePlugins, installedPlugins, marketplaceError, installedError } = route.useLoaderData();
     const search = route.useSearch();
 
     return (
@@ -49,6 +78,8 @@ export const MarketplacePage = aos
         <MarketplacePageInner
           marketplacePlugins={marketplacePlugins}
           installedPlugins={installedPlugins}
+          marketplaceError={marketplaceError}
+          installedError={installedError}
           search={search}
         />
       </DormantGate>

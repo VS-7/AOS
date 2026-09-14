@@ -54,6 +54,11 @@ export interface MarketplaceSkillComponentItem {
 
 /** A marketplace search-result / card entry (`MarketplaceSkillListingSchema`). */
 export interface MarketplaceSkillListing {
+  /**
+   * What the card routes by: a registry listing's `source` ("owner/repo"),
+   * which is what marketplace_get looks a listing up by, or an installed
+   * skill's id. Never the display name, which neither command knows.
+   */
   name: string;
   displayName: string;
   shortDescription: string;
@@ -65,6 +70,76 @@ export interface MarketplaceSkillListing {
   keywords: string[];
   capabilities: string[];
   brandColor: string | null;
+  /** The registry fields, present for a listing a registry offered. */
+  source?: string;
+  registry?: string;
+  version?: string;
+  stars?: number;
+  updatedAt?: string;
+  permissions?: Record<string, unknown>;
+}
+
+/**
+ * What marketplace_discovery and marketplace_get actually answer
+ * (`internal/domain/marketplace/entity.go`'s `Listing`). The screens render
+ * {@link MarketplaceSkillListing}; `toMarketplaceListing` is the one place
+ * the first becomes the second.
+ */
+export interface MarketplaceRegistryListing {
+  registry: string;
+  source: string;
+  name: string;
+  description?: string;
+  version?: string;
+  tags?: string[];
+  stars?: number;
+  updatedAt?: string;
+  permissions?: Record<string, unknown>;
+}
+
+/**
+ * An installed skill, as skills_list answers it
+ * (`internal/domain/skill/entity.go`'s `Skill`) — only the fields the
+ * marketplace reads.
+ */
+export interface InstalledSkillRecord {
+  id: string;
+  name: string;
+  description?: string;
+  active: boolean;
+  version?: string;
+  source?: string;
+  permissions?: Record<string, unknown>;
+  metadata?: {
+    toolsets?: Array<{ id: string; type?: string }>;
+    collections?: Array<{ id: string }>;
+    views?: Array<{ id: string }>;
+    hooks?: Array<{ id: string }>;
+    artifacts?: Array<{ id: string }>;
+    templates?: Array<{ id: string }>;
+    instructions?: Array<{ id: string }>;
+  };
+}
+
+/**
+ * What the plugin page shows: a registry listing, an installed skill, or
+ * both when the installed skill came from that listing.
+ */
+export interface MarketplacePluginDetail {
+  plugin: {
+    name: string;
+    displayName: string;
+    description: string;
+    category: string;
+    author: string;
+    version?: string;
+    source?: string;
+    registry?: string;
+    permissions?: Record<string, unknown>;
+  };
+  inventory: MarketplaceSkillInventory;
+  isInstalled: boolean;
+  installedSkill?: MarketplaceInstalledSkill;
 }
 
 /** Author block on a plugin manifest (`MarketplaceSkillAuthorSchema`). */

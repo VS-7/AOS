@@ -7,17 +7,50 @@ import (
 	"github.com/OWNER/aos/internal/core/build"
 )
 
-func errInvalidID(id string) error {
+// errInvalidID says what the caller actually gave. A caller who sent only a
+// name — the settings form, which has no id field — used to read `"" is not a
+// usable agent slug` and a CTA to type an id on the command line.
+func errInvalidID(id, name string) error {
+	if id == "" {
+		return apperr.New("AGENT_INVALID_ID").
+			Causer("agent.Service.Create").
+			Msgf("%q has no letters or digits to make an agent id from", name).
+			Issue("name", name).
+			Status(apperr.StatusBadRequest).
+			CTA(apperr.CallToAction{
+				Label: "use a name with letters or digits, such as \"Atlas\"; the id is made from it",
+				Tool:  "agents_create",
+				Input: map[string]any{"name": "Atlas"},
+			})
+	}
 	return apperr.New("AGENT_INVALID_ID").
 		Causer("agent.Service.Create").
-		Msgf("%q is not a usable agent slug", id).
+		Msgf("%q is not a usable agent id", id).
 		Issue("id", id).
 		Status(apperr.StatusBadRequest).
 		CTA(apperr.CallToAction{
-			Label:   "use a lowercase slug without spaces, such as \"atlas\"",
+			Label:   "use a lowercase id without spaces, such as \"atlas\", or leave it out to make one from the name",
 			Command: build.Name + " agents create atlas",
 			Tool:    "agents_create",
 		})
+}
+
+// errAlreadyExists names the agent in the way. The storage layer's own
+// sentence named a collection and a key, which tells a person what the file
+// system thinks and not which agent to open or which name to change.
+func errAlreadyExists(id string, existing *Agent) error {
+	return apperr.New("AGENT_ALREADY_EXISTS").
+		Causer("agent.Service.Create").
+		Msgf("%s already has the id %q", existing.DisplayName(), id).
+		Issue("id", id).
+		Status(apperr.StatusConflict).
+		CTA(
+			apperr.CallToAction{
+				Label: "choose another name, or change the existing agent instead",
+				Tool:  "agents_get",
+				Input: map[string]any{"id": id},
+			},
+		)
 }
 
 // errLeaderCycle names the loop it found. A caller told only that the write was

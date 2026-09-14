@@ -115,6 +115,9 @@ var excluded = map[string]string{
 	"routines_fire": "executes a real turn against a model. Running it on four surfaces " +
 		"would be four turns. Covered by the routine suite and end to end by " +
 		"TestTheDeliveryOfPhaseSix.",
+	"toolsets_tools": "connects to the toolset's target to ask what it publishes — the same " +
+		"spawn toolsets_call makes, for the same reason excluded. Covered by the toolset " +
+		"suite over a fake Adapter.",
 	"toolsets_call": "the one boundary where this system executes something outside its " +
 		"own process — spawning an MCP server five times over would leave five " +
 		"processes behind. Covered by the toolset suite over a fake Adapter.",

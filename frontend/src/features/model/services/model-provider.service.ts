@@ -3,7 +3,7 @@ import { aos } from "@/app/aos";
 import { PROVIDER_CATALOG } from "@/features/model/data/provider-catalog";
 import type { ModelProvider } from "@/features/model/interfaces/model.interfaces";
 import type { Config, ConfigAgentModels, ConfigAgentProviderConnection } from "@/features/config/interfaces/config.interfaces";
-import { mergeProviderKey, removeProvider } from "./merge-provider-key";
+import { clearSlotsOf, mergeProviderKey, removeProvider, seedDefaultSlot } from "./merge-provider-key";
 import { useDiscoveredModels } from "./discovered-models";
 
 export { mergeProviderKey, removeProvider };
@@ -77,6 +77,16 @@ export function useModelProviders(): ModelProvider[] {
   );
 }
 
+/** What connecting a provider found out when it asked the provider itself. */
+export interface ProviderConnectOutcome {
+  /** The provider's own reason, when it could not list its models. */
+  error?: string;
+  /** What to do about `error`, most specific first. */
+  actions?: string[];
+  /** The model the Default slot was pointed at, when this connect seeded it. */
+  seeded?: string;
+}
+
 /**
  * Connects a provider, or updates the credential of one already connected.
  *
@@ -90,11 +100,16 @@ export function useModelProviders(): ModelProvider[] {
  * list, there is no path to one element inside it. Round-tripping the
  * redacted view instead would silently overwrite every untouched
  * provider's real key with its fingerprint string on the very next save.
+ *
+ * Resolves with what the provider said. The dialog used to report
+ * "connected." for a key the provider had just refused, and Default was then
+ * seeded from the static list — a screen that looked ready over a first chat
+ * that could only fail.
  */
 export async function setModelProviderKey(
   id: string,
   key: string,
-): Promise<void> {
+): Promise<ProviderConnectOutcome> {
   // Two writes, in this order, because the second depends on the first: the
   // provider can only be asked what it serves once this installation holds a
   // credential to ask with. Seeding from the static catalog in one write is
@@ -102,12 +117,21 @@ export async function setModelProviderKey(
   // does not exist — became the saved default for anyone connecting Codex.
   await writeProviders((providers) => mergeProviderKey(providers, id, key));
 
-  const model = await firstModelOf(id);
-  if (!model) return;
+  const discovery = await firstModelOf(id);
+  if (discovery.error || !discovery.model) {
+    return { error: discovery.error, actions: discovery.actions };
+  }
+  const model = discovery.model;
+  let seeded: string | undefined;
   await writeProviders(
     (providers) => providers,
-    (models) => seedDefaultSlot(models, id, model),
+    (models, providers) => {
+      const next = seedDefaultSlot(models, providers, id, model);
+      if (next !== models) seeded = model;
+      return next;
+    },
   );
+  return { seeded };
 }
 
 /**
@@ -118,78 +142,52 @@ export async function setModelProviderKey(
  * Codex endpoint's own priority order), so the first entry is the provider's
  * recommendation rather than this build's guess.
  *
- * A provider that cannot be reached falls back to the static catalog, which
- * is the same list this function replaces — no worse than before, and it
- * keeps a network hiccup during connect from leaving the slot empty and the
- * agent unable to answer.
+ * A provider that *answered* with a failure — a refused key, a login file
+ * that is not there — seeds nothing and says why: the static list is what
+ * was true when somebody typed it, and pointing Default at it is how a
+ * refused key looked configured. Only a round trip that never reached the
+ * daemon falls back to the static list, so a hiccup there does not leave a
+ * working provider with an empty slot.
  */
-async function firstModelOf(id: string): Promise<string | undefined> {
+async function firstModelOf(
+  id: string,
+): Promise<{ model?: string; error?: string; actions?: string[] }> {
+  const fallback = PROVIDER_CATALOG.find((p) => p.id === id)?.models[0]?.id;
   try {
     const answer = await aos.client.model.list.query<{
-      providers?: { id?: string; models?: { id?: string }[] }[];
+      providers?: { id?: string; models?: { id?: string }[]; error?: string; cta?: { label?: string }[] }[];
     }>({ query: { provider: id } });
 
-    const discovered = answer.data?.providers?.find((p) => p?.id === id)?.models;
-    const first = discovered?.find((m) => m?.id)?.id;
-    if (first) return first;
+    const found = answer.data?.providers?.find((p) => p?.id === id);
+    if (found?.error) {
+      const actions = (found.cta ?? [])
+        .map((cta) => cta?.label?.trim())
+        .filter((label): label is string => !!label);
+      return { error: found.error, actions };
+    }
+    const first = found?.models?.find((m) => m?.id)?.id;
+    if (first) return { model: first };
   } catch {
     // Discovery is an improvement on the fallback, never a precondition for
-    // connecting. A provider that refuses to list its models can still serve
-    // them, so a failure here must not fail the connection.
+    // connecting. A round trip that failed says nothing about the provider.
   }
-  return PROVIDER_CATALOG.find((p) => p.id === id)?.models[0]?.id;
-}
-
-/**
- * Points the `default` model slot at `providerId` when nothing owns it yet.
- *
- * Connecting a provider and being able to talk to an agent are the same
- * intent, but they were two different pieces of configuration, and only
- * one of them had a control that wrote anything. `agents.models.default`
- * is the single slot the runtime reads to answer a chat
- * (`internal/app/runtime.go`'s `models.For`; `subconscious` falls back to
- * it in `continuity.go`), and with it unset `agentloop.Resolve` returns
- * `AOS_AGENT_PROVIDER_NOT_ENABLED` — "no model provider is configured for
- * this agent". So a person could connect a provider, watch the Models
- * list show a model next to "Default", send a message, and get silence:
- * the model shown there was a display-time fallback
- * (`models-section.tsx`'s `resolveSlotValue`) that had never been saved.
- *
- * Seeding here rather than at render time keeps the write tied to
- * something the person actually did, and it only ever fills an *empty*
- * slot — a deliberate choice is never overwritten by connecting another
- * provider.
- *
- * `modelId` is passed in rather than looked up because the caller is the
- * one that can ask the provider (see `firstModelOf`). That is what finally
- * covers `openrouter`/`crof`/`opencode`, whose static catalogues are empty
- * on purpose — hundreds of vendor slugs that change without this build
- * being rebuilt — so connecting one used to leave the slot unset and the
- * agent unable to answer until somebody edited the config by hand.
- */
-function seedDefaultSlot(
-  models: ConfigAgentModels | undefined,
-  providerId: string,
-  modelId: string,
-): ConfigAgentModels | undefined {
-  const current = models?.default;
-  if (current?.provider && current?.model) return models;
-
-  return {
-    ...(models ?? {}),
-    default: {
-      provider: providerId,
-      model: modelId,
-      reasoning: current?.reasoning ?? "medium",
-    },
-  } as ConfigAgentModels;
+  return { model: fallback };
 }
 
 /**
  * Disconnects a provider — the meaning an empty key used to carry.
+ *
+ * Every model slot pointing at it is cleared in the same write. Left behind,
+ * the Default slot kept naming a provider with no credential: the screen
+ * showed it as unset, connecting another provider did not fill it (the slot
+ * looked owned), and the next chat went out to the disconnected provider
+ * with no key and came back as its 401.
  */
 export async function disconnectModelProvider(id: string): Promise<void> {
-  await writeProviders((providers) => removeProvider(providers, id));
+  await writeProviders(
+    (providers) => removeProvider(providers, id),
+    (models) => clearSlotsOf(models, id),
+  );
 }
 
 /**
@@ -206,7 +204,10 @@ export async function disconnectModelProvider(id: string): Promise<void> {
  */
 async function writeProviders(
   edit: (providers: ConfigAgentProviderConnection[]) => ConfigAgentProviderConnection[],
-  editModels?: (models: ConfigAgentModels | undefined) => ConfigAgentModels | undefined,
+  editModels?: (
+    models: ConfigAgentModels | undefined,
+    providers: ConfigAgentProviderConnection[],
+  ) => ConfigAgentModels | undefined,
 ): Promise<void> {
   const current = await aos.client.config.get.query({
     query: { reveal: true },
@@ -219,7 +220,7 @@ async function writeProviders(
 
   const config = current.data as Config | undefined;
   const providers = edit(config?.agents?.providers ?? []);
-  const models = editModels?.(config?.agents?.models);
+  const models = editModels?.(config?.agents?.models, providers);
 
   const result = await aos.client.config.update.mutate({
     body: {

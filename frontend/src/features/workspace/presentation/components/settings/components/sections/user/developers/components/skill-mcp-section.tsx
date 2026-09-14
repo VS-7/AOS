@@ -9,6 +9,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { toast } from "sonner";
 import { saveText } from "@/lib/save-file";
+import { daemonOrigin } from "@/lib/daemon-origin";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -26,7 +27,16 @@ import { cn } from "@/lib/utils";
 import { AddSkillDropdown } from "./add-skill-dropdown";
 import { t } from "@/lib/i18n";
 
-const MCP_HTTP_URL = "http://localhost:5326/mcp";
+/**
+ * The daemon's own MCP endpoint. It was hardcoded to localhost:5326, which is
+ * wrong for any daemon on another port: inside the window the daemon's
+ * address is the one the window was opened with, and in a browser the daemon
+ * serves this very page.
+ */
+function mcpHttpUrl(): string {
+  const origin = daemonOrigin || (typeof window !== "undefined" ? window.location.origin : "");
+  return `${origin}/mcp`;
+}
 const TOKEN_PLACEHOLDER = "aos_<your-api-token>";
 const TOKEN_PLACEHOLDER_MASKED = "aos_...xxxx";
 
@@ -75,7 +85,7 @@ function buildHttpConfig(token: string): string {
       mcpServers: {
         aos: {
           type: "http",
-          url: MCP_HTTP_URL,
+          url: mcpHttpUrl(),
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -113,9 +123,7 @@ export function DevelopersSkillMcpSection({
       await navigator.clipboard.writeText(exportJson);
       setCopied(true);
       toast.success(
-        apiToken
-          ? "mcp.json copied with full token"
-          : "mcp.json copied (replace the token placeholder)",
+        apiToken ? t("mcp.json copied with full token") : t("mcp.json copied (replace the token placeholder)"),
       );
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -174,11 +182,7 @@ export function DevelopersSkillMcpSection({
                 {t("AOS MCP server")}
               </p>
               <p className="text-sm text-muted-foreground">
-                {t("Add this to agents that support")}{" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
-                  mcp.json
-                </code>
-                .
+                {t("Add this to agents that support mcp.json.")}
               </p>
             </div>
           </div>
@@ -227,7 +231,7 @@ export function DevelopersSkillMcpSection({
                     size="icon"
                     className="size-7"
                     onClick={() => void handleCopy()}
-                    aria-label={t("Copy mcp.json with full token")}
+                    aria-label={apiToken ? t("Copy mcp.json with full token") : t("Copy mcp.json")}
                   >
                     {copied ? (
                       <HugeiconsIcon icon={Tick01Icon} className="size-3.5" />
@@ -247,7 +251,7 @@ export function DevelopersSkillMcpSection({
             </Tabs>
             {!apiToken ? (
               <p className="mt-2 text-xs text-muted-foreground">
-                {t("Preview shows a masked token. Generate or load an API token in REST API to copy mcp.json with the full value.")}
+                {t("The token is only shown when it is generated. Generate one under REST API to copy mcp.json with its full value.")}
               </p>
             ) : null}
           </div>

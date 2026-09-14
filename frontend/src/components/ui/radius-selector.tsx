@@ -92,7 +92,9 @@ export function ThemeRadiusSelector({
               )}
               style={{ borderRadius: `${previewRadiusPx}px` }}
             />
-            <span className="text-[10px] font-medium leading-none">{option.label}</span>
+            {/* The labels are catalogue keys, translated here: the table is
+                built when the module loads, before the language is known. */}
+            <span className="text-[10px] font-medium leading-none">{t(option.label)}</span>
           </button>
         )
       })}

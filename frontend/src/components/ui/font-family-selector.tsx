@@ -89,9 +89,9 @@ export type FontFamilySelectorProps = {
 export function FontFamilySelector({
   value,
   onValueChange,
-  placeholder = "Select a font",
-  systemLabel = "System font",
-  searchPlaceholder = "Search fonts",
+  placeholder,
+  systemLabel,
+  searchPlaceholder,
   className,
   disabled = false,
   mono = false,
@@ -101,7 +101,10 @@ export function FontFamilySelector({
   const selectedValue = value ?? SYSTEM_FONT_VALUE;
   const isSystemFont =
     selectedValue === SYSTEM_FONT_VALUE || selectedValue.length === 0;
-  const displayLabel = isSystemFont ? systemLabel : selectedValue || placeholder;
+  // Defaults resolved here rather than in the signature, so they are read in
+  // the language on screen when the selector renders.
+  const systemText = systemLabel ?? t("System font");
+  const displayLabel = isSystemFont ? systemText : selectedValue || (placeholder ?? t("Select a font"));
 
   React.useEffect(() => {
     let active = true;
@@ -148,13 +151,13 @@ export function FontFamilySelector({
         className="w-[var(--radix-popover-trigger-width)] min-w-56 p-0"
       >
         <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+          <CommandInput placeholder={searchPlaceholder ?? t("Search fonts")} />
           <CommandList className="max-h-72">
             <CommandEmpty>{t("No fonts found.")}</CommandEmpty>
             <CommandGroup>
               <CommandItem
                 value={SYSTEM_FONT_COMMAND_VALUE}
-                keywords={[systemLabel, "system", "default", "monospace"]}
+                keywords={[systemText, "system", "default", "monospace"]}
                 onSelect={() => {
                   onValueChange?.(SYSTEM_FONT_VALUE);
                   setOpen(false);
@@ -168,7 +171,7 @@ export function FontFamilySelector({
                       : "system-ui, sans-serif",
                   }}
                 >
-                  {systemLabel}
+                  {systemText}
                 </span>
                 <CheckIcon
                   className={cn(
