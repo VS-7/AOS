@@ -65,6 +65,13 @@ type worktrees struct {
 	removed  []string
 	failWith error
 	source   *WorktreeSource
+
+	// folder is where the workspace sits inside the repository it belongs
+	// to; gone reports it missing from every checkout. sourced counts the
+	// Source calls, each of which is up to four git processes.
+	folder  string
+	gone    bool
+	sourced int
 }
 
 func (w *worktrees) Create(_ context.Context, spec WorktreeSpec) (string, error) {
@@ -110,7 +117,15 @@ func (w *worktrees) Exists(_ context.Context, _, path string) bool {
 	return false
 }
 
+func (w *worktrees) WorkspaceIn(_ context.Context, checkout string) (string, bool, error) {
+	if w.gone {
+		return checkout, false, nil
+	}
+	return filepath.Join(checkout, w.folder), true, nil
+}
+
 func (w *worktrees) Source(context.Context, WorktreeSpec) (WorktreeSource, error) {
+	w.sourced++
 	if w.source != nil {
 		return *w.source, nil
 	}

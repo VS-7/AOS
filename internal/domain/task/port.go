@@ -65,6 +65,16 @@ type Worktrees interface {
 	// anything is created or pruned — so a workspace with nothing to cut from
 	// is refused with the reason rather than with git's last words.
 	Source(ctx context.Context, spec WorktreeSpec) (WorktreeSource, error)
+
+	// WorkspaceIn is the directory the workspace is inside one of its
+	// checkouts: the checkout itself when the workspace is its repository's
+	// top, the workspace's folder inside it when the workspace is a folder of
+	// a project. found is false, and the directory the checkout, when that
+	// folder is not in the checkout or leads out of it.
+	//
+	// It depends on where the workspace sits in its repository and on the
+	// checkout, never on the task's branch: it is asked on every turn.
+	WorkspaceIn(ctx context.Context, checkout string) (dir string, found bool, err error)
 }
 
 // WorktreeSource is the repository a task's checkout would come from.

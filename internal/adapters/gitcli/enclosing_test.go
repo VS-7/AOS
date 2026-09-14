@@ -121,3 +121,47 @@ func TestEnclosingRepositoryNamesOnlySomebodyElsesRepository(t *testing.T) {
 		t.Fatalf("EnclosingRepository(plain) = %q, %v; want none", top, err)
 	}
 }
+
+// A turn on a task in a folder of a project is rooted in that folder of the
+// task's checkout. It is found from where the workspace sits in its
+// repository, so it holds whatever happens to the task's branch, and a
+// checkout whose branch no longer has the folder — or has a link there leading
+// out of the checkout — is rooted at its own top instead.
+func TestAWorkspaceIsFoundInsideItsCheckoutWhateverHappenedToTheBranch(t *testing.T) {
+	outer, inner := nested(t)
+	commit(t, outer, "the workspace is part of the project")
+	trees := gitcli.NewWorktrees(gitcli.New(), inner)
+	path, err := trees.Create(ctx(), task.WorktreeSpec{
+		TaskID: "t-1", Branch: "aos/fix-it", Path: filepath.Join(t.TempDir(), "wt", "t-1"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(path, "workspaces", "vs")
+
+	git(t, outer, "branch", "-m", "aos/fix-it", "aos/renamed")
+	if dir, found, err := trees.WorkspaceIn(ctx(), path); err != nil || !found || dir != want {
+		t.Fatalf("with the branch renamed: WorkspaceIn = %q, %v, %v; want %s", dir, found, err, want)
+	}
+
+	if err := os.RemoveAll(want); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), want); err != nil {
+		t.Skipf("links are not available here: %v", err)
+	}
+	if dir, found, err := trees.WorkspaceIn(ctx(), path); err != nil || found || dir != path {
+		t.Fatalf("with the folder a link out of the checkout: WorkspaceIn = %q, %v, %v; want the checkout, not found", dir, found, err)
+	}
+	if err := os.Remove(want); err != nil {
+		t.Fatal(err)
+	}
+	if dir, found, err := trees.WorkspaceIn(ctx(), path); err != nil || found || dir != path {
+		t.Fatalf("with the folder gone: WorkspaceIn = %q, %v, %v; want the checkout, not found", dir, found, err)
+	}
+
+	own := gitcli.NewWorktrees(gitcli.New(), outer)
+	if dir, found, err := own.WorkspaceIn(ctx(), path); err != nil || !found || dir != path {
+		t.Fatalf("for the project's own workspace: WorkspaceIn = %q, %v, %v; want the checkout", dir, found, err)
+	}
+}

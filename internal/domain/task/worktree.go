@@ -162,13 +162,23 @@ func (s *Service) Checkout(ctx context.Context, id string) (string, error) {
 	// A workspace that is a folder of a project has a checkout of the whole
 	// project, and its turns belong in the folder, where the paths the agent
 	// knows the workspace by still mean the same files.
-	source, err := s.worktrees.Source(ctx, WorktreeSpec{
-		TaskID: current.ID, Branch: current.Worktree.Branch, Base: current.Worktree.Base, Path: recorded,
-	})
+	//
+	// Asked of where the workspace sits in its repository, not of the task's
+	// branch. Source answered it, on every turn — up to four git processes —
+	// and stopped before the folder whenever the branch and its base were
+	// gone, a branch renamed with its checkout still there, which rooted the
+	// turn in the whole project.
+	dir, found, err := s.worktrees.WorkspaceIn(ctx, recorded)
 	if err != nil {
-		return recorded, nil //nolint:nilerr // still the task's own checkout; only the folder inside it is unknown
+		return "", errReadFailed("Checkout", err)
 	}
-	return workspaceInCheckout(recorded, source), nil
+	if !found {
+		// Still the task's own isolated checkout, only without the folder:
+		// the agent moved or removed it on its branch.
+		s.log.Warn("a task's checkout does not hold the workspace's folder; its turn runs at the checkout's top",
+			"task", current.ID, "path", recorded)
+	}
+	return dir, nil
 }
 
 // workspaceInCheckout is where the workspace is inside a checkout cut from

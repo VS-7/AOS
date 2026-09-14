@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/OWNER/aos/internal/domain/task"
 )
@@ -19,6 +20,12 @@ type Worktrees struct {
 
 	// repo is the working tree the checkouts are cut from.
 	repo string
+
+	// folder is where repo sits inside the repository it belongs to, once it
+	// has been asked: a directory does not move inside its repository while
+	// the process runs, and every turn on a task asks for it.
+	folderMu sync.Mutex
+	folder   *string
 }
 
 // NewWorktrees builds the driver for one repository.
@@ -297,6 +304,55 @@ func (w *Worktrees) Source(ctx context.Context, spec task.WorktreeSpec) (task.Wo
 	_, err = w.git.run(ctx, w.repo, "cat-file", "-e", rev+":"+filepath.ToSlash(rel))
 	out.SubdirCommitted = err == nil
 	return out, nil
+}
+
+// WorkspaceIn is the workspace's directory inside one of its checkouts.
+//
+// It is the checkout when the workspace is its repository's top, and the
+// workspace's folder inside it when the workspace is a folder of a project —
+// unless the checkout's branch no longer holds that folder, or holds a link
+// there that leads out of the checkout, when it is the checkout and found is
+// false. Nothing here reads the branch: a renamed one used to stop the lookup
+// before the folder and root the turn in the whole project.
+func (w *Worktrees) WorkspaceIn(ctx context.Context, checkout string) (string, bool, error) {
+	folder, err := w.folderInRepository(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	if folder == "" {
+		return checkout, true, nil
+	}
+	dir := filepath.Join(checkout, folder)
+	if !isDir(dir) || !inside(resolve(checkout), resolve(dir)) {
+		return checkout, false, nil
+	}
+	return dir, true, nil
+}
+
+// folderInRepository is where the workspace sits inside the repository it
+// belongs to, "" when it is that repository's top. It is found once; a
+// workspace that is in no repository right now is asked again next time.
+func (w *Worktrees) folderInRepository(ctx context.Context) (string, error) {
+	w.folderMu.Lock()
+	defer w.folderMu.Unlock()
+	if w.folder != nil {
+		return *w.folder, nil
+	}
+	top, own, err := w.git.topOf(ctx, w.repo)
+	if err != nil {
+		return "", err
+	}
+	if top == "" {
+		return "", nil
+	}
+	folder := ""
+	if !own {
+		if rel, relErr := filepath.Rel(resolve(top), w.repo); relErr == nil && filepath.IsLocal(rel) {
+			folder = rel
+		}
+	}
+	w.folder = &folder
+	return folder, nil
 }
 
 // hasBranch reports whether a branch name already exists.

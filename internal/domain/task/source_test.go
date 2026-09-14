@@ -69,8 +69,54 @@ func TestAWorkspaceInsideAProjectBranchesFromTheProject(t *testing.T) {
 	if tree.Path != "/tmp/wt/"+task.ID {
 		t.Fatalf("checkout = %q, want the task's own under the root", tree.Path)
 	}
+	h.worktrees.folder = "services/api"
 	if got, err := h.svc.Checkout(ctx(), task.ID); err != nil || got != "/tmp/wt/"+task.ID+"/services/api" {
 		t.Fatalf("checkout for a turn = %q, %v; want the workspace's folder inside the project's checkout", got, err)
+	}
+}
+
+// A turn's root is the workspace's folder in the task's checkout whatever has
+// happened to the task's branch since. It used to be asked of Source on every
+// turn — up to four git processes — and Source stops before the folder when
+// the branch and the base are gone (a branch renamed while its checkout
+// stays), so the turn was rooted in the whole project instead.
+func TestATurnStaysInTheWorkspacesFolderWhateverHappenedToTheBranch(t *testing.T) {
+	h := newHarness(t)
+	h.worktrees.source = &WorktreeSource{
+		Dir: "/code/mono/services/api", Toplevel: "/code/mono", BaseExists: true,
+		Subdir: "services/api", SubdirCommitted: true,
+	}
+	h.worktrees.folder = "services/api"
+	task := h.create(t, CreateInput{Name: "Build the library API", Status: Todo, Worktree: true})
+	if _, err := h.svc.Branch(ctx(), BranchInput{ID: task.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The branch was renamed: what Source can say about it now.
+	h.worktrees.source = &WorktreeSource{Dir: "/code/mono/services/api", Toplevel: "/code/mono"}
+	h.worktrees.sourced = 0
+	for range 3 {
+		if got, err := h.svc.Checkout(ctx(), task.ID); err != nil || got != "/tmp/wt/"+task.ID+"/services/api" {
+			t.Fatalf("checkout for a turn = %q, %v; want the workspace's folder", got, err)
+		}
+	}
+	if h.worktrees.sourced != 0 {
+		t.Errorf("three turns asked Source %d times; the folder does not depend on the branch", h.worktrees.sourced)
+	}
+}
+
+// A checkout whose branch no longer holds the workspace's folder — the agent
+// moved it — is still the task's own isolated checkout, and the turn is rooted
+// at its top rather than refused or sent back to the main working tree.
+func TestATurnInACheckoutWithoutTheWorkspacesFolderIsRootedAtTheCheckout(t *testing.T) {
+	h := newHarness(t)
+	task := h.create(t, CreateInput{Name: "Move the service", Status: Todo, Worktree: true})
+	if _, err := h.svc.Branch(ctx(), BranchInput{ID: task.ID}); err != nil {
+		t.Fatal(err)
+	}
+	h.worktrees.gone = true
+	if got, err := h.svc.Checkout(ctx(), task.ID); err != nil || got != "/tmp/wt/"+task.ID {
+		t.Fatalf("checkout for a turn = %q, %v; want the checkout itself", got, err)
 	}
 }
 
