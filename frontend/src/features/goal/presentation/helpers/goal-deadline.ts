@@ -33,7 +33,7 @@ export function formatDeadline(value?: string | null, locale: Locale = getLocale
 export function isDeadlineOverdue(value?: string | null, now: Date = new Date()): boolean {
   const instant = instantOf(value);
   if (!instant) return false;
-  if (!isPickedDay(instant)) return instant.getTime() < now.getTime();
+  if (!isPickedDay(value)) return instant.getTime() < now.getTime();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return calendarDayOf(value)!.getTime() < today.getTime();
 }
