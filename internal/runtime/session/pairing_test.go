@@ -44,7 +44,7 @@ func bodyOfNextTurn(t *testing.T, stored *chat.Chat) []map[string]any {
 	}))
 	t.Cleanup(server.Close)
 
-	messages := append(transcript(stored), agentloop.Message{Role: agentloop.RoleUser, Text: "and now?"})
+	messages := append(transcript(stored, speaker{self: stored.Agent}), agentloop.Message{Role: agentloop.RoleUser, Text: "and now?"})
 	// Pruned the way the next turn's loop would prune it, so a repair that only
 	// survives an uncompacted history does not pass.
 	state := &agentloop.State{Model: "gpt-5.5", Messages: agentloop.Prune(messages, agentloop.DefaultPolicy())}

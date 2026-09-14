@@ -42,7 +42,7 @@ func TestAStoredConversationBecomesWhatTheModelReads(t *testing.T) {
 		{Role: chat.RoleSystem, Parts: []chat.Part{{Type: chat.PartText, Text: "ignored"}}},
 	}}
 
-	got := transcript(stored)
+	got := transcript(stored, speaker{})
 	if len(got) != 3 {
 		t.Fatalf("got %d messages: %+v", len(got), got)
 	}
@@ -66,7 +66,7 @@ func TestAnAssistantTurnWithNothingInItIsDropped(t *testing.T) {
 	got := transcript(&chat.Chat{Messages: []chat.Message{
 		{Role: chat.RoleAssistant, CreatedAt: at},
 		{Role: chat.RoleUser, Parts: []chat.Part{{Type: chat.PartText, Text: "hello"}}},
-	}})
+	}}, speaker{})
 	if len(got) != 1 || got[0].Role != agentloop.RoleUser {
 		t.Fatalf("got %+v", got)
 	}
