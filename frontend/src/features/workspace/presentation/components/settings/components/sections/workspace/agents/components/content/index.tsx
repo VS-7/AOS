@@ -18,6 +18,7 @@ import { AvatarAgentFallback } from "@/components/ui/avatar";
 import { SettingsContentContainer } from "../../../../../content-container";
 import { useAgents } from "../../contexts/agents.context";
 import { t } from "@/lib/i18n";
+import { toast } from "sonner";
 
 export function SelectedAgentContent() {
   const {
@@ -25,6 +26,7 @@ export function SelectedAgentContent() {
     isCreateMode,
     isLoadingContent,
     isDeleting,
+    isDirty,
     form,
     deleteSelectedAgent,
   } = useAgents();
@@ -62,7 +64,13 @@ export function SelectedAgentContent() {
 
   async function handleCopyId() {
     if (!selectedAgent?.id) return;
-    await navigator.clipboard.writeText(selectedAgent.id);
+    try {
+      await navigator.clipboard.writeText(selectedAgent.id);
+      toast.success(t("Copied to clipboard."));
+    } catch {
+      // A webview can refuse the clipboard; a silent button reads as broken.
+      toast.error(t("Could not copy to the clipboard."));
+    }
   }
 
   return (
@@ -70,12 +78,16 @@ export function SelectedAgentContent() {
       <SplitPageLayout.ContentHeader>
         <SplitPageLayout.ContentHeaderMain>
           <SplitPageLayout.ContentTitle className="flex items-center gap-2">
+            {/* Seeded by id, the same seed every other screen resolves to,
+                so an agent has one generated face. A new agent has no id
+                yet, and seeding by the name being typed re-drew the avatar
+                on every keystroke. */}
             <AvatarAgentFallback
-              name={(title || selectedAgent?.id || "agent").toLowerCase()}
+              name={isCreateMode ? "new agent" : selectedAgent?.id ?? "agent"}
               image={image}
             />
             {title?.trim() ||
-              (isCreateMode ? "New Agent" : selectedAgent?.name)}
+              (isCreateMode ? t("New agent") : selectedAgent?.name)}
           </SplitPageLayout.ContentTitle>
         </SplitPageLayout.ContentHeaderMain>
 
@@ -111,8 +123,9 @@ export function SelectedAgentContent() {
                     <AlertDialogHeader>
                       <AlertDialogTitle>{t("Delete this agent?")}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        {t("This action removes")}{" "}
-                        <strong>{selectedAgent.name}</strong> permanently.
+                        {t("This removes {{name}} permanently, with its memories and routines.", {
+                          name: selectedAgent.name || selectedAgent.id,
+                        })}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -124,7 +137,7 @@ export function SelectedAgentContent() {
                         disabled={isDeleting}
                         onClick={deleteSelectedAgent}
                       >
-                        {isDeleting ? "Deleting..." : "Delete agent"}
+                        {isDeleting ? t("Deleting...") : t("Delete agent")}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -137,14 +150,16 @@ export function SelectedAgentContent() {
               variant="secondary"
               size="sm"
               onClick={() => void form.submit()}
-              disabled={form.isLoading}
+              // Nothing to save is not a save: the button used to answer an
+              // untouched form with "Agent updated.".
+              disabled={form.isLoading || isLoadingContent || (!isCreateMode && !isDirty)}
             >
               <Save />
               {form.isLoading
-                ? "Saving..."
+                ? t("Saving...")
                 : isCreateMode
-                  ? "Create agent"
-                  : "Save changes"}
+                  ? t("Create agent")
+                  : t("Save changes")}
             </Button>
           </div>
         </SplitPageLayout.ContentHeaderActions>

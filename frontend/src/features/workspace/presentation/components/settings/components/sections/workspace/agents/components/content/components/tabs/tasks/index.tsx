@@ -17,19 +17,26 @@ interface AgentTasksTabProps {
 export function AgentTasksTab({ agent }: AgentTasksTabProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
+    setLoadError(null);
 
+    // Asked of the daemon, which filters by owner. This read the first 200
+    // tasks of the workspace and filtered them here, so an agent whose tasks
+    // were not among those 200 showed none.
     aos.client.task.list
-      .query({ query: { limit: "200" } })
+      .query({ query: { assigned: agent.id } })
       .then((response) => {
         if (!isMounted) return;
-        const allTasks: Task[] = response.data?.tasks ?? [];
-        const selectedAgentId = agent.id.toLowerCase();
-        const filtered = allTasks.filter((task) => (task.assigned ?? "").toLowerCase() === selectedAgentId);
-        setTasks(filtered);
+        if (response.error) {
+          setLoadError(response.error.message ?? t("Could not load this agent's tasks."));
+          setTasks([]);
+          return;
+        }
+        setTasks(response.data?.tasks ?? []);
       })
       .finally(() => {
         if (!isMounted) return;
@@ -47,10 +54,18 @@ export function AgentTasksTab({ agent }: AgentTasksTabProps) {
     <div className="container max-w-6xl mx-auto px-6 py-6 pb-10">
       <div className="flex items-center justify-between mb-3 px-2">
         <span className="text-xs uppercase tracking-wide text-muted-foreground">{t("Assigned tasks")}</span>
-        <span className="text-xs text-muted-foreground">{tasks.length} total</span>
+        <span className="text-xs text-muted-foreground">
+          {t("{{count}} total", { count: tasks.length })}
+        </span>
       </div>
 
-      {!isLoading && tasks.length === 0 && (
+      {!isLoading && loadError ? (
+        <p className="px-2 text-sm text-destructive" role="alert">
+          {loadError}
+        </p>
+      ) : null}
+
+      {!isLoading && !loadError && tasks.length === 0 && (
         <AnimatedEmptyState className="border-none shadow-none py-12">
           <AnimatedEmptyState.Carousel>
             <div className="flex items-center gap-3">

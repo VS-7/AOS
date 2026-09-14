@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import type { ModelProvider, ModelProviderAuth } from "@/features/model/interfaces/model.interfaces";
+import type { ModelProvider } from "@/features/model/interfaces/model.interfaces";
 import {
   MODEL_DISCOVERY_KEY,
   setModelProviderKey,
@@ -31,20 +31,31 @@ interface ProviderUpsertDialogProps {
   onSuccess?: () => void;
 }
 
-function isOAuthLike(auth: ModelProviderAuth) {
-  return auth.mode !== "api-key";
-}
-
 function ProviderLogoBadge({ provider }: { provider: ModelProvider }) {
   const src = useProviderLogo(provider);
   if (!src) return null;
   return (
     <img
       src={src}
-      alt={`${provider.name} logo`}
+      alt={t("{{provider}} logo", { provider: provider.name })}
       className="size-6 rounded-md"
     />
   );
+}
+
+/**
+ * What the dialog tells a person about the credential.
+ *
+ * The catalogue's own guidance, translated. An API-key dialog used to replace
+ * it with "Visit <name> to get your API key." — which told somebody connecting
+ * opencode Zen to go and get a key that provider does not need.
+ */
+export function providerGuidance(provider: ModelProvider): string {
+  const { auth } = provider;
+  if (auth.mode === "oauth-file" && auth.login) {
+    return t(auth.description, { tool: auth.login.tool, path: auth.login.path });
+  }
+  return t(auth.description);
 }
 
 export function ProviderUpsertDialog({
@@ -61,14 +72,13 @@ export function ProviderUpsertDialog({
     if (!open) {
       setValue("");
       setIsSubmitting(false);
-      return;
     }
     // In edit mode, providers don't expose the existing key (it's masked).
     // The user enters a new key only if they want to rotate it.
   }, [open]);
 
-  const requiresKey = provider.auth.required && provider.auth.mode === "api-key";
-  const oauthLike = isOAuthLike(provider.auth);
+  const takesKey = provider.auth.mode === "api-key";
+  const requiresKey = takesKey && provider.auth.required;
 
   const queryClient = useQueryClient();
 
@@ -81,32 +91,35 @@ export function ProviderUpsertDialog({
 
     setIsSubmitting(true);
     try {
-      await setModelProviderKey(provider.id, value);
+      const outcome = await setModelProviderKey(provider.id, takesKey ? value : "");
       // The catalogue is cached for five minutes on both sides, which is
       // right for a screen being re-rendered and wrong for the one moment a
       // person has just changed the credential the catalogue is read with.
       await queryClient.invalidateQueries({ queryKey: MODEL_DISCOVERY_KEY });
 
-      toast.success(
-        mode === "edit"
-          ? `${provider.name} updated.`
-          : `${provider.name} connected.`,
-      );
+      if (outcome.error) {
+        // Saved, but the provider did not accept it. Saying "connected."
+        // here is how a refused key looked ready until the first chat.
+        toast.warning(t("{{provider}} is saved, but it did not answer.", { provider: provider.name }), {
+          description: [outcome.error, outcome.actions?.[0]].filter(Boolean).join("\n→ "),
+          duration: 12000,
+        });
+      } else {
+        toast.success(
+          mode === "edit"
+            ? t("{{provider}} updated.", { provider: provider.name })
+            : t("{{provider}} connected.", { provider: provider.name }),
+        );
+      }
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
       console.error(error);
-      toast.error(
-        error instanceof Error ? error.message : "Failed to save provider.",
-      );
+      toast.error(error instanceof Error ? error.message : t("Failed to save provider."));
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  const description = oauthLike
-    ? provider.auth.description
-    : `Visit ${provider.name} to get your API key.`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -115,34 +128,36 @@ export function ProviderUpsertDialog({
           <div className="flex items-center gap-2">
             <ProviderLogoBadge provider={provider} />
             <DialogTitle>
-              {mode === "edit" ? "Edit" : "Connect with"} {provider.name}
+              {mode === "edit"
+                ? t("Edit {{provider}}", { provider: provider.name })
+                : t("Connect {{provider}}", { provider: provider.name })}
             </DialogTitle>
           </div>
-          <DialogDescription>{description}</DialogDescription>
+          <DialogDescription>{providerGuidance(provider)}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor={`provider-${provider.id}-key`}>
-              {provider.auth.label}
-            </Label>
-            <Input
-              id={`provider-${provider.id}-key`}
-              autoFocus
-              autoComplete="off"
-              type={provider.auth.masked ? "password" : "text"}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder={provider.auth.placeholder}
-              required={requiresKey}
-              disabled={isSubmitting}
-            />
-            {!provider.auth.required && (
-              <p className="text-xs text-muted-foreground">
-                {t("Optional — leave empty to use the default discovery.")}
-              </p>
-            )}
-          </div>
+          {takesKey ? (
+            <div className="space-y-2">
+              <Label htmlFor={`provider-${provider.id}-key`}>{t("API key")}</Label>
+              <Input
+                id={`provider-${provider.id}-key`}
+                autoFocus
+                autoComplete="off"
+                type={provider.auth.masked ? "password" : "text"}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder={provider.auth.placeholder}
+                required={requiresKey}
+                disabled={isSubmitting}
+              />
+              {!provider.auth.required && (
+                <p className="text-xs text-muted-foreground">
+                  {t("Optional — leave empty to use the default discovery.")}
+                </p>
+              )}
+            </div>
+          ) : null}
 
           <DialogFooter className="gap-2 sm:gap-2">
             <Button
@@ -154,7 +169,7 @@ export function ProviderUpsertDialog({
               {t("Cancel")}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Submitting…" : "Submit"}
+              {isSubmitting ? t("Connecting…") : mode === "edit" ? t("Save") : t("Connect")}
             </Button>
           </DialogFooter>
         </form>

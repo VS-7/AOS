@@ -41,11 +41,18 @@ function AvatarAgentFallback({
         agents: AgentSummary[]
       },
   })
-  const storeImage = agents.data?.agents.find(
+  const match = agents.data?.agents.find(
     (agent) =>
       agent.id === name ||
       agent.name.toLowerCase() === name.toLowerCase(),
-  )?.image
+  )
+  const storeImage = match?.image
+  // The generated face is seeded by the agent's id whenever the caller's
+  // name resolves to an agent. Callers pass either — the id in the chat team
+  // list, the lowercased display name in the task assignee and routine
+  // pickers — and "api-builder" and "api builder" hash to two different
+  // faces, so the same agent looked like two.
+  const seed = match?.id ?? name
   // Explicit prop wins (including "" after remove). Otherwise use the list.
   const resolvedImage = (image !== undefined && image !== null
     ? image
@@ -66,7 +73,7 @@ function AvatarAgentFallback({
   }
 
   return (
-    <Hashvatar hash={name} size={size} mode="dither" animated={animated} className={className} />
+    <Hashvatar hash={seed} size={size} mode="dither" animated={animated} className={className} />
   )
 }
 
