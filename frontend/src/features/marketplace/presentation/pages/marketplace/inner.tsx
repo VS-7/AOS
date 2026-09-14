@@ -59,35 +59,51 @@ export function MarketplacePageInner({
   const [searchQuery, setSearchQuery] = React.useState(search.query ?? "");
   const trimmedQuery = searchQuery.trim();
 
-  // The query the box and the address last agreed on. Each side below only
-  // acts on a change of its own; comparing each against the other's latest
-  // value instead made them chase each other the moment both changed at once.
-  const lastSynced = React.useRef(search.query ?? "");
+  // What the address says about the query, as far as this page knows: what it
+  // read there, or last wrote there itself.
+  const addressQuery = React.useRef(search.query ?? "");
+  // Queries this page wrote that the address has not reported back yet. Each
+  // lands a moment after it was written, while the person may have typed on:
+  // taking one for a change made elsewhere put the box back to it.
+  const unconfirmedWrites = React.useRef<string[]>([]);
 
   // The address is the source of truth for the query: a link to /marketplace
   // (the sidebar, Clear filters) resets what the box holds. It used to be
   // local state seeded once, so clearing the URL left the old search on
-  // screen, "0 results for …" included.
+  // screen, "0 results for …" included. Its own writes coming back are not
+  // such a change.
   React.useEffect(() => {
     const query = search.query ?? "";
-    lastSynced.current = query;
-    setSearchQuery((current) => (current.trim() === query ? current : query));
+    const own = unconfirmedWrites.current.indexOf(query);
+    if (own !== -1) {
+      unconfirmedWrites.current = unconfirmedWrites.current.slice(own + 1);
+      return;
+    }
+    unconfirmedWrites.current = [];
+    if (query === addressQuery.current) return;
+    addressQuery.current = query;
+    setSearchQuery(query);
   }, [search.query]);
 
-  // …and the box writes to the address only when it says something new. This
-  // navigated on mount too, which dropped ?category= before it could apply
-  // and re-ran the loader, so every visit searched every registry twice.
+  // …and the box writes to the address once typing pauses, only when it says
+  // something new. This navigated on mount too, which dropped ?category=
+  // before it could apply and re-ran the loader, so every visit searched every
+  // registry twice.
   React.useEffect(() => {
-    if (trimmedQuery === lastSynced.current) return;
-    lastSynced.current = trimmedQuery;
-    void navigate({
-      to: "/marketplace",
-      search: (prev: { category?: string; query?: string }) => ({
-        ...prev,
-        query: trimmedQuery || undefined,
-      }),
-      replace: true,
-    });
+    if (trimmedQuery === addressQuery.current) return;
+    const timer = window.setTimeout(() => {
+      addressQuery.current = trimmedQuery;
+      unconfirmedWrites.current.push(trimmedQuery);
+      void navigate({
+        to: "/marketplace",
+        search: (prev: { category?: string; query?: string }) => ({
+          ...prev,
+          query: trimmedQuery || undefined,
+        }),
+        replace: true,
+      });
+    }, 300);
+    return () => window.clearTimeout(timer);
   }, [trimmedQuery, navigate]);
 
   // Through the address only: the effect above then empties the box, so the
@@ -209,8 +225,8 @@ export function MarketplacePageInner({
           {t("Extend your Workspace")}
         </h1>
         <MarketplaceSearch
-          defaultQuery={searchQuery}
-          onQueryChange={setSearchQuery}
+          value={searchQuery}
+          onValueChange={setSearchQuery}
           className="w-full shrink-0 md:w-auto"
         />
       </div>
