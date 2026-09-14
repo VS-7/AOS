@@ -29,6 +29,11 @@ export interface Artifact {
   description?: string;
   entrypoint: string;
   visibility: ArtifactVisibility;
+  /**
+   * Whether a password is set (`Service.present`). A by_password artifact
+   * without one refuses everybody until it gets one.
+   */
+  hasPassword?: boolean;
   createdAt: string;
   updatedAt: string;
   urls: ArtifactUrls;

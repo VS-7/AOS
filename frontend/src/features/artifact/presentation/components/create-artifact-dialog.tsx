@@ -31,6 +31,7 @@ import type {
 import { ArtifactHelper } from "@/features/artifact/presentation/helpers/artifact.helper";
 import { ArtifactStore } from "@/features/artifact/presentation/stores/artifact.store";
 import { t } from "@/lib/i18n";
+import { MIN_ARTIFACT_PASSWORD_LENGTH } from "./artifact-access-dialog";
 
 // A function, so the labels are in the language the person has when the
 // dialog opens rather than the one this module was loaded in.
@@ -61,8 +62,8 @@ function visibilityOptions(): Array<{
   ];
 }
 
-/** The shortest password the dialog accepts — a shared link is a secret. */
-const MIN_PASSWORD_LENGTH = 8;
+/** The shortest password the dialog accepts — the daemon's own minimum. */
+const MIN_PASSWORD_LENGTH = MIN_ARTIFACT_PASSWORD_LENGTH;
 
 interface CreateArtifactDialogProps {
   children: React.ReactNode;
@@ -88,21 +89,23 @@ export function CreateArtifactDialog({ children }: CreateArtifactDialogProps) {
 
   const { mutate: createArtifact, loading: isCreating } =
     aos.client.artifact.create.useMutation({
-      onSuccess: async (response) => {
+      onSuccess: async (response, variables) => {
         const created = response?.data as ArtifactListItem | undefined;
         if (!created) {
           toast.error(t("Unable to create artifact."));
           return;
         }
+        // A by_password artifact asks everybody for its password, its creator
+        // included, and this is the one moment the dialog already has it: the
+        // one it was just created with.
+        const typed = (variables as { body?: { password?: string } } | undefined)?.body?.password;
         await ArtifactStore.actions.refresh();
         resetAndClose();
-        // A by_password artifact asks everybody for its password, its creator
-        // included, and the window's tab has no way to supply one: opening it
-        // here would show the daemon's refusal as raw JSON.
         if (created.visibility === "by_password") {
           toast.success(t("Created \"{{name}}\".", { name: created.name }), {
             description: t("Share its address together with the password."),
           });
+          ArtifactHelper.openInBrowserTab(created, { password: typed });
           return;
         }
         toast.success(t("Created \"{{name}}\".", { name: created.name }));

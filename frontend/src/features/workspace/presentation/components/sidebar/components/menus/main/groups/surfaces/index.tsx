@@ -8,6 +8,7 @@ import {
   MoreHorizontalIcon,
   PencilIcon,
   Delete01Icon,
+  LockPasswordIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
@@ -37,6 +38,8 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ArtifactHelper } from "@/features/artifact/presentation/helpers/artifact.helper";
+import { requestArtifactAccess } from "@/features/artifact/presentation/helpers/artifact-access";
+import type { ArtifactListItem } from "@/features/artifact/interfaces/artifact.interfaces";
 import { useArtifacts } from "@/features/artifact/presentation/hooks/use-artifacts";
 import { CreateArtifactDialog } from "@/features/artifact/presentation/components/create-artifact-dialog";
 import { useViews } from "@/features/view/presentation/hooks/use-views";
@@ -55,6 +58,8 @@ type SurfaceRow = {
    * would leave the skill installed without it.
    */
   managed: boolean;
+  /** The artifact itself, for the actions that need more than its id. */
+  artifact?: ArtifactListItem;
   onOpen: () => void;
 };
 
@@ -95,6 +100,7 @@ export function WorkspaceSidebarSurfacesGroupMenu() {
       kind: "artifact" as const,
       id: artifact.id,
       managed: !artifact.skill,
+      artifact,
       key: `artifact:${artifact.id}`,
       label: artifact.name,
       icon: ArtifactHelper.getIcon(),
@@ -237,6 +243,15 @@ export function WorkspaceSidebarSurfacesGroupMenu() {
                           <DropdownMenuItem onClick={() => setRenaming(row)}>
                             <HugeiconsIcon icon={PencilIcon} />
                             {t("Rename")}
+                          </DropdownMenuItem>
+                        ) : null}
+                        {/* One an agent made by_password with no password
+                            refused everybody, and nothing here could give it
+                            one. */}
+                        {row.artifact?.visibility === "by_password" ? (
+                          <DropdownMenuItem onClick={() => requestArtifactAccess(row.artifact!, "set")}>
+                            <HugeiconsIcon icon={LockPasswordIcon} />
+                            {t("Set password")}
                           </DropdownMenuItem>
                         ) : null}
                         <DropdownMenuItem variant="destructive" onClick={() => void handleDelete(row)}>
