@@ -248,15 +248,11 @@ func errWorktreeBaseMissing(id, base string, source WorktreeSource) error {
 	if named == "" {
 		named = "HEAD"
 	}
-	repo := source.Toplevel
-	if repo == "" {
-		repo = source.Dir
-	}
-	commitOnce := apperr.CallToAction{
-		Label:   "commit once on " + named + " in " + repo + ", then branch again",
-		Command: "git -C " + strconv.Quote(repo) + " commit --allow-empty -m \"Start the workspace\"",
-	}
 	if source.Own || source.Toplevel == "" {
+		repo := source.Toplevel
+		if repo == "" {
+			repo = source.Dir
+		}
 		return apperr.New("TASK_WORKTREE_BASE_MISSING").
 			Causer("task.Service.Branch").
 			Msgf("there is no commit on %q to cut the task's branch from", named).
@@ -264,12 +260,19 @@ func errWorktreeBaseMissing(id, base string, source WorktreeSource) error {
 			Issue("base", named).
 			Issue("workspace", source.Dir).
 			Status(apperr.StatusConflict).
-			CTA(commitOnce, apperr.CallToAction{
+			CTA(apperr.CallToAction{
+				Label:   "commit once on " + named + " in " + repo + ", then branch again",
+				Command: "git -C " + strconv.Quote(repo) + " commit --allow-empty -m \"Start the workspace\"",
+			}, apperr.CallToAction{
 				Label: "or branch again naming a base that exists",
 				Tool:  "tasks_branch",
 				Input: map[string]any{"id": id},
 			})
 	}
+	// The enclosing repository is offered only as something to decide on, never
+	// as a command: it is as often a home directory under version control as a
+	// monorepo, and a commit there set an agent on a chain that ended with the
+	// workspace — secrets included — staged into it (see errWorktreeNotCommitted).
 	return apperr.New("TASK_WORKTREE_BASE_MISSING").
 		Causer("task.Service.Branch").
 		Msgf("the workspace at %s is a folder of the repository at %s, and there is no commit on %q there to cut the task's branch from", source.Dir, source.Toplevel, named).
@@ -281,11 +284,20 @@ func errWorktreeBaseMissing(id, base string, source WorktreeSource) error {
 		CTA(apperr.CallToAction{
 			Label:   "give the workspace a repository of its own and commit once, then branch again",
 			Command: "git -C " + strconv.Quote(source.Dir) + " init && git -C " + strconv.Quote(source.Dir) + " commit --allow-empty -m \"Start the workspace\"",
-		}, commitOnce)
+		}, apperr.CallToAction{
+			Label: "or, only if the workspace is part of the project at " + source.Toplevel + ", have its owner make the first commit there, then branch again",
+		})
 }
 
 // errWorktreeNotCommitted is a workspace that is a folder of a project the
 // project never committed: a checkout of the project would not contain it.
+//
+// The enclosing repository is frequently not a project at all but a home
+// directory under version control, which is usually pushed somewhere. The
+// refusal used to hand over `git add <folder> && git commit` there as the thing
+// to run, and that staged the workspace's .env into it. A repository of the
+// workspace's own is what is offered to run; committing the folder into the
+// enclosing one is left as a decision, with what to look out for.
 func errWorktreeNotCommitted(id string, source WorktreeSource) error {
 	return apperr.New("TASK_WORKTREE_NOT_COMMITTED").
 		Causer("task.Service.Branch").
@@ -295,8 +307,10 @@ func errWorktreeNotCommitted(id string, source WorktreeSource) error {
 		Issue("enclosingRepository", source.Toplevel).
 		Status(apperr.StatusConflict).
 		CTA(apperr.CallToAction{
-			Label:   "commit the workspace's folder in that repository, then branch again",
-			Command: "git -C " + strconv.Quote(source.Toplevel) + " add " + strconv.Quote(source.Subdir) + " && git -C " + strconv.Quote(source.Toplevel) + " commit -m \"Add the workspace\"",
+			Label:   "give the workspace a repository of its own and commit once, then branch again",
+			Command: "git -C " + strconv.Quote(source.Dir) + " init && git -C " + strconv.Quote(source.Dir) + " commit --allow-empty -m \"Start the workspace\"",
+		}, apperr.CallToAction{
+			Label: "or, only if the workspace is part of the project at " + source.Toplevel + ", commit its folder there yourself — review what git stages first so secrets such as .env stay out — then branch again",
 		}, apperr.CallToAction{
 			Label: "or execute the task in the workspace itself, without an isolated checkout",
 		})
