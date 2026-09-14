@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/command"
@@ -65,7 +66,7 @@ func (s *Service) List(ctx context.Context, _ ListInput) ([]Artifact, error) {
 	out := make([]Artifact, len(found))
 	for i := range found {
 		out[i] = found[i].Clone()
-		out[i].URLs = s.urlsFor(out[i].ID)
+		s.present(&out[i])
 	}
 	return out, nil
 }
@@ -79,6 +80,28 @@ func (s *Service) List(ctx context.Context, _ ListInput) ([]Artifact, error) {
 // URLs' own doc) — a real follow-up, not a silent omission.
 func (s *Service) urlsFor(id string) *URLs {
 	return &URLs{Local: "/v/artifacts/" + id + "/"}
+}
+
+// present fills in what every read answers but nothing stores: where the
+// artifact is reached, and whether it has a password.
+func (s *Service) present(a *Artifact) {
+	a.URLs = s.urlsFor(a.ID)
+	a.HasPassword = a.PasswordHash != ""
+}
+
+// minPasswordLength is the shortest password a by_password artifact is shared
+// behind. The link travels outside the workspace, and the password is all
+// that stands between it and whoever finds it.
+const minPasswordLength = 8
+
+// checkPassword refuses a password no by_password artifact should be shared
+// behind. Create and SetPassword both call it, so the two ways of setting one
+// cannot disagree about what is acceptable.
+func checkPassword(password string) error {
+	if strings.TrimSpace(password) == "" || utf8.RuneCountInString(password) < minPasswordLength {
+		return errPasswordInvalid(minPasswordLength)
+	}
+	return nil
 }
 
 // GetInput names one artifact.
@@ -105,7 +128,7 @@ func (s *Service) get(ctx context.Context, id string) (*Artifact, error) {
 		return nil, errNotFound(id)
 	}
 	clone := found.Clone()
-	clone.URLs = s.urlsFor(clone.ID)
+	s.present(&clone)
 	return &clone, nil
 }
 
@@ -150,6 +173,14 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Artifact, error)
 	// leaves no artifact behind without the protection it was created with.
 	var passwordHash string
 	if in.Password != "" {
+		// Only by_password ever asks for it. Stored on a private artifact, it
+		// would leave its sender believing the artifact is behind a password.
+		if visibility != ByPassword {
+			return nil, errPasswordUnused(string(visibility))
+		}
+		if err := checkPassword(in.Password); err != nil {
+			return nil, err
+		}
 		hash, herr := s.hasher.Hash(in.Password)
 		if herr != nil {
 			return nil, errHashFailed(id, herr)
@@ -177,7 +208,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Artifact, error)
 	if err := s.repo.Create(ctx, a); err != nil {
 		return nil, errWriteFailed("Create", err)
 	}
-	a.URLs = s.urlsFor(a.ID)
+	s.present(a)
 	return a, nil
 }
 
@@ -223,7 +254,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Artifact, error)
 	if err := s.repo.Update(ctx, &toWrite, collections.Version{}); err != nil {
 		return nil, errWriteFailed("Update", err)
 	}
-	current.URLs = s.urlsFor(current.ID)
+	s.present(current)
 	return current, nil
 }
 
@@ -282,6 +313,9 @@ func (s *Service) SetPassword(ctx context.Context, in SetPasswordInput) (SetPass
 	id := strings.TrimSpace(in.ID)
 	current, err := s.get(ctx, id)
 	if err != nil {
+		return SetPasswordOutput{}, err
+	}
+	if err := checkPassword(in.Password); err != nil {
 		return SetPasswordOutput{}, err
 	}
 

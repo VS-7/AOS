@@ -70,6 +70,12 @@ type Artifact struct {
 	// hash is written to disk, so the link survives one. Fixes defect #19.
 	PasswordHash string `yaml:"passwordHash,omitempty" json:"-"`
 
+	// HasPassword is computed on every read, never persisted: whether
+	// PasswordHash is set. The hash stays inside the daemon, and without this
+	// a by_password artifact created with no password — which refuses
+	// everybody — reads exactly like one that is shared.
+	HasPassword bool `yaml:"-" json:"hasPassword" jsonschema:"Whether a password is set. A by_password artifact without one refuses every request until set-password runs."`
+
 	CreatedAt time.Time `yaml:"createdAt" json:"createdAt" jsonschema:"When this artifact was created."`
 	UpdatedAt time.Time `yaml:"updatedAt" json:"updatedAt" jsonschema:"When it was last changed."`
 

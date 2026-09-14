@@ -28,8 +28,9 @@ else it references, registered in the workspace and served by this daemon at
   report or generated page an agent produced — create an artifact rather than
   describing the content in a message
 - **Sharing outside the workspace:** set visibility to by_password and give
-  create a password (or call set-password afterwards), then hand out the
-  artifact's URL
+  create a password of at least 8 characters (or call set-password
+  afterwards), then hand out the artifact's URL; hasPassword on every read says
+  whether one is set
 
 ## When NOT to use
 - Not for anything that should stay inside the conversation — an artifact is
@@ -74,7 +75,10 @@ func Register(reg *command.Registry, svc *Service) {
 		Name:    "create",
 		Summary: "Register a new artifact.",
 		Doc: `Registers a new artifact and scaffolds a minimal entrypoint HTML file when
-none is given. Defaults to private visibility.`,
+none is given. Defaults to private visibility.
+
+A password is taken only with visibility by_password, and needs at least 8
+characters; one given with any other visibility is refused rather than stored.`,
 		Examples: []command.Example{
 			{Description: "publish a new dashboard", Input: CreateInput{Name: "Sales dashboard"}},
 		},
@@ -102,7 +106,8 @@ none is given. Defaults to private visibility.`,
 		Summary: "Set the password a by_password artifact is shared behind.",
 		Doc: `Hashes the given password with argon2id and persists the hash, so the
 returned URL keeps working after a restart. Does not change visibility —
-call update first if the artifact is not already by_password.`,
+call update first if the artifact is not already by_password. The password
+needs at least 8 characters.`,
 		Examples: []command.Example{
 			{Description: "share an artifact by link", Input: SetPasswordInput{ID: "sales-dashboard", Password: "correct-horse-battery-staple"}},
 		},
