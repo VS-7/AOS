@@ -67,6 +67,31 @@ describe("AgentModelSelect", () => {
     expect(document.activeElement).toBe(search);
   });
 
+  // W3-23: the arrows were let through to the menu, but a Radix menu moves
+  // focus only for keys aimed at the menu itself, and it swallows Tab. After
+  // typing "opus", ArrowDown left nothing focused: a keyboard could filter the
+  // list and never pick from it.
+  it("moves from the search box into the results with ArrowDown or Tab", () => {
+    for (const key of ["ArrowDown", "Tab"]) {
+      const { search } = open();
+      search.focus();
+      fireEvent.change(search, { target: { value: "opus" } });
+      fireEvent.keyDown(search, { key });
+
+      expect(document.activeElement, key).toBe(screen.getByRole("menuitem", { name: /Claude Opus 5/ }));
+      cleanup();
+    }
+  });
+
+  it("moves to the last result with ArrowUp", () => {
+    const { search } = open();
+    search.focus();
+    fireEvent.change(search, { target: { value: "claude" } });
+    fireEvent.keyDown(search, { key: "ArrowUp" });
+
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: /Claude Haiku 4.5/ }));
+  });
+
   it("finds a model by its name or id, not only by its provider", () => {
     const { search, onChange } = open();
     fireEvent.change(search, { target: { value: "opus" } });

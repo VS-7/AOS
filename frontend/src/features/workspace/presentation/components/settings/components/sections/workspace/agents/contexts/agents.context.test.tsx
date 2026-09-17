@@ -76,6 +76,12 @@ const { AgentsProvider, useAgents } = await import("./agents.context");
 
 type Ctx = ReturnType<typeof useAgents>;
 
+const probe: { current: Ctx | null } = { current: null };
+function Probe() {
+  probe.current = useAgents();
+  return null;
+}
+
 function mount(agents: Agent[]) {
   const ref: { current: Ctx | null } = { current: null };
   function Probe() {
@@ -192,6 +198,79 @@ describe("AgentsProvider", () => {
     await waitFor(() => expect(ctx().form.getValues("role")).toBe("Changed Elsewhere"));
   });
 
+  // W3-11: every reload set the loading flag, which disables Instructions —
+  // so a change made elsewhere took the caret out of the field mid-sentence
+  // and the next keys went nowhere. Only the first load has nothing to show.
+  it("keeps the instructions editable while it re-reads an agent changed elsewhere", async () => {
+    const { ctx, rerender } = mount([builder, luara]);
+    await select(ctx, "api-builder");
+
+    let answer!: () => void;
+    daemon.getById.mockImplementationOnce(
+      ({ params }: any) => new Promise((resolve) => (answer = () => resolve({ data: { agent: daemon.records[params.agent] }, error: null }))),
+    );
+    daemon.records["api-builder"] = { ...daemon.records["api-builder"], voice: "x", updatedAt: "2026-09-13T03:00:00Z" };
+    await act(async () => rerender([{ ...builder, updatedAt: "2026-09-13T03:00:00Z" }, luara]));
+
+    expect(daemon.getById).toHaveBeenCalledTimes(2);
+    expect(ctx().isLoadingContent).toBe(false);
+    expect(ctx().contentLoadFailed).toBe(false);
+    await act(async () => answer());
+  });
+
+  // The same change announced by two roster refreshes read the agent twice.
+  it("reads a changed agent once, however many refreshes announce the change", async () => {
+    const { ctx, rerender } = mount([builder, luara]);
+    await select(ctx, "api-builder");
+
+    let answer!: () => void;
+    daemon.getById.mockImplementationOnce(
+      ({ params }: any) => new Promise((resolve) => (answer = () => resolve({ data: { agent: daemon.records[params.agent] }, error: null }))),
+    );
+    const changed = { ...builder, updatedAt: "2026-09-13T03:00:00Z" };
+    daemon.records["api-builder"] = { ...daemon.records["api-builder"], updatedAt: changed.updatedAt };
+    await act(async () => rerender([changed, luara]));
+    await act(async () => rerender([{ ...changed }, { ...luara }]));
+    await act(async () => answer());
+    await act(async () => rerender([{ ...changed }, luara]));
+
+    expect(daemon.getById).toHaveBeenCalledTimes(2);
+  });
+
+  // W3-11: a refused or failed load cleared the loading flag and left the
+  // roster entry in the form, whose content is "" — an editable empty body
+  // that a save would write over AGENT.md.
+  it("keeps the instructions closed after a refused load, and a save leaves AGENT.md alone", async () => {
+    daemon.getById.mockResolvedValueOnce({ data: undefined, error: { code: "AOS_INTERNAL", message: "disk says no" } });
+    const { ctx } = mount([builder, luara]);
+    await select(ctx, "api-builder");
+
+    expect(ctx().contentLoadFailed).toBe(true);
+    expect(daemon.toasts).toContain("error:disk says no");
+
+    await act(async () => {
+      ctx().form.setValue("content", "only this", { shouldDirty: true });
+      ctx().form.setValue("role", "Reviewer", { shouldDirty: true });
+    });
+    await act(async () => ctx().form.submit());
+
+    expect(daemon.update.mock.calls[0][0].body).toEqual({ role: "Reviewer" });
+    expect(daemon.records["api-builder"].content).toBe(INSTRUCTIONS);
+  });
+
+  it("says so when the agent cannot be read at all, and reads it again on retry", async () => {
+    daemon.getById.mockRejectedValueOnce(new Error("bridge closed"));
+    const { ctx } = mount([builder, luara]);
+    await select(ctx, "api-builder");
+
+    expect(ctx().contentLoadFailed).toBe(true);
+    expect(daemon.toasts.some((m) => m.startsWith("error:"))).toBe(true);
+
+    await act(async () => ctx().retryContentLoad());
+    await waitFor(() => expect(ctx().contentLoadFailed).toBe(false));
+    expect(ctx().form.getValues("content")).toBe(INSTRUCTIONS);
+  });
+
   // #168 / #172 / #183: blanks were sent as undefined (dropped by JSON, so
   // "leave unchanged"), a skill nobody can set was sent, and the whole
   // instructions body went out on every save.
@@ -285,6 +364,47 @@ describe("AgentsProvider", () => {
   // #176 / #177: the daemon's answers were '"" is not a usable agent slug'
   // and a storage sentence about a collection — neither says what to change
   // in a form whose only identity field is the name.
+  // W3-12: the request was applied again only when the agent it named
+  // changed. After the person picked someone else, a second "View details"
+  // for the same agent reached the same URL and did not bring her back.
+  it("opens the requested agent again when the same request is made again", async () => {
+    const view = render(
+      <AgentsProvider agents={[builder, luara]} requestedAgentId="luara" requestKey="first">
+        <Probe />
+      </AgentsProvider>,
+    );
+    await waitFor(() => expect(probe.current!.selectedAgentId).toBe("luara"));
+    await act(async () => probe.current!.setSelectedAgentId("api-builder"));
+    expect(probe.current!.selectedAgentId).toBe("api-builder");
+
+    view.rerender(
+      <AgentsProvider agents={[builder, luara]} requestedAgentId="luara" requestKey="second">
+        <Probe />
+      </AgentsProvider>,
+    );
+    await waitFor(() => expect(probe.current!.selectedAgentId).toBe("luara"));
+  });
+
+  // Through the same guard as a click: unsaved edits are asked about.
+  it("asks before a request replaces unsaved edits", async () => {
+    const view = render(
+      <AgentsProvider agents={[builder, luara]} requestedAgentId="api-builder" requestKey="first">
+        <Probe />
+      </AgentsProvider>,
+    );
+    await waitFor(() => expect(probe.current!.isLoadingContent).toBe(false));
+    await waitFor(() => expect(probe.current!.selectedAgentId).toBe("api-builder"));
+    await act(async () => probe.current!.form.setValue("role", "UNSAVED", { shouldDirty: true }));
+
+    view.rerender(
+      <AgentsProvider agents={[builder, luara]} requestedAgentId="luara" requestKey="second">
+        <Probe />
+      </AgentsProvider>,
+    );
+    await waitFor(() => expect(probe.current!.pendingSelection).toBe("luara"));
+    expect(probe.current!.selectedAgentId).toBe("api-builder");
+  });
+
   it("refuses a name that makes no id, before asking the daemon", async () => {
     const { ctx } = mount([builder, luara]);
     await act(async () => ctx().startCreate());

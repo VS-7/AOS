@@ -34,6 +34,10 @@ async function navigateToSettingsSection(
           // Merged into what is already there: the window's own parameters
           // (`daemon`, `platform`) ride in the same query string.
           search: (previous: Record<string, unknown>) => ({ ...previous, ...selection }),
+          // Asking for the agent already in the URL is still a request: the
+          // router treats an identical location as no navigation at all, so
+          // the section would never hear it. A fresh key makes it one.
+          state: (previous: Record<string, unknown>) => ({ ...previous, settingsSelection: generateId() }),
         }
       : args) as never,
   );

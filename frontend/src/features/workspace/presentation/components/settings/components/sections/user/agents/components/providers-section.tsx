@@ -324,7 +324,9 @@ export function ProvidersSection({ providers, models, onRefresh }: ProvidersSect
               {t("Disconnect {{provider}}?", { provider: disconnecting?.name ?? "" })}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {t("{{provider}} is removed from this installation's connected providers. Nothing else on this machine is touched.", {
+              {/* What AOS changes is listed below — the slots this same write
+                  clears among it — so this names only what it leaves alone. */}
+              {t("{{provider}} is removed from this installation's connected providers. A login it has outside AOS, such as a CLI's, is left as it is.", {
                 provider: disconnecting?.name ?? "",
               })}
             </AlertDialogDescription>

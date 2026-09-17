@@ -15,6 +15,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { ImageUpload } from "@/components/ui/image-upload";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -64,6 +65,9 @@ interface AgentContentTabsProps {
   form: any;
   isCreateMode: boolean;
   isLoadingInstructions: boolean;
+  /** The instructions could not be read: there is nothing to edit. */
+  instructionsFailed?: boolean;
+  onRetryInstructions?: () => void;
 }
 
 export function AgentContentTabs({
@@ -71,6 +75,8 @@ export function AgentContentTabs({
   form,
   isCreateMode,
   isLoadingInstructions,
+  instructionsFailed = false,
+  onRetryInstructions,
 }: AgentContentTabsProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const idPrefix = `agent-content-${agent?.id ?? "new"}`;
@@ -207,16 +213,24 @@ export function AgentContentTabs({
                       spellCheck={false}
                       // Until the agent's own instructions arrive the field
                       // holds nothing; typing into it then would save that
-                      // nothing over AGENT.md.
-                      disabled={isLoadingInstructions}
+                      // nothing over AGENT.md. The same holds when they could
+                      // not be read at all.
+                      disabled={isLoadingInstructions || instructionsFailed}
                       placeholder={
                         isLoadingInstructions
                           ? t("Loading instructions…")
-                          : t("Write the system instructions for this agent...")
+                          : instructionsFailed
+                            ? t("The instructions could not be loaded.")
+                            : t("Write the system instructions for this agent...")
                       }
                       className="min-h-64 resize-y font-mono text-sm leading-relaxed"
                     />
                   </FormControl>
+                  {instructionsFailed && onRetryInstructions ? (
+                    <Button type="button" variant="secondary" size="sm" className="w-fit" onClick={onRetryInstructions}>
+                      {t("Try again")}
+                    </Button>
+                  ) : null}
                   <FormMessage />
                 </FormItem>
               )}

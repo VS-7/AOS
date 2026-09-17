@@ -168,7 +168,6 @@ func errConnectFailed(op, id string, cause error) error {
 		})
 }
 
-// errCallFailed wraps a failure of the tool call itself, once connected.
 // errListToolsFailed fires when a toolset connected but could not say what it
 // publishes — distinct from errConnectFailed, which never got that far.
 func errListToolsFailed(id string, cause error) error {
@@ -184,6 +183,7 @@ func errListToolsFailed(id string, cause error) error {
 		})
 }
 
+// errCallFailed wraps a failure of the tool call itself, once connected.
 func errCallFailed(id, tool string, cause error) error {
 	return apperr.New("TOOLSET_CALL_FAILED").
 		Causer("toolset.Service.Call").

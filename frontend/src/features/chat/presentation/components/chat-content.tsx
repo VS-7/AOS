@@ -8,6 +8,7 @@ import { useChat } from "@/features/chat/presentation/hooks/use-chat";
 import { ComposerHelper } from "@/features/chat/presentation/helpers/composer.helper";
 import {
   closeChatTab,
+  getTabChatId,
   syncChatTabTitle,
 } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
 import { ChatKindHelper } from "@/features/chat/services/chat/chat-kind.helper";
@@ -101,13 +102,24 @@ export function ChatContent({ chatId, userName, userId }: ChatContentProps) {
   const kind = chat ? ChatKindHelper.classify(chat, agentIds) : undefined;
   const displayTitle = directAgent ? directAgent.name : chat?.title;
 
+  // The header names the conversation, and its tab says the same. Whoever
+  // opens the tab passes a title of their own (search passes the stored
+  // one, a task its name), so the tab's title is watched too: a later open
+  // with another name is put back instead of staying until the header's
+  // title itself changes.
+  const tabTitle = aos.stores.viewport.useState(
+    (state) =>
+      state.tabs.items.find(
+        (tab) => tab.type === "chat" && getTabChatId(tab) === chatId,
+      )?.title,
+  );
   React.useEffect(() => {
     if (notFound) {
       syncChatTabTitle(chatId, t("Conversation not found"));
     } else if (displayTitle) {
       syncChatTabTitle(chatId, displayTitle);
     }
-  }, [chatId, displayTitle, notFound]);
+  }, [chatId, displayTitle, notFound, tabTitle]);
 
   if (notFound) {
     return (
@@ -159,7 +171,11 @@ export function ChatContent({ chatId, userName, userId }: ChatContentProps) {
               </h1>
             </div>
           </div>
-          <ChatActionsMenu chat={chat} onCleared={liveChat.replaceAndRefresh} />
+          <ChatActionsMenu
+            chat={chat}
+            canRename={!directAgent}
+            onCleared={liveChat.replaceAndRefresh}
+          />
         </div>
       </PageHeader>
       <PageBody className="min-h-0 overflow-hidden overflow-y-hidden relative">

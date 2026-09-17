@@ -112,8 +112,10 @@ function ToolsetInventoryBody({
     params: { toolset: toolsetId },
   });
 
-  // Connecting is what listing costs — a process spawned, a server asked — so
-  // it happens when the Tools tab is actually looked at, not on every open.
+  // Listing connects — a process spawned, a server asked — so it runs only
+  // while the Tools tab shows. That is the tab the sheet opens on, so every
+  // open lists the tools; another tab asks nothing, and the minute of
+  // staleTime keeps a switch back to Tools from connecting again.
   const toolsQuery = aos.client.toolset.listTools.useQuery({
     params: { toolset: toolsetId },
     enabled: activeTab === "tools",

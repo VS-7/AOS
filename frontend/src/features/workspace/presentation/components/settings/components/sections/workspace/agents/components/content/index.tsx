@@ -25,6 +25,8 @@ export function SelectedAgentContent() {
     selectedAgent,
     isCreateMode,
     isLoadingContent,
+    contentLoadFailed,
+    retryContentLoad,
     isDeleting,
     isDirty,
     form,
@@ -172,6 +174,8 @@ export function SelectedAgentContent() {
             form={form}
             isCreateMode={isCreateMode}
             isLoadingInstructions={isLoadingContent}
+            instructionsFailed={contentLoadFailed}
+            onRetryInstructions={retryContentLoad}
           />
         </SettingsContentContainer>
       </SplitPageLayout.ContentBody>

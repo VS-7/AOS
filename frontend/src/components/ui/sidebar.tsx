@@ -9,6 +9,7 @@ import { Slot } from "radix-ui"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
+import { commandKeyHeld } from "@/lib/command-key"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
@@ -98,9 +99,13 @@ function SidebarProvider({
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // The platform's command key only: on macOS ^B is a text field's
+      // "back one character", not a sidebar toggle.
       if (
         event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
-        (event.metaKey || event.ctrlKey)
+        commandKeyHeld(event) &&
+        !event.altKey &&
+        !event.shiftKey
       ) {
         event.preventDefault()
         toggleSidebar()
