@@ -393,7 +393,8 @@ func (s *service) installBeside(ctx context.Context, daemon Daemon, known bool, 
 	}
 	out := Install{
 		Method: InstallFromTerminal, Reopen: reopen,
-		Unsupervised: known && daemon.Answering && !daemon.supervised(),
+		Unsupervised: known && daemon.unsupervised(),
+		Unidentified: known && daemon.unidentified(),
 	}
 	if version == "" {
 		return out
@@ -791,7 +792,9 @@ func (s *service) mayRestart(ctx context.Context, version string) error {
 		return errDaemonUnknown(err)
 	case daemon.Self:
 		return errRestartUnavailable(s.installBeside(ctx, daemon, true, version))
-	case daemon.Answering && !daemon.supervised():
+	case daemon.unidentified():
+		return errDaemonUnidentified(daemon)
+	case daemon.unsupervised():
 		return errDaemonNotSupervised(daemon, s.installBeside(ctx, daemon, true, version).Command)
 	case !daemon.restartable():
 		return errDaemonNotAnswering(daemon)

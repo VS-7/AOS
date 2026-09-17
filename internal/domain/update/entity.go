@@ -181,6 +181,11 @@ type Install struct {
 	// restart a daemon it did not start: that one is stopped where it was
 	// started first, and Command then starts the new version itself.
 	Unsupervised bool `json:"unsupervised,omitempty"`
+	// Unidentified is true when a daemon answers, the supervisor's record
+	// names a live process, and the two cannot be matched — see
+	// Daemon.unidentified. Restarting through the supervisor is what helps,
+	// and it is the opposite of the advice Unsupervised carries.
+	Unidentified bool `json:"unidentified,omitempty"`
 }
 
 // Daemon is which daemon answers for this installation, as the process asking
@@ -212,6 +217,30 @@ type Daemon struct {
 func (d Daemon) supervised() bool {
 	return d.Answering && d.RecordedPID > 0 && d.PID == d.RecordedPID
 }
+
+// unidentified: a daemon answers, the supervisor's record names a process
+// that is alive, and the two cannot be matched.
+//
+// It is neither supervised nor started by hand, and calling it either is
+// wrong in a way somebody then acts on. There are two ways to get here and
+// both are the supervisor's own daemon: a release older than the health
+// answer's pid, which says nothing about which process it is (install.sh
+// replaced the binaries without restarting anything); and a daemon started
+// through a wrapper script that does not exec, so the record holds the
+// wrapper's pid and the daemon answers with its own.
+//
+// Neither is mended by stopping a terminal nobody is running — restarting
+// through the supervisor is what tells them apart or brings a release that
+// names its process up.
+func (d Daemon) unidentified() bool {
+	return d.Answering && d.RecordedPID > 0 && d.PID != d.RecordedPID
+}
+
+// unsupervised: a daemon answers and this installation's supervisor has no
+// record of a live process at all, so that daemon was started some other way
+// — `aosd serve` in a terminal, a service manager — and a restart from here
+// cannot stop it.
+func (d Daemon) unsupervised() bool { return d.Answering && d.RecordedPID == 0 }
 
 // idle: no daemon runs at all — nothing answers, and the supervisor's record
 // names no live process — so an install starts the new version rather than
