@@ -22,15 +22,17 @@ var (
 // an agent capability — see commands.go.
 type Service interface {
 	// Start publishes the local daemon. It refuses when the API is not
-	// authenticated (errInsecureExposure) or when hostname/token are not
-	// configured (errConfigIncomplete) — see the guard in service.go.
+	// authenticated — security off, or no account holding an active API
+	// token (errInsecureExposure) — or when hostname/token are not
+	// configured (errConfigIncomplete). See the guard in service.go.
 	Start(ctx context.Context) (State, error)
 
 	// Stop tears the tunnel down. Hostname and token are left in the config,
 	// so Start can bring it back up without reconfiguring.
 	Stop(ctx context.Context) (State, error)
 
-	// Status reads the current state without changing it.
+	// Status reads the current state without changing it, including whether
+	// the guard would let Start through (State.Authenticated).
 	Status(ctx context.Context) (State, error)
 }
 
@@ -43,12 +45,26 @@ type Config interface {
 	Raw(ctx context.Context) (RawConfig, error)
 }
 
-// RawConfig is the two substructures Start's guard reads.
+// RawConfig is the part of the configuration Start's guard reads.
 type RawConfig struct {
 	SecurityEnabled bool
-	APIToken        string
 	Hostname        string
 	Token           string
+}
+
+// Credentials answers the other half of the guard: whether anybody holds a
+// credential a remote caller could present. Authentication switched on with
+// no API token in existence is a door nobody outside can open, which reads
+// as safe but means the tunnel publishes nothing usable.
+//
+// It counts the account API tokens Settings › Developers issues, because
+// those are what REST and MCP callers authenticate with. Config
+// security.apiToken used to be the thing checked here; nothing authenticates
+// against it, so the guard could never be satisfied from the desktop.
+type Credentials interface {
+	// HasActiveAPIToken reports whether at least one account holds an API
+	// token that is neither revoked nor expired.
+	HasActiveAPIToken(ctx context.Context) (bool, error)
 }
 
 // Runner spawns and supervises the cloudflared process, kept behind a port

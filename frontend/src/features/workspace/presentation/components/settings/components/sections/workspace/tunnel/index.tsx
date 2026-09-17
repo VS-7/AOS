@@ -166,11 +166,17 @@ export function WorkspaceTunnelSection() {
   const tunnelError =
     tunnelState === "failed" ? (tunnelStatus as { error?: string } | undefined)?.error : undefined;
   // The daemon refuses to publish an API that asks for no credential
-  // (AOS_TUNNEL_INSECURE_EXPOSURE). The redacted configuration still says
-  // whether a token is set — an unset secret stays empty — so the switch can
-  // say so before it is flipped, rather than after a refusal.
-  const security = config?.security as { enabled?: boolean; apiToken?: string } | undefined;
-  const lacksAuthentication = !security?.enabled || !security?.apiToken;
+  // (AOS_TUNNEL_INSECURE_EXPOSURE), and reports that same guard in the status
+  // it answers, so the switch can say so before it is flipped rather than
+  // after a refusal. Read from there and not from config.security.apiToken:
+  // nothing authenticates against that field, so this screen used to demand a
+  // token no one could make count, while the one Settings > Developers issues
+  // — the credential REST and MCP callers present — did not clear the
+  // warning. Unknown (the first fetch) is not "unauthenticated": the switch
+  // is disabled while the query runs anyway.
+  const lacksAuthentication =
+    tunnelStatus !== undefined &&
+    !(tunnelStatus as { authenticated?: boolean } | undefined)?.authenticated;
   const isBusy = activationForm.isLoading || credentialsForm.isLoading || tunnelStatusQuery.isFetching;
 
   const handleCopyUrl = async () => {
@@ -258,7 +264,7 @@ export function WorkspaceTunnelSection() {
                       </FormDescription>
                       {lacksAuthentication && !field.value ? (
                         <FormDescription className="text-destructive">
-                          {t("The daemon will not expose an API that asks for no credential. Turn authentication on and set an API token first (security.enabled and security.apiToken).")}
+                          {t("The daemon will not expose an API that asks for no credential. Turn authentication on, then generate an API token in Settings > Developers.")}
                         </FormDescription>
                       ) : null}
                     </div>

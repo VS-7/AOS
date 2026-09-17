@@ -267,6 +267,27 @@ func (s *Service) APIToken(ctx context.Context, userID string) (*Token, error) {
 	return current, nil
 }
 
+// AnyActiveAPIToken reports whether any account holds an API credential that
+// still authenticates. It answers a yes/no about the installation, never
+// which account or which token, because the one caller that asks — the
+// tunnel's exposure guard — only needs to know whether a remote caller could
+// have a credential to present.
+func (s *Service) AnyActiveAPIToken(ctx context.Context) (bool, error) {
+	users, err := s.store.Load(ctx)
+	if err != nil {
+		return false, errStoreFailed("AnyActiveAPIToken", err)
+	}
+	now := s.clock.Now()
+	for _, u := range users {
+		for _, t := range u.Tokens {
+			if t.Name == APITokenName && t.Active(now) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
 // RegenerateAPIToken retires the account's API credential and issues a new
 // one, returning its plain value once.
 //
