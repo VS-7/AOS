@@ -19,16 +19,21 @@ var refTime = time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
 
 // fakeProcs is an operating system with a process table a test controls.
 type fakeProcs struct {
-	mu       sync.Mutex
-	alive    map[int]bool
-	nextPID  int
-	started  []gateway.Command
+	mu      sync.Mutex
+	alive   map[int]bool
+	nextPID int
+	started []gateway.Command
+	// lines is what each live process is running, as the operating system
+	// would report it. A pid with no line is one the platform cannot tell
+	// anything about, which is what Windows answers.
+	lines    map[int]string
 	startErr error
 
 	// ignoresTerminate models a daemon that does not shut down when asked,
 	// which is the case the escalation to kill exists for.
 	ignoresTerminate bool
 	killErr          error
+	lineErr          error
 	terminated       []int
 	killed           []int
 
@@ -36,9 +41,11 @@ type fakeProcs struct {
 	onStart func(pid int)
 }
 
-func newProcs() *fakeProcs { return &fakeProcs{alive: map[int]bool{}, nextPID: 1000} }
+func newProcs() *fakeProcs {
+	return &fakeProcs{alive: map[int]bool{}, lines: map[int]string{}, nextPID: 1000}
+}
 
-func (p *fakeProcs) Start(context.Context, gateway.Command) (int, error) {
+func (p *fakeProcs) Start(_ context.Context, cmd gateway.Command) (int, error) {
 	if p.startErr != nil {
 		return 0, p.startErr
 	}
@@ -46,6 +53,7 @@ func (p *fakeProcs) Start(context.Context, gateway.Command) (int, error) {
 	defer p.mu.Unlock()
 	p.nextPID++
 	p.alive[p.nextPID] = true
+	p.lines[p.nextPID] = strings.TrimSpace(cmd.Path + " " + strings.Join(cmd.Args, " "))
 	p.started = append(p.started, gateway.Command{})
 	if p.onStart != nil {
 		p.onStart(p.nextPID)
@@ -57,6 +65,24 @@ func (p *fakeProcs) Alive(pid int) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.alive[pid]
+}
+
+func (p *fakeProcs) CommandLine(pid int) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.lineErr != nil {
+		return "", p.lineErr
+	}
+	return p.lines[pid], nil
+}
+
+// reuse models the one thing a pid guarantees nothing about: the process that
+// had this number is gone, and the number now belongs to something else.
+func (p *fakeProcs) reuse(pid int, line string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.alive[pid] = true
+	p.lines[pid] = line
 }
 
 func (p *fakeProcs) Terminate(pid int) error {
@@ -574,6 +600,86 @@ func TestStoppingAStaleRecordCleansIt(t *testing.T) {
 	}
 	if h.store.meta != nil {
 		t.Error("the stale record was not cleaned")
+	}
+}
+
+// A pid is a number the operating system hands out again. A daemon that
+// crashed without clearing its record leaves one behind, and by the time
+// anybody asks, that number can belong to an unrelated process — which is
+// alive, so the record read as running and Stop signalled a stranger.
+func TestARecordWhosePIDWasReusedIsStaleRatherThanRunning(t *testing.T) {
+	h := newHarness(t)
+	started, err := h.svc.Start(ctx(), gateway.StartInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid := started.Meta.PID
+	h.procs.die(pid)
+	h.procs.reuse(pid, "/bin/sleep 1000")
+
+	state, err := h.svc.Status(ctx(), gateway.StatusInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != gateway.Stale {
+		t.Fatalf("a record naming somebody else's process is stale, got %q", state.Status)
+	}
+
+	out, err := h.svc.Stop(ctx(), gateway.StopInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(h.procs.terminated) != 0 || len(h.procs.killed) != 0 {
+		t.Fatalf("a process that is not the daemon was signalled: terminated %v, killed %v",
+			h.procs.terminated, h.procs.killed)
+	}
+	if out.Stopped || !out.Cleaned {
+		t.Fatalf("the stale record should be reported as cleaned, got %+v", out)
+	}
+	if h.store.meta != nil {
+		t.Error("the stale record was not cleared")
+	}
+	if !h.procs.Alive(pid) {
+		t.Error("the unrelated process was killed")
+	}
+}
+
+// The evidence is a mismatch, and only a mismatch: a platform that cannot
+// say what a process is running (Windows), a record from before the command
+// was written down, or a wrapper script that shows up as its interpreter's
+// argument must all leave the daemon stoppable.
+func TestAProcessThatCannotBeIdentifiedIsStillTheDaemon(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		line    string
+		lineErr error
+		command string
+	}{
+		{name: "the platform cannot tell", command: "/usr/local/bin/aosd"},
+		{name: "reading it failed", lineErr: errors.New("ps: not found"), command: "/usr/local/bin/aosd"},
+		{name: "a record from before commands were written down", line: "/bin/sleep 1000"},
+		{name: "a wrapper script", line: "/bin/sh /opt/aos/aosd-wrapper serve", command: "/opt/aos/aosd-wrapper"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			h.procs.reuse(4242, tc.line)
+			h.procs.lineErr = tc.lineErr
+			h.store.meta = &gateway.Meta{PID: 4242, Host: "127.0.0.1", Port: 5326, Command: tc.command}
+
+			state, err := h.svc.Status(ctx(), gateway.StatusInput{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if state.Status != gateway.Running {
+				t.Fatalf("status = %q", state.Status)
+			}
+			if _, err := h.svc.Stop(ctx(), gateway.StopInput{}); err != nil {
+				t.Fatal(err)
+			}
+			if len(h.procs.terminated) != 1 || h.procs.terminated[0] != 4242 {
+				t.Fatalf("the daemon was not stopped: %v", h.procs.terminated)
+			}
+		})
 	}
 }
 

@@ -17,6 +17,20 @@ type Processes interface {
 	// Alive reports whether a process with this identifier exists.
 	Alive(pid int) bool
 
+	// CommandLine reports what the process with this identifier is running,
+	// as the operating system describes it: the executable, and its arguments
+	// where the platform says them.
+	//
+	// It exists because a pid identifies nothing on its own. The operating
+	// system hands the same number out again, so a record left behind by a
+	// daemon that crashed can name a process that is alive and is not the
+	// daemon — and the supervisor used to signal it.
+	//
+	// An empty answer with a nil error means the platform could not tell,
+	// which is not the same as the process being somebody else's: only a
+	// mismatch is evidence. See Service.read.
+	CommandLine(pid int) (string, error)
+
 	// Terminate asks a process to stop, politely.
 	Terminate(pid int) error
 

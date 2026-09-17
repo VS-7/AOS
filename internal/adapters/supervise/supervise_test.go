@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -82,6 +83,40 @@ func TestAliveIsFalseForNothingAndForGarbage(t *testing.T) {
 	for _, pid := range []int{0, -1, -12345} {
 		if procs.Alive(pid) {
 			t.Errorf("pid %d reported alive", pid)
+		}
+	}
+}
+
+// TestTheCommandLineNamesWhatAProcessIsRunning is what tells a record whose
+// pid was handed out again from a daemon that is still running: the pid is
+// the same number either way, and only the command line differs.
+func TestTheCommandLineNamesWhatAProcessIsRunning(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the platform does not answer this question here; see commandLine in platform_windows.go")
+	}
+	procs := supervise.NewProcesses()
+
+	pid, err := procs.Start(ctx(), gateway.Command{Path: sleepBinary(t), Args: []string{"30"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = procs.Kill(pid) })
+
+	line, err := procs.CommandLine(pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(line, "sleep") {
+		t.Errorf("the command line of a sleep is %q", line)
+	}
+
+	// Nothing to report is reported as nothing, not as a failure: the caller
+	// takes only a mismatch as evidence, and an error it cannot act on would
+	// be one more reason to signal a pid nobody identified.
+	for _, absent := range []int{0, -1, 2147483646} {
+		line, err := procs.CommandLine(absent)
+		if err != nil || line != "" {
+			t.Errorf("pid %d answered %q, %v", absent, line, err)
 		}
 	}
 }

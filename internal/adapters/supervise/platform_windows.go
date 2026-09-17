@@ -44,6 +44,18 @@ const stillActive = 259
 // A pid the caller may not open is treated as alive rather than dead: it
 // exists, and reporting it dead is what makes a supervisor start a second
 // daemon beside the first.
+// commandLine does not answer here, and says so by answering nothing.
+//
+// The identity check this feeds treats "the platform could not tell" as no
+// evidence at all, which leaves supervision on this platform exactly as it
+// was: a live pid in the record is the daemon. That is the safe direction —
+// the daemon stays stoppable — and it is deliberate rather than pending.
+// What Windows offers instead (tasklist's image name, a WMI query for the
+// command line that needs a privilege the account may not have) is another
+// spawn per status read for an answer this cannot verify on any machine the
+// project builds on.
+func commandLine(int) (string, error) { return "", nil }
+
 func alive(pid int) bool {
 	handle, err := syscall.OpenProcess(syscall.PROCESS_QUERY_INFORMATION, false, uint32(pid))
 	if err != nil {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/OWNER/aos/internal/core/build"
@@ -143,7 +145,44 @@ func (s *Service) read(ctx context.Context) (State, error) {
 	if !s.procs.Alive(meta.PID) {
 		return State{Status: Stale, Meta: meta}, nil
 	}
+	// Alive is not the same as "is the daemon". A crash that leaves the
+	// record behind leaves a pid the operating system is free to hand out
+	// again, and once it has, the record names a live process that has
+	// nothing to do with this installation: status called it running, and
+	// Stop — reached by following `aos gateway restart`, which the update's
+	// own refusal recommends — sent SIGTERM to a stranger's process.
+	if !s.runsTheRecordedCommand(meta) {
+		return State{Status: Stale, Meta: meta}, nil
+	}
 	return State{Status: Running, Meta: meta}, nil
+}
+
+// runsTheRecordedCommand reports whether the process the record names is
+// still running what the supervisor started.
+//
+// Only a mismatch is evidence. A platform that cannot say what a process is
+// running, a record written before the command was kept, or a command line
+// that could not be read all answer yes and leave the pid exactly as
+// trustworthy as it was before — a daemon that is alive and stuck must stay
+// stoppable.
+func (s *Service) runsTheRecordedCommand(meta *Meta) bool {
+	if meta.Command == "" {
+		return true
+	}
+	line, err := s.procs.CommandLine(meta.PID)
+	if err != nil {
+		s.log.Warn("could not read what the recorded process is running", "pid", meta.PID, "err", err)
+		return true
+	}
+	if strings.TrimSpace(line) == "" {
+		return true
+	}
+	// The recorded path is looked for in the line rather than compared with
+	// it, because the line is not always the command: a wrapper script the
+	// supervisor executed appears as its interpreter's argument
+	// ("/bin/sh /opt/aos/aosd-wrapper serve"), and some platforms report the
+	// executable's name without its directory.
+	return strings.Contains(line, meta.Command) || strings.Contains(line, filepath.Base(meta.Command))
 }
 
 // Start launches the daemon, and is idempotent.
