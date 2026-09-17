@@ -31,7 +31,7 @@ import type {
 import { ArtifactHelper } from "@/features/artifact/presentation/helpers/artifact.helper";
 import { ArtifactStore } from "@/features/artifact/presentation/stores/artifact.store";
 import { t } from "@/lib/i18n";
-import { MIN_ARTIFACT_PASSWORD_LENGTH } from "./artifact-access-dialog";
+import { MIN_ARTIFACT_PASSWORD_LENGTH, isArtifactPasswordRefused } from "../helpers/artifact-access";
 
 // A function, so the labels are in the language the person has when the
 // dialog opens rather than the one this module was loaded in.
@@ -85,7 +85,7 @@ export function CreateArtifactDialog({ children }: CreateArtifactDialogProps) {
   const [password, setPassword] = React.useState("");
   const options = visibilityOptions();
   const needsPassword = visibility === "by_password";
-  const passwordTooShort = needsPassword && password.length < MIN_PASSWORD_LENGTH;
+  const passwordTooShort = needsPassword && isArtifactPasswordRefused(password);
 
   const { mutate: createArtifact, loading: isCreating } =
     aos.client.artifact.create.useMutation({

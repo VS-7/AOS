@@ -17,18 +17,13 @@ import { errorMessage } from "@/lib/aos-facade";
 import { t } from "@/lib/i18n";
 import { ArtifactHelper } from "../helpers/artifact.helper";
 import {
+  MIN_ARTIFACT_PASSWORD_LENGTH,
   addressWithPassword,
   checkArtifactPassword,
   closeArtifactAccess,
+  isArtifactPasswordRefused,
   useArtifactAccessRequest,
 } from "../helpers/artifact-access";
-
-/**
- * The shortest password a by_password artifact takes — the daemon's own
- * minimum (artifact.minPasswordLength), checked here too so the button says
- * so before a request does.
- */
-export const MIN_ARTIFACT_PASSWORD_LENGTH = 8;
 
 /**
  * Asks for a by_password artifact's password, or sets one.
@@ -60,7 +55,7 @@ export function ArtifactAccessDialog() {
     setBusy(false);
   }, [request]);
 
-  const tooShort = setting && password.length < MIN_ARTIFACT_PASSWORD_LENGTH;
+  const tooShort = setting && isArtifactPasswordRefused(password);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

@@ -103,6 +103,19 @@ describe("ArtifactAccessDialog", () => {
     expect(createTab).toHaveBeenCalledWith(expect.objectContaining({ url: "/v/artifacts/report/?password=long-enough-1" }));
   });
 
+  // Eight spaces are eight characters: the dialog took them, and the daemon
+  // answered "the payload of artifacts_set-password is not valid" under the
+  // field instead of the dialog's own rule.
+  it("refuses a password of nothing but spaces", () => {
+    ask({ hasPassword: false });
+
+    const open = screen.getByRole("button", { name: "Set password and open" });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "        " } });
+    expect(open).toHaveProperty("disabled", true);
+    fireEvent.click(open);
+    expect(setPassword).not.toHaveBeenCalled();
+  });
+
   // The tab already open on it carries the old password in its address, and
   // would show the daemon's refusal the next time it loads.
   it("changes the password from the row menu, and points its open tab at the new one", async () => {

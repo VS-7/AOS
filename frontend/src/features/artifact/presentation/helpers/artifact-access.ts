@@ -46,6 +46,26 @@ export function useArtifactAccessRequest(): ArtifactAccessRequest | null {
 }
 
 /**
+ * The shortest password a by_password artifact takes — the daemon's own
+ * minimum (artifact.minPasswordLength), checked here too so a dialog says so
+ * before a request does.
+ */
+export const MIN_ARTIFACT_PASSWORD_LENGTH = 8;
+
+/**
+ * Whether the daemon would refuse this password, asked the way the daemon
+ * asks it (artifact.checkPassword): nothing but spaces, or shorter than the
+ * minimum. Counting characters alone let eight spaces through, and the daemon
+ * answered a bare "the payload is not valid" where the password was typed.
+ *
+ * @param password - The password as typed.
+ * @returns True when the daemon would refuse it.
+ */
+export function isArtifactPasswordRefused(password: string): boolean {
+  return password.trim() === "" || [...password].length < MIN_ARTIFACT_PASSWORD_LENGTH;
+}
+
+/**
  * An artifact's address with its password.
  *
  * The daemon reads a by_password artifact's password from the query string,

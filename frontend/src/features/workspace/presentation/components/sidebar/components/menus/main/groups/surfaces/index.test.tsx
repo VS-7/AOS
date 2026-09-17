@@ -6,7 +6,13 @@ vi.mock("@/components/ui/dropdown-menu", async () => (await import("../sidebar-t
 vi.mock("@/components/ui/collapsible", async () => (await import("../sidebar-test-doubles")).collapsible);
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
 vi.mock("@/features/artifact/presentation/components/create-artifact-dialog", () => ({ CreateArtifactDialog: ({ children }: any) => children }));
-vi.mock("./components/rename-surface-dialog", () => ({ RenameSurfaceDialog: () => null }));
+let renameDialog: any = null;
+vi.mock("./components/rename-surface-dialog", () => ({
+  RenameSurfaceDialog: (props: any) => {
+    renameDialog = props;
+    return null;
+  },
+}));
 
 const toast = { success: vi.fn(), error: vi.fn() };
 vi.mock("sonner", () => ({ toast }));
@@ -30,16 +36,21 @@ vi.mock("@/features/artifact/presentation/helpers/artifact-access", () => ({ req
 
 const deleteView = vi.fn(async (_o: unknown) => ({}));
 const deleteArtifact = vi.fn(async (_o: unknown) => ({}));
+const updateArtifact = vi.fn(async (_o: unknown) => ({}));
 const closeTab = vi.fn();
+const updateTab = vi.fn();
 const tabs = { items: [] as any[] };
 vi.mock("@/app/aos", () => ({
   aos: {
     client: {
       view: { delete: { mutateOrThrow: (o: unknown) => deleteView(o) } },
-      artifact: { delete: { mutateOrThrow: (o: unknown) => deleteArtifact(o) }, update: { mutateOrThrow: vi.fn() } },
+      artifact: {
+        delete: { mutateOrThrow: (o: unknown) => deleteArtifact(o) },
+        update: { mutateOrThrow: (o: unknown) => updateArtifact(o) },
+      },
     },
     stores: {
-      viewport: { state: { tabs }, actions: { closeTab } },
+      viewport: { state: { tabs }, actions: { closeTab, updateTab } },
       view: { actions: { refresh: vi.fn(async () => undefined) } },
       artifact: { actions: { refresh: vi.fn(async () => undefined) } },
     },
@@ -61,7 +72,8 @@ beforeEach(() => {
     { id: "plugin-page", name: "Plugin page", visibility: "private", skill: "crm", urls: { local: "/v/artifacts/plugin-page/" } },
   ];
   tabs.items = [];
-  for (const fn of [openView, openArtifact, requestArtifactAccess, deleteView, deleteArtifact, closeTab, navigate, confirm, toast.success, toast.error]) fn.mockClear();
+  renameDialog = null;
+  for (const fn of [openView, openArtifact, requestArtifactAccess, deleteView, deleteArtifact, updateArtifact, closeTab, updateTab, navigate, confirm, toast.success, toast.error]) fn.mockClear();
 });
 
 afterEach(() => cleanup());
@@ -111,6 +123,22 @@ describe("Surfaces rows", () => {
     await waitFor(() => expect(deleteArtifact).toHaveBeenCalledWith({ params: { artifact: "notes" } }));
     expect(closeTab).toHaveBeenCalledWith("t1");
     expect(closeTab).not.toHaveBeenCalledWith("t2");
+  });
+
+  // The sidebar row took the new name, the tab open on the artifact kept the
+  // old one and there was no way to refresh it.
+  it("renames an artifact and retitles the tab open on it", async () => {
+    tabs.items = [
+      { id: "t1", type: "browser", metadata: { artifactId: "notes" } },
+      { id: "t2", type: "browser", metadata: { artifactId: "report" } },
+    ];
+    render(<WorkspaceSidebarSurfacesGroupMenu />);
+    fireEvent.click(within(row("Notes")).getByRole("menuitem", { name: "Rename" }));
+    await renameDialog.onRename("Meeting notes");
+    expect(updateArtifact).toHaveBeenCalledWith({ params: { artifact: "notes" }, body: { name: "Meeting notes" } });
+    expect(updateTab).toHaveBeenCalledWith("t1", { title: "Meeting notes" });
+    expect(updateTab).not.toHaveBeenCalledWith("t2", expect.anything());
+    expect(toast.success).toHaveBeenCalledWith("Renamed.");
   });
 
   it("says why a delete was refused, and keeps the row", async () => {

@@ -162,6 +162,13 @@ export function WorkspaceSidebarSurfacesGroupMenu() {
     try {
       await aos.client.artifact.update.mutateOrThrow({ params: { artifact: row.id }, body: { name } });
       await aos.stores.artifact.actions.refresh();
+      // A tab open on the artifact was titled when it opened, and went on
+      // showing the name the artifact no longer has.
+      for (const tab of aos.stores.viewport.state.tabs.items) {
+        if (tab.type === "browser" && tab.metadata?.artifactId === row.id) {
+          aos.stores.viewport.actions.updateTab(tab.id, { title: name });
+        }
+      }
       toast.success(t("Renamed."));
     } catch (error) {
       toast.error(errorMessage(error) ?? t("Unable to rename \"{{name}}\".", { name: row.label }));
