@@ -919,9 +919,9 @@ export interface CommandMap {
     "_reasoning": string;
     /** New display color. Omit to leave unchanged. */
     "color"?: unknown;
-    /** New body content, in Markdown. Omit to leave unchanged. */
+    /** New body content, in Markdown. Empty string clears it. Omit to leave unchanged. */
     "content"?: unknown;
-    /** New description. Omit to leave unchanged. */
+    /** New description. Empty string clears it. Omit to leave unchanged. */
     "description"?: unknown;
     /** New display icon. Omit to leave unchanged. */
     "icon"?: unknown;
@@ -931,7 +931,7 @@ export interface CommandMap {
     "name"?: unknown;
     /** New list of associated paths. Replaces the field wholesale when given. */
     "paths"?: unknown;
-    /** New source directory — an absolute, existing path. Omit to leave unchanged. */
+    /** New source directory — an absolute, existing path. Empty string unbinds it. Omit to leave unchanged. */
     "source"?: unknown;
     /** New lifecycle status. Omit to leave unchanged. */
     "status"?: "active" | "paused" | "done" | "archived";
