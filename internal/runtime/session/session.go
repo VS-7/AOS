@@ -400,7 +400,7 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 	// thing the screen showed describe the turn the same way.
 	live := r.emitter(workspaceID, conversation.ID, answerID, worker.ID)
 
-	transcribed := transcript(conversation)
+	transcribed := transcript(conversation, r.speakersOf(ctx, conversation, worker.ID))
 	// How much of the loop's working transcript was already there. What comes
 	// after it is what this turn produced, which is the only reasoning that
 	// belongs on this answer.
@@ -837,8 +837,28 @@ func answerParts(result *agentloop.Result, reasoning []string) []chat.Part {
 	return parts
 }
 
+// recordTimeout bounds a write that says how a turn ended. It is made on a
+// context the turn's own cancellation does not reach (see recording), so
+// something has to stop a store that never answers from holding a shutdown.
+const recordTimeout = 10 * time.Second
+
+// recording is the context the end of a turn is written on.
+//
+// The turn's context is over by then as often as not: Stop cancels it, and so
+// does a daemon shutting down under a queued routine's run. The conversation
+// store refuses a cancelled context — it answered AOS_CHAT_NOT_FOUND for a
+// chat that was there — so the record of the stop was lost and the message
+// kept a run marked running for good, a spinner nothing would ever end.
+func recording(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), recordTimeout)
+}
+
 func (r *Runner) persist(ctx context.Context, in chat.Turn, agentID, answerID string, started time.Time, result *agentloop.Result, reasoning []string) error {
 	parts := answerParts(result, reasoning)
+	// The answer is complete and paid for; a stop pressed a moment late must
+	// not be what loses it.
+	ctx, cancel := recording(ctx)
+	defer cancel()
 
 	_, err := r.deps.Chats.Reply(ctx, chat.ReplyInput{
 		Chat:      in.ChatID,
@@ -856,6 +876,8 @@ func (r *Runner) persist(ctx context.Context, in chat.Turn, agentID, answerID st
 // a turn that did not answer is visible in the conversation rather than only in
 // a log the person cannot see.
 func (r *Runner) recordFailure(ctx context.Context, in chat.Turn, agentID string, started time.Time, cause error) {
+	ctx, cancel := recording(ctx)
+	defer cancel()
 	// A turn somebody stopped is not a turn that failed, and the conversation
 	// should not read like an error. The context this turn was given is the
 	// only thing that can be cancelled from outside (see Runner.running), so
@@ -948,10 +970,77 @@ func deepestMessage(from error) string {
 	return out
 }
 
-// transcript turns a stored conversation into the messages a model reads.
-func transcript(c *chat.Chat) []agentloop.Message {
+// speaker is who a transcript is read by, and what the other agents in it are
+// called.
+type speaker struct {
+	// self is the agent taking the turn. Only its own messages are its turns.
+	self string
+	// names holds the display name of every other agent that wrote in the
+	// conversation, by id. One that is missing is called by its id.
+	names map[string]string
+}
+
+// other names the agent that wrote m when that is not the agent taking the
+// turn, and is "" for the turn-taker's own messages and for a person's.
+func (s speaker) other(m chat.Message) string {
+	if s.self == "" || m.Author == nil || m.Author.Type != chat.ActorAgent || m.Author.ID == s.self {
+		return ""
+	}
+	if name := s.names[m.Author.ID]; name != "" {
+		return name
+	}
+	return m.Author.ID
+}
+
+// speakersOf is the speaker for a turn of self in c: the other agents that
+// wrote in it, looked up once each. An agent that can no longer be read — one
+// deleted since — keeps its id as its name.
+func (r *Runner) speakersOf(ctx context.Context, c *chat.Chat, self string) speaker {
+	out := speaker{self: self, names: map[string]string{}}
+	for _, m := range c.Messages {
+		if m.Author == nil || m.Author.Type != chat.ActorAgent || m.Author.ID == self {
+			continue
+		}
+		if _, seen := out.names[m.Author.ID]; seen {
+			continue
+		}
+		out.names[m.Author.ID] = m.Author.ID
+		if r.deps.Agents == nil {
+			continue
+		}
+		if found, err := r.deps.Agents.Get(ctx, agent.GetInput{ID: m.Author.ID}); err == nil && found != nil {
+			out.names[m.Author.ID] = found.DisplayName()
+		}
+	}
+	return out
+}
+
+// transcript turns a stored conversation into the messages the agent taking
+// the turn reads.
+//
+// Only that agent's own messages are assistant turns. A message another agent
+// wrote — the orchestrator's delegation in a task conversation, another
+// member's report — is somebody talking to it, and it is read as a user turn
+// that says who is talking. It was replayed as the turn-taker's own words: a
+// member read the delegation as a reply it had given itself, and Gemini
+// refused the whole conversation, because the member's tool calls then came
+// straight after a model turn instead of after a user one. The other agent's
+// tool calls and their results stay out: they were its steps, not this
+// agent's, and a call replayed without the step it belonged to is exactly what
+// every provider refuses.
+func transcript(c *chat.Chat, reader speaker) []agentloop.Message {
 	out := make([]agentloop.Message, 0, len(c.Messages))
 	for _, m := range c.Messages {
+		if m.Role == chat.RoleUser || m.Role == chat.RoleAssistant {
+			if name := reader.other(m); name != "" {
+				if text := m.Text(); text != "" {
+					out = append(out, agentloop.Message{
+						Role: agentloop.RoleUser, Text: "[" + name + "]: " + text, At: m.CreatedAt,
+					})
+				}
+				continue
+			}
+		}
 		switch m.Role {
 		case chat.RoleUser:
 			if text := m.Text(); text != "" {

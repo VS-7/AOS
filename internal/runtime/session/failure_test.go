@@ -60,3 +60,50 @@ func TestARefusedModelSaysWhichSettingToChange(t *testing.T) {
 		t.Errorf("a different failure was annotated: %+v", got)
 	}
 }
+
+// cancelledRefusingChats refuses a write on a context that is already over,
+// as the conversation store does: its Get answers AOS_CHAT_NOT_FOUND once the
+// context is cancelled, although the conversation is there.
+type cancelledRefusingChats struct {
+	recordingChats
+	deadlines int
+}
+
+func (r *cancelledRefusingChats) Reply(ctx context.Context, in chat.ReplyInput) (chat.ReplyOutput, error) {
+	if ctx.Err() != nil {
+		return chat.ReplyOutput{}, apperr.New("CHAT_NOT_FOUND").Msgf("no chat %q", in.Chat)
+	}
+	if _, ok := ctx.Deadline(); ok {
+		r.deadlines++
+	}
+	return r.recordingChats.Reply(ctx, in)
+}
+
+// A turn cut short — by Stop, or by a daemon shutting down under a scheduled
+// routine's run — is handed a context that is already cancelled, and the
+// record of how it ended was written on that context. The store refused it
+// (logged as "a stopped turn could not be recorded … AOS_CHAT_NOT_FOUND"),
+// and the message kept runs[0].status = running for good: a spinner in the
+// routine's transcript that nothing would ever end.
+func TestATurnCutShortIsRecordedAlthoughItsContextIsOver(t *testing.T) {
+	for name, cause := range map[string]error{
+		"stopped": context.Canceled,
+		"failed":  apperr.New("AGENT_PROVIDER_FAILED").Msgf("the provider did not answer"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			chats := &cancelledRefusingChats{recordingChats: recordingChats{chat: &chat.Chat{ID: "c-1"}}}
+			runner := New(Deps{Chats: chats, Log: slog.New(slog.DiscardHandler)})
+			over, cancel := context.WithCancel(context.Background())
+			cancel()
+
+			runner.recordFailure(over, chat.Turn{ChatID: "c-1", MessageID: "m-1"}, "atlas", at, cause)
+
+			if len(chats.replies) != 1 || chats.replies[0].Failure == nil {
+				t.Fatalf("replies = %+v, want how the turn ended recorded once", chats.replies)
+			}
+			if chats.deadlines != 1 {
+				t.Error("the record was written with no deadline; a store that hangs would hold shutdown for good")
+			}
+		})
+	}
+}

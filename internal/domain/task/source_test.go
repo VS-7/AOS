@@ -174,3 +174,35 @@ func TestAGitFailureSaysWhatGitSaid(t *testing.T) {
 		t.Errorf("error = %+v, want git's reason and a next step", app)
 	}
 }
+
+// A workspace inside a repository it does not own is often a folder of a home
+// directory under version control — a dotfiles repository that gets pushed.
+// The refusals offered `git add <folder> && git commit` there as the command
+// to run, and the folder's .env went into that repository with it. A
+// repository of the workspace's own comes first, and nothing a person or an
+// agent can run as offered stages or commits in the enclosing repository.
+func TestARefusalNeverOffersToCommitIntoTheEnclosingRepository(t *testing.T) {
+	for _, source := range []WorktreeSource{
+		{Dir: "/home/me/Projects/foo", Toplevel: "/home/me", Subdir: "Projects/foo"},
+		{Dir: "/home/me/Projects/foo", Toplevel: "/home/me", Subdir: "Projects/foo", BaseExists: true},
+	} {
+		h := newHarness(t)
+		h.worktrees.source = &source
+		task := h.create(t, CreateInput{Name: "Build the library API", Status: Todo, Worktree: true})
+
+		_, err := h.svc.Branch(ctx(), BranchInput{ID: task.ID})
+		app, ok := apperr.As(err)
+		if !ok || len(app.Actions) == 0 {
+			t.Fatalf("err = %v, want a refusal with next steps", err)
+		}
+		first := app.Actions[0]
+		if !strings.Contains(first.Command, `git -C "/home/me/Projects/foo" init`) {
+			t.Errorf("%s: first action = %+v, want a repository of the workspace's own", app.Code, first)
+		}
+		for _, action := range app.Actions {
+			if strings.Contains(action.Command, `git -C "/home/me" `) {
+				t.Errorf("%s: action %q runs %q in the enclosing repository", app.Code, action.Label, action.Command)
+			}
+		}
+	}
+}

@@ -143,7 +143,7 @@ func (g *strictGemini) refusals() []string {
 // it.
 func replayToGemini(t *testing.T, backend *httptest.Server, stored *chat.Chat) error {
 	t.Helper()
-	messages := append(transcript(stored), agentloop.Message{Role: agentloop.RoleUser, Text: "and now?"})
+	messages := append(transcript(stored, speaker{self: stored.Agent}), agentloop.Message{Role: agentloop.RoleUser, Text: "and now?"})
 	state := &agentloop.State{Model: "gemini-3-pro", Messages: agentloop.Prune(messages, agentloop.DefaultPolicy())}
 	_, err := google.New("google", providers.Config{APIKey: "k", BaseURL: backend.URL}, nil).
 		Generate(context.Background(), state.Request())

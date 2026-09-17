@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/OWNER/aos/internal/core/build"
+	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/core/identity"
 	"github.com/OWNER/aos/internal/core/ids"
 	"github.com/OWNER/aos/internal/domain/activity"
@@ -649,8 +650,9 @@ func (a *App) jobScope(ctx context.Context, workspaceID string) (*App, error) {
 	return a.scopes.forID(ctx, a.Workspaces, workspaceID)
 }
 
-// routineHandler runs a scheduled firing the worker's tick queued, in the
-// workspace the job names, as the scheduled run it is.
+// routineHandler runs a firing that was queued — a scheduled one the worker's
+// tick found due, or one an activity set off (routineReactor) — in the
+// workspace the job names, as the run it is.
 type routineHandler struct {
 	scopeFor func(ctx context.Context, workspaceID string) (*App, error)
 }
@@ -665,9 +667,10 @@ func (h routineHandler) Handle(ctx context.Context, j job.Job) (json.RawMessage,
 		return nil, err
 	}
 	// As the system, the way the tick that found it due acted: the run itself
-	// is taken as the routine's own agent (routine.Service.fire).
+	// is taken as the routine's own agent (routine.Service.fire). Take puts a
+	// reaction back in the chain of firings that led to it.
 	ctx = identity.With(ctx, identity.Identity{WorkspaceID: j.Workspace})
-	run, err := target.Routines.Fire(ctx, firing.Input())
+	run, err := target.Routines.Take(ctx, firing)
 	if err != nil {
 		// The run record says how it went, and the job fails with the same
 		// reason, once: it is queued with a single try, because a routine's
@@ -689,10 +692,11 @@ type routineQueue struct {
 }
 
 func (q routineQueue) Dispatch(ctx context.Context, f routine.Firing) (bool, error) {
-	// A firing of this routine still waiting or running is the one the new
-	// firing would repeat. A worker that died holding one leaves it claimed
-	// until its lease lapses and it is handed back and run, so this never
-	// waits on work nothing will do.
+	// A scheduled firing of this routine still waiting or running is the one
+	// the new firing would repeat. A worker that died holding one leaves it
+	// claimed until its lease lapses and it is handed back and run, so this
+	// never waits on work nothing will do. A firing an activity set off
+	// repeats nothing the schedule is due for, and does not stand in for it.
 	for _, status := range []job.Status{job.Pending, job.Claimed} {
 		waiting, err := q.queue.List(ctx, job.Filter{Kind: kindRoutine, Status: status, Workspace: q.workspace})
 		if err != nil {
@@ -703,7 +707,7 @@ func (q routineQueue) Dispatch(ctx context.Context, f routine.Firing) (bool, err
 			// An empty workspace filters nothing, so the primary's own is
 			// compared here too.
 			if j.Workspace == q.workspace && json.Unmarshal(j.Payload, &queued) == nil &&
-				queued.Agent == f.Agent && queued.Routine == f.Routine {
+				queued.Activity == nil && queued.Agent == f.Agent && queued.Routine == f.Routine {
 				return false, nil
 			}
 		}
@@ -719,6 +723,88 @@ func (q routineQueue) Dispatch(ctx context.Context, f routine.Firing) (bool, err
 		return false, err
 	}
 	return true, nil
+}
+
+// routineReactor hands the firings an activity sets off to the job queue, so
+// the mutation that published the activity returns without waiting for them.
+//
+// Delivered inline, a task a person moved waited for the whole turn of every
+// routine the move set off, and Run now waited for every routine that heard
+// that run. The pool's slots take a queued firing the way they take a
+// scheduled one, in the workspace the job names.
+//
+// Its fields are filled in by New once what they read exists: the routine
+// service is built before the queue is opened, and before the App whose
+// worker drains it.
+type routineReactor struct {
+	queue job.Queue
+	ids   ids.Generator
+
+	// workspace is the id of the workspace these services are bound to, or
+	// "" when it cannot be named with certainty.
+	workspace func(ctx context.Context) string
+
+	// draining reports whether a worker in this process takes the queue's
+	// jobs.
+	draining func() bool
+}
+
+func (r *routineReactor) React(ctx context.Context, f routine.Firing) (bool, error) {
+	// A process that drains nothing — `aosd` running one command and exiting
+	// — would leave the job for whichever daemon next opens the queue, which
+	// may serve another directory or never come. The firing runs where the
+	// activity was published, as it did before. The `aos` client is not such
+	// a process: it asks the daemon, and the daemon publishes.
+	if r == nil || r.queue == nil || r.draining == nil || !r.draining() {
+		return false, nil
+	}
+	// The reaction outlives the request that published the activity, the way
+	// a dispatched turn does: a caller that hangs up is not cancelling it, nor
+	// the lookup that names where it runs.
+	detached := context.WithoutCancel(ctx)
+	// The job names its workspace explicitly. One naming none is taken as the
+	// primary's, and the primary of the daemon that claims it is not
+	// necessarily the directory whose routine this is.
+	id := ""
+	if r.workspace != nil {
+		id = r.workspace(detached)
+	}
+	if id == "" {
+		return false, nil
+	}
+	payload, err := json.Marshal(f)
+	if err != nil {
+		return false, err
+	}
+	if _, err := r.queue.Enqueue(detached, job.Job{
+		ID: r.ids.New(), Queue: job.QueueRoutine, Kind: kindRoutine,
+		Workspace: id, Payload: payload, MaxTries: 1,
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// boundWorkspace names the workspace a set of services is bound to: the id its
+// events are published under, once the registry confirms that id is this
+// directory. A primary nothing pinned resolves its id from the registry, and
+// with one workspace registered elsewhere that lookup answers that one.
+func boundWorkspace(scope *eventScope, registry *workspace.Service, root string) func(context.Context) string {
+	want := filepath.Clean(root)
+	return func(ctx context.Context) string {
+		id := scope.ID(ctx)
+		if id == "" {
+			return ""
+		}
+		found, err := registry.Get(ctx, workspace.GetInput{
+			Workspace: id,
+			Reasoning: command.Reasoning{Reasoning: "naming the workspace a routine's queued firing runs in"},
+		})
+		if err != nil || found == nil || filepath.Clean(found.Path) != want {
+			return ""
+		}
+		return id
+	}
 }
 
 // servedScope is one workspace the periodic work runs in: its services, and

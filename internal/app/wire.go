@@ -130,6 +130,11 @@ type Options struct {
 	// inside it. See updateSupervisor.
 	sharedServing *atomic.Bool
 
+	// sharedDraining is whether the primary's worker is running. A secondary
+	// builds no worker of its own, and its routines hand their reactions to
+	// the queue only while the primary's drains it (see routineReactor).
+	sharedDraining func() bool
+
 	// secondary marks a workspace built by another App, so it does not build
 	// a set of workspaces of its own and recurse forever.
 	secondary bool
@@ -586,12 +591,15 @@ func New(opts Options) (*App, error) {
 		Repo: repos.comments, Parent: taskSvc, Clock: clock, IDs: idgen, Log: logger,
 	})
 
+	// Filled in below, once the queue is open and the worker exists.
+	reactor := &routineReactor{}
 	routineSvc := routine.NewService(routine.Deps{
 		Repo:      repos.routines,
 		Runs:      repos.runs,
 		Tokens:    tokens{},
 		Directory: agentDirectory{agents: agentSvc},
 		Notifier:  routineActivity{activities: activitySvc, log: logger},
+		Reactor:   reactor,
 		Clock:     clock,
 		IDs:       idgen,
 		Tick:      resolver.Duration(env.KeyJobsTick, job.DefaultTick),
@@ -875,6 +883,8 @@ func New(opts Options) (*App, error) {
 	if signatures == nil {
 		signatures = subconscious.NewMemorySignatures(clock.Now)
 	}
+	reactor.queue, reactor.ids = queue, idgen
+	reactor.workspace = boundWorkspace(scope, workspaceSvc, root)
 
 	// The background observer. It runs on its own slot so a cheap model can
 	// watch while an expensive one reasons, and it is handed to the runtime as
@@ -1000,6 +1010,12 @@ func New(opts Options) (*App, error) {
 		serving:     serving,
 		workspaceID: active,
 	}
+	// A secondary's reactions are drained by the primary's worker; the
+	// primary's by its own, which exists only once the block below has run.
+	reactor.draining = opts.sharedDraining
+	if !opts.secondary {
+		reactor.draining = built.draining
+	}
 
 	// The workspaces this process serves besides the one it opened.
 	//
@@ -1018,15 +1034,16 @@ func New(opts Options) (*App, error) {
 			primary: built,
 			build: func(id, workspaceRoot string) (*App, error) {
 				return New(Options{
-					Env:           opts.Env,
-					Clock:         opts.Clock,
-					IDs:           opts.IDs,
-					WorkspaceRoot: workspaceRoot,
-					workspaceID:   id,
-					sharedEvents:  events,
-					sharedQueue:   queue,
-					sharedServing: serving,
-					secondary:     true,
+					Env:            opts.Env,
+					Clock:          opts.Clock,
+					IDs:            opts.IDs,
+					WorkspaceRoot:  workspaceRoot,
+					workspaceID:    id,
+					sharedEvents:   events,
+					sharedQueue:    queue,
+					sharedServing:  serving,
+					sharedDraining: built.draining,
+					secondary:      true,
 				})
 			},
 		}
@@ -1061,6 +1078,9 @@ func New(opts Options) (*App, error) {
 
 	return built, nil
 }
+
+// draining reports whether this App's worker is taking the queue's jobs.
+func (a *App) draining() bool { return a.Worker.Running() }
 
 // workspaceRoot adapts workspace.Service to file.Workspaces: the active
 // workspace's path, resolved fresh on every call rather than captured once,

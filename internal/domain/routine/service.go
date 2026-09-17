@@ -19,6 +19,7 @@ type Service struct {
 	repo      Repository
 	runs      Runs
 	executor  Executor
+	reactor   Reactor
 	tokens    Tokens
 	directory Directory
 	notifier  Notifier
@@ -40,6 +41,10 @@ type Deps struct {
 	Directory Directory
 	Notifier  Notifier
 
+	// Reactor is optional. Without one — or when it takes nothing — the
+	// firings an activity sets off run inline, on the publishing context.
+	Reactor Reactor
+
 	// Tick is the scheduler's window. It is carried here because the effective
 	// resolution is reported to the user with the cron they declared, and the
 	// two have to come from the same number.
@@ -59,7 +64,7 @@ func NewService(d Deps) *Service {
 		tick = DefaultTick
 	}
 	return &Service{
-		repo: d.Repo, runs: d.Runs, executor: d.Executor, tokens: d.Tokens,
+		repo: d.Repo, runs: d.Runs, executor: d.Executor, reactor: d.Reactor, tokens: d.Tokens,
 		directory: d.Directory, notifier: d.Notifier,
 		clock: d.Clock, ids: d.IDs, tick: tick, log: log,
 	}
@@ -257,6 +262,16 @@ func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, err
 	return DeleteOutput{ID: current.ID, Agent: current.Agent}, nil
 }
 
+// Take runs a firing that was handed on — by the scheduler's tick, or by an
+// activity through the Reactor — as the trigger it was, in the chain that led
+// to it.
+func (s *Service) Take(ctx context.Context, f Firing) (*Run, error) {
+	if f.Chain != nil {
+		ctx = withChain(ctx, *f.Chain)
+	}
+	return s.Fire(ctx, f.Input())
+}
+
 // Fire runs a routine now, recording a run whichever way it ends.
 func (s *Service) Fire(ctx context.Context, in FireInput) (*Run, error) {
 	current, err := s.load(ctx, in.Agent, in.ID)
@@ -318,16 +333,20 @@ func (s *Service) authenticateWebhook(ctx context.Context, in WebhookInput) (*Ro
 //
 // It never returns an error to its caller. It is wired as a sink of the
 // activity aggregate, and a routine that fails must not roll back the task
-// whose status changed.
+// whose status changed. Nor does it wait for the firings when a Reactor takes
+// them: each is a whole turn, and the mutation that published the activity
+// returns without them.
 //
 // An activity published while routines are firing — by a run, or by a firing
-// announcing itself — fires no routine already in that chain, and nothing at
-// all once the chain is MaxChain long. See MaxChain for the loop this closes.
+// announcing itself — fires no routine already in that chain, nothing at all
+// once the chain is MaxChain long, and nothing through the routine namespace
+// once a firing in it reacted to a routine's. See Chain for the loops and the
+// fan-out this closes.
 func (s *Service) OnActivity(ctx context.Context, namespace, event string, data map[string]any) {
 	chain := chainOf(ctx)
-	if len(chain) >= MaxChain {
+	if why := chain.stops(namespace); why != "" {
 		s.log.Warn("an activity published by a chain of routine firings fired no further routine",
-			"namespace", namespace, "event", event, "chain", chain, "limit", MaxChain)
+			"namespace", namespace, "event", event, "chain", chain.Firings, "reason", why, "limit", MaxChain)
 		return
 	}
 	found, err := s.repo.List(ctx, collections.Query{IncludeContent: true})
@@ -336,30 +355,56 @@ func (s *Service) OnActivity(ctx context.Context, namespace, event string, data 
 			"namespace", namespace, "event", event, "err", err)
 		return
 	}
+	occurred := Occurrence{Namespace: namespace, Event: event, Data: data}
 	for i := range found {
 		r := &found[i]
-		if r.Status != Enabled || inChain(chain, r) {
+		if r.Status != Enabled || chain.includes(r) {
 			continue
-		}
-		// Each firing is a whole turn. A caller that went away while an
-		// earlier one ran is not a reason to start the next.
-		if ctx.Err() != nil {
-			s.log.Warn("stopped reacting to an activity: the caller is gone",
-				"namespace", namespace, "event", event, "err", ctx.Err())
-			return
 		}
 		for _, t := range r.Triggers {
 			if !t.Matches(namespace, event, data) {
 				continue
 			}
-			payload := map[string]any{"namespace": namespace, "event": event, "data": data}
-			if _, err := s.fire(ctx, r, Activity, payload, false); err != nil {
-				s.log.Error("a routine that reacted to an activity failed",
-					"routine", r.ID, "agent", r.Agent, "err", err)
+			if !s.react(ctx, r, occurred, chain) {
+				return
 			}
 			break // one firing per activity, however many triggers match
 		}
 	}
+}
+
+// react fires r for an activity: handed to the Reactor when it takes the
+// firing, here otherwise. It reports false when the caller is gone and nothing
+// more should be started on its behalf.
+func (s *Service) react(ctx context.Context, r *Routine, occurred Occurrence, chain Chain) bool {
+	if s.reactor != nil {
+		firing := Firing{Agent: r.Agent, Routine: r.ID, Activity: &occurred}
+		if len(chain.Firings) > 0 || chain.Echoed {
+			firing.Chain = &chain
+		}
+		handed, err := s.reactor.React(ctx, firing)
+		if err != nil {
+			// Losing the reaction is worse than waiting for it.
+			s.log.Warn("a routine that reacted to an activity could not be handed on; it runs here",
+				"routine", r.ID, "agent", r.Agent, "err", err)
+		}
+		if handed {
+			return true
+		}
+	}
+	// Taken here, each firing is a whole turn on the caller's context. A
+	// caller that went away while an earlier one ran is not a reason to start
+	// the next.
+	if ctx.Err() != nil {
+		s.log.Warn("stopped reacting to an activity: the caller is gone",
+			"namespace", occurred.Namespace, "event", occurred.Event, "err", ctx.Err())
+		return false
+	}
+	if _, err := s.fire(ctx, r, Activity, occurred.payload(), false); err != nil {
+		s.log.Error("a routine that reacted to an activity failed",
+			"routine", r.ID, "agent", r.Agent, "err", err)
+	}
+	return true
 }
 
 // ProcessScheduled evaluates cron triggers against the current tick window and
@@ -439,8 +484,13 @@ func (s *Service) scheduled(ctx context.Context, now time.Time, fire func(contex
 // leaving one.
 func (s *Service) fire(ctx context.Context, r *Routine, trigger TriggerType, payload map[string]any, force bool) (*Run, error) {
 	// Everything below — the run, and the routine.fired it publishes — happens
-	// on behalf of this firing, and OnActivity must be able to tell.
-	ctx = withFiring(ctx, r)
+	// on behalf of this firing, and OnActivity must be able to tell, down to
+	// whether an activity of the routine namespace set it off.
+	namespace := ""
+	if trigger == Activity {
+		namespace, _ = payload["namespace"].(string)
+	}
+	ctx = withFiring(ctx, r, namespace)
 
 	if r.Status != Enabled && !force {
 		run := s.newRun(r, trigger, payload)

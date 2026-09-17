@@ -77,18 +77,60 @@ type Dispatcher interface {
 	Dispatch(ctx context.Context, f Firing) (bool, error)
 }
 
-// Firing is one scheduled firing handed on. Whoever runs it fires it with
-// Input, which records it as the scheduled run it is.
+// Reactor takes the firings an activity sets off out of the mutation that
+// published the activity.
+//
+// A firing is a whole turn. Delivered inline, the mutation waited for it: a
+// task a person moved waited for every routine the move set off, and a Run now
+// for every routine reacting to that run.
+type Reactor interface {
+	// React hands one firing on to be run later. It reports false, having
+	// handed nothing on, when nothing would run it — this process drains no
+	// queue — and the firing is then taken where the activity was published.
+	React(ctx context.Context, f Firing) (bool, error)
+}
+
+// Firing is one firing handed on: a scheduled one, or one an activity set off.
+// Whoever runs it hands it to Service.Take, which records it as the run it is.
 type Firing struct {
 	Agent   string `json:"agent"`
 	Routine string `json:"routine"`
-	Cron    string `json:"cron"`
+	Cron    string `json:"cron,omitempty"`
+
+	// Activity is what a firing an activity set off reacts to, and nil on a
+	// scheduled firing.
+	Activity *Occurrence `json:"activity,omitempty"`
+
+	// Chain is the routine firings that led to that activity. It travels
+	// with the firing because the bound on what one outside event sets off
+	// (see Chain) would otherwise start again from nothing on every firing
+	// taken off a queue.
+	Chain *Chain `json:"chain,omitempty"`
 }
 
-// Input is how the firing is run: Fire, as a scheduled trigger carrying its
-// cron, and never forced — a routine disabled while its firing waited records
-// a skipped run instead.
+// Occurrence is the activity a firing reacts to, as the run records it.
+type Occurrence struct {
+	Namespace string         `json:"namespace"`
+	Event     string         `json:"event"`
+	Data      map[string]any `json:"data,omitempty"`
+}
+
+// payload is the occurrence as a run's payload, which is also what the agent
+// is handed as the reason it runs.
+func (o Occurrence) payload() map[string]any {
+	return map[string]any{"namespace": o.Namespace, "event": o.Event, "data": o.Data}
+}
+
+// Input is how the firing is run: Fire, as the trigger it was — scheduled,
+// carrying its cron, or the activity it reacts to — and never forced: a
+// routine disabled while its firing waited records a skipped run instead.
 func (f Firing) Input() FireInput {
+	if f.Activity != nil {
+		return FireInput{
+			ID: f.Routine, Agent: f.Agent, Trigger: Activity,
+			Payload: f.Activity.payload(),
+		}
+	}
 	return FireInput{
 		ID: f.Routine, Agent: f.Agent, Trigger: Scheduled,
 		Payload: map[string]any{"cron": f.Cron},
