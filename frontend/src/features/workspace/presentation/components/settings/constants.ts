@@ -88,7 +88,10 @@ export const SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
   {
     id: "user.users",
     get title() { return t("Users"); },
-    get description() { return t("Manage accounts that can sign in to this AOS instance."); },
+    // What the section actually offers: it lists the accounts and says the
+    // first one is created during onboarding. "Manage" promised adding,
+    // changing and removing, which the body then says is not possible here.
+    get description() { return t("Accounts that can sign in to this AOS installation."); },
     group: "user",
     icon: UserMultiple02Icon,
   },
@@ -116,7 +119,9 @@ export const SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
   {
     id: "workspace.members",
     get title() { return t("Members"); },
-    get description() { return t("Invite and manage workspace members and roles."); },
+    // Membership has no commands in this build — the section says so — so
+    // this no longer offers to invite anybody.
+    get description() { return t("Accounts with access to this workspace and their membership role."); },
     group: "workspace",
     icon: UserGroupIcon,
   },
