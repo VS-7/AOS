@@ -1,5 +1,9 @@
 import * as React from "react";
+import { Compass, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
+import { Button } from "@/components/ui/button";
+import { frameAddress, frameSandbox, openExternal } from "@/lib/wails";
 import { ViewportTabState } from "@/features/workspace/presentation/stores/viewport.store";
 
 /**
@@ -17,10 +21,12 @@ import { ViewportTabState } from "@/features/workspace/presentation/stores/viewp
  * including every artifact opened from the sidebar — showed a blank pane
  * regardless of platform.
  *
- * An iframe needs no bridge at all for same-origin content, which is what
- * every artifact this daemon serves is (`/v/artifacts/{id}/*`, same origin
- * as the app itself — see internal/transport/artifactapi's own CSP,
- * `frame-ancestors 'self'`, which exists for exactly this). It is a real,
+ * An iframe needs no bridge at all for the page's own content, which is where
+ * every artifact comes from (`/v/artifacts/{id}/*`, the app's own origin —
+ * see internal/transport/artifactapi's own CSP, `frame-ancestors 'self'`,
+ * which exists for exactly this). In the desktop window it is framed opaque,
+ * at the address the window hands out for it (see `frameAddress`), since that
+ * is the only one that serves its own files to an opaque page. It is a real,
  * working rendering path, not a stub: general web browsing to an arbitrary
  * external URL may still fail to display if the target site refuses to be
  * framed (`X-Frame-Options`/its own `frame-ancestors`) — an honest iframe
@@ -30,6 +36,16 @@ import { ViewportTabState } from "@/features/workspace/presentation/stores/viewp
  * and browser/index.tsx's own comments on what still depends on the bridge
  * that does not exist.
  */
+/** An http(s) page on another origin: something a site, not the window, serves. */
+function isExternalSite(url: string): boolean {
+  if (typeof window === "undefined" || !/^https?:\/\//i.test(url)) return false;
+  try {
+    return new URL(url).origin !== window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 export function BrowserRenderer({
   tab,
   active,
@@ -43,10 +59,10 @@ export function BrowserRenderer({
     (event: React.SyntheticEvent<HTMLIFrameElement>) => {
       let title = tab.title;
       try {
-        // Only readable for same-origin content (every artifact); a
-        // cross-origin external page throws here, left as the tab's
-        // existing title rather than surfaced as an error — the page did
-        // load, this is just cosmetic.
+        // Unreadable for anything framed opaque (every artifact) or
+        // cross-origin (an external page): left as the tab's existing title
+        // rather than surfaced as an error — the page did load, this is just
+        // cosmetic.
         const doc = event.currentTarget.contentDocument;
         if (doc?.title) title = doc.title;
       } catch {
@@ -69,6 +85,33 @@ export function BrowserRenderer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab.url, tab.reloadNonce]);
 
+  // Where the frame actually points, for the URL it was resolved from. Kept
+  // together so a tab whose URL changed never shows the previous address.
+  const [frame, setFrame] = React.useState<{ from: string; src: string } | null>(null);
+  React.useEffect(() => {
+    const url = tab.url;
+    if (!url) return;
+    let current = true;
+    frameAddress(url).then(
+      (src) => {
+        if (current) setFrame({ from: url, src });
+      },
+      (error: unknown) => {
+        if (!current) return;
+        console.error(`[browser] no frame address for ${url}`, error);
+        onStateChange(tab.id, { status: "idle", error: t("This artifact could not be opened.") });
+      },
+    );
+    return () => {
+      current = false;
+    };
+    // Resolved again only for a new URL; onStateChange is the parent's and
+    // tab.id does not change for the life of the tab.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab.url]);
+  const src = tab.url && frame?.from === tab.url ? frame.src : null;
+  const external = tab.url ? isExternalSite(tab.url) : false;
+
   return (
     <div
       className={cn(
@@ -76,20 +119,50 @@ export function BrowserRenderer({
         !active && "pointer-events-none opacity-0",
       )}
     >
-      {tab.url ? (
+      {!tab.url ? (
+        // A new tab has no address until one is typed. It used to open
+        // https://duckduckgo.com/, which refuses to be framed, so every new
+        // tab was the browser's broken-page icon and nothing else.
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <Compass className="size-8 text-muted-foreground/60" aria-hidden />
+          <p className="text-sm font-medium text-muted-foreground">{t("New tab")}</p>
+          <p className="max-w-sm text-xs text-muted-foreground/80">
+            {t("Type an address in the bar above. A search opens in your browser.")}
+          </p>
+        </div>
+      ) : null}
+      {src && external ? (
+        // A site that refuses to be framed still fires `load`, into a page
+        // this one cannot read, so the refusal cannot be detected — only
+        // offered a way around, always, where the person will look for it.
+        <div className="flex items-center justify-between gap-3 border-b bg-muted/40 px-4 py-1.5 text-xs text-muted-foreground">
+          <span className="truncate">{t("Some sites refuse to open inside AOS.")}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 shrink-0 gap-1 px-2 text-xs"
+            onClick={() => void openExternal(tab.url!)}
+          >
+            <ExternalLink className="size-3" aria-hidden />
+            {t("Open in your browser")}
+          </Button>
+        </div>
+      ) : null}
+      {src ? (
         <iframe
           key={`${tab.id}:${tab.reloadNonce ?? 0}`}
-          src={tab.url}
+          src={src}
           title={tab.title}
           className="flex-1 w-full border-0 bg-background"
           onLoad={handleLoad}
           onError={handleError}
-          // Same posture as the artifact CSP this most often points at:
-          // same-origin, no popups, no top-level navigation out from inside
-          // the frame. A general external site that needs more than this
-          // to function will not fully work in-frame — see this file's own
-          // top comment.
-          sandbox="allow-scripts allow-same-origin allow-forms"
+          // No popups, no top-level navigation out from inside the frame. A
+          // general external site that needs more than this to function will
+          // not fully work in-frame — see this file's own top comment. The
+          // page's own content (an artifact) is also denied its origin, which
+          // would reach the Wails bridge in the window and /api with the
+          // session in a browser tab — see frameSandbox.
+          sandbox={frameSandbox(src)}
         />
       ) : null}
     </div>

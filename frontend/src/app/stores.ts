@@ -1,6 +1,17 @@
 import { AosStore } from "./builders/store";
+import { replacing } from "./builders/replace-state";
 import { client, rememberedWorkspace, setWorkspace } from "@/lib/client";
-import { session, status, login, logout, updateProfile, changePassword } from "@/lib/auth";
+import {
+  AUTHENTICATED_EVENT,
+  SIGNED_OUT_EVENT,
+  session,
+  status,
+  login,
+  logout,
+  updateProfile,
+  changePassword,
+  regenerateApiToken,
+} from "@/lib/auth";
 import type {
   WorkspaceDirectoryAgent,
   WorkspaceDirectoryUser,
@@ -171,20 +182,54 @@ async function resolveWorkspaces(
   const workspaces = listed?.workspaces ?? [];
   if (workspaces.length === 0) return null;
 
-  const current =
-    workspaces.find((workspace) => workspace.id === preferredId) ?? workspaces[0];
+  // With nothing remembered and more than one to choose from, the workspace
+  // the request already addresses: in the desktop window, the one the window
+  // adopted for the directory it was launched in. The list is sorted by id, so
+  // its first entry was simply the alphabetically first workspace — a fresh
+  // window opened "Harness Two" instead of the one it was started in. With a
+  // single workspace there is nothing to ask, which also keeps a first run
+  // (nothing adopted yet) from collecting a refusal; a refusal otherwise just
+  // leaves the first entry as the answer.
+  let adoptedId: string | undefined;
+  if (!preferredId && workspaces.length > 1) {
+    try {
+      const adopted = (await client.invoke("workspace_get", {
+        _reasoning: "finding the workspace this window was opened for, before choosing one to address",
+      })) as { id?: string } | undefined;
+      adoptedId = adopted?.id;
+    } catch {
+      adoptedId = undefined;
+    }
+  }
 
-  setWorkspace(current.id);
+  const current =
+    workspaces.find((workspace) => workspace.id === (preferredId || undefined)) ??
+    workspaces.find((workspace) => workspace.id === adoptedId) ??
+    workspaces[0];
+
+  // Awaited: inside the desktop window this is what points the bridge at the
+  // workspace, and a scoped call made before it lands addresses whichever one
+  // the Go side had adopted on its own. A failure is said, not swallowed —
+  // but it does not stop the store, whose list entry is already an answer.
+  try {
+    await setWorkspace(current.id);
+  } catch (err) {
+    console.error(`[workspace] the window could not be pointed at ${current.id}`, err);
+  }
   if (typeof document !== "undefined") {
     document.cookie = `x-workspace-id=${encodeURIComponent(current.id)}; path=/; max-age=31536000; SameSite=Lax`;
   }
 
-  // Now that the request carries an id, ask for the full record. The list
-  // entry is already complete today; this keeps working if `workspace_get`
-  // ever returns more than `workspace_list` does, and costs one call.
+  // Now ask for the full record, by id. The list entry is already complete
+  // today; this keeps working if `workspace_get` ever returns more than
+  // `workspace_list` does, and costs one call. Naming the workspace, rather
+  // than leaving it to whatever the request's header says, is what keeps the
+  // snapshot from belonging to a different workspace than the data: the
+  // answer used to depend on the order two concurrent bridge calls arrived in.
   let detail = current;
   try {
     detail = ((await client.invoke("workspace_get", {
+      workspace: current.id,
       _reasoning: "populating the workspace store's current-workspace snapshot (task-type taxonomy, name) at app start",
     })) as CurrentWorkspaceState) ?? current;
   } catch {
@@ -198,6 +243,20 @@ async function resolveWorkspaces(
       workspace.id === resolved.id ? resolved : { ...workspace, tasks: workspace.tasks ?? [] },
     ),
   };
+}
+
+/**
+ * The failure a store action hands back, as a real `Error`.
+ *
+ * These actions return their failure rather than throw it, and they used to
+ * return it as a plain `{message}` object. Callers that throw it on — the
+ * account settings forms do, to reach `useForm`'s error path — then handed
+ * `useForm` something that is not an `Error`, which it turns into one with
+ * `String(err)`: the toast read "[object Object]" instead of "an account
+ * needs a name". Keeping the original `Error` also keeps its `code`.
+ */
+function asError(err: unknown, fallback: string): Error {
+  return err instanceof Error ? err : new Error(fallback);
 }
 
 const workspaceStore = AosStore.create("workspace")
@@ -248,12 +307,35 @@ const workspaceStore = AosStore.create("workspace")
           if (!resolved) return;
           ctx.state.set((state) => ({
             ...state,
-            current: resolved.current,
+            current: replacing(state.current, resolved.current),
             options: resolved.options,
           }));
         } catch {
           // Keep the last known snapshot on a transient failure.
         }
+      },
+  )
+  .addAction(
+    "adopt",
+    (ctx) =>
+      /**
+       * Takes the workspace a `workspace_update` answered with as the
+       * snapshot, without asking again.
+       *
+       * The Git, Worktrees and Tasks settings read this snapshot and saved
+       * without ever writing back to it, so leaving a section and returning
+       * showed the values from before the save — and the next autosave sent
+       * them, undoing it. `replacing`, because the answer omits a field that
+       * was emptied, and a merge would have kept the old text.
+       */
+      (workspace: CurrentWorkspaceState | null | undefined) => {
+        if (!workspace?.id) return;
+        const next: CurrentWorkspaceState = { ...workspace, tasks: workspace.tasks ?? [] };
+        ctx.state.set((state) => ({
+          ...state,
+          current: state.current?.id === next.id ? replacing(state.current, next) : state.current,
+          options: state.options.map((option) => (option.id === next.id ? next : option)),
+        }));
       },
   )
   .addAction(
@@ -294,9 +376,13 @@ const workspaceStore = AosStore.create("workspace")
       async (workspaceId: string) => {
         const known = ctx.state.get().options.find((w) => w.id === workspaceId);
         if (!known) {
-          return { error: { message: `No workspace ${workspaceId}.` } };
+          return { error: new Error(`No workspace ${workspaceId}.`) };
         }
-        setWorkspace(workspaceId);
+        try {
+          await setWorkspace(workspaceId);
+        } catch (err) {
+          console.error(`[workspace] the window could not be pointed at ${workspaceId}`, err);
+        }
         if (typeof document !== "undefined") {
           document.cookie = `x-workspace-id=${encodeURIComponent(workspaceId)}; path=/; max-age=31536000; SameSite=Lax`;
         }
@@ -309,11 +395,9 @@ const workspaceStore = AosStore.create("workspace")
               options: resolved.options,
             }));
           }
-          return { error: undefined as { message: string } | undefined };
+          return { error: undefined as Error | undefined };
         } catch (err) {
-          return {
-            error: { message: err instanceof Error ? err.message : "Could not switch workspace." },
-          };
+          return { error: asError(err, "Could not switch workspace.") };
         }
       },
   )
@@ -339,9 +423,7 @@ const workspaceStore = AosStore.create("workspace")
             _reasoning: "the person asked to remove this workspace from the installation",
           });
         } catch (err) {
-          return {
-            error: { message: err instanceof Error ? err.message : "Could not delete workspace." },
-          };
+          return { error: asError(err, "Could not delete workspace.") };
         }
         try {
           const resolved = await resolveWorkspaces(
@@ -356,7 +438,7 @@ const workspaceStore = AosStore.create("workspace")
           // The delete landed; a failed re-read is a stale list, not a
           // failed operation.
         }
-        return { error: undefined as { message: string } | undefined };
+        return { error: undefined as Error | undefined };
       },
   )
   .build();
@@ -413,18 +495,48 @@ const authStore = AosStore.create("auth")
             // preload above.
             user: { ...user, hasToken: true, tokenMasked: null } as unknown as AuthSelfProfile,
           }));
-          return { error: undefined as { message: string } | undefined };
+          return { error: undefined as Error | undefined };
         } catch (err) {
-          return { error: { message: err instanceof Error ? err.message : "Login failed." } };
+          return { error: asError(err, "Login failed.") };
         }
       },
   )
   .addAction(
     "logout",
-    () =>
-      /** Real, same reasoning as `login` above — backed by `lib/auth.ts`. */
+    (ctx) =>
+      /**
+       * Real, same reasoning as `login` above — backed by `lib/auth.ts`.
+       *
+       * The store is cleared and AuthGate told before anything navigates.
+       * This used to end the session and leave `isAuthenticated` true, so the
+       * account menu's navigation to /login was bounced back to / by
+       * `workspace.middleware.ts`, and every home loader fired without a
+       * credential before a failed call finally sent the gate to Login — with
+       * the URL left at /.
+       */
       async () => {
         await logout();
+        ctx.state.set((state) => ({ ...state, isAuthenticated: false, user: null }));
+        if (typeof window !== "undefined") window.dispatchEvent(new Event(SIGNED_OUT_EVENT));
+      },
+  )
+  .addAction(
+    "signedIn",
+    (ctx) =>
+      /**
+       * AuthGate saw somebody sign in again after Login or Onboarding — see
+       * `AUTHENTICATED_EVENT`. Set synchronously, before the router remounts
+       * under the gate and reads it; the account itself follows.
+       */
+      async () => {
+        ctx.state.set((state) => ({ ...state, isAuthenticated: true, onboarding: "done" as const }));
+        try {
+          const { user } = await session();
+          ctx.state.set((state) => ({ ...state, user: user as unknown as AuthSelfProfile }));
+        } catch {
+          // The name in the sidebar stays empty until the next read; the
+          // session itself is fine, which is what the router needs.
+        }
       },
   )
   .addAction(
@@ -438,16 +550,18 @@ const authStore = AosStore.create("auth")
        */
       async (params: { name: string; email: string; image?: string }) => {
         try {
-          const { user } = await updateProfile(params.name, params.email);
+          // `image` goes too: it was dropped here, so the avatar picker said
+          // "Profile updated successfully!" over an image nobody kept.
+          const { user } = await updateProfile(params.name, params.email, params.image);
           ctx.state.set((state) => ({
             ...state,
-            user: { ...(state.user ?? {}), ...user } as unknown as AuthSelfProfile,
+            // `image` named even when absent: a removed avatar is missing from
+            // the answer, and the store's merge would otherwise keep the old one.
+            user: { ...(state.user ?? {}), ...user, image: user.image } as unknown as AuthSelfProfile,
           }));
-          return { error: undefined as { message: string } | undefined };
+          return { error: undefined as Error | undefined };
         } catch (err) {
-          return {
-            error: { message: err instanceof Error ? err.message : "Could not save the profile." },
-          };
+          return { error: asError(err, "Could not save the profile.") };
         }
       },
   )
@@ -458,11 +572,9 @@ const authStore = AosStore.create("auth")
       async (params: { currentPassword: string; newPassword: string }) => {
         try {
           await changePassword(params.currentPassword, params.newPassword);
-          return { error: undefined as { message: string } | undefined };
+          return { error: undefined as Error | undefined };
         } catch (err) {
-          return {
-            error: { message: err instanceof Error ? err.message : "Could not change the password." },
-          };
+          return { error: asError(err, "Could not change the password.") };
         }
       },
   )
@@ -482,14 +594,29 @@ const authStore = AosStore.create("auth")
   .addAction(
     "regenerateToken",
     () =>
-      /** Disclosed stub — same reasoning as `updateProfile` above. */
-      async () => ({
-        success: false,
-        token: undefined as string | undefined,
-        error: { message: "API token regeneration isn't wired up in this build yet." },
-      }),
+      /**
+       * Replaces the account's API token. It was a disclosed stub that
+       * answered "isn't wired up in this build yet" behind a dialog promising
+       * a new token; `/api/auth/api-token` issues one now.
+       */
+      async () => {
+        try {
+          const issued = await regenerateApiToken();
+          return { success: true, token: issued.token as string | undefined, prefix: issued.prefix, error: undefined as Error | undefined };
+        } catch (err) {
+          return { success: false, token: undefined as string | undefined, prefix: undefined as string | undefined, error: asError(err, "Could not generate an API token.") };
+        }
+      },
   )
   .build();
+
+// The gate is the one that sees a sign-in through its own Login page; the
+// store the router reads learns of it here. See `signedIn` above.
+if (typeof window !== "undefined") {
+  window.addEventListener(AUTHENTICATED_EVENT, () => {
+    void authStore.actions.signedIn();
+  });
+}
 
 /**
  * Reads a list command into a store, tolerating the two shapes the daemon

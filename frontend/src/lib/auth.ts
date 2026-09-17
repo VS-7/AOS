@@ -1,7 +1,5 @@
-import { Call } from "@wailsio/runtime";
-import { DomainError, bridgeFetch, unwrap } from "./client";
+import { DomainError, bridgeFetch, callBridge, unwrap } from "./client";
 import { isDesktopWindow } from "./wails";
-import { desktopRetryDelays, markDesktopConfirmed, sleep } from "./desktop-transport";
 import { daemonURL } from "./daemon-origin";
 
 /** Mirrors internal/transport/wailsvc.PublicUser / internal/domain/auth.Public. */
@@ -10,6 +8,8 @@ export interface PublicUser {
   name: string;
   username: string;
   email: string;
+  /** The avatar, as an inline data URI; absent when the account has none. */
+  image?: string;
   role: string;
 }
 
@@ -25,58 +25,73 @@ export interface AuthStatus {
   authenticated: boolean;
 }
 
+/**
+ * The page's own "somebody just signed out", fired by the logout action.
+ *
+ * Distinct from lib/client.ts's UNAUTHENTICATED_EVENT, which is a *suspicion*
+ * a failed call raises and AuthGate checks before acting on. This one is a
+ * fact the page established itself, so the gate shows Login at once — before
+ * the router can react to the navigation the account menu makes next.
+ */
+export const SIGNED_OUT_EVENT = "aos:signed-out";
+
+/**
+ * AuthGate's "the daemon says somebody is signed in again", after it had
+ * shown Login or Onboarding.
+ *
+ * The auth store the router reads is not the gate's, and nothing else tells it:
+ * after signing in through the gate it went on saying "signed out", and the
+ * router sent the person to its own login page a second time.
+ */
+export const AUTHENTICATED_EVENT = "aos:authenticated";
+
 const WAILSVC_PKG = "github.com/OWNER/aos/internal/transport/wailsvc";
 const AUTH_SERVICE = `${WAILSVC_PKG}.AuthService`;
 
 /**
- * Whether a rejected Call.ByName is worth retrying rather than falling back
- * to HTTP. Mirrors client.ts's isRetryableDesktopError: a well-formed
- * DomainError means the call reached the daemon and back, so whatever it
- * says is the real answer, not a warm-up symptom.
+ * One of AuthService's bound methods.
+ *
+ * A refusal — a wrong password, no session, a daemon that is down — arrives
+ * as a Go error, which callBridge reads as the domain error it is and hands
+ * straight back. It used to be taken for a bridge still warming up: retried
+ * four times over nearly four seconds and then sent again over HTTP, so one
+ * wrong password was checked six times before the form said anything, and a
+ * daemon that was down kept the window blank for five seconds before AuthGate
+ * could say it was waiting. AuthGate has its own backoff for that; this does
+ * not need a second one.
  */
-function isRetryable(err: unknown): boolean {
-  return !(err instanceof DomainError);
+async function desktopCall<T>(method: string, ...args: unknown[]): Promise<T> {
+  const raw = await callBridge(`${AUTH_SERVICE}.${method}`, args);
+  return unwrap<T>(typeof raw === "string" ? JSON.parse(raw) : raw);
 }
 
-// Shares its cold-start budget with client.ts's desktop transport — see
-// desktop-transport.ts — rather than keeping its own separate clock. Two
-// independent retry windows on the same page compound into a much longer
-// wait than either alone: AuthGate's status() check and, moments later,
-// RootLayout's own data queries would otherwise each pay the full price.
-async function desktopCall<T>(method: string, ...args: unknown[]): Promise<T> {
-  // Same reasoning as client.ts's invoke: a browser tab has no bridge to
-  // warm up, and `isDesktopWindow` says so synchronously. Probing anyway is
-  // what made a fresh server installation wait out two full retry budgets —
-  // this call and the workspace query behind it — before its first screen.
-  if (!isDesktopWindow) {
+/** Reads a surface's answer, which is the daemon's own JSON envelope. */
+function readEnvelope<T>(status: number, body: string): T {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(body);
+  } catch {
     throw new DomainError({
-      code: "TRANSPORT_NO_BRIDGE",
-      message: "this page is a browser tab and has no desktop bridge",
-      status: 0,
+      code: "TRANSPORT_UNREADABLE",
+      message: `the daemon answered ${status} with something that is not JSON`,
+      status,
     });
   }
-  const delays = desktopRetryDelays();
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const raw = await Call.ByName(`${AUTH_SERVICE}.${method}`, ...args);
-      markDesktopConfirmed();
-      return unwrap<T>(typeof raw === "string" ? JSON.parse(raw) : raw);
-    } catch (err) {
-      const delay = delays[attempt];
-      if (!isRetryable(err) || delay === undefined) throw err;
-      await sleep(delay);
-    }
-  }
+  return unwrap<T>(payload);
 }
 
+/**
+ * One request to /api/auth, over the transport this page has.
+ *
+ * Inside the desktop window that is the bridge, which attaches the window's
+ * credential: a plain fetch from there is cross-origin and anonymous, which is
+ * why the account roster, the profile form and the password change were all
+ * refused in the application. In a browser tab it is fetch, same-origin, with
+ * the session cookie. Never both — see lib/client.ts's `client` for what a
+ * fallback from one to the other cost.
+ */
 async function httpRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  // The bridge first, for the same reason lib/file.ts takes it: inside the
-  // desktop window this request is cross-origin and carries no credential,
-  // so the account roster, the profile form and the password change were all
-  // refused there. `Call.ByName` rejecting means there is no bridge — a
-  // browser tab, where the fetch below is same-origin and the session cookie
-  // travels with it.
-  try {
+  if (isDesktopWindow) {
     const headers = (init?.headers ?? {}) as Record<string, string>;
     const answer = await bridgeFetch(
       init?.method ?? "GET",
@@ -84,24 +99,11 @@ async function httpRequest<T>(path: string, init?: RequestInit): Promise<T> {
       headers["content-type"] ?? "",
       typeof init?.body === "string" ? init.body : "",
     );
-    try {
-      return unwrap(JSON.parse(answer.body));
-    } catch (err) {
-      if (err instanceof DomainError) throw err;
-      throw new DomainError({
-        code: "TRANSPORT_UNREADABLE",
-        message: `the daemon answered ${answer.status} with something that is not JSON`,
-        status: answer.status,
-      });
-    }
-  } catch (err) {
-    if (err instanceof DomainError) throw err;
+    return readEnvelope<T>(answer.status, answer.body);
   }
 
   let response: Response;
   try {
-    // Absolute inside the desktop window, where a relative path reaches the
-    // application's own asset host rather than the daemon — see daemon-origin.
     response = await fetch(daemonURL(path), init);
   } catch (err) {
     throw new DomainError({
@@ -110,40 +112,19 @@ async function httpRequest<T>(path: string, init?: RequestInit): Promise<T> {
       status: 503,
     });
   }
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new DomainError({
-      code: "TRANSPORT_UNREADABLE",
-      message: `the daemon answered ${response.status} with something that is not JSON`,
-      status: response.status,
-    });
-  }
-  return unwrap(payload);
+  return readEnvelope<T>(response.status, await response.text());
 }
 
 /**
- * Tries the desktop transport, falling back to HTTP — the same trade
- * client.ts's client.invoke makes, and for the same reason: there is no
- * reliable synchronous "am I in the desktop window" signal, but attempting
- * the call is itself the reliable signal.
+ * AuthService's method inside the desktop window, the HTTP route in a browser.
  *
- * `desktopMethod` may be `null` for an endpoint AuthService does not bind
- * at all (see AuthService's own doc comment in
- * internal/transport/wailsvc/auth.go for which five it binds). Trying
- * `desktopCall` for a method that will never exist would still pay the
- * full retry budget in desktop-transport.ts before falling back — a
- * multi-second stall for no gain, since the answer is already known
- * without asking. `null` skips straight to HTTP instead.
+ * `desktopMethod` is `null` for an endpoint AuthService does not bind (see
+ * AuthService's own doc comment in internal/transport/wailsvc/auth.go for
+ * which five it binds); the window reaches those through the bridge's Fetch.
  */
 async function call<T>(desktopMethod: string | null, desktopArgs: unknown[], httpPath: string, httpInit?: RequestInit): Promise<T> {
-  if (desktopMethod === null) return httpRequest<T>(httpPath, httpInit);
-  try {
-    return await desktopCall<T>(desktopMethod, ...desktopArgs);
-  } catch {
-    return httpRequest<T>(httpPath, httpInit);
-  }
+  if (isDesktopWindow && desktopMethod !== null) return desktopCall<T>(desktopMethod, ...desktopArgs);
+  return httpRequest<T>(httpPath, httpInit);
 }
 
 const jsonHeaders = { "content-type": "application/json" };
@@ -181,10 +162,9 @@ export async function logout(): Promise<void> {
 /**
  * The accounts on this installation.
  *
- * HTTP only: AuthService binds five methods over the Wails bridge and this is
- * not one of them, so asking the desktop first would pay the whole cold-start
- * retry budget before falling back — see `call`'s own doc on the `null`
- * argument.
+ * No AuthService method: AuthService binds five over the Wails bridge and this
+ * is not one of them, so the window reaches the route through the bridge's
+ * Fetch — see `call`'s own doc on the `null` argument.
  */
 export function users(): Promise<{ users: PublicUser[] }> {
   return call<{ users: PublicUser[] }>(null, [], "/api/auth/users");
@@ -198,26 +178,59 @@ export function session(): Promise<{ user: PublicUser }> {
 /**
  * Changes the signed-in account's name and email.
  *
- * HTTP only, same as `changePassword` below and for the same reason:
- * AuthService binds five methods over the bridge and this is not one of them.
+ * No AuthService method, same as `changePassword` below and for the same
+ * reason: AuthService binds five methods over the bridge and this is not one
+ * of them.
  */
-export function updateProfile(name: string, email: string): Promise<{ user: PublicUser }> {
+export function updateProfile(name: string, email: string, image?: string): Promise<{ user: PublicUser }> {
+  // `image` only when given: the daemon reads an absent one as "leave the
+  // avatar as it is" and "" as "remove it".
+  const body = image === undefined ? { name, email } : { name, email, image };
   return call<{ user: PublicUser }>(
     null,
     [],
     "/api/auth/profile",
-    { method: "POST", headers: jsonHeaders, body: JSON.stringify({ name, email }) },
+    { method: "POST", headers: jsonHeaders, body: JSON.stringify(body) },
   );
+}
+
+/** What the Developers page is told about an account's API credential. */
+export interface ApiTokenInfo {
+  prefix: string;
+  createdAt: string;
+  lastUsedAt?: string;
+}
+
+/**
+ * Which API token the account has, if any — its prefix, never its value.
+ *
+ * Desktop method `null`: a route AuthService does not bind, reached over the
+ * bridge's Fetch inside the window (see `changePassword`).
+ */
+export function apiToken(): Promise<{ token: ApiTokenInfo | null }> {
+  return call<{ token: ApiTokenInfo | null }>(null, [], "/api/auth/api-token", { method: "GET" });
+}
+
+/**
+ * Replaces the account's API token and returns the new value — the only time
+ * the daemon ever answers it. The previous one stops working at once.
+ */
+export function regenerateApiToken(): Promise<ApiTokenInfo & { token: string }> {
+  return call<ApiTokenInfo & { token: string }>(null, [], "/api/auth/api-token", {
+    method: "POST",
+    headers: jsonHeaders,
+    body: "{}",
+  });
 }
 
 /**
  * Changes the current session's password.
  *
  * Desktop method is `null` on purpose: AuthService binds only Status,
- * Login, Onboarding, Logout and Session, not this. The HTTP route is real
- * and fully wired (internal/transport/authapi), so this goes straight
- * there instead of burning the desktop retry budget on a method call that
- * would always fail.
+ * Login, Onboarding, Logout and Session, not this. The route is real and
+ * fully wired (internal/transport/authapi), so it is reached directly — over
+ * the bridge's Fetch inside the window — rather than through a bound method
+ * that does not exist.
  */
 export async function changePassword(current: string, next: string): Promise<void> {
   await call<Record<string, never>>(

@@ -1,30 +1,16 @@
-import { PauseCircle, PlayCircle, StopCircle } from "lucide-react";
-import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
-import type { RoutineReservedAgent } from "@/features/routine/interfaces/routine.interfaces";
+import { PlayCircle, StopCircle } from "lucide-react";
+import type { RoutineStatus } from "@/features/routine/interfaces/routine.interfaces";
 import { t } from "@/lib/i18n";
 
-export const ROUTINE_RESERVED_AGENT_CONFIG: Record<
-  RoutineReservedAgent,
-  { label: string; description: string }
-> = {
-  orchestrator: {
-    get label() { return t("Orchestrator"); },
-    get description() { return t("Resolves to the workspace orchestrator agent at fire time."); },
-  },
-  all: {
-    get label() { return t("All agents"); },
-    get description() { return t("Manual fire only — runs once per workspace agent."); },
-  },
-};
-
-export const ROUTINE_STATUS_ORDER: Routine["status"][] = [
-  "enabled",
-  "paused",
-  "disabled",
-];
+/**
+ * The two statuses Go has (`routine.Status`). A third, "paused", was offered
+ * on every status menu and filter and refused every time with
+ * AOS_ROUTINE_INVALID_STATUS; "disabled" is what it would have meant.
+ */
+export const ROUTINE_STATUS_ORDER: RoutineStatus[] = ["enabled", "disabled"];
 
 export const ROUTINE_STATUS_CONFIG: Record<
-  Routine["status"],
+  RoutineStatus,
   {
     label: string;
     icon: typeof PlayCircle;
@@ -35,14 +21,6 @@ export const ROUTINE_STATUS_CONFIG: Record<
     get label() { return t("Enabled"); },
     icon: PlayCircle,
     color: "text-emerald-600",
-  },
-  // Task 9 addition: `RoutineStatusSchema` (routine.interfaces.ts)
-  // already had "paused" — this consts file's `enabled`/`disabled` pair
-  // predates that and was missing the third value.
-  paused: {
-    get label() { return t("Paused"); },
-    icon: PauseCircle,
-    color: "text-amber-600",
   },
   disabled: {
     get label() { return t("Disabled"); },

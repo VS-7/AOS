@@ -150,6 +150,8 @@ export interface CommandMap {
   "agents_update": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
+    /** New communication channel bindings. Replaces the list entirely; an empty list removes every binding. */
+    "channels"?: unknown;
     /** New Markdown system instructions. Replaces the body entirely. */
     "content"?: unknown;
     /** New orchestrator-facing summary. */
@@ -223,6 +225,8 @@ export interface CommandMap {
     "id"?: string;
     /** Human-readable name. */
     "name": string;
+    /** Password to share a by_password artifact behind, hashed before it is stored. Optional: set-password can set or change it later. */
+    "password"?: string;
     /** Skill that owns this artifact, if any. */
     "skill"?: string;
     /** One of: private, workspace, by_password. Defaults to private. */
@@ -473,6 +477,8 @@ export interface CommandMap {
     "_reasoning": string;
     /** Id of the record's collection. */
     "collection": string;
+    /** The new Markdown body, for a collection of format md. Omit to keep the stored body; an empty string empties it. */
+    "content"?: unknown;
     /** The record's new fields, replacing the old ones wholesale. */
     "data": Record<string, unknown>;
     /** Identifier of the record to rewrite. */
@@ -567,8 +573,8 @@ export interface CommandMap {
     "content"?: string;
     /** One line summarising the outcome. */
     "description"?: string;
-    /** When this goal is due, if it has a deadline. */
-    "dueAt"?: unknown;
+    /** When this goal is due, if it has a deadline: an RFC3339 instant. */
+    "dueAt"?: string;
     /** How to tell this goal was actually served. */
     "measure"?: string;
     /** How urgent this goal is. Defaults to no_priority. */
@@ -615,13 +621,13 @@ export interface CommandMap {
     "_reasoning": string;
     /** New body content, in Markdown. Omit to leave unchanged. */
     "content"?: unknown;
-    /** New one-line summary of the outcome. Omit to leave unchanged. */
+    /** New one-line summary of the outcome. Empty string clears it. Omit to leave unchanged. */
     "description"?: unknown;
-    /** New due date. Omit to leave unchanged. */
+    /** New due date, an RFC3339 instant. Empty string clears it. Omit to leave unchanged. */
     "dueAt"?: unknown;
     /** Identifier of the goal to update. */
     "id": string;
-    /** New measure that makes this goal checkable rather than aspirational. Omit to leave unchanged. */
+    /** New measure that makes this goal checkable rather than aspirational. Empty string clears it. Omit to leave unchanged. */
     "measure"?: unknown;
     /** New priority: no_priority, urgent, high, medium or low. Omit to leave unchanged. */
     "priority"?: "no_priority" | "urgent" | "high" | "medium" | "low";
@@ -913,9 +919,9 @@ export interface CommandMap {
     "_reasoning": string;
     /** New display color. Omit to leave unchanged. */
     "color"?: unknown;
-    /** New body content, in Markdown. Omit to leave unchanged. */
+    /** New body content, in Markdown. Empty string clears it. Omit to leave unchanged. */
     "content"?: unknown;
-    /** New description. Omit to leave unchanged. */
+    /** New description. Empty string clears it. Omit to leave unchanged. */
     "description"?: unknown;
     /** New display icon. Omit to leave unchanged. */
     "icon"?: unknown;
@@ -925,7 +931,7 @@ export interface CommandMap {
     "name"?: unknown;
     /** New list of associated paths. Replaces the field wholesale when given. */
     "paths"?: unknown;
-    /** New source directory — an absolute, existing path. Omit to leave unchanged. */
+    /** New source directory — an absolute, existing path. Empty string unbinds it. Omit to leave unchanged. */
     "source"?: unknown;
     /** New lifecycle status. Omit to leave unchanged. */
     "status"?: "active" | "paused" | "done" | "archived";
@@ -1043,7 +1049,7 @@ export interface CommandMap {
   };
     /** enabled or disabled. */
     "status"?: unknown;
-    /** New triggers. Replaces the old ones whole; a webhook among them mints a new token. */
+    /** New triggers. Replaces the old ones whole. A webhook keeps the token it already has; one added where there was none mints a token, returned once. */
     "triggers"?: unknown;
   }; output: unknown };
   /** Install a skill package, from a script or an agent assembling one. */
@@ -1104,6 +1110,8 @@ export interface CommandMap {
     "assigned"?: string;
     /** Branch the checkout is cut from. */
     "base"?: string;
+    /** Branch the checkout is cut on. Generated from the workspace prefix and the task slug when left out. */
+    "branch"?: string;
     /** The description and plan, in Markdown. */
     "content"?: string;
     /** Tasks that must finish before this one can start. */
@@ -1214,9 +1222,9 @@ export interface CommandMap {
     "content": string;
     /** What this template produces and when to use it. */
     "description"?: string;
-    /** Identifier for the template. Also its file name: lowercase, digits, hyphen and underscore only. */
-    "id": string;
-    /** Human name of the template. */
+    /** Identifier for the template. Also its file name: lowercase, digits, hyphen and underscore only. Derived from Name when omitted. */
+    "id"?: string;
+    /** Human name of the template. The id is derived from it when none is given. */
     "name": string;
     /** Suggested relative output path for a render of this template. */
     "output"?: string;
@@ -1436,6 +1444,13 @@ export interface CommandMap {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
   }; output: unknown };
+  /** List the tools a toolset publishes. */
+  "toolsets_tools": { input: {
+    /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
+    "_reasoning": string;
+    /** Identifier of the toolset. */
+    "id": string;
+  }; output: unknown };
   /** Reconfigure a toolset. */
   "toolsets_update-config": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
@@ -1476,12 +1491,8 @@ export interface CommandMap {
   "update_apply": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
-    /** The staged release, as DownloadOutput.staged returned it. */
-    "staged": {
-    "binaries": Record<string, string>;
-    "dir": string;
+    /** The version to install, as DownloadOutput.staged.version returned it. */
     "version": string;
-  };
   }; output: unknown };
   /** Query the release channel. Never downloads anything. */
   "update_check": { input: {
@@ -1500,12 +1511,13 @@ export interface CommandMap {
     "channel": string;
     "checksumsUrl": string;
     "notes"?: string;
+    "pageUrl"?: string;
     "publishedAt": string;
     "signatureUrl": string;
     "version": string;
   };
   }; output: unknown };
-  /** Report the current version and channel, without checking the network. */
+  /** Report the current version, the last check and what is staged, without checking the network. */
   "update_status": { input: {
     /** MANDATORY. NEVER FORGET. Explain why this specific tool is being called now, what outcome you expect, and the immediate next step if that helps clarify the call. Do not leave this empty. */
     "_reasoning": string;
@@ -1564,6 +1576,8 @@ export interface CommandMap {
     "input"?: Record<string, unknown>;
     /** Label of the action within the view's tree, as declared. */
     "label": string;
+    /** The skill the view ships with, when it is skill-scoped. */
+    "skill"?: string;
   }; output: unknown };
   /** Read one view's declaration. */
   "views_get": { input: {
@@ -1815,6 +1829,7 @@ export const COMMAND_KEYS = [
   "toolsets_get",
   "toolsets_get-config",
   "toolsets_list",
+  "toolsets_tools",
   "toolsets_update-config",
   "tunnel_start",
   "tunnel_status",

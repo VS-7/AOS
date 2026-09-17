@@ -90,7 +90,11 @@ export default defineConfig({
       // point was added, which meant every artifact URL a dev build opened
       // resolved to Vite's own index.html (a 200, wrong content) instead of
       // ever reaching the daemon.
-      "/v": { target: "http://127.0.0.1:5326", changeOrigin: true },
+      //
+      // Anchored, and with the slash: a bare "/v" is a prefix match, so it also
+      // took "/views/…" and "/v1…", and reloading a view page in development
+      // sent the page request to the daemon instead of serving the app.
+      "^/v/": { target: "http://127.0.0.1:5326", changeOrigin: true },
     },
   },
 });

@@ -1,9 +1,7 @@
 "use client";
 
 import React from "react";
-import { SignalZero, SignalLow, SignalMedium, SignalHigh, FlagIcon } from "lucide-react";
 import {
-  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
@@ -15,14 +13,6 @@ interface SetPriorityDropdownProps {
   onPriorityChange: (priority: TaskPriority) => void;
 }
 
-const PRIORITY_ICONS: Record<TaskPriority, React.ElementType> = {
-  no_priority: SignalZero,
-  low: SignalLow,
-  medium: SignalMedium,
-  high: SignalHigh,
-  urgent: FlagIcon,
-};
-
 export function SetPriorityDropdown({ currentPriority, onPriorityChange }: SetPriorityDropdownProps) {
   return (
     <DropdownMenuRadioGroup
@@ -31,7 +21,7 @@ export function SetPriorityDropdown({ currentPriority, onPriorityChange }: SetPr
     >
       {TASK_PRIORITY_ORDER.map((priority) => {
         const config = TASK_PRIORITY_CONFIG[priority];
-        const Icon = PRIORITY_ICONS[priority];
+        const Icon = config.icon;
 
         return (
           <DropdownMenuRadioItem

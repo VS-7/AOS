@@ -305,21 +305,24 @@ function ThinkingStep({
                 transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
                 className="relative min-w-0 flex-1"
               >
-                <span className="line-clamp-1 block text-[13px] leading-snug text-muted-foreground">
+                {/* Faded by masking the text itself, not by painting the page
+                    colour over its end: an error row is tinted, and a patch of
+                    `--background` showed on it as a white box before the icon. */}
+                <span
+                  className="line-clamp-1 block text-[13px] leading-snug text-muted-foreground"
+                  style={
+                    descriptionFade
+                      ? ({
+                          maskImage:
+                            "linear-gradient(to right, black calc(100% - 3rem), transparent)",
+                          WebkitMaskImage:
+                            "linear-gradient(to right, black calc(100% - 3rem), transparent)",
+                        } satisfies CSSProperties)
+                      : undefined
+                  }
+                >
                   {description}
                 </span>
-                {descriptionFade ? (
-                  <span
-                    aria-hidden="true"
-                    className="pointer-events-none absolute inset-y-0 right-0 w-12"
-                    style={
-                      {
-                        background:
-                          "linear-gradient(to right, transparent, var(--background) 72%)",
-                      } satisfies CSSProperties
-                    }
-                  />
-                ) : null}
               </motion.div>
             ) : null}
             {isError ? (

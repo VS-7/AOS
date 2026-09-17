@@ -4,10 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -290,4 +293,21 @@ func ToolArguments(s string) json.RawMessage {
 		return json.RawMessage(fmt.Sprintf("%q", s))
 	}
 	return json.RawMessage(s)
+}
+
+// CallID names a tool call the provider's API left unnamed.
+//
+// The loop and every stored answer pair a result with its call, and the chat
+// draws a result inside the call that shares its id. The name the Gemini-shaped
+// adapters used to make up, "<tool>-<position in the answer>", was the same
+// for every step that started with the same tool: a three-step turn stored
+// three calls named "Read-1", and the chat drew all three results into the
+// last of them while the first two read as still running. The position stays
+// for whoever reads a log; the suffix makes the name one call's own.
+func CallID(tool string, position int) string {
+	var suffix [6]byte
+	// crypto/rand does not fail on a supported platform; the Go runtime
+	// aborts the process rather than return an error from it.
+	_, _ = rand.Read(suffix[:])
+	return tool + "-" + strconv.Itoa(position) + "-" + hex.EncodeToString(suffix[:])
 }

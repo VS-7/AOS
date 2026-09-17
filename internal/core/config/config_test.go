@@ -138,7 +138,10 @@ func TestSecretFilesAreTheOnesAudited(t *testing.T) {
 		t.Fatal(err)
 	}
 	files := p.SecretFiles()
-	want := []string{p.Config(), p.Users(), p.LocalToken()}
+	// desktop.token is the window's own session (cmd/aos-desktop's
+	// windowSession): a bearer as good as local.token, written 0600, and a
+	// loosened copy of it went unreported.
+	want := []string{p.Config(), p.Users(), p.LocalToken(), p.DesktopToken()}
 	if len(files) != len(want) {
 		t.Fatalf("expected %v, got %v", want, files)
 	}

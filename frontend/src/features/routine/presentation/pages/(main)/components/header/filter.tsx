@@ -17,9 +17,9 @@ import { aos } from "@/app/aos";
 import { t } from "@/lib/i18n";
 
 const TRIGGER_TYPE_OPTIONS = [
-  { id: "webhook", label: "Webhook" },
-  { id: "scheduled", label: "Scheduled" },
-  { id: "activity", label: "Activity" },
+  { id: "webhook", get label() { return t("Webhook"); } },
+  { id: "scheduled", get label() { return t("Scheduled"); } },
+  { id: "activity", get label() { return t("Activity"); } },
 ] as const;
 
 export function RoutinesFilter() {
@@ -38,30 +38,30 @@ export function RoutinesFilter() {
   const agents = aos.stores.agent.useState((state) => state.items);
 
   const getStatusButtonLabel = () => {
-    if (selectedStatuses.length === 0) return "Status";
+    if (selectedStatuses.length === 0) return t("Status");
     if (selectedStatuses.length === 1) {
-      return `Status: ${RoutineHelper.getStatus(selectedStatuses[0]).label}`;
+      return t("Status: {{value}}", { value: RoutineHelper.getStatus(selectedStatuses[0]).label });
     }
-    return `Status (${selectedStatuses.length})`;
+    return t("Status ({{count}})", { count: selectedStatuses.length });
   };
 
   const getAgentButtonLabel = () => {
-    if (selectedAgents.length === 0) return "Agent";
+    if (selectedAgents.length === 0) return t("Agent");
     if (selectedAgents.length === 1) {
-      return `Agent: ${RoutineHelper.getAgentLabel(selectedAgents[0], agents)}`;
+      return t("Agent: {{value}}", { value: RoutineHelper.getAgentLabel(selectedAgents[0], agents) });
     }
-    return `Agent (${selectedAgents.length})`;
+    return t("Agent ({{count}})", { count: selectedAgents.length });
   };
 
   const getTypeButtonLabel = () => {
-    if (selectedTypes.length === 0) return "Trigger";
+    if (selectedTypes.length === 0) return t("Trigger");
     if (selectedTypes.length === 1) {
       const match = TRIGGER_TYPE_OPTIONS.find(
         (option) => option.id === selectedTypes[0],
       );
-      return `Trigger: ${match?.label ?? selectedTypes[0]}`;
+      return t("Trigger: {{value}}", { value: match?.label ?? selectedTypes[0] });
     }
-    return `Trigger (${selectedTypes.length})`;
+    return t("Trigger ({{count}})", { count: selectedTypes.length });
   };
 
   return (

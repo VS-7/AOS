@@ -164,6 +164,24 @@ func (f *fakeFS) Rename(_ context.Context, from, to string) error {
 	return nil
 }
 
+// CopyFile refuses an occupied destination, as the port requires of every
+// implementation.
+func (f *fakeFS) CopyFile(_ context.Context, from, to string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	from, to = path.Clean(from), path.Clean(to)
+	e, ok := f.entries[from]
+	if !ok || e.dir {
+		return file.ErrNotExist
+	}
+	if _, taken := f.entries[to]; taken {
+		return errors.New("fake: destination exists")
+	}
+	f.mkdirAllLocked(path.Dir(to))
+	f.entries[to] = entry{data: append([]byte(nil), e.data...)}
+	return nil
+}
+
 func (f *fakeFS) Remove(_ context.Context, p string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -598,6 +616,9 @@ func TestEveryRouteAnswersJSON(t *testing.T) {
 		{http.MethodGet, "/read?path=a.md", nil},
 		{http.MethodPut, "/write", file.WriteInput{Path: "b.md", Content: "y"}},
 		{http.MethodPut, "/move", map[string]string{"from": "b.md", "to": "c.md"}},
+		{http.MethodPut, "/create", file.WriteInput{Path: "d.md", Content: "z"}},
+		{http.MethodPut, "/mkdir", map[string]string{"path": "e"}},
+		{http.MethodPut, "/copy", map[string]string{"from": "d.md", "to": "e/d.md"}},
 		{http.MethodDelete, "/delete?path=c.md", nil},
 		{http.MethodGet, "/diff?path=a.md", nil},
 	} {
@@ -763,5 +784,123 @@ func TestContentReportsAMissingFile(t *testing.T) {
 
 	if res.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", res.StatusCode, http.StatusNotFound)
+	}
+}
+
+// An agent writes workspace files, and this route served its HTML as a
+// document of the API's own origin: opened in a browser signed in to the
+// daemon, a page whose script fetched /api/auth/session was answered with the
+// person. Every answer that could be a document running script comes back
+// sandboxed into an opaque origin, with no scripts at all, and never sniffed
+// into one.
+func TestContentSandboxesEveryDocumentThatCouldRunScript(t *testing.T) {
+	probe := []byte(`<script>fetch('/api/auth/session')</script>`)
+	fs := newFakeFS()
+	names := []string{"probe.html", "probe.htm", "probe.xhtml", "probe.svg", "probe.xml", "probe.txt", "probe.json", "probe.js", "probe"}
+	for _, name := range names {
+		fs.put(root+"/"+name, probe)
+	}
+	srv := newServer(t, fs, fakeGit{}, fixedWorkspace{root: root})
+
+	for _, name := range names {
+		res, _ := do(t, srv, http.MethodGet, "/content?path="+name, nil)
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("%s: status = %d, want %d", name, res.StatusCode, http.StatusOK)
+		}
+		if got := res.Header.Get("Content-Security-Policy"); got != "sandbox" {
+			t.Errorf("%s (%s): Content-Security-Policy = %q, want sandbox", name, res.Header.Get("Content-Type"), got)
+		}
+		if got := res.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("%s: X-Content-Type-Options = %q, want nosniff", name, got)
+		}
+	}
+}
+
+// The three routes the explorer's New File, New Folder and Paste stand on.
+// Before them New Folder wrote a zero-byte file under the folder's name, and a
+// paste wrote whatever the window had read back — nothing, in practice — over
+// whatever was at the destination.
+func TestCreateMkdirAndCopyRoutes(t *testing.T) {
+	fs := newFakeFS()
+	fs.put(root+"/pixel.png", []byte{0x89, 'P', 0x00})
+	srv := newServer(t, fs, fakeGit{}, fixedWorkspace{root: root})
+
+	res, raw := do(t, srv, http.MethodPut, "/mkdir", map[string]string{"path": "assets"})
+	var out map[string]string
+	dataOf(t, res, raw, &out)
+	if out["path"] != "assets" {
+		t.Fatalf("mkdir answered %q, want assets", out["path"])
+	}
+	if info, err := fs.Stat(t.Context(), root+"/assets"); err != nil || !info.Dir {
+		t.Fatalf("assets is not a directory: %+v, %v", info, err)
+	}
+
+	res, raw = do(t, srv, http.MethodPut, "/copy", map[string]string{"from": "pixel.png", "to": "assets/pixel.png"})
+	dataOf(t, res, raw, &out)
+	if out["path"] != "assets/pixel.png" {
+		t.Fatalf("copy answered %q, want the destination", out["path"])
+	}
+	got, _, err := fs.ReadFile(t.Context(), root+"/assets/pixel.png", 1<<20)
+	if err != nil || !bytes.Equal(got, []byte{0x89, 'P', 0x00}) {
+		t.Fatalf("the copy holds %v, %v", got, err)
+	}
+
+	res, raw = do(t, srv, http.MethodPut, "/create", file.WriteInput{Path: "notes.md", Content: "# hi"})
+	dataOf(t, res, raw, &out)
+	if out["path"] != "notes.md" {
+		t.Fatalf("create answered %q, want notes.md", out["path"])
+	}
+
+	for _, tc := range []struct {
+		target string
+		body   any
+	}{
+		{"/create", file.WriteInput{Path: "notes.md", Content: ""}},
+		{"/mkdir", map[string]string{"path": "assets"}},
+		{"/copy", map[string]string{"from": "pixel.png", "to": "assets/pixel.png"}},
+	} {
+		res, raw := do(t, srv, http.MethodPut, tc.target, tc.body)
+		if res.StatusCode != http.StatusConflict {
+			t.Fatalf("%s onto an existing path: status = %d, want 409; body: %s", tc.target, res.StatusCode, raw)
+		}
+		if code := errorOf(t, raw).Error.Code; code != "AOS_FILE_ALREADY_EXISTS" {
+			t.Fatalf("%s: code = %q", tc.target, code)
+		}
+	}
+}
+
+// What the Files panel's viewers load is left to render: a sandboxed PDF is
+// refused by the browser's own viewer, and a policy on an image changes
+// nothing but the header count.
+func TestContentLeavesPassiveMediaUnsandboxed(t *testing.T) {
+	fs := newFakeFS()
+	names := []string{"logo.png", "photo.jpg", "report.pdf"}
+	for _, name := range names {
+		fs.put(root+"/"+name, []byte("bytes"))
+	}
+	srv := newServer(t, fs, fakeGit{}, fixedWorkspace{root: root})
+
+	for _, name := range names {
+		res, _ := do(t, srv, http.MethodGet, "/content?path="+name, nil)
+		if got := res.Header.Get("Content-Security-Policy"); got != "" {
+			t.Errorf("%s: Content-Security-Policy = %q, want none", name, got)
+		}
+		if got := res.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("%s: X-Content-Type-Options = %q, want nosniff", name, got)
+		}
+	}
+}
+
+// A move with no paths is a malformed request and says so, instead of the
+// `"" already exists` both empty paths resolving to the root used to produce.
+func TestMoveWithoutPathsIsABadRequest(t *testing.T) {
+	srv := newServer(t, newFakeFS(), fakeGit{}, fixedWorkspace{root: root})
+
+	res, raw := do(t, srv, http.MethodPut, "/move", map[string]string{"fromPath": "a.md", "toPath": "b.md"})
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", res.StatusCode, raw)
+	}
+	if code := errorOf(t, raw).Error.Code; code != "AOS_FILE_PATH_REQUIRED" {
+		t.Fatalf("code = %q, want AOS_FILE_PATH_REQUIRED", code)
 	}
 }

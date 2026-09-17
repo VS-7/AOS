@@ -19,6 +19,7 @@ import {
   DropdownMenuPortal,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -47,14 +48,13 @@ export interface AgentModelSelectProvider {
   renderLogo?: () => React.ReactNode;
 }
 
-export type AgentModelReasoning =
-  | "provider-default"
-  | "none"
-  | "minimal"
-  | "low"
-  | "medium"
-  | "high"
-  | "xhigh";
+/**
+ * The levels the runtime honours (`internal/runtime/agentloop`'s `levelOf`).
+ * The picker used to offer "Provider default", "Minimal" and "Extra high" as
+ * well, and the runtime read each of those as medium — a choice that saved and
+ * then did nothing.
+ */
+export type AgentModelReasoning = "none" | "low" | "medium" | "high";
 
 export interface AgentModelSelectValue {
   provider: string;
@@ -73,22 +73,86 @@ interface AgentModelSelectProps {
   onChange: (next: AgentModelSelectValue) => void;
   /** When `true` the selector is rendered as a `ButtonGroup` of two buttons; otherwise just the model picker. */
   showReasoning?: boolean;
+  /** What the menu says when there is no provider to offer at all. */
+  emptyLabel?: string;
+  /** What the trigger says while nothing is selected. */
+  placeholder?: string;
+  /** When given, the menu offers to clear the selection (e.g. back to a default). */
+  onClear?: () => void;
+  clearLabel?: string;
+  /** Opens the menu on mount. */
+  defaultOpen?: boolean;
   className?: string;
   disabled?: boolean;
 }
 
-const REASONING_OPTIONS: { value: AgentModelReasoning; label: string }[] = [
-  { value: "provider-default", label: "Provider default" },
-  { value: "none", label: "None" },
-  { value: "minimal", label: "Minimal" },
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "xhigh", label: "Extra high" },
-];
+function reasoningOptions(): { value: AgentModelReasoning; label: string }[] {
+  return [
+    { value: "none", label: t("None") },
+    { value: "low", label: t("Low") },
+    { value: "medium", label: t("Medium") },
+    { value: "high", label: t("High") },
+  ];
+}
 
 function isProviderSelectable(provider: AgentModelSelectProvider) {
   return provider.configured !== false;
+}
+
+/**
+ * Keys the search box keeps for itself, and the ones that take a person from
+ * it into the list.
+ *
+ * A Radix menu runs typeahead on every printable key that reaches it, moving
+ * focus to the first item whose label starts with that letter — so the second
+ * letter of a search landed on a menu item instead of in the box. Those keys
+ * stay in the box.
+ *
+ * The menu does not move focus out of the box either: it answers the arrows
+ * only when they are aimed at the menu itself, and it swallows Tab. So
+ * ArrowDown and Tab go to the first result and ArrowUp to the last, from here,
+ * where the menu's own arrows take over. Escape still travels, and closes it,
+ * and so does Shift+Tab, which the menu keeps where it is.
+ */
+function keepKeyInSearch(event: React.KeyboardEvent<HTMLInputElement>) {
+  const toLast = event.key === "ArrowUp";
+  const intoList = toLast || event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey);
+  if (!intoList) {
+    if (event.key !== "Escape" && event.key !== "Tab") event.stopPropagation();
+    return;
+  }
+
+  const menu = event.currentTarget.closest("[data-radix-menu-content]");
+  const items = Array.from(
+    menu?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([data-disabled])') ?? [],
+  );
+  const target = toLast ? items.at(-1) : items[0];
+  // Nothing to move to: the menu handles the key as it always did.
+  if (!target) return;
+  event.preventDefault();
+  event.stopPropagation();
+  target.focus();
+}
+
+/** The models matching `term` by model id, model name or provider name, per provider. */
+export function matchModels(
+  providers: AgentModelSelectProvider[],
+  term: string,
+): { provider: AgentModelSelectProvider; models: { id: string; name?: string }[] }[] {
+  const needle = term.trim().toLowerCase();
+  return providers
+    .map((provider) => {
+      const providerHit =
+        provider.name.toLowerCase().includes(needle) || provider.id.toLowerCase().includes(needle);
+      const models = (provider.models ?? []).filter(
+        (m) =>
+          providerHit ||
+          m.id.toLowerCase().includes(needle) ||
+          (m.name ?? "").toLowerCase().includes(needle),
+      );
+      return { provider, models };
+    })
+    .filter((entry) => entry.models.length > 0);
 }
 
 /**
@@ -110,6 +174,11 @@ export const AgentModelSelect = ({
   value,
   onChange,
   showReasoning = true,
+  emptyLabel,
+  placeholder,
+  onClear,
+  clearLabel,
+  defaultOpen,
   className,
   disabled,
 }: AgentModelSelectProps) => {
@@ -139,11 +208,11 @@ export const AgentModelSelect = ({
     return match?.name ?? value.model;
   }, [currentProvider, dynamicModels, value.model]);
 
-  const filteredProviders = React.useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return visibleProviders;
-    return visibleProviders.filter((p) => p.name.toLowerCase().includes(term));
-  }, [visibleProviders, search]);
+  const term = search.trim();
+  const matches = React.useMemo(
+    () => (term ? matchModels(visibleProviders, term) : []),
+    [visibleProviders, term],
+  );
 
   const handleSelectModel = React.useCallback(
     (providerId: string, modelId: string) => {
@@ -195,12 +264,12 @@ export const AgentModelSelect = ({
     <Button
       variant="outline"
       size="sm"
-      className="gap-1.5 rounded-r-none pr-1.5"
+      className={cn("gap-1.5 pr-1.5", showReasoning && "rounded-r-none")}
       disabled={disabled}
     >
       {currentProvider?.renderLogo?.()}
       <span className="max-w-40 truncate font-medium">
-        {currentModelLabel || "Select model"}
+        {currentModelLabel || placeholder || t("Select model")}
       </span>
       <HugeiconsIcon icon={ArrowDown01Icon} className="size-3.5 opacity-60" />
     </Button>
@@ -218,124 +287,129 @@ export const AgentModelSelect = ({
     </Button>
   );
 
+  const emptyState = (text: string) => (
+    <div className="px-2 py-3 text-center text-xs text-muted-foreground">{text}</div>
+  );
+
+  const browse = () =>
+    visibleProviders.map((provider) => {
+      const providerModels = provider.models ?? dynamicModels[provider.id] ?? [];
+      const isSelected = provider.id === value.provider;
+      const isLoading = loadingProvider === provider.id;
+
+      if (providerModels.length === 0 && onLoadModels) {
+        return (
+          <DropdownMenuItem
+            key={provider.id}
+            onSelect={() => handleSelectProvider(provider.id)}
+            className="cursor-pointer"
+          >
+            {provider.renderLogo?.()}
+            <span className="flex-1">{provider.name}</span>
+            <HugeiconsIcon icon={ArrowRight01Icon} className="size-3.5 opacity-50" />
+            {isLoading && (
+              <span className="text-xs text-muted-foreground">{t("Loading…")}</span>
+            )}
+          </DropdownMenuItem>
+        );
+      }
+
+      if (providerModels.length === 0) {
+        return (
+          <DropdownMenuItem key={provider.id} disabled className="cursor-not-allowed opacity-60">
+            {provider.renderLogo?.()}
+            <span className="flex-1">{provider.name}</span>
+            <span className="text-xs text-muted-foreground">{t("No models")}</span>
+          </DropdownMenuItem>
+        );
+      }
+
+      return (
+        <DropdownMenuSub key={provider.id}>
+          <DropdownMenuSubTrigger
+            className={cn("cursor-pointer", isSelected && "bg-accent text-accent-foreground")}
+          >
+            {provider.renderLogo?.()}
+            <span className="flex-1">{provider.name}</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuPortal>
+            <DropdownMenuSubContent className="min-w-56 max-h-80 overflow-y-auto p-1">
+              <DropdownMenuLabel className="px-2 py-1 text-[11px]">{provider.name}</DropdownMenuLabel>
+              {providerModels.map((m) => modelItem(provider, m))}
+            </DropdownMenuSubContent>
+          </DropdownMenuPortal>
+        </DropdownMenuSub>
+      );
+    });
+
+  const modelItem = (provider: AgentModelSelectProvider, m: { id: string; name?: string }) => {
+    const isModelSelected = provider.id === value.provider && m.id === value.model;
+    return (
+      <DropdownMenuItem
+        key={`${provider.id}/${m.id}`}
+        onSelect={() => handleSelectModel(provider.id, m.id)}
+        className="cursor-pointer"
+      >
+        <span className="flex-1 truncate">{m.name ?? m.id}</span>
+        {isModelSelected && <span className="text-xs text-muted-foreground">✓</span>}
+      </DropdownMenuItem>
+    );
+  };
+
+  // A search lists the matching models themselves, flat and grouped by
+  // provider: a model name is what people search for, and a hit hidden
+  // inside a submenu is a hit nobody sees.
+  const searchResults = () =>
+    matches.map(({ provider, models }) => (
+      <React.Fragment key={provider.id}>
+        <DropdownMenuLabel className="flex items-center gap-1.5 px-2 py-1 text-[11px]">
+          {provider.renderLogo?.()}
+          {provider.name}
+        </DropdownMenuLabel>
+        {models.map((m) => modelItem(provider, m))}
+      </React.Fragment>
+    ));
+
   return (
     <ButtonGroup className={cn("w-fit", className)}>
       <DropdownMenu
+        defaultOpen={defaultOpen}
         onOpenChange={(open) => {
           if (!open) setSearch("");
         }}
       >
         <DropdownMenuTrigger asChild>{modelTrigger}</DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          sideOffset={6}
-          className="w-72 p-0"
-        >
+        <DropdownMenuContent align="start" sideOffset={6} className="w-72 p-0">
           <div className="flex items-center gap-2 border-b border-border/60 px-2 py-1.5">
-            <HugeiconsIcon
-              icon={Search01Icon}
-              className="size-3.5 text-muted-foreground"
-            />
+            <HugeiconsIcon icon={Search01Icon} className="size-3.5 text-muted-foreground" />
             <Input
               autoFocus
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={keepKeyInSearch}
               placeholder={t("Search models")}
               className="h-7 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
             />
           </div>
           <div className="max-h-72 overflow-y-auto p-1">
-            {filteredProviders.length === 0 ? (
-              <div className="px-2 py-3 text-center text-xs text-muted-foreground">
-                {t("No providers configured.")}
-              </div>
-            ) : (
-              filteredProviders.map((provider) => {
-                const providerModels =
-                  provider.models ?? dynamicModels[provider.id] ?? [];
-                const isSelected = provider.id === value.provider;
-                const isLoading = loadingProvider === provider.id;
-
-                if (providerModels.length === 0 && onLoadModels) {
-                  return (
-                    <DropdownMenuItem
-                      key={provider.id}
-                      onSelect={() => handleSelectProvider(provider.id)}
-                      className="cursor-pointer"
-                    >
-                      {provider.renderLogo?.()}
-                      <span className="flex-1">{provider.name}</span>
-                      <HugeiconsIcon
-                        icon={ArrowRight01Icon}
-                        className="size-3.5 opacity-50"
-                      />
-                      {isLoading && (
-                        <span className="text-xs text-muted-foreground">
-                          {t("Loading…")}
-                        </span>
-                      )}
-                    </DropdownMenuItem>
-                  );
-                }
-
-                if (providerModels.length === 0) {
-                  return (
-                    <DropdownMenuItem
-                      key={provider.id}
-                      disabled
-                      className="cursor-not-allowed opacity-60"
-                    >
-                      {provider.renderLogo?.()}
-                      <span className="flex-1">{provider.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {t("No models")}
-                      </span>
-                    </DropdownMenuItem>
-                  );
-                }
-
-                return (
-                  <DropdownMenuSub key={provider.id}>
-                    <DropdownMenuSubTrigger
-                      className={cn(
-                        "cursor-pointer",
-                        isSelected && "bg-accent text-accent-foreground",
-                      )}
-                    >
-                      {provider.renderLogo?.()}
-                      <span className="flex-1">{provider.name}</span>
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuPortal>
-                      <DropdownMenuSubContent className="min-w-56 max-h-80 overflow-y-auto p-1">
-                        <DropdownMenuLabel className="px-2 py-1 text-[11px]">
-                          {provider.name}
-                        </DropdownMenuLabel>
-                        {providerModels.map((m) => {
-                          const isModelSelected =
-                            provider.id === value.provider && m.id === value.model;
-                          return (
-                            <DropdownMenuItem
-                              key={m.id}
-                              onSelect={() => handleSelectModel(provider.id, m.id)}
-                              className="cursor-pointer"
-                            >
-                              <span className="flex-1 truncate">
-                                {m.name ?? m.id}
-                              </span>
-                              {isModelSelected && (
-                                <span className="text-xs text-muted-foreground">
-                                  ✓
-                                </span>
-                              )}
-                            </DropdownMenuItem>
-                          );
-                        })}
-                      </DropdownMenuSubContent>
-                    </DropdownMenuPortal>
-                  </DropdownMenuSub>
-                );
-              })
-            )}
+            {onClear && !term ? (
+              <>
+                <DropdownMenuItem onSelect={onClear} className="cursor-pointer">
+                  <span className="flex-1">{clearLabel ?? t("Clear")}</span>
+                  {!value.provider && !value.model ? (
+                    <span className="text-xs text-muted-foreground">✓</span>
+                  ) : null}
+                </DropdownMenuItem>
+                {visibleProviders.length > 0 ? <DropdownMenuSeparator /> : null}
+              </>
+            ) : null}
+            {visibleProviders.length === 0
+              ? emptyState(emptyLabel ?? t("No providers connected yet."))
+              : term
+                ? matches.length === 0
+                  ? emptyState(t('No model matches "{{term}}".', { term }))
+                  : searchResults()
+                : browse()}
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -344,14 +418,9 @@ export const AgentModelSelect = ({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>{reasoningButton}</DropdownMenuTrigger>
           <DropdownMenuContent align="end" sideOffset={6} className="w-44">
-            <DropdownMenuLabel className="px-2 text-[11px]">
-              {t("Reasoning")}
-            </DropdownMenuLabel>
-            <DropdownMenuRadioGroup
-              value={value.reasoning ?? "provider-default"}
-              onValueChange={handleReasoning}
-            >
-              {REASONING_OPTIONS.map((opt) => (
+            <DropdownMenuLabel className="px-2 text-[11px]">{t("Reasoning")}</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={value.reasoning ?? "medium"} onValueChange={handleReasoning}>
+              {reasoningOptions().map((opt) => (
                 <DropdownMenuRadioItem key={opt.value} value={opt.value}>
                   {opt.label}
                 </DropdownMenuRadioItem>

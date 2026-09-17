@@ -12,6 +12,7 @@ import (
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/command"
+	"github.com/OWNER/aos/internal/domain/auth"
 	"github.com/OWNER/aos/internal/domain/bot"
 	"github.com/OWNER/aos/internal/domain/chat"
 	"github.com/OWNER/aos/internal/domain/collection"
@@ -272,10 +273,19 @@ func (c tunnelConfig) Raw(ctx context.Context) (tunnel.RawConfig, error) {
 	}
 	return tunnel.RawConfig{
 		SecurityEnabled: cfg.Security.Enabled,
-		APIToken:        cfg.Security.APIToken,
 		Hostname:        cfg.Tunnel.Hostname,
 		Token:           cfg.Tunnel.Token,
 	}, nil
+}
+
+// tunnelCredentials adapts auth.Service to tunnel.Credentials: the other half
+// of the exposure guard, which asks whether anybody holds a credential a
+// remote caller could present. The tunnel refuses to publish an API that
+// would answer to nobody.
+type tunnelCredentials struct{ svc *auth.Service }
+
+func (c tunnelCredentials) HasActiveAPIToken(ctx context.Context) (bool, error) {
+	return c.svc.AnyActiveAPIToken(ctx)
 }
 
 // chatsForBot adapts chat.Service to bot.Chats: finding the conversation an

@@ -35,9 +35,11 @@ import {
   openAgentDmTab,
   openChatTab,
   openUserDmTab,
+  teamPeople,
 } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
 import { ChatActivityStamp } from "./chat-activity-stamp";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
 
 interface ChatTeamListProps {
   agents: Agent[];
@@ -83,7 +85,7 @@ function AgentRow({
 
   const handleViewInSettings = (e: React.MouseEvent) => {
     e.stopPropagation();
-    aos.stores.viewport.actions.openSettings("workspace.agents");
+    aos.stores.viewport.actions.openSettings("workspace.agents", { agent: agent.id });
     setOpen(false);
   };
 
@@ -263,7 +265,8 @@ function UserRow({
 /**
  * Team tab — peer agents + people as DM starters.
  *
- * Peers come from `stores.workspace.directory` (viewer-relative: self excluded).
+ * Peers come from `stores.workspace.directory`, less the viewer (see
+ * `teamPeople`: the directory itself lists everyone).
  * Live processing merges occupancy + chat list on top of the directory seed.
  */
 export function ChatTeamList({ agents, currentChatId }: ChatTeamListProps) {
@@ -283,7 +286,10 @@ export function ChatTeamList({ agents, currentChatId }: ChatTeamListProps) {
     }
   }, [directory.agents.length, directory.users.length]);
 
-  const peerUsers = directory.users;
+  const peerUsers = React.useMemo(
+    () => teamPeople(directory.users, selfUserId),
+    [directory.users, selfUserId],
+  );
   const teamAgents = React.useMemo(() => {
     if (agents.length > 0) {
       return agents;
@@ -343,7 +349,7 @@ export function ChatTeamList({ agents, currentChatId }: ChatTeamListProps) {
         }
       }
 
-      return "Teammate";
+      return t("Teammate");
     },
     [chats, selfUserId],
   );
@@ -405,9 +411,7 @@ export function ChatTeamList({ agents, currentChatId }: ChatTeamListProps) {
                         title: agent.name || agent.id,
                       }).catch((error) => {
                         toast.error(
-                          error instanceof Error
-                            ? error.message
-                            : "Unable to open agent DM.",
+                          errorMessage(error) ?? t("Unable to open agent DM."),
                         );
                       });
                     }}
@@ -453,9 +457,7 @@ export function ChatTeamList({ agents, currentChatId }: ChatTeamListProps) {
                         title: name,
                       }).catch((error) => {
                         toast.error(
-                          error instanceof Error
-                            ? error.message
-                            : "Unable to open user DM.",
+                          errorMessage(error) ?? t("Unable to open user DM."),
                         );
                       });
                     }}

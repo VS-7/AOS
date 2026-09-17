@@ -11,13 +11,13 @@ import {
   AvatarAgentFallback,
   AvatarImage,
 } from "@/components/ui/avatar";
-import { aos } from "@/app/aos";
 import { t } from "@/lib/i18n";
 import {
   assigneeAgents,
   assigneeInitials,
   assigneePeople,
 } from "@/features/task/presentation/helpers/assignee.helper";
+import { useAssigneeDirectory } from "@/features/task/presentation/hooks/assignee-directory.hook";
 
 interface SetAssigneeDropdownProps {
   currentAssignee?: string;
@@ -28,12 +28,9 @@ export function SetAssigneeDropdown({
   currentAssignee,
   onAssigneeChange,
 }: SetAssigneeDropdownProps) {
-  const directory = aos.stores.workspace.useState((state) => state.directory);
-  const self = aos.stores.auth.useState((state) => state.user);
-
-  const directoryInput = { ...directory, self };
-  const people = assigneePeople(directoryInput);
-  const agents = assigneeAgents(directoryInput);
+  const directory = useAssigneeDirectory();
+  const people = assigneePeople(directory);
+  const agents = assigneeAgents(directory);
 
   return (
     <div className="flex flex-col gap-1">
@@ -86,6 +83,11 @@ export function SetAssigneeDropdown({
       <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
         {t("Agents")}
       </DropdownMenuLabel>
+      {agents.length === 0 && (
+        <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+          {t("No agents in this workspace")}
+        </DropdownMenuItem>
+      )}
       {agents.map((agent) => (
         <DropdownMenuItem
           key={agent.id}

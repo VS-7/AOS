@@ -26,6 +26,13 @@ func (g *Git) Changes(ctx context.Context, dir string) ([]file.Change, error) {
 	// --untracked-files=normal lists an untracked directory as the directory
 	// rather than every file beneath it, which is what somebody scanning the
 	// panel wants to see for a fresh node_modules.
+	//
+	// A directory inside some other repository is refused the same way: git
+	// would answer for the enclosing repository, root-relative paths and all,
+	// and the panel listed a home directory's files as the workspace's.
+	if err := g.ownRepository(ctx, "status", dir); err != nil {
+		return nil, err
+	}
 	out, err := g.run(ctx, dir, "status", "--porcelain", "-z", "--untracked-files=normal")
 	if err != nil {
 		return nil, errGitFailed("status", dir, err)

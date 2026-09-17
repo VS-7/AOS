@@ -26,13 +26,30 @@ interface CreateWorkspaceDialogProps {
   onSuccess?: (workspaceId: string) => void;
 }
 
-const formSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  path: z.string().min(1, "Path is required"),
-  color: z.string(),
-});
+// Built when the dialog renders, not at import: a message translated at
+// module load stays in whatever language the module happened to load in.
+function buildFormSchema() {
+  return z.object({
+    name: z.string().min(1, t("Name is required")),
+    path: z.string().min(1, t("Path is required")),
+    color: z.string(),
+  });
+}
 
 export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }: CreateWorkspaceDialogProps) {
+  // Controlled when the caller passes `open`; otherwise the dialog keeps its
+  // own state, which is how the workspace switcher uses it. It needs one
+  // either way: a successful create has to close the dialog, and with only
+  // Radix's internal state the dialog stayed open over the workspace it had
+  // just switched to.
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
+  const isOpen = open ?? uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    if (open === undefined) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
+
+  const formSchema = React.useMemo(buildFormSchema, []);
   const form = aos.useForm({
     schema: formSchema,
     mutation: "workspace.create",
@@ -50,7 +67,7 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
       // `useFieldArray` in `tasks/index.tsx`. Cast, not a real type.
       const data = rawData as any;
       if (error) {
-        toast.error(error.message || "Failed to create workspace");
+        toast.error(t("Failed to create workspace"), { description: error.message || undefined });
         return;
       }
 
@@ -72,11 +89,13 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
 
       const result = await aos.stores.workspace.actions.switch(created);
       if (result.error) {
-        toast.error(result.error.message || "Failed to switch to the new workspace");
+        toast.error(t("Failed to switch to the new workspace"), { description: result.error.message || undefined });
         return;
       }
 
       toast.success(t("Workspace created."));
+      form.reset();
+      setOpen(false);
       onSuccess?.(created);
     }
   });
@@ -85,7 +104,7 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
   const currentColor = form.watch("color");
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={setOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className="sm:max-w-106.25">
         <DialogHeader>
@@ -141,10 +160,16 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
               <FormItem className="grid gap-2">
                 <Label htmlFor="color">{t("Brand Color")}</Label>
                 <div className="flex gap-2">
+                  {/* Hex, as the workspace stores it, whichever format
+                      the channels are shown in. */}
                   <ColorPickerPopover
                     triggerShowRemove
-                    onTriggerRemove={() => field.onChange(null)}
+                    // "" rather than null: the schema says string, and a null
+                    // here failed validation under a field with no visible
+                    // control for it once Create Workspace actually submitted.
+                    onTriggerRemove={() => field.onChange("")}
                     value={field.value}
+                    valueFormat="hex"
                     onValueChange={(v) => field.onChange(v)}
                   />
                 </div>
@@ -155,7 +180,7 @@ export function CreateWorkspaceDialog({ trigger, open, onOpenChange, onSuccess }
 
           <DialogFooter className="mt-4">
             <Button type="submit" disabled={form.isLoading}>
-              {form.isLoading ? "Creating..." : "Create Workspace"}
+              {form.isLoading ? t("Creating...") : t("Create Workspace")}
             </Button>
           </DialogFooter>
         </Form>

@@ -82,6 +82,11 @@ type UpdateInput struct {
 	// merge is how a removal silently does nothing.
 	Sandbox *Sandbox `json:"sandbox,omitempty" jsonschema:"New filesystem and execution policy. Replaces the block entirely."`
 
+	// Channels was on the entity and on CreateInput but not here, so the
+	// settings Channels tab's save was decoded, dropped, and answered with the
+	// agent unchanged. Replaced whole for the same reason as Sandbox.
+	Channels *[]Channel `json:"channels,omitempty" jsonschema:"New communication channel bindings. Replaces the list entirely; an empty list removes every binding."`
+
 	Content *string `json:"content,omitempty" jsonschema:"New Markdown system instructions. Replaces the body entirely."`
 
 	command.Reasoning

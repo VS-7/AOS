@@ -3,6 +3,45 @@ import * as React from "react"
 import { toast } from "sonner"
 import type { PendingAudioClip } from "../composer.types"
 
+/**
+ * What a failed microphone request means, in words the interface owns.
+ *
+ * The browser's own message went straight to the toast — "Requested device
+ * not found", in English, in a Portuguese window — and it names the API that
+ * failed rather than what the person can do about it.
+ */
+export function microphoneErrorMessage(error: unknown): string {
+  const name = error && typeof error === "object" && "name" in error ? String((error as { name?: unknown }).name) : "";
+  switch (name) {
+    case "NotAllowedError":
+    case "SecurityError":
+      return t("Microphone access was denied. Allow it for this app in the system's privacy settings.")
+    case "NotFoundError":
+    case "OverconstrainedError":
+      return t("No microphone was found.")
+    case "NotReadableError":
+    case "AbortError":
+      return t("The microphone is in use by another application.")
+    case "NotSupportedError":
+      return t("Recording audio is not supported here.")
+    default:
+      return t("Unable to access the microphone.")
+  }
+}
+
+/** Recording formats, best first. WebKit records MP4/AAC and not WebM. */
+const RECORDING_TYPES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/aac"]
+
+/**
+ * The first format this engine can record, or `undefined` to let it choose.
+ *
+ * Asking for WebM unconditionally threw NotSupportedError in the desktop
+ * window, whose engine is WebKit.
+ */
+export function recordingMimeType(isSupported: (type: string) => boolean): string | undefined {
+  return RECORDING_TYPES.find((type) => isSupported(type))
+}
+
 export function useChatComposerAudio() {
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null)
   const mediaStreamRef = React.useRef<MediaStream | null>(null)
@@ -36,8 +75,8 @@ export function useChatComposerAudio() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm"
-      const recorder = new MediaRecorder(stream, { mimeType })
+      const mimeType = recordingMimeType((type) => MediaRecorder.isTypeSupported(type))
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
 
       mediaRecorderRef.current = recorder
       mediaStreamRef.current = stream
@@ -69,7 +108,8 @@ export function useChatComposerAudio() {
           return
         }
 
-        const filename = `voice-note-${new Date().toISOString().replace(/[:.]/g, "-")}.webm`
+        const extension = blob.type.includes("mp4") || blob.type.includes("aac") ? "m4a" : "webm"
+        const filename = `voice-note-${new Date().toISOString().replace(/[:.]/g, "-")}.${extension}`
         const url = URL.createObjectURL(blob)
 
         setPendingAudioClip((current) => {
@@ -100,7 +140,7 @@ export function useChatComposerAudio() {
       setIsRecording(true)
     } catch (error) {
       setIsRecording(false)
-      toast.error(error instanceof Error ? error.message : "Unable to access the microphone.")
+      toast.error(microphoneErrorMessage(error))
     }
   }, [isRecording])
 

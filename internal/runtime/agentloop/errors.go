@@ -57,6 +57,24 @@ func errProviderFailed(provider string, cause error) error {
 		})
 }
 
+// errModelUnavailable is a provider refusing the model it was asked for — a
+// model it retired, or one this account's plan does not include. It wraps the
+// provider's own words, which say which of the two.
+func errModelUnavailable(provider, model string, cause error) error {
+	return apperr.New("AGENT_MODEL_UNAVAILABLE").
+		Causer("agentloop.Loop.call").
+		Msgf("the %s provider refused the model %q", provider, model).
+		Issue("provider", provider).
+		Issue("model", model).
+		Status(apperr.StatusBadGateway).
+		Wrap(cause).
+		CTA(apperr.CallToAction{
+			Label: "choose a model this account can use — see what " + provider + " serves, then change the model this agent resolves to",
+			Tool:  "models_list",
+			Input: map[string]any{"provider": provider},
+		})
+}
+
 // errTurnCancelled is a turn that was interrupted: the person navigated away,
 // the daemon is shutting down, or the total timeout elapsed. It carries what
 // was spent before the interruption, because that is billed either way.

@@ -400,6 +400,12 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Chat, error) {
 		if p.Type == ActorAgent {
 			p.ID = strings.ToLower(p.ID)
 		}
+		// Once per actor. A conversation that lists the same person twice is
+		// read as two people by everything downstream — a "DM" with oneself
+		// looked like a DM between two users, and routed like one.
+		if hasParticipant(participants, p.Type, p.ID) {
+			continue
+		}
 		participants = append(participants, p)
 	}
 	// Whoever opened the conversation is in it. A private chat its own creator

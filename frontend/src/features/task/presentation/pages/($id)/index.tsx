@@ -1,16 +1,15 @@
+import { useEffect } from "react";
+import { Link, useNavigate, useRouter } from "@tanstack/react-router";
+import { SearchX } from "lucide-react";
 import { aos } from "@/app/aos";
 import { WorkspacePageMiddleware } from "@/features/workspace/presentation/middlewares/workspace.middleware";
 import { Page, PageBody } from "@/components/ui/page";
+import { Button } from "@/components/ui/button";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { TaskDetailsMain } from "./components/main";
 import { TaskDetailsSidebar } from "./components/details";
-import type { TaskWithContext, TaskPriority } from "@/features/task/interfaces/task.interfaces";
-import { toast } from "sonner";
-import { useNavigate, useRouter } from "@tanstack/react-router";
-import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
-import { useTasksStatusTransition } from "@/features/task/presentation/hooks/tasks-status-transition.hook";
-import { TasksFinishWorkflowDialog } from "@/features/task/presentation/components/dialogs/finish";
-import { useEffect } from "react";
+import type { TaskWithContext } from "@/features/task/interfaces/task.interfaces";
+import { useTaskActions } from "@/features/task/presentation/hooks/task-actions.hook";
 import { useChat } from "@/features/chat/presentation/hooks/use-chat";
 import { t } from "@/lib/i18n";
 
@@ -20,171 +19,82 @@ export const TaskDetailsPage = aos.page("/tasks/$id")
     description: "Task details page",
   })
   .use(WorkspacePageMiddleware())
-  .withLoader(async ({ client, request, response }) => {
+  .withLoader(async ({ client, request }) => {
     const result = await client.task.getById.query({ params: { task: request.params.id } });
     // See `(main)/index.tsx`'s loader for why this cast is needed —
     // the facade returns `Envelope<unknown>`, not a typed payload.
     const task = (result.data as { task: TaskWithContext } | undefined)?.task;
-
-    if (!task) {
-      return response.notFound();
+    if (task) {
+      return { task, missing: null };
     }
 
-    return { task };
+    // Only the daemon saying there is no such task is "not found". Every
+    // failure used to become the global "Page not found", so a daemon or
+    // bridge error read as a wrong address, and a missing task never said it
+    // was the task that was missing.
+    const code = (result.error as { code?: string } | undefined)?.code;
+    if (result.error && code !== "AOS_TASK_NOT_FOUND") {
+      throw result.error;
+    }
+    return { task: null, missing: request.params.id };
   })
-  .withComponent(({ route, client }) => {
-    const { task } = route.useLoaderData();
-    const liveChat = useChat({
-      chatId: task.chat ?? "",
-      enabled: Boolean(task.chat),
-    });
-
-    const router = useRouter();
-    const finishTransition = useTasksStatusTransition();
-
-    useEffect(() => {
-      aos.stores.viewport.actions.toggle("page.details.visible", true);
-    }, []);
-
-    async function handleStatusChange(status: TaskWithContext["status"]) {
-      if (status === task.status) return;
-      if (status === "finished") {
-        finishTransition.open(task, status);
-        return;
-      }
-      const { error } = await aos.client.task.setStatus.mutate({
-        params: { task: task.id },
-        body: { status },
-      });
-      if (error) {
-        // @ts-expect-error - Expected
-        toast.error(error.error?.message || "Failed to update status");
-        return;
-      }
-      toast.success(`Moved to ${TaskHelper.getStatus(status).label}`);
-      router.invalidate();
+  .withComponent(({ route }) => {
+    const { task, missing } = route.useLoaderData();
+    if (!task) {
+      return <TaskNotFound id={missing ?? ""} />;
     }
-
-    async function handlePriorityChange(priority: TaskPriority) {
-      try {
-        await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { priority } });
-        toast.success(t("Priority updated"));
-        router.invalidate();
-      } catch {
-        toast.error(t("Failed to update priority"));
-      }
-    }
-
-    async function handleAssigneeChange(assignee: string | undefined) {
-      try {
-        await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { assigned: assignee } });
-        toast.success(assignee ? "Assigned" : "Unassigned");
-        router.invalidate();
-      } catch {
-        toast.error(t("Failed to update assignee"));
-      }
-    }
-
-    async function handleTypeChange(type: string) {
-      try {
-        await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { type } });
-        toast.success(t("Type updated"));
-        router.invalidate();
-      } catch {
-        toast.error(t("Failed to update type"));
-      }
-    }
-
-    async function handleDueDateChange(dueAt: string | undefined) {
-      try {
-        await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { dueAt } });
-        toast.success(dueAt ? "Due date set" : "Due date removed");
-        router.invalidate();
-      } catch {
-        toast.error(t("Failed to update due date"));
-      }
-    }
-
-    async function handleProjectChange(project: string | undefined) {
-      try {
-        await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { project } });
-        toast.success(project ? "Project updated" : "Project cleared");
-        router.invalidate();
-      } catch {
-        toast.error(t("Failed to update project"));
-      }
-    }
-
-    async function handleGoalChange(goal: string | undefined) {
-      try {
-        await aos.client.task.update.mutateOrThrow({ params: { task: task.id }, body: { goal } });
-        toast.success(goal ? "Goal updated" : "Goal cleared");
-        router.invalidate();
-      } catch {
-        toast.error(t("Failed to update goal"));
-      }
-    }
-
-    return (
-      <>
-        <Page className="h-full overflow-hidden">
-          <PageBody className="overflow-hidden">
-            <SplitPageLayout>
-              <SplitPageLayout.Content>
-                <TaskDetailsMain
-                  client={aos.client}
-                  liveChat={liveChat}
-                  refresh={route.refresh}
-                  task={task}
-                />
-              </SplitPageLayout.Content>
-
-              <SplitPageLayout.Detail>
-                <TaskDetailsSidebar
-                  liveChat={liveChat}
-                  task={task}
-                  onStatusChange={handleStatusChange}
-                  onPriorityChange={handlePriorityChange}
-                  onTypeChange={handleTypeChange}
-                  onAssigneeChange={handleAssigneeChange}
-                  onDueDateChange={handleDueDateChange}
-                  onProjectChange={handleProjectChange}
-                  onGoalChange={handleGoalChange}
-                />
-              </SplitPageLayout.Detail>
-            </SplitPageLayout>
-          </PageBody>
-        </Page>
-
-        <TasksFinishWorkflowDialog
-          open={finishTransition.state.open}
-          task={finishTransition.state.task}
-          onOpenChange={(open) => {
-            if (!open) finishTransition.close();
-          }}
-          onConfirm={async (input) => {
-            if (!finishTransition.state.task) {
-              finishTransition.close();
-              return;
-            }
-
-            const { error } = await aos.client.task.setStatus.mutate({
-              params: { task: finishTransition.state.task.id },
-              body: input,
-            });
-
-            if (error) {
-              // @ts-expect-error - Expected
-              toast.error(error.error?.message || "Failed to finish task");
-              return;
-            }
-
-            toast.success(`Finished ${finishTransition.state.task.id}`);
-            finishTransition.close();
-            router.invalidate();
-          }}
-        />
-      </>
-    );
+    return <TaskDetails key={task.id} task={task} />;
   })
   .build();
+
+function TaskDetails({ task }: { task: TaskWithContext }) {
+  const router = useRouter();
+  const navigate = useNavigate();
+  const liveChat = useChat({
+    chatId: task.chat ?? "",
+    enabled: Boolean(task.chat),
+  });
+  const actions = useTaskActions(task, {
+    onChanged: () => void router.invalidate(),
+    onDeleted: () => void navigate({ to: "/tasks" }),
+  });
+
+  useEffect(() => {
+    aos.stores.viewport.actions.toggle("page.details.visible", true);
+  }, []);
+
+  return (
+    <Page className="h-full overflow-hidden">
+      <PageBody className="overflow-hidden">
+        <SplitPageLayout>
+          <SplitPageLayout.Content>
+            <TaskDetailsMain task={task} actions={actions} liveChat={liveChat} />
+          </SplitPageLayout.Content>
+
+          <SplitPageLayout.Detail>
+            <TaskDetailsSidebar task={task} actions={actions} liveChat={liveChat} />
+          </SplitPageLayout.Detail>
+        </SplitPageLayout>
+      </PageBody>
+    </Page>
+  );
+}
+
+function TaskNotFound({ id }: { id: string }) {
+  return (
+    <Page className="h-full overflow-hidden">
+      <PageBody className="flex items-center justify-center">
+        <div className="flex max-w-md flex-col items-center gap-3 px-6 text-center">
+          <SearchX className="size-8 text-muted-foreground" />
+          <h1 className="text-base font-semibold">{t("Task not found")}</h1>
+          <p className="text-sm text-muted-foreground">
+            {t("No task with the id {{id}} exists in this workspace. It may have been deleted.", { id })}
+          </p>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/tasks">{t("Back to tasks")}</Link>
+          </Button>
+        </div>
+      </PageBody>
+    </Page>
+  );
+}

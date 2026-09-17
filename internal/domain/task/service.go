@@ -218,7 +218,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*View, error) {
 		Project:   in.Project,
 		Goal:      in.Goal,
 		DependsOn: in.DependsOn,
-		Worktree:  Worktree{Enabled: in.Worktree, Base: in.Base},
+		Worktree:  Worktree{Enabled: in.Worktree, Base: in.Base, Branch: strings.TrimSpace(in.Branch)},
 		CreatedAt: now,
 		UpdatedAt: now,
 		Content:   strings.TrimLeft(in.Content, " \t\n\r"),
@@ -463,7 +463,7 @@ func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, err
 	if err != nil {
 		return DeleteOutput{}, err
 	}
-	if current.Worktree.Path != "" && s.worktrees != nil {
+	if current.Worktree.Path != "" && s.worktrees != nil && s.placedHere(ctx, current.ID, current.Worktree.Path) {
 		if err := s.worktrees.Remove(ctx, current.Worktree.Path); err != nil {
 			// The checkout is outside the task directory, so removing the task
 			// cannot take it with it. Reported rather than hidden: a leftover
@@ -479,9 +479,32 @@ func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, err
 	return DeleteOutput{ID: current.ID}, nil
 }
 
+// placedHere reports whether a recorded checkout is the one this workspace
+// placed for the task and is still there. Delete removes a checkout with
+// --force, and the recorded path is read back from a file anybody can edit:
+// one that names somebody's own worktree, or another task's checkout, is not
+// the task's to take with it — and neither is a link under the worktree root
+// that leads to one, which git follows when it removes.
+//
+// A checkout that is already gone is left to git's own record of it, which
+// cutting one again at that path or on that branch forgets.
+func (s *Service) placedHere(ctx context.Context, taskID, path string) bool {
+	policy, err := s.worktreePolicy(ctx)
+	if err != nil || !s.ownCheckout(ctx, policy, taskID, path) {
+		s.log.Warn("a deleted task's recorded checkout is not one of this workspace's checkouts, so it was left alone",
+			"path", path, "worktreeRoot", policy.Root)
+		return false
+	}
+	return true
+}
+
 // view builds the projections a reader needs and the file does not hold.
 func (s *Service) view(ctx context.Context, t *Task) (View, error) {
-	out := View{Task: *t, Assignee: ResolvedAssignee{ID: t.Assigned, Type: AssigneeUnknown}}
+	out := View{
+		Task:       *t,
+		Assignee:   ResolvedAssignee{ID: t.Assigned, Type: AssigneeUnknown},
+		NextStates: t.Status.nextStatuses(),
+	}
 	if t.Assigned != "" && s.directory != nil {
 		resolved, err := s.directory.Resolve(ctx, t.Assigned)
 		if err == nil {

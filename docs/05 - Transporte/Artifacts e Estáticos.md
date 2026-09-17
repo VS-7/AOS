@@ -124,6 +124,37 @@ de propósito, ou a senha de um artifact `by_password` pela query string — ver
 nesta reconstrução: o daemon é single-workspace, então a URL é
 `/v/artifacts/{id}/*` sem esse segmento.
 
+Toda resposta de `/v/artifacts` leva `sandbox allow-scripts allow-forms
+allow-popups allow-modals allow-downloads` na CSP: o documento roda numa origem
+opaca onde quer que seja aberto — no frame da janela, no frame de uma aba do navegador ou sozinho no
+link compartilhado. Sem isso, "não ler o cookie em `/v`" não bastava: um
+artifact `by_password` que carregava `probe.js?password=pw`, aberto no link
+num navegador logado, rodava na origem da API e o navegador anexava o cookie
+de sessão às chamadas `/api` do próprio script. Como a página é opaca, os
+arquivos dela são pedidos cross-origin: quando a leitura foi autorizada pela
+senha que a própria requisição apresentou, a resposta vai para qualquer origem
+(`Cross-Origin-Resource-Policy: cross-origin`, `Access-Control-Allow-Origin: *`,
+sem credenciais); lida por qualquer outro motivo (bearer, segurança
+desligada), continua só para a mesma origem. `connect-src` nomeia também o
+diretório do próprio artifact em endereço absoluto, porque o WebKit deixa de
+contar a URL de uma página opaca como `'self'` para `fetch`. Limite conhecido:
+o cookie `x-workspace-id` é `SameSite=Lax` e não acompanha os pedidos da página
+opaca, então num navegador os arquivos de um artifact resolvem o workspace
+primário do daemon — a URL publicada não nomeia o workspace.
+
+A lista de permissões do `sandbox` é uma decisão, e um teste a fixa inteira
+(`TestTheArtifactSandboxGrantsExactlyWhatAnArtifactIsFor`): `allow-scripts` e
+`allow-forms` são o comportamento da própria página; `allow-popups` abre um
+link em outra janela, que herda o mesmo sandbox (não há
+`allow-popups-to-escape-sandbox`); `allow-modals` e `allow-downloads` devolvem
+`alert`/`confirm`/`prompt` e `<a download>`, que um artifact aberto no link
+compartilhado usava antes do sandbox e que não dão acesso a origem nenhuma.
+Ficam de fora `allow-same-origin` (o problema inteiro descrito acima) e toda
+forma de `allow-top-navigation`. Armazenamento não é uma permissão, é
+consequência: uma origem opaca não tem `localStorage`, `sessionStorage` nem
+IndexedDB, que lançam exceção no link compartilhado como já lançavam nos
+frames do aplicativo.
+
 A SPA embutida existe só em `aos-desktop` (`//go:embed all:dist`,
 `cmd/aos-desktop/main.go`) — `aosd`, o daemon headless, não serve a SPA por
 HTTP; não há decisão registrada sobre se deveria (expor a UI completa no

@@ -237,6 +237,38 @@ export function toUiMessage(raw: unknown, options: ToUiMessageOptions = {}): unk
   };
 }
 
+/** Two timestamps naming the same instant, whatever precision each was written with. */
+function sameInstant(left: string | undefined, right: string | undefined): boolean {
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const a = Date.parse(left);
+  return !Number.isNaN(a) && a === Date.parse(right);
+}
+
+/**
+ * The message an answer replies to, for an answer stored before `replyTo`
+ * existed.
+ *
+ * Those name nothing, so their elapsed time read "0s" — a five-minute turn
+ * included. The run that produced one is still recognisable: `Reply` stamps
+ * the run's completion and the answer's creation with the same clock read, so
+ * it is the nearest earlier message holding a run by the answer's own agent
+ * that completed at exactly the answer's `createdAt`.
+ */
+function legacySourceOf(messages: RawMessage[], at: number): RawMessage | undefined {
+  const answer = messages[at];
+  const agent = answer?.author?.id;
+  if (answer?.role !== "assistant" || !agent || !answer.createdAt) return undefined;
+  for (let i = at - 1; i >= 0; i--) {
+    const candidate = messages[i];
+    const runs = Array.isArray(candidate?.runs) ? candidate.runs : [];
+    if (runs.some((run) => run.agentId === agent && sameInstant(run.completedAt, answer.createdAt))) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Every message of one chat, translated, with each answer's run resolved
  * through the message it replies to.
@@ -252,9 +284,12 @@ export function toUiMessages(raw: unknown): unknown {
     }
   }
 
-  return messages.map((message) => {
+  return messages.map((message, index) => {
     if (message === null || typeof message !== "object") return message;
-    const replyTo = typeof message.replyTo === "string" ? message.replyTo : undefined;
+    const replyTo =
+      typeof message.replyTo === "string"
+        ? message.replyTo
+        : legacySourceOf(messages, index)?.id;
     return toUiMessage(message, {
       sourceRuns: replyTo ? runsByID.get(replyTo) : undefined,
       sourceMessageId: replyTo,

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/OWNER/aos/internal/core/apperr"
+	"github.com/OWNER/aos/internal/core/build"
 	"github.com/OWNER/aos/internal/core/clockx"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/core/identity"
@@ -51,6 +52,16 @@ type Chats interface {
 	MarkRun(ctx context.Context, in chat.MarkRunInput) error
 }
 
+// Tasks is what a turn needs from the task aggregate: where a task's isolated
+// checkout is, when the conversation belongs to one.
+type Tasks interface {
+	// Checkout is the checkout a turn on the task is confined to, or "" when
+	// it has none that can be used. The task service checks the recorded path
+	// before answering; the runner never reads it off the task itself, because
+	// TASK.md is a workspace file any workspace-rooted turn can rewrite.
+	Checkout(ctx context.Context, id string) (string, error)
+}
+
 // Models resolves an agent to a provider, so the composition root owns the
 // configuration and this package owns nothing.
 type Models interface {
@@ -69,6 +80,7 @@ type Bots interface {
 type Deps struct {
 	Agents   Agents
 	Chats    Chats
+	Tasks    Tasks
 	Models   Models
 	Registry *command.Registry
 	Bus      *event.Service
@@ -350,7 +362,7 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 		RequestID:   identity.From(ctx).RequestID,
 	})
 
-	box, err := r.sandboxFor(worker)
+	box, err := r.sandboxFor(ctx, worker, in.Task)
 	if err != nil {
 		return nil, err
 	}
@@ -388,7 +400,7 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 	// thing the screen showed describe the turn the same way.
 	live := r.emitter(workspaceID, conversation.ID, answerID, worker.ID)
 
-	transcribed := transcript(conversation)
+	transcribed := transcript(conversation, r.speakersOf(ctx, conversation, worker.ID))
 	// How much of the loop's working transcript was already there. What comes
 	// after it is what this turn produced, which is the only reasoning that
 	// belongs on this answer.
@@ -425,7 +437,7 @@ func (r *Runner) Run(ctx context.Context, in chat.Turn) (result *agentloop.Resul
 	if err != nil {
 		// Recorded by the deferred handler at the top, along with every
 		// other way this turn can fail.
-		return nil, err
+		return nil, adviseModel(err, worker)
 	}
 	// Priced here, not inside agentloop: the loop talks to LLMProvider, not to
 	// the pricing table, and internal/runtime/providers already imports
@@ -493,13 +505,37 @@ func (r *Runner) observe(ctx context.Context, worker *agent.Agent, sessionID, wo
 	})
 }
 
-// sandboxFor builds the confinement from the agent's own file.
-func (r *Runner) sandboxFor(a *agent.Agent) (*sandbox.Sandbox, error) {
+// sandboxFor builds the confinement from the agent's own file, rooted in the
+// task's isolated checkout when the conversation belongs to a task that has
+// one.
+//
+// The checkout was recorded and never used: tasks_branch, the task's own
+// documentation and the agent's instructions all say the sandbox root becomes
+// that path, and every turn was confined to the workspace root regardless — so
+// an agent "working on its own branch" edited the main working tree.
+//
+// The root is the checkout the task service vouches for, not the path TASK.md
+// records: the file sits in the workspace, and a recorded path taken as
+// written let an edited one root the next task turn in the installation's own
+// directory, beside its credentials. A task that no longer exists, or whose
+// checkout is gone or not one of this workspace's, runs where any other turn
+// does — which is no more than the turn that could have edited the file.
+func (r *Runner) sandboxFor(ctx context.Context, a *agent.Agent, taskID string) (*sandbox.Sandbox, error) {
 	opts := sandbox.Options{
 		WorkspacePath: r.deps.WorkspaceRoot,
 		TmpDir:        r.deps.TmpDir,
 		Permissions:   sandbox.DefaultPermissions(),
 		Exec:          sandbox.DefaultExecPolicy(),
+	}
+	if taskID != "" && r.deps.Tasks != nil {
+		checkout, err := r.deps.Tasks.Checkout(ctx, taskID)
+		switch {
+		case errors.Is(err, apperr.ErrNotFound):
+		case err != nil:
+			return nil, err
+		default:
+			opts.WorktreePath = checkout
+		}
 	}
 	if a.Sandbox != nil {
 		if len(a.Sandbox.Permissions) > 0 {
@@ -760,42 +796,69 @@ func answerParts(result *agentloop.Result, reasoning []string) []chat.Part {
 		parts = append(parts, chat.Part{Type: chat.PartReasoning, Text: block})
 	}
 
-	// Only the calls this turn actually made.
+	// Only the calls this turn actually made, each stored beside its result.
 	//
-	// `result.Messages` is the loop's whole working transcript, and the loop
-	// is seeded with the conversation so far — so walking it wrote every tool
-	// call *ever made in this conversation* into this one answer, again, on
-	// every turn. A chat that had run a few tools showed them repeated across
-	// each new message, growing by the whole history each time.
+	// `result.Messages` is the wrong source for them twice over. It is the
+	// loop's whole working transcript, seeded with the conversation so far, so
+	// walking it wrote every tool call ever made in the conversation into each
+	// new answer. And it is what compaction prunes: a turn long enough to
+	// compact had lost its earliest calls from it while their results stayed in
+	// `result.ToolCalls`, so the answer was stored with results whose calls were
+	// gone — and the provider refused every later turn of that conversation
+	// ("No tool call found for function call output").
 	//
-	// `result.ToolCalls` holds the results of this turn (its name is the
-	// loop's, not this layer's). A call whose id produced one of them is a
-	// call this turn made; anything else belongs to an earlier message that
-	// already carries it.
-	thisTurn := make(map[string]bool, len(result.ToolCalls))
-	for _, c := range result.ToolCalls {
-		thisTurn[c.CallID] = true
-	}
-	for _, m := range result.Messages {
-		for _, c := range m.ToolCalls {
-			if !thisTurn[c.ID] {
-				continue
-			}
-			parts = append(parts, chat.Part{
-				Type: chat.PartToolCall, ToolName: c.Name, ToolCallID: c.ID, Input: c.Input,
-			})
+	// `result.Calls` is what the model asked for in this turn and nothing else,
+	// kept where no prune reaches, one entry per entry of `result.ToolCalls`.
+	// They are paired by position, not by id: ids are not unique within a turn
+	// on every provider — Google names a call after its place in the answer,
+	// so every step that starts with Read asks for "Read-1" — and keeping only
+	// the first call with an id stored one call for three results. A call is
+	// stored only with its result and a result only with its call, so what is
+	// written can always be sent back.
+	n := min(len(result.Calls), len(result.ToolCalls))
+	paired := make([]int, 0, n)
+	for i := range n {
+		if result.Calls[i].ID == result.ToolCalls[i].CallID {
+			paired = append(paired, i)
 		}
 	}
-	for _, c := range result.ToolCalls {
+	for _, i := range paired {
+		c := result.Calls[i]
 		parts = append(parts, chat.Part{
-			Type: chat.PartToolResult, ToolName: c.Name, ToolCallID: c.CallID, Output: c.Output,
+			Type: chat.PartToolCall, ToolName: c.Name, ToolCallID: c.ID, Input: c.Input,
+		})
+	}
+	for _, i := range paired {
+		r := result.ToolCalls[i]
+		parts = append(parts, chat.Part{
+			Type: chat.PartToolResult, ToolName: r.Name, ToolCallID: r.CallID, Output: r.Output,
 		})
 	}
 	return parts
 }
 
+// recordTimeout bounds a write that says how a turn ended. It is made on a
+// context the turn's own cancellation does not reach (see recording), so
+// something has to stop a store that never answers from holding a shutdown.
+const recordTimeout = 10 * time.Second
+
+// recording is the context the end of a turn is written on.
+//
+// The turn's context is over by then as often as not: Stop cancels it, and so
+// does a daemon shutting down under a queued routine's run. The conversation
+// store refuses a cancelled context — it answered AOS_CHAT_NOT_FOUND for a
+// chat that was there — so the record of the stop was lost and the message
+// kept a run marked running for good, a spinner nothing would ever end.
+func recording(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), recordTimeout)
+}
+
 func (r *Runner) persist(ctx context.Context, in chat.Turn, agentID, answerID string, started time.Time, result *agentloop.Result, reasoning []string) error {
 	parts := answerParts(result, reasoning)
+	// The answer is complete and paid for; a stop pressed a moment late must
+	// not be what loses it.
+	ctx, cancel := recording(ctx)
+	defer cancel()
 
 	_, err := r.deps.Chats.Reply(ctx, chat.ReplyInput{
 		Chat:      in.ChatID,
@@ -813,6 +876,8 @@ func (r *Runner) persist(ctx context.Context, in chat.Turn, agentID, answerID st
 // a turn that did not answer is visible in the conversation rather than only in
 // a log the person cannot see.
 func (r *Runner) recordFailure(ctx context.Context, in chat.Turn, agentID string, started time.Time, cause error) {
+	ctx, cancel := recording(ctx)
+	defer cancel()
 	// A turn somebody stopped is not a turn that failed, and the conversation
 	// should not read like an error. The context this turn was given is the
 	// only thing that can be cancelled from outside (see Runner.running), so
@@ -830,9 +895,10 @@ func (r *Runner) recordFailure(ctx context.Context, in chat.Turn, agentID string
 	}
 
 	code, message := "AOS_AGENT_TURN_FAILED", cause.Error()
+	var actions []apperr.CallToAction
 	var app *apperr.Error
 	if errors.As(cause, &app) {
-		code, message = app.Code, app.Message
+		code, message, actions = app.Code, app.Message, app.Actions
 		// The outermost message names which layer gave up — "the google
 		// provider did not answer" — and says nothing about why. The reason
 		// is in the cause, which is exactly what AGENT_PROVIDER_FAILED's own
@@ -848,11 +914,42 @@ func (r *Runner) recordFailure(ctx context.Context, in chat.Turn, agentID string
 	if _, err := r.deps.Chats.Reply(ctx, chat.ReplyInput{
 		Chat: in.ChatID, ReplyTo: in.MessageID, AgentID: agentID,
 		StartedAt: started,
-		Failure:   &chat.RunError{Code: code, Message: message},
+		Failure:   &chat.RunError{Code: code, Message: message, Actions: actions},
 	}); err != nil {
 		r.log.Error("the failure of a turn could not be recorded",
 			"chat", in.ChatID, "err", err)
 	}
+}
+
+// adviseModel says which setting a refused model came from, so the way out of
+// the failure names the thing to change.
+//
+// The loop knows the provider refused the model; only the turn knows why that
+// model was asked for. An agent that names no model resolves to the Default
+// slot, which is what put every such agent — Luara, the orchestrator — on a
+// model the provider had stopped serving, and nothing on the failure pointed
+// at Settings. An agent that names its own model is changed in its own file.
+func adviseModel(err error, worker *agent.Agent) error {
+	app, ok := apperr.As(err)
+	if !ok || app.Code != build.ErrorPrefix+"_AGENT_MODEL_UNAVAILABLE" || worker == nil {
+		return err
+	}
+	advice := apperr.CallToAction{
+		Label: "choose another model for the Default slot in Settings › AI Providers › Models",
+		Tool:  "config_update",
+	}
+	setting := "default slot"
+	if strings.TrimSpace(worker.Model) != "" {
+		setting = "agent"
+		advice = apperr.CallToAction{
+			Label: "choose another model in " + worker.DisplayName() + "'s own settings",
+			Tool:  "agents_update",
+			Input: map[string]any{"id": worker.ID},
+		}
+	}
+	_ = app.Issue("setting", setting)
+	app.Actions = append([]apperr.CallToAction{advice}, app.Actions...)
+	return err
 }
 
 // deepestMessage returns the innermost apperr's message in a chain — the one
@@ -873,10 +970,77 @@ func deepestMessage(from error) string {
 	return out
 }
 
-// transcript turns a stored conversation into the messages a model reads.
-func transcript(c *chat.Chat) []agentloop.Message {
+// speaker is who a transcript is read by, and what the other agents in it are
+// called.
+type speaker struct {
+	// self is the agent taking the turn. Only its own messages are its turns.
+	self string
+	// names holds the display name of every other agent that wrote in the
+	// conversation, by id. One that is missing is called by its id.
+	names map[string]string
+}
+
+// other names the agent that wrote m when that is not the agent taking the
+// turn, and is "" for the turn-taker's own messages and for a person's.
+func (s speaker) other(m chat.Message) string {
+	if s.self == "" || m.Author == nil || m.Author.Type != chat.ActorAgent || m.Author.ID == s.self {
+		return ""
+	}
+	if name := s.names[m.Author.ID]; name != "" {
+		return name
+	}
+	return m.Author.ID
+}
+
+// speakersOf is the speaker for a turn of self in c: the other agents that
+// wrote in it, looked up once each. An agent that can no longer be read — one
+// deleted since — keeps its id as its name.
+func (r *Runner) speakersOf(ctx context.Context, c *chat.Chat, self string) speaker {
+	out := speaker{self: self, names: map[string]string{}}
+	for _, m := range c.Messages {
+		if m.Author == nil || m.Author.Type != chat.ActorAgent || m.Author.ID == self {
+			continue
+		}
+		if _, seen := out.names[m.Author.ID]; seen {
+			continue
+		}
+		out.names[m.Author.ID] = m.Author.ID
+		if r.deps.Agents == nil {
+			continue
+		}
+		if found, err := r.deps.Agents.Get(ctx, agent.GetInput{ID: m.Author.ID}); err == nil && found != nil {
+			out.names[m.Author.ID] = found.DisplayName()
+		}
+	}
+	return out
+}
+
+// transcript turns a stored conversation into the messages the agent taking
+// the turn reads.
+//
+// Only that agent's own messages are assistant turns. A message another agent
+// wrote — the orchestrator's delegation in a task conversation, another
+// member's report — is somebody talking to it, and it is read as a user turn
+// that says who is talking. It was replayed as the turn-taker's own words: a
+// member read the delegation as a reply it had given itself, and Gemini
+// refused the whole conversation, because the member's tool calls then came
+// straight after a model turn instead of after a user one. The other agent's
+// tool calls and their results stay out: they were its steps, not this
+// agent's, and a call replayed without the step it belonged to is exactly what
+// every provider refuses.
+func transcript(c *chat.Chat, reader speaker) []agentloop.Message {
 	out := make([]agentloop.Message, 0, len(c.Messages))
 	for _, m := range c.Messages {
+		if m.Role == chat.RoleUser || m.Role == chat.RoleAssistant {
+			if name := reader.other(m); name != "" {
+				if text := m.Text(); text != "" {
+					out = append(out, agentloop.Message{
+						Role: agentloop.RoleUser, Text: "[" + name + "]: " + text, At: m.CreatedAt,
+					})
+				}
+				continue
+			}
+		}
 		switch m.Role {
 		case chat.RoleUser:
 			if text := m.Text(); text != "" {

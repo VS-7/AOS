@@ -245,13 +245,9 @@ func (s *Service) Call(ctx context.Context, in CallInput) (CallOutput, error) {
 	if err != nil {
 		return CallOutput{}, err
 	}
-	if ts.Status == StatusDisabled {
-		return CallOutput{}, errDisabled(id)
-	}
-
-	factory, ok := s.adapters[ts.Type]
-	if !ok {
-		return CallOutput{}, errTypeNotAvailable(ts.Type)
+	factory, err := s.reachable("Call", ts)
+	if err != nil {
+		return CallOutput{}, err
 	}
 
 	start := s.clock.Now()
@@ -265,10 +261,46 @@ func (s *Service) Call(ctx context.Context, in CallInput) (CallOutput, error) {
 		s.audit(ctx, id, tool, s.clock.Now().Sub(start), callErr)
 	}()
 
-	resolved, ierr := interpolateToolset(*ts, s.env)
-	if ierr != nil {
-		callErr = ierr
+	adapter, ctx, cerr := s.connect(ctx, "Call", ts, factory)
+	if cerr != nil {
+		callErr = cerr
 		return CallOutput{}, callErr
+	}
+	defer func() { _ = adapter.Close() }()
+
+	result, cerr := adapter.Call(ctx, tool, in.Input)
+	if cerr != nil {
+		callErr = errCallFailed(id, tool, cerr)
+		return CallOutput{}, callErr
+	}
+
+	return CallOutput{Result: result, DurationMS: s.clock.Now().Sub(start).Milliseconds()}, nil
+}
+
+// reachable is what has to hold before anything is attempted against a
+// toolset: it is enabled, and this build has an adapter for its type. Neither
+// is an attempt, so Call does not audit them. op is the Service method asking,
+// which its refusals name as their cause.
+func (s *Service) reachable(op string, ts *Toolset) (Factory, error) {
+	if ts.Status == StatusDisabled {
+		return nil, errDisabled(op, ts.ID)
+	}
+	factory, ok := s.adapters[ts.Type]
+	if !ok {
+		return nil, errTypeNotAvailable(op, ts.Type)
+	}
+	return factory, nil
+}
+
+// connect resolves a toolset's variables, applies its skill's network
+// allowlist, and connects — the road every reach outside the process takes,
+// whether it then calls a tool or only asks which tools there are. The adapter
+// comes back connected, for the caller to close; on failure it is already
+// closed. The context it returns carries the allowlist the adapter was given.
+func (s *Service) connect(ctx context.Context, op string, ts *Toolset, factory Factory) (Adapter, context.Context, error) {
+	resolved, err := interpolateToolset(*ts, s.env)
+	if err != nil {
+		return nil, ctx, err
 	}
 
 	// A rest-api or mcp-server::http toolset a skill installed only ever
@@ -282,32 +314,59 @@ func (s *Service) Call(ctx context.Context, in CallInput) (CallOutput, error) {
 	// run without a sandbox attached to ctx.
 	if ts.Skill != "" && (ts.Type == RESTAPI || ts.Type == MCPHTTP) {
 		if s.network == nil {
-			callErr = errNetworkGuardUnavailable(id)
-			return CallOutput{}, callErr
+			return nil, ctx, errNetworkGuardUnavailable(op, ts.ID)
 		}
-		hosts, nerr := s.network.NetworkHosts(ctx, ts.Skill)
-		if nerr != nil {
-			callErr = errNetworkLookupFailed(id, ts.Skill, nerr)
-			return CallOutput{}, callErr
+		hosts, err := s.network.NetworkHosts(ctx, ts.Skill)
+		if err != nil {
+			return nil, ctx, errNetworkLookupFailed(op, ts.ID, ts.Skill, err)
 		}
 		ctx = WithAllowedHosts(ctx, hosts)
 	}
 
 	adapter := factory()
+	if err := adapter.Connect(ctx, resolved); err != nil {
+		_ = adapter.Close()
+		return nil, ctx, errConnectFailed(op, ts.ID, err)
+	}
+	return adapter, ctx, nil
+}
+
+// ToolsOutput is what a connected toolset publishes.
+type ToolsOutput struct {
+	Tools []ToolSpec `json:"tools" jsonschema:"Every tool the connected target publishes: name, description and argument schema."`
+}
+
+// Tools connects to a toolset, asks what it publishes, and closes.
+//
+// Nothing could answer that before: toolsets_call needs a tool's name and
+// arguments, and no command said what they were — the desktop's Tools tab
+// read a field no toolset has and was always empty. It takes Call's road,
+// refusals included, so a toolset that cannot be called cannot be listed
+// either. It runs no tool, so it records no activity.
+func (s *Service) Tools(ctx context.Context, in GetInput) (ToolsOutput, error) {
+	ts, err := s.get(ctx, strings.TrimSpace(in.ID))
+	if err != nil {
+		return ToolsOutput{}, err
+	}
+	factory, err := s.reachable("Tools", ts)
+	if err != nil {
+		return ToolsOutput{}, err
+	}
+	adapter, ctx, err := s.connect(ctx, "Tools", ts, factory)
+	if err != nil {
+		return ToolsOutput{}, err
+	}
 	defer func() { _ = adapter.Close() }()
 
-	if cerr := adapter.Connect(ctx, resolved); cerr != nil {
-		callErr = errConnectFailed(id, cerr)
-		return CallOutput{}, callErr
+	listed, err := adapter.ListTools(ctx)
+	if err != nil {
+		return ToolsOutput{}, errListToolsFailed(ts.ID, err)
 	}
-
-	result, cerr := adapter.Call(ctx, tool, in.Input)
-	if cerr != nil {
-		callErr = errCallFailed(id, tool, cerr)
-		return CallOutput{}, callErr
+	tools := make([]ToolSpec, len(listed))
+	for i := range listed {
+		tools[i] = listed[i].Clone()
 	}
-
-	return CallOutput{Result: result, DurationMS: s.clock.Now().Sub(start).Milliseconds()}, nil
+	return ToolsOutput{Tools: tools}, nil
 }
 
 // audit records one Call attempt. It never carries the input payload — that

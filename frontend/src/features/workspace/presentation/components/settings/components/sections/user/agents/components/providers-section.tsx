@@ -21,7 +21,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { aos } from "@/app/aos";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { ModelProvider } from "@/features/model/interfaces/model.interfaces";
@@ -49,12 +60,23 @@ function isSubscriptionAuth(provider: ModelProvider) {
  * that has been quietly refusing for a week goes unnoticed.
  */
 function catalogueLabel(provider: ModelProvider): string {
-  const auth = isSubscriptionAuth(provider) ? "Subscription" : "API Key";
-  if (provider.modelsError) return `${auth} · could not read its models`;
+  const auth = isSubscriptionAuth(provider) ? t("Subscription") : t("API key");
+  if (provider.modelsError) return t("{{auth}} · could not read its models", { auth });
   if (!provider.modelsDiscovered) return auth;
   const count = provider.models.length;
-  return `${auth} · ${count} ${count === 1 ? "model" : "models"}`;
+  return count === 1
+    ? t("{{auth}} · 1 model", { auth })
+    : t("{{auth}} · {{count}} models", { auth, count });
 }
+
+const SLOT_NAMES: Record<string, () => string> = {
+  default: () => t("Default"),
+  subconscious: () => t("Subconscious"),
+  realtime: () => t("Realtime"),
+  voice: () => t("Voice"),
+  image: () => t("Image"),
+  video: () => t("Video"),
+};
 
 function ProviderLogo({ className, provider }: { className?: string, provider: ModelProvider }) {
   const src = useProviderLogo(provider);
@@ -62,7 +84,7 @@ function ProviderLogo({ className, provider }: { className?: string, provider: M
   return (
     <img
       src={src}
-      alt={`${provider.name} logo`}
+      alt={t("{{provider}} logo", { provider: provider.name })}
       className={cn("size-5 shrink-0 rounded-md", className)}
     />
   );
@@ -70,14 +92,18 @@ function ProviderLogo({ className, provider }: { className?: string, provider: M
 
 interface ProvidersSectionProps {
   providers: ModelProvider[];
+  /** The saved model slots, to say which ones a disconnect would clear. */
+  models?: Record<string, { provider?: string } | undefined>;
   onRefresh?: () => void;
 }
 
-export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps) {
+export function ProvidersSection({ providers, models, onRefresh }: ProvidersSectionProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [connectOpen, setConnectOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<ModelProvider | null>(null);
+  const [disconnecting, setDisconnecting] = React.useState<ModelProvider | null>(null);
+  const agents = aos.stores.agent.useState((state) => state.items);
 
   const connected = providers.filter((p) => p.configured);
   const available = providers.filter((p) => !p.configured);
@@ -91,16 +117,29 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
       // Same reason as connecting: the credential this catalogue was read
       // with is gone, so the catalogue is no longer this account's.
       await queryClient.invalidateQueries({ queryKey: MODEL_DISCOVERY_KEY });
-      toast.success(`${provider.name} disconnected.`);
+      toast.success(t("{{provider}} disconnected.", { provider: provider.name }));
       onRefresh?.();
       router.invalidate();
     } catch (error) {
       console.error(error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to disconnect provider.",
+        error instanceof Error ? error.message : t("Failed to disconnect provider."),
       );
     }
   };
+
+  // What a disconnect takes with it, named before it happens: the slots it
+  // clears, and the agents that name this provider and will stop answering.
+  const disconnectImpact = React.useMemo(() => {
+    if (!disconnecting) return { slots: [] as string[], agents: [] as string[] };
+    const slots = Object.entries(models ?? {})
+      .filter(([, slot]) => slot?.provider === disconnecting.id)
+      .map(([name]) => SLOT_NAMES[name]?.() ?? name);
+    const users = agents
+      .filter((agent) => agent.provider === disconnecting.id)
+      .map((agent) => agent.name || agent.id);
+    return { slots, agents: users };
+  }, [disconnecting, models, agents]);
 
   return (
     <div className="rounded-xl border border-border bg-secondary/50 overflow-hidden divide-y divide-border">
@@ -130,6 +169,19 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
             >
               {catalogueLabel(provider)}
             </p>
+            {provider.modelsError ? (
+              // On the row, not only in a tooltip nobody hovers: the reason
+              // is the part that says whether signing in again can help, and
+              // the first action is what to do instead when it cannot.
+              <div className="mt-1 space-y-0.5 text-xs leading-tight text-muted-foreground">
+                {/* Whole, not clamped: the part that says why comes last,
+                    after the path of the file that could not be renewed. */}
+                <p className="wrap-anywhere">{provider.modelsError}</p>
+                {provider.modelsErrorActions?.[0] ? (
+                  <p className="break-words text-foreground/80">→ {provider.modelsErrorActions[0]}</p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <div className="flex items-center gap-2">
             <DropdownMenu>
@@ -137,7 +189,7 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label={`Manage ${provider.name}`}
+                  aria-label={t("Manage {{provider}}", { provider: provider.name })}
                 >
                   <HugeiconsIcon
                     icon={MoreHorizontalIcon}
@@ -146,14 +198,20 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" sideOffset={6} className="w-44">
-                <DropdownMenuItem onSelect={() => setEditing(provider)}>
-                  <HugeiconsIcon icon={PencilEdit01Icon} className="size-4" />
-                  <span>{t("Edit")}</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                {provider.auth.mode === "api-key" ? (
+                  // A login-file provider has nothing to edit: its
+                  // credential is the other tool's file.
+                  <>
+                    <DropdownMenuItem onSelect={() => setEditing(provider)}>
+                      <HugeiconsIcon icon={PencilEdit01Icon} className="size-4" />
+                      <span>{t("Edit")}</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                ) : null}
                 <DropdownMenuItem
                   variant="destructive"
-                  onSelect={() => handleDisconnect(provider)}
+                  onSelect={() => setDisconnecting(provider)}
                 >
                   <HugeiconsIcon icon={Cancel01Icon} className="size-4" />
                   <span>{t("Disconnect")}</span>
@@ -183,21 +241,14 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
                   {t("Subscription")}
                 </DropdownMenuLabel>
                 {subscriptionAvailable.map((provider) => (
-                  <DropdownMenuItem
+                  <ConnectMenuItem
                     key={provider.id}
+                    provider={provider}
                     onSelect={() => {
                       setConnectOpen(false);
                       setEditing(provider);
                     }}
-                    className="cursor-pointer"
-                  >
-                    <ProviderLogo className="size-3.5" provider={provider} />
-                    <span className="flex-1">{provider.name}</span>
-                    <HugeiconsIcon
-                      icon={ArrowRight01Icon}
-                      className="size-3.5 opacity-50"
-                    />
-                  </DropdownMenuItem>
+                  />
                 ))}
               </>
             )}
@@ -206,24 +257,17 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
               <>
                 {subscriptionAvailable.length > 0 && <DropdownMenuSeparator />}
                 <DropdownMenuLabel className="px-2 py-1 text-[11px]">
-                  API
+                  {t("API key")}
                 </DropdownMenuLabel>
                 {apiKeyAvailable.map((provider) => (
-                  <DropdownMenuItem
+                  <ConnectMenuItem
                     key={provider.id}
+                    provider={provider}
                     onSelect={() => {
                       setConnectOpen(false);
                       setEditing(provider);
                     }}
-                    className="cursor-pointer"
-                  >
-                    <ProviderLogo className="size-3.5" provider={provider} />
-                    <span className="flex-1">{provider.name}</span>
-                    <HugeiconsIcon
-                      icon={ArrowRight01Icon}
-                      className="size-3.5 opacity-50"
-                    />
-                  </DropdownMenuItem>
+                  />
                 ))}
               </>
             )}
@@ -267,7 +311,98 @@ export function ProvidersSection({ providers, onRefresh }: ProvidersSectionProps
           router.invalidate();
         }}
       />
+
+      <AlertDialog
+        open={disconnecting !== null}
+        onOpenChange={(open) => {
+          if (!open) setDisconnecting(null);
+        }}
+      >
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("Disconnect {{provider}}?", { provider: disconnecting?.name ?? "" })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {/* What AOS changes is listed below — the slots this same write
+                  clears among it — so this names only what it leaves alone. */}
+              {t("{{provider}} is removed from this installation's connected providers. A login it has outside AOS, such as a CLI's, is left as it is.", {
+                provider: disconnecting?.name ?? "",
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {disconnectImpact.slots.length > 0 || disconnectImpact.agents.length > 0 ? (
+            <ul className="space-y-1 text-sm text-muted-foreground">
+              {disconnectImpact.slots.length > 0 ? (
+                <li>
+                  {t("Model slots cleared: {{slots}}", { slots: disconnectImpact.slots.join(", ") })}
+                </li>
+              ) : null}
+              {disconnectImpact.agents.length > 0 ? (
+                <li>
+                  {disconnecting?.auth.mode === "api-key" && disconnecting.auth.required
+                    ? t("Agents that use it and will stop answering: {{agents}}", {
+                        agents: disconnectImpact.agents.join(", "),
+                      })
+                    : // A login-file or optional-key provider is still
+                      // reachable without an entry, so "will stop
+                      // answering" would not be true of it.
+                      t("Agents that name it: {{agents}}", {
+                        agents: disconnectImpact.agents.join(", "),
+                      })}
+                </li>
+              ) : null}
+            </ul>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                const provider = disconnecting;
+                setDisconnecting(null);
+                if (provider) void handleDisconnect(provider);
+              }}
+            >
+              {t("Disconnect")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  );
+}
+
+/**
+ * One provider in the Connect menu, with the catalogue's own description.
+ *
+ * The menu listed names only, so "Gemini (CLI login)" was offered as if it
+ * still worked while its catalogue entry said it was retired — text nothing
+ * ever rendered.
+ */
+function ConnectMenuItem({ provider, onSelect }: { provider: ModelProvider; onSelect: () => void }) {
+  return (
+    <DropdownMenuItem
+      onSelect={onSelect}
+      disabled={provider.retired}
+      className="cursor-pointer items-start"
+    >
+      <ProviderLogo className="mt-0.5 size-3.5" provider={provider} />
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="flex items-center gap-1.5">
+          {provider.name}
+          {provider.retired ? (
+            <Badge variant="outline" className="h-4 px-1 text-[10px]">
+              {t("Retired")}
+            </Badge>
+          ) : null}
+        </span>
+        <span className="line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+          {t(provider.description)}
+        </span>
+      </span>
+      <HugeiconsIcon icon={ArrowRight01Icon} className="mt-0.5 size-3.5 opacity-50" />
+    </DropdownMenuItem>
   );
 }
 

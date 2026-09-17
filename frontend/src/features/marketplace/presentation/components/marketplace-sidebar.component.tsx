@@ -29,7 +29,21 @@ export function MarketplaceSidebar({
   return (
     <MarketplaceRail>
       <nav aria-label={t("Marketplace sections")} className="flex flex-col gap-4">
-        <p className="text-[13px] font-medium text-foreground">{t("Marketplace")}</p>
+        {/* A control, not a caption: from the Installed view it is the way
+            back to browsing, which used to mean leaving the page. */}
+        <button
+          type="button"
+          onClick={() => onSelectView("marketplace")}
+          aria-current={activeView === "marketplace" ? "page" : undefined}
+          className={cn(
+            "w-full rounded-md px-0 py-1.5 text-left text-[13px] font-medium transition-colors",
+            activeView === "marketplace"
+              ? "text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {t("Marketplace")}
+        </button>
 
         <ul className="flex flex-col gap-1">
           {links.map((link) => (
@@ -56,6 +70,7 @@ export function MarketplaceSidebar({
         <button
           type="button"
           onClick={() => onSelectView("installed")}
+          aria-current={activeView === "installed" ? "page" : undefined}
           className={cn(
             "w-full rounded-md px-0 py-1.5 text-left text-[13px] font-medium transition-colors",
             activeView === "installed"
@@ -63,7 +78,7 @@ export function MarketplaceSidebar({
               : "text-muted-foreground hover:text-foreground",
           )}
         >
-          {t("Installed (")}{installedCount})
+          {t("Installed ({{count}})", { count: installedCount })}
         </button>
       </nav>
     </MarketplaceRail>

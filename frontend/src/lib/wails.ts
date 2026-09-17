@@ -45,10 +45,54 @@ import { Browser, Clipboard, Dialogs, System, Window } from "@wailsio/runtime";
 /** Go's GOOS, which is what the Wails runtime reports. */
 export type Platform = "darwin" | "windows" | "linux" | "";
 
-const params =
-  typeof window === "undefined"
-    ? new URLSearchParams()
-    : new URLSearchParams(window.location.search);
+/** Where a window keeps the parameters it was opened with, for its reloads. */
+const WINDOW_PARAMS_KEY = "aos.window";
+
+/**
+ * The parameters the desktop window states about itself — the daemon's address
+ * and the platform — from the URL it was opened at, or, failing that, from
+ * the last time this same window read them.
+ *
+ * The URL alone is not enough. The router strips the query string on the
+ * first navigation, and the native menu's View › Reload (Cmd+R) reloads the
+ * URL as it is by then — which `reloadHere` below cannot intercept. The
+ * bundle came back without `?daemon=` and became a browser tab: relative
+ * `/api` calls reached the asset host, the event channel had nowhere to open,
+ * and the window stayed broken until the application was restarted. Session
+ * storage survives a reload of the same window and nothing else, which is
+ * exactly the lifetime these have.
+ */
+function readWindowParams(): URLSearchParams {
+  const out = new URLSearchParams();
+  if (typeof window === "undefined") return out;
+  const stated = new URLSearchParams(window.location.search);
+  for (const key of ["daemon", "platform"]) {
+    const value = stated.get(key);
+    if (value !== null) out.set(key, value);
+  }
+  try {
+    if (out.has("daemon")) {
+      window.sessionStorage.setItem(WINDOW_PARAMS_KEY, out.toString());
+    } else {
+      const remembered = window.sessionStorage.getItem(WINDOW_PARAMS_KEY);
+      if (remembered) return new URLSearchParams(remembered);
+    }
+  } catch {
+    // Storage off: the URL is still the answer, as it always was.
+  }
+  return out;
+}
+
+const params = readWindowParams();
+
+/**
+ * The daemon's address as this window stated it, or null in a browser tab.
+ *
+ * The one place it is read: `lib/daemon-origin.ts` and `lib/realtime.ts` used
+ * to read the query string themselves, which is three places to lose it on a
+ * reload instead of one to keep it.
+ */
+export const declaredDaemon: string | null = params.get("daemon");
 
 /**
  * Whether this page is the desktop window.
@@ -61,7 +105,7 @@ const params =
  * during exactly the window this has to be right for.
  */
 export const isDesktopWindow: boolean =
-  typeof window !== "undefined" && params.has("daemon");
+  typeof window !== "undefined" && declaredDaemon !== null;
 
 /**
  * The seed value for the platform, stated by the window that opened this page.
@@ -168,6 +212,103 @@ export function reloadAt(path: string): void {
  */
 export function reloadHere(): void {
   reloadAt(window.location.pathname + window.location.search + window.location.hash);
+}
+
+/**
+ * The `sandbox` a browser tab's `<iframe>` gets for `url`.
+ *
+ * Content from this page's own origin is framed without `allow-same-origin`,
+ * in the desktop window and in a browser tab alike. An artifact is HTML a model
+ * generated. In the window, its real origin would let a script reach
+ * `window.parent` and the Wails bridge, which is every command the person can
+ * run; in a browser tab that origin is the API's, where a same-origin page
+ * calls `/api` with the session cookie and reads the interface's storage.
+ * An external site keeps its own origin, which it needs to work at all and
+ * which gives it nothing of this page's.
+ *
+ * The frame is not the only guard, nor the one that matters most: the daemon
+ * sandboxes every artifact answer itself (internal/transport/artifactapi's
+ * `sandbox`), which also covers a share link opened with no frame at all. That
+ * is what let a browser tab's frame go opaque too — before it, an opaque frame
+ * had its own files cancelled by the daemon's same-origin resource policy. A
+ * password-read artifact's files now answer its opaque page; one read any other
+ * way does not, and in the window that is what `frameAddress` is for.
+ */
+export function frameSandbox(url: string): string {
+  const permissive = "allow-scripts allow-same-origin allow-forms";
+  if (typeof window === "undefined") return permissive;
+  let target: URL;
+  try {
+    target = new URL(url, window.location.href);
+  } catch {
+    return "allow-scripts allow-forms";
+  }
+  return fromThisPage(target) ? "allow-scripts allow-forms" : permissive;
+}
+
+/**
+ * Whether `target` is served by whatever serves this page.
+ *
+ * Compared by scheme and host rather than by `origin`. The window's scheme is
+ * `wails:` on macOS and Linux, and the URL standard gives a scheme it does not
+ * know an opaque origin, serialised "null": whether `new URL(…).origin` and
+ * `location.origin` then agree is up to the engine, and a disagreement here
+ * would frame the window's own content with its origin, or an artifact at the
+ * address whose files are refused.
+ */
+function fromThisPage(target: URL): boolean {
+  return target.protocol === window.location.protocol && target.host === window.location.host;
+}
+
+/** Where the desktop window's asset host says where to frame an artifact. */
+const FRAME_ADDRESS_ROUTE = "/v/frame-address";
+
+/**
+ * The address to frame `url` at.
+ *
+ * Anything but an artifact, and anything at all in a browser tab, is framed
+ * where it is. An artifact in the desktop window is not: its frame is opaque
+ * (see `frameSandbox`), so its own stylesheet, script and images are
+ * cross-origin loads, and the window's asset host — which attaches the
+ * window's credential to what it forwards — answers those only at an address
+ * it hands out for that one artifact (`cmd/aos-desktop`'s artifactFrames).
+ * Framed at its plain `/v/artifacts/` URL, an artifact rendered as unstyled,
+ * inert HTML.
+ *
+ * The question carries a header no cross-origin request can carry without a
+ * preflight the window refuses. A failure is thrown rather than answered with
+ * `url`: framing the plain address is exactly the broken page.
+ */
+export async function frameAddress(url: string): Promise<string> {
+  if (!isDesktopWindow || typeof window === "undefined") return url;
+  let target: URL;
+  try {
+    target = new URL(url, window.location.href);
+  } catch {
+    return url;
+  }
+  if (!fromThisPage(target) || !target.pathname.startsWith("/v/artifacts/")) {
+    return url;
+  }
+  const own = target.pathname + target.search + target.hash;
+  // The page's scheme and host, which the asset server does not pass on: the
+  // window names the frame's absolute address in the artifact's connect-src,
+  // since WebKit stops counting an opaque page's own URL as 'self' there.
+  // Built from protocol and host rather than `origin`, which a URL standard
+  // reading serialises as "null" for a scheme like wails:.
+  const base = `${window.location.protocol}//${window.location.host}`;
+  const response = await fetch(
+    `${FRAME_ADDRESS_ROUTE}?url=${encodeURIComponent(own)}&base=${encodeURIComponent(base)}`,
+    { headers: { "x-aos-frame": "1" } },
+  );
+  if (!response.ok) {
+    throw new Error(`the window has no frame address for ${own} (${response.status})`);
+  }
+  const answer = (await response.json()) as { url?: unknown };
+  if (typeof answer.url !== "string" || !answer.url) {
+    throw new Error(`the window answered no frame address for ${own}`);
+  }
+  return answer.url;
 }
 
 /* -------------------------------------------------------------------------

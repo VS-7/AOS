@@ -179,4 +179,10 @@ type View struct {
 	// Blocked lists the dependencies that are not finished. It is empty for a
 	// task that can start, which is the question a caller is actually asking.
 	Blocked []string `json:"blocked,omitempty" jsonschema:"Dependencies that are not finished yet."`
+
+	// NextStates is the lifecycle graph read from where the task stands. A
+	// screen that offers a move has to know which moves exist, and a copy of
+	// the table kept beside the screen is the copy that drifts; the guards
+	// (open steps, unfinished dependencies) still decide at the move itself.
+	NextStates []Status `json:"nextStates" jsonschema:"Statuses set-status accepts from here, before its guards run."`
 }

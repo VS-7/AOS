@@ -1,4 +1,5 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
+import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { WorkspaceTaskType } from "@/features/workspace/interfaces/workspace.interfaces";
@@ -19,12 +20,37 @@ import { SettingsStackedView } from "../../../../stacked-view";
 import { aos } from "@/app/aos";
 import { t } from "@/lib/i18n";
 
+// The label is what the id is slugged from, so an empty one saved a task
+// type with no label and an empty id — which the daemon accepted — the
+// first time "Create task type" actually submitted. Built when the view
+// renders, so the message is in the language on screen.
+//
+// `takenIds` are the ids of the other types: the id is slugged from the label,
+// so a second "Docs" asked the daemon to store two types named "docs" and
+// only its refusal said so.
+function buildTaskTypeFormSchema(takenIds: string[]) {
+  return WorkspaceTaskTypeSchema.extend({
+    label: z.string().trim().min(1, t("Label is required")),
+  }).superRefine((values, ctx) => {
+    const id = values.id || Slug.generate(values.label);
+    if (id && takenIds.includes(id)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["label"],
+        message: t("Another task type already uses the id {{id}}.", { id }),
+      });
+    }
+  });
+}
+
 interface UpsertTaskTypeViewProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   taskType?: WorkspaceTaskType;
   index?: number;
   onSave: (data: WorkspaceTaskType, index?: number) => void;
+  /** The ids of every other task type, which this one may not reuse. */
+  takenIds: string[];
 }
 
 export function UpsertTaskTypeView({
@@ -33,9 +59,13 @@ export function UpsertTaskTypeView({
   taskType,
   index,
   onSave,
+  takenIds,
 }: UpsertTaskTypeViewProps) {
+  const takenKey = takenIds.join("\n");
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the ids' content, not the array's identity
+  const taskTypeFormSchema = useMemo(() => buildTaskTypeFormSchema(takenIds), [takenKey]);
   const form = aos.useForm({
-    schema: WorkspaceTaskTypeSchema,
+    schema: taskTypeFormSchema,
     values: {
       id: "",
       label: "",
@@ -77,11 +107,11 @@ export function UpsertTaskTypeView({
     <SettingsStackedView
       open={open}
       onBack={() => onOpenChange(false)}
-      title={taskType ? "Edit Task Type" : "Create Task Type"}
+      title={taskType ? t("Edit Task Type") : t("Create Task Type")}
       description={
         taskType
-          ? "Update the details for this task type."
-          : "Define a new task type for your workspace."
+          ? t("Update the details for this task type.")
+          : t("Define a new task type for your workspace.")
       }
       contentClassName="p-6"
     >
@@ -162,7 +192,7 @@ export function UpsertTaskTypeView({
             {t("Cancel")}
           </Button>
           <Button type="submit">
-            {taskType ? "Save changes" : "Create task type"}
+            {taskType ? t("Save changes") : t("Create task type")}
           </Button>
         </div>
       </Form>

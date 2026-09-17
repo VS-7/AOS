@@ -7,7 +7,7 @@ import { saveBlob } from "@/lib/save-file";
 import type { UIMessage } from "ai";
 import { ArrowDownIcon, DownloadIcon } from "lucide-react";
 import type { ComponentProps } from "react";
-import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
+import { Virtuoso, type FollowOutput, type VirtuosoHandle } from "react-virtuoso";
 
 export interface ConversationProps<T> extends Omit<
   ComponentProps<"div">,
@@ -16,10 +16,17 @@ export interface ConversationProps<T> extends Omit<
   data: T[];
   itemContent: (index: number, item: T) => React.ReactNode;
   computeItemKey?: (index: number, item: T) => React.Key;
-  followOutput?: "smooth" | "auto" | boolean;
+  /**
+   * Whether new items pull the list down. A function decides per append — see
+   * Virtuoso's `followOutput`; the chat uses it to follow the person's own
+   * message even when they had scrolled up.
+   */
+  followOutput?: FollowOutput;
   footerHeight?: number;
   initialIndex?: number | "last";
   scrollButtonClassName?: string;
+  /** Classes for the scrolling element itself, apart from the frame around it. */
+  scrollerClassName?: string;
 }
 
 export function Conversation<T>({
@@ -31,22 +38,29 @@ export function Conversation<T>({
   footerHeight = 256,
   initialIndex = "last",
   scrollButtonClassName,
+  scrollerClassName,
   ...props
 }: ConversationProps<T>) {
   const virtuosoRef = React.useRef<VirtuosoHandle>(null);
   const [isAtBottom, setIsAtBottom] = React.useState(true);
 
+  // "Last" means the very bottom, footer included. A bare index aligns the
+  // *top* of that item with the viewport, so a conversation whose last answer
+  // is taller than the screen opened at the start of that answer, with the
+  // scroll-down button showing. The footer is the room the floating composer
+  // covers; ending at the item instead of below the footer would tuck the
+  // item's last lines under the composer.
   const initialTopMostItemIndex = React.useMemo(() => {
     if (data.length === 0) {
       return undefined;
     }
 
     if (initialIndex === "last") {
-      return data.length - 1;
+      return { index: "LAST" as const, align: "end" as const, offset: footerHeight };
     }
 
     return Math.min(Math.max(initialIndex, 0), data.length - 1);
-  }, [data.length, initialIndex]);
+  }, [data.length, footerHeight, initialIndex]);
 
   const scrollToBottom = React.useCallback(() => {
     if (data.length === 0) {
@@ -54,11 +68,12 @@ export function Conversation<T>({
     }
 
     virtuosoRef.current?.scrollToIndex({
-      index: data.length - 1,
+      index: "LAST",
       align: "end",
+      offset: footerHeight,
       behavior: "smooth",
     });
-  }, [data.length]);
+  }, [data.length, footerHeight]);
 
   return (
     <div
@@ -67,7 +82,7 @@ export function Conversation<T>({
       {...props}
     >
       <Virtuoso
-        className="size-full min-h-0"
+        className={cn("size-full min-h-0", scrollerClassName)}
         computeItemKey={computeItemKey}
         data={data}
         followOutput={followOutput}

@@ -10,12 +10,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Project } from "@/features/project/interfaces/project.interfaces";
 import { ProjectHelper } from "@/features/project/presentation/helpers/project.helper";
+import { projectStatusConfig } from "@/features/project/presentation/consts/project";
+import { useAlert } from "@/components/ui/alert-provider";
 import { Icon } from "@/components/ui/icon";
 import { aos } from "@/app/aos";
 import { toast } from "sonner";
-import { MoreHorizontal, Trash2, Copy, Folder } from "lucide-react";
+import { MoreHorizontal, Trash2, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
 
 interface ProjectListRowProps {
   project: Project;
@@ -23,23 +26,38 @@ interface ProjectListRowProps {
 
 export function ProjectListRow({ project }: ProjectListRowProps) {
   const router = useRouter();
+  const { confirm } = useAlert();
   const iconName = ProjectHelper.getIcon(project.icon);
+  const status = projectStatusConfig(project.status);
 
+  // The same question the project page asks: the row's menu removed the
+  // project on the first click.
   const handleDelete = async () => {
+    const confirmed = await confirm({
+      title: t("Delete this project?"),
+      description: t("This permanently removes {{name}}. Its tasks and goals are kept, without the project.", {
+        name: project.name,
+      }),
+      confirmText: t("Delete project"),
+      cancelText: t("Cancel"),
+      variant: "destructive",
+    });
+    if (!confirmed) return;
     try {
       await aos.client.project.delete.mutateOrThrow({
         params: { project: project.id },
       });
-      toast.success(`Project ${project.id} deleted`);
+      toast.success(t("Project {{name}} deleted", { name: project.name }));
+      void aos.stores.projects.actions.refresh();
       router.invalidate();
-    } catch {
-      toast.error(t("Failed to delete project"));
+    } catch (error) {
+      toast.error(t("Failed to delete project"), { description: errorMessage(error) });
     }
   };
 
   const handleCopyIdentifier = () => {
     navigator.clipboard.writeText(project.id);
-    toast.success(`${project.id} copied`);
+    toast.success(t("{{value}} copied", { value: project.id }));
   };
 
   return (
@@ -49,7 +67,7 @@ export function ProjectListRow({ project }: ProjectListRowProps) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4, transition: { duration: 0.15 } }}
       transition={{ duration: 0.2, ease: "easeOut" }}
-      className="grid min-h-11 w-full grid-cols-[1fr_auto_auto] items-center gap-3 px-3 py-2 transition-colors hover:border-input hover:bg-accent/40"
+      className="grid min-h-11 w-full grid-cols-[1fr_auto_auto_auto] items-center gap-3 px-3 py-2 transition-colors hover:border-input hover:bg-accent/40"
     >
       {/* Title and description */}
       <Link
@@ -64,6 +82,11 @@ export function ProjectListRow({ project }: ProjectListRowProps) {
         />
         <span className="truncate text-sm font-medium">{project.name}</span>
       </Link>
+
+      {/* Status: the daemon keeps one for every project, and no screen showed it. */}
+      <Badge variant="outline" className={`shrink-0 text-xs ${status.badgeClass}`}>
+        {status.label}
+      </Badge>
 
       {/* ID badge */}
       <Badge variant="outline" className="shrink-0 text-xs font-mono">

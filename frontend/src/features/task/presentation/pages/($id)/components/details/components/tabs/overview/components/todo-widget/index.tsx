@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useRouter } from "@tanstack/react-router";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { Flag, Plus } from "lucide-react";
 import { aos } from "@/app/aos";
@@ -12,6 +14,8 @@ interface TodoWidgetProps {
 }
 
 export function TodoWidget({ taskId }: TodoWidgetProps) {
+  const router = useRouter();
+  const [editing, setEditing] = useState<Todo | null>(null);
   const { data: todosData, refetch } = aos.client.todo.list.useQuery({
     enabled: !!taskId,
     params: {
@@ -21,8 +25,17 @@ export function TodoWidget({ taskId }: TodoWidgetProps) {
 
   const todos: Todo[] =
     (todosData as { todos: Todo[] } | null | undefined)?.todos || [];
-  const finishedCount = todos.filter((todo) => todo.status === "finished").length;
-  const progressPct = todos.length > 0 ? Math.round((finishedCount / todos.length) * 100) : 0;
+  const progress = (todosData as { progress?: { completed: number; total: number } } | null | undefined)?.progress;
+  // Skipped steps count as done, the way the review guard counts them.
+  const settledCount = progress?.completed ?? todos.filter((todo) => todo.status === "finished" || todo.status === "skipped").length;
+  const progressPct = todos.length > 0 ? Math.round((settledCount / todos.length) * 100) : 0;
+
+  // The task's own progress (the header's percentage, the review button) is
+  // read from the task, so a step that moved re-reads both.
+  const refresh = () => {
+    void refetch();
+    void router.invalidate();
+  };
 
   return (
     <SplitPageLayout.Widget>
@@ -32,8 +45,8 @@ export function TodoWidget({ taskId }: TodoWidgetProps) {
           {todos.length > 0 && (
             <span className="text-xs text-muted-foreground">{progressPct}%</span>
           )}
-          <TodoDialogUpsert taskId={taskId} onCreated={() => refetch()}>
-            <Button size="icon" variant="secondary" className="rounded-full">
+          <TodoDialogUpsert taskId={taskId} onCreated={refresh}>
+            <Button size="icon" variant="secondary" className="rounded-full" aria-label={t("Add todo")}>
               <Plus />
             </Button>
           </TodoDialogUpsert>
@@ -43,7 +56,7 @@ export function TodoWidget({ taskId }: TodoWidgetProps) {
         <SplitPageLayout.WidgetItem>
           <Flag className="size-3.5 shrink-0 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">
-            {finishedCount} / {todos.length} {t("todos finished")}
+            {t("{{done}} / {{total}} todos finished", { done: settledCount, total: todos.length })}
           </span>
         </SplitPageLayout.WidgetItem>
         {todos.length === 0 && (
@@ -52,11 +65,28 @@ export function TodoWidget({ taskId }: TodoWidgetProps) {
           </SplitPageLayout.WidgetItem>
         )}
         {todos.map((todo) => (
-          <TodoDialogUpsert taskId={taskId} todo={todo} onCreated={() => refetch()}>
-            <TodoItem key={todo.id} todo={todo} />
-          </TodoDialogUpsert>
+          <TodoItem
+            key={todo.id}
+            taskId={taskId}
+            todo={todo}
+            onOpen={() => setEditing(todo)}
+            onChanged={refresh}
+          />
         ))}
       </SplitPageLayout.WidgetContent>
+
+      {/* One dialog for whichever step was opened, rather than one mounted per
+          row with the row as its trigger — which is also what left the list
+          without keys on its children. */}
+      <TodoDialogUpsert
+        taskId={taskId}
+        todo={editing ?? undefined}
+        open={editing !== null}
+        onOpenChange={(next) => {
+          if (!next) setEditing(null);
+        }}
+        onCreated={refresh}
+      />
     </SplitPageLayout.Widget>
   );
 }

@@ -2,6 +2,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { WorkspaceSidebar } from "../sidebar";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { WorkspaceCommander } from "../dialogs/commander";
+import { ArtifactAccessDialog } from "@/features/artifact/presentation/components/artifact-access-dialog";
 import { TaskDialog } from "../../../../task/presentation/components/dialogs/create";
 import { ApprovalDialog } from "@/features/approval/presentation/components/approval-dialog";
 import { AlertProvider } from "@/components/ui/alert-provider";
@@ -17,6 +18,7 @@ import { ChatPanel } from "@/features/chat/presentation/components/panels/chat";
 import { useRealtime } from "@/hooks/use-realtime";
 import { aos } from "@/app/aos";
 import { useNotification } from "@/hooks/use-notification";
+import { isOwnActivity } from "@/features/activity/presentation/helpers/activity-presentation.helper";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useCoalescedInvalidate } from "@/hooks/use-coalesced-invalidate";
 import { WorkspaceNavControlsShell } from "../sidebar/components/workspace-nav-controls-shell";
@@ -87,8 +89,14 @@ export function WorkspaceLayout() {
   // In-app route changes (Tasks, Goals, …) reveal the Outlet by focusing the
   // "aos" tab. Sidebar chat opens call openChatTab without changing
   // pathname, so chat multi-tabs are not reset by this effect.
+  //
+  // `/chats/$id` is the exception: its page moves the conversation into a
+  // chat tab of its own. A child's effects run before its parent's, so this
+  // effect ran second and put the "aos" tab back in front — a deep link to a
+  // conversation landed on an empty page.
   useEffect(() => {
     if (activeTabId === "aos") return;
+    if (pathname.startsWith("/chats/")) return;
 
     stores.viewport.actions.setActiveTab("aos");
   }, [pathname]);
@@ -121,7 +129,13 @@ export function WorkspaceLayout() {
   useRealtime(
     "activity:created",
     async (event) => {
-      await notify(event);
+      // Not for what you did yourself: the screen you did it on already said
+      // so ("Goal created."), and the notification on top of it was a second
+      // toast — and a sound — about your own click. Everything still
+      // refreshes below; only the announcement is skipped.
+      if (!isOwnActivity(event, aos.stores.auth.state.user?.id)) {
+        await notify(event);
+      }
       invalidate();
 
       aos.stores.activity.actions.refresh();
@@ -211,6 +225,8 @@ export function WorkspaceLayout() {
           <WorkspaceNavControlsShell />
           <WorkspaceSidebar />
           <WorkspaceCommander />
+          {/* Asks for a by_password artifact's password wherever one is opened. */}
+          <ArtifactAccessDialog />
           <div
             className={cn(
               "relative h-screen w-full min-h-0 bg-background shadow-xs grid grid-rows-[auto_1fr] border-l border-y",

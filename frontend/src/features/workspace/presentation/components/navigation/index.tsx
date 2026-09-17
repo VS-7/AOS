@@ -38,17 +38,11 @@ export function WorkspaceNavigation() {
   const unreadCount = aos.stores.activity.useState((s) => s.unreadCount);
 
   const fullscreen = aos.stores.viewport.useState((s) => s.fullscreen);
-  const isAgentPanelVisible = aos.stores.viewport.useState(
-    (s) => s.agent.panel.visible,
-  );
-  const isPageDetailsVisible = aos.stores.viewport.useState(
-    (s) => s.page.details.visible,
-  );
   const isPageSidebarVisible = aos.stores.viewport.useState(
     (s) => s.page.sidebar.visible,
   );
-  const isInboxPanelVisible = aos.stores.viewport.useState(
-    (s) => s.inbox.panel.visible,
+  const isPageSidebarEnabled = aos.stores.viewport.useState(
+    (s) => s.page.sidebar.enabled,
   );
   const tabs = aos.stores.viewport.useState((s) => s.tabs.items);
   const activeTabId = aos.stores.viewport.useState((s) => s.tabs.current);
@@ -58,10 +52,12 @@ export function WorkspaceNavigation() {
       clearTimeout(clickTimeoutRef.current);
       clickTimeoutRef.current = null;
 
+      // fullscreen() already decides the sidebar (hidden entering, shown
+      // leaving). Toggling it again here undid that: a double-click entered
+      // fullscreen with the sidebar still open, and left it with it closed.
       aos.stores.viewport.actions.fullscreen(
         fullscreen ? undefined : "page",
       );
-      aos.stores.viewport.actions.toggle("layout.sidebar.visible");
     } else {
       clickTimeoutRef.current = setTimeout(() => {
         (aos.triggers as { dispatch: (id: string, input?: unknown) => Promise<unknown> }).dispatch("viewport.fullscreen.page");
@@ -114,6 +110,7 @@ export function WorkspaceNavigation() {
             <TooltipTrigger asChild>
               <button
                 type="button"
+                aria-label={t("New Browser Tab")}
                 onClick={() => {
                   aos.stores.viewport.actions.createTab();
                 }}
@@ -165,7 +162,7 @@ export function WorkspaceNavigation() {
             {t("Activity")}
             {unreadCount > 0 ? (
               <span className="text-xs text-muted-foreground">
-                {unreadCount} unread
+                {t("{{count}} unread", { count: unreadCount })}
               </span>
             ) : null}
           </TooltipContent>
@@ -177,6 +174,7 @@ export function WorkspaceNavigation() {
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-foreground disabled:opacity-20"
+              aria-label={t("Open Changes")}
               onClick={() => (aos.triggers as { dispatch: (id: string, input?: unknown) => Promise<unknown> }).dispatch("files.changes.open")}
             >
               <HugeiconsIcon icon={GitBranchIcon} className="size-3.5" />
@@ -202,6 +200,7 @@ export function WorkspaceNavigation() {
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-foreground disabled:opacity-20"
+              aria-label={t("Refresh")}
               onClick={() => (aos.triggers as { dispatch: (id: string, input?: unknown) => Promise<unknown> }).dispatch("tabs.reload")}
             >
               <HugeiconsIcon
@@ -225,16 +224,19 @@ export function WorkspaceNavigation() {
 
         <Tooltip>
           <TooltipTrigger asChild>
+            {/* Styled like its neighbours at rest, and marked while on. It
+                used to sit at 40% opacity — the look of a disabled control —
+                and could never reach full opacity, because the panels its
+                condition waited on are the ones fullscreen itself shows. */}
             <Button
               variant="ghost"
               size="icon"
               onClick={handleFullscreenAction}
+              aria-label={t("Toggle Fullscreen")}
+              aria-pressed={fullscreen === "page"}
               className={cn(
-                "h-8 w-8 opacity-40",
-                !isPageDetailsVisible &&
-                  !isAgentPanelVisible &&
-                  !isInboxPanelVisible &&
-                  "opacity-100",
+                "h-8 w-8 text-muted-foreground hover:text-foreground",
+                fullscreen === "page" && "bg-accent/60 text-foreground",
               )}
             >
               <HugeiconsIcon icon={FullScreenIcon} className="size-3.5" />
@@ -256,15 +258,21 @@ export function WorkspaceNavigation() {
 
         <Tooltip>
           <TooltipTrigger asChild>
+            {/* Only a page that has a sidebar can toggle one; on any other
+                page (Home among them) the button used to look dimmed, toggle
+                an invisible flag, and change nothing. */}
             <Button
               variant="ghost"
               size="icon"
+              disabled={!isPageSidebarEnabled}
               onClick={() =>
                 (aos.triggers as { dispatch: (id: string, input?: unknown) => Promise<unknown> }).dispatch("viewport.toggle.page_sidebar")
               }
+              aria-label={t("Toggle Page Sidebar")}
+              aria-pressed={isPageSidebarEnabled ? isPageSidebarVisible : undefined}
               className={cn(
-                "h-8 w-8 opacity-40",
-                !isPageSidebarVisible && "opacity-100",
+                "h-8 w-8 text-muted-foreground hover:text-foreground disabled:opacity-20",
+                isPageSidebarEnabled && isPageSidebarVisible && "text-foreground",
               )}
             >
               <HugeiconsIcon icon={SidebarRightIcon} className="size-3.5" />

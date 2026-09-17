@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/OWNER/aos/internal/core/build"
@@ -143,7 +145,69 @@ func (s *Service) read(ctx context.Context) (State, error) {
 	if !s.procs.Alive(meta.PID) {
 		return State{Status: Stale, Meta: meta}, nil
 	}
+	// Alive is not the same as "is the daemon". A crash that leaves the
+	// record behind leaves a pid the operating system is free to hand out
+	// again, and once it has, the record names a live process that has
+	// nothing to do with this installation: status called it running, and
+	// Stop — reached by following `aos gateway restart`, which the update's
+	// own refusal recommends — sent SIGTERM to a stranger's process.
+	if !s.isTheRecordedDaemon(meta) {
+		return State{Status: Stale, Meta: meta}, nil
+	}
 	return State{Status: Running, Meta: meta}, nil
+}
+
+// pidReuseSlack is how much later than the record a process may have started
+// and still be the one it was written about. The record is written moments
+// after the daemon is spawned, and a process's age is reported to the second,
+// so a genuine daemon is always at least as old as its record.
+const pidReuseSlack = 5 * time.Second
+
+// isTheRecordedDaemon reports whether the live process the record names is
+// the daemon the supervisor started, or somebody who was given that number
+// afterwards.
+//
+// Two things have to be true of a stranger, because either on its own is
+// wrong about a daemon that is perfectly fine. Running something other than
+// the recorded command is true of a wrapper script that exec'd the daemon —
+// same process, and the command line is now the daemon's own path rather
+// than the wrapper's the record holds. Being younger than the record is true
+// of nothing else, but a platform that will not say an age would then make
+// every process a stranger.
+//
+// So: only a mismatch is evidence, and here it takes both. Anything the
+// platform cannot answer leaves the pid exactly as trustworthy as it was
+// before — a daemon that is alive and stuck must stay stoppable.
+func (s *Service) isTheRecordedDaemon(meta *Meta) bool {
+	info, err := s.procs.Describe(meta.PID)
+	if err != nil {
+		s.log.Warn("could not read what the recorded process is", "pid", meta.PID, "err", err)
+		return true
+	}
+	if !s.runsSomethingElse(info.CommandLine, meta.Command) {
+		return true
+	}
+	if !info.ElapsedKnown || meta.StartedAt.IsZero() {
+		return true
+	}
+	// A process that has not been running as long as the record has existed
+	// started after the daemon it names did — so it is not that daemon.
+	return info.Elapsed+pidReuseSlack >= s.clock.Now().Sub(meta.StartedAt)
+}
+
+// runsSomethingElse compares a command line with the command the supervisor
+// recorded, and is false whenever it cannot tell.
+//
+// The recorded path is looked for in the line rather than compared with it,
+// because the line is not always the command: a wrapper script the supervisor
+// executed appears as its interpreter's argument ("/bin/sh /opt/aos/wrapper
+// serve"), and some platforms report the executable's name without its
+// directory.
+func (s *Service) runsSomethingElse(line, command string) bool {
+	if command == "" || strings.TrimSpace(line) == "" {
+		return false
+	}
+	return !strings.Contains(line, command) && !strings.Contains(line, filepath.Base(command))
 }
 
 // Start launches the daemon, and is idempotent.
@@ -178,6 +242,16 @@ func (s *Service) Start(ctx context.Context, _ StartInput) (State, error) {
 			return State{}, errStateUnwritable(err)
 		}
 	case Stopped:
+	}
+
+	// Nothing this supervisor started is running, and something is answering
+	// on the port anyway: a daemon started some other way (`aosd serve` in a
+	// terminal, `task dev`) or one whose record was lost. Spawning beside it
+	// used to produce a second daemon that died on "cannot listen" — while
+	// the first answered the health probe below, so Start reported success
+	// and recorded the dead pid, and Restart then stopped nothing.
+	if s.health.Probe(ctx, s.host, s.port) == nil {
+		return State{}, errNotOurs(s.host, s.port)
 	}
 
 	cmd, err := s.resolver.Resolve(ctx)
@@ -215,6 +289,12 @@ func (s *Service) waitHealthy(ctx context.Context, pid int) error {
 	deadline := s.clock.Now().Add(s.startTimeout)
 	for {
 		if err := s.health.Probe(ctx, s.host, s.port); err == nil {
+			// An answer is only this child's if the child is still alive: a
+			// daemon that bound the port first answers just the same while
+			// ours exits on "cannot listen".
+			if !s.procs.Alive(pid) {
+				return errNotOurs(s.host, s.port)
+			}
 			return nil
 		}
 		// A process that exited is not going to start answering. Reporting that

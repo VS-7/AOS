@@ -160,7 +160,7 @@ export function ChangesContent({
             </AnimatedEmptyState.Title>
             <AnimatedEmptyState.Description>
               {(changesQuery.error as { message?: string })?.message ||
-                "The Changes panel could not load git status for this context."}
+                t("The Changes panel could not load git status for this context.")}
             </AnimatedEmptyState.Description>
           </AnimatedEmptyState.Content>
         </AnimatedEmptyState>
@@ -168,12 +168,12 @@ export function ChangesContent({
         <AnimatedEmptyState className="border-none shadow-none">
           <AnimatedEmptyState.Content>
             <AnimatedEmptyState.Title>
-              {findQuery.trim() ? "No matching changes" : "No changes"}
+              {findQuery.trim() ? t("No matching changes") : t("No changes")}
             </AnimatedEmptyState.Title>
             <AnimatedEmptyState.Description>
               {findQuery.trim()
-                ? "Try a different filter."
-                : "This context has a clean working tree."}
+                ? t("Try a different filter.")
+                : t("This context has a clean working tree.")}
             </AnimatedEmptyState.Description>
           </AnimatedEmptyState.Content>
         </AnimatedEmptyState>

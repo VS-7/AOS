@@ -3,6 +3,7 @@ package task
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -63,6 +64,17 @@ type worktrees struct {
 	existing []string
 	removed  []string
 	failWith error
+	source   *WorktreeSource
+
+	// folder is where the workspace sits inside the repository it belongs
+	// to; gone reports it missing from every checkout. sourced counts the
+	// Source calls, each of which is up to four git processes.
+	folder  string
+	gone    bool
+	sourced int
+
+	// branches are the branch names the repository already has.
+	branches map[string]bool
 }
 
 func (w *worktrees) Create(_ context.Context, spec WorktreeSpec) (string, error) {
@@ -86,8 +98,43 @@ func (w *worktrees) Remove(_ context.Context, path string) error {
 	return nil
 }
 
-func (w *worktrees) List(context.Context) ([]string, error) {
-	return append([]string(nil), w.existing...), nil
+// List is the checkouts under root, compared as relative paths so
+// "/w/trees-of-mine" is not inside "/w/trees". The fake has no links.
+func (w *worktrees) List(_ context.Context, root string) ([]string, error) {
+	var out []string
+	for _, p := range w.existing {
+		rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(p))
+		if err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+func (w *worktrees) Exists(_ context.Context, _, path string) bool {
+	for _, p := range w.existing {
+		if p == path {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *worktrees) WorkspaceIn(_ context.Context, checkout string) (string, bool, error) {
+	if w.gone {
+		return checkout, false, nil
+	}
+	return filepath.Join(checkout, w.folder), true, nil
+}
+
+func (w *worktrees) Source(_ context.Context, spec WorktreeSpec) (WorktreeSource, error) {
+	w.sourced++
+	out := WorktreeSource{Dir: "/w", Toplevel: "/w", Own: true, BaseExists: true}
+	if w.source != nil {
+		out = *w.source
+	}
+	out.BranchExists = w.branches[spec.Branch]
+	return out, nil
 }
 
 // setup records that the script ran and under whose policy.

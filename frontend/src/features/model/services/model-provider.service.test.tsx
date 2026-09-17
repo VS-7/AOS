@@ -94,4 +94,30 @@ describe("useModelProviders", () => {
     expect(codex.models.length).toBeGreaterThan(0);
     expect(codex.modelsError).toContain("401");
   });
+
+  // The reason a catalogue could not be read is only half of it: the daemon
+  // also says what to do, and for an Antigravity login this build cannot renew
+  // that is the only part a person can act on.
+  it("keeps what to do about it, most specific first", () => {
+    state.connected = [{ id: "antigravity", key: "" }];
+    state.answer = {
+      providers: [{
+        id: "antigravity",
+        models: [],
+        error: "AOS_OAUTH_REFRESH_FAILED: the credential could not be renewed: renewing it needs the CLI's OAuth client",
+        cta: [
+          { label: "set AOS_ANTIGRAVITY_CLIENT_ID and AOS_ANTIGRAVITY_CLIENT_SECRET; or sign in again", command: "agy" },
+          { label: "sign in again with the Antigravity CLI (agy)" },
+        ],
+      }],
+      total: 0,
+    };
+
+    const antigravity = providerNamed("antigravity");
+    expect(antigravity.modelsError).toContain("needs the CLI's OAuth client");
+    expect(antigravity.modelsErrorActions).toEqual([
+      "set AOS_ANTIGRAVITY_CLIENT_ID and AOS_ANTIGRAVITY_CLIENT_SECRET; or sign in again",
+      "sign in again with the Antigravity CLI (agy)",
+    ]);
+  });
 });

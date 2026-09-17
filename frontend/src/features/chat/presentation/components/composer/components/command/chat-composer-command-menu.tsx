@@ -32,7 +32,12 @@ interface ChatComposerCommandMenuProps {
   onMentionSelect: (target: ComposerMentionTarget) => void;
   onQueryChange: (value: string) => void;
   onReferenceSelect: (reference: ComposerReference) => void;
-  onUploadSelect: () => void;
+  /**
+   * Opens the file picker. Omitted while an attachment cannot reach the agent
+   * (`chats_send` has no field for one): offering the upload only to drop the
+   * file on send was worse than not offering it.
+   */
+  onUploadSelect?: () => void;
   selectableFiles: ComposerReference[];
 }
 
@@ -55,6 +60,10 @@ export function ChatComposerCommandMenu({
     (target) => target.kind === "user",
   );
   const mentionLimit = mentionState ? 8 : 4;
+  // After an `@` the person is naming someone. Files and uploads belong to
+  // the `+` menu; listing them here put the workspace's files ahead of the
+  // people the trigger is for.
+  const showFiles = !mentionState;
 
   return (
     <PopoverContent
@@ -68,9 +77,9 @@ export function ChatComposerCommandMenu({
         <PromptInputCommandInput
           onValueChange={onQueryChange}
           placeholder={
-            mentionState && !isDirectMessage
-              ? "Search teammates..."
-              : "Search files, folders, and mentions..."
+            mentionState
+              ? t("Search teammates…")
+              : t("Search files, folders, and mentions…")
           }
           value={commandQuery}
         />
@@ -79,18 +88,20 @@ export function ChatComposerCommandMenu({
             {t("No matches found for this search.")}
           </PromptInputCommandEmpty>
 
-          <PromptInputCommandItem
-            onSelect={onUploadSelect}
-            value="upload photo file attachment"
-          >
-            <HugeiconsIcon icon={Attachment01Icon} className="size-4 text-muted-foreground" />
-            <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-              {t("Upload photo or file")}
-            </span>
-            <HugeiconsIcon icon={PlusSignIcon} className="size-4 text-muted-foreground" />
-          </PromptInputCommandItem>
+          {showFiles && onUploadSelect ? (
+            <PromptInputCommandItem
+              onSelect={onUploadSelect}
+              value="upload photo file attachment"
+            >
+              <HugeiconsIcon icon={Attachment01Icon} className="size-4 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                {t("Upload photo or file")}
+              </span>
+              <HugeiconsIcon icon={PlusSignIcon} className="size-4 text-muted-foreground" />
+            </PromptInputCommandItem>
+          ) : null}
 
-          {selectableFiles.length > 0 ? (
+          {showFiles && selectableFiles.length > 0 ? (
             <PromptInputCommandGroup heading={t("Files & folders")}>
               {selectableFiles.map((reference) => {
                 const isFolder = reference.kind === "folder";
@@ -107,7 +118,7 @@ export function ChatComposerCommandMenu({
                       {reference.label}
                     </span>
                     <span className="rounded-full border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                      {isFolder ? "Folder" : "File"}
+                      {isFolder ? t("Folder") : t("File")}
                     </span>
                     <HugeiconsIcon icon={PlusSignIcon} className="size-4 text-muted-foreground" />
                   </PromptInputCommandItem>

@@ -8,6 +8,7 @@ import {
 import { aos } from "@/app/aos";
 import { ChatKindHelper } from "@/features/chat/services/chat/chat-kind.helper";
 import { resolveActiveChatId } from "@/features/chat/presentation/helpers/open-chat-tab.helper";
+import { useChatListLive } from "@/features/chat/presentation/hooks/use-chat-list-live";
 import { CreateChannelDialog } from "../channels/components/create-channel-dialog";
 import { ChatChannelsList } from "./components/chat-channels-list";
 import { ChatRunsList } from "./components/chat-runs-list";
@@ -52,6 +53,7 @@ export function WorkspaceSidebarChatGroupMenu() {
   React.useEffect(() => {
     void aos.stores.chat.actions.refresh();
   }, []);
+  useChatListLive();
 
   const handleTabChange = React.useCallback((next: ChatSidebarTab) => {
     setTab(next);
@@ -94,7 +96,9 @@ export function WorkspaceSidebarChatGroupMenu() {
       <div className="flex h-8 items-center gap-1 px-2">
         <SidebarGroupLabel className="flex-1 px-0">{t("Chat")}</SidebarGroupLabel>
         <ChatSearchToggle open={searchOpen} onOpenChange={setSearchOpen} />
-        {tab === "channels" && !searchOpen ? <CreateChannelDialog /> : null}
+        {tab === "channels" && !searchOpen ? (
+          <CreateChannelDialog onCreated={refreshLists} />
+        ) : null}
       </div>
 
       <SidebarGroupContent className="gap-1">

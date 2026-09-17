@@ -72,14 +72,37 @@ func (s *fakeStore) Delete(_ context.Context, id string) error {
 
 // fakeGit records what was asked of it.
 type fakeGit struct {
-	repos    map[string]bool
-	origin   string
-	initErr  error
-	checkErr error
-	inits    int
+	repos     map[string]bool
+	enclosing map[string]string
+	origin    string
+	initErr   error
+	checkErr  error
+	commitErr error
+	inits     int
+	commits   map[string]int
 }
 
-func newGit() *fakeGit { return &fakeGit{repos: map[string]bool{}} }
+func newGit() *fakeGit {
+	return &fakeGit{repos: map[string]bool{}, enclosing: map[string]string{}, commits: map[string]int{}}
+}
+
+func (g *fakeGit) EnclosingRepository(_ context.Context, dir string) (string, error) {
+	if g.checkErr != nil {
+		return "", g.checkErr
+	}
+	if g.repos[dir] {
+		return "", nil
+	}
+	return g.enclosing[dir], nil
+}
+
+func (g *fakeGit) CommitEmpty(_ context.Context, dir, _ string) error {
+	if g.commitErr != nil {
+		return g.commitErr
+	}
+	g.commits[dir]++
+	return nil
+}
 
 func (g *fakeGit) IsRepository(_ context.Context, dir string) (bool, error) {
 	if g.checkErr != nil {

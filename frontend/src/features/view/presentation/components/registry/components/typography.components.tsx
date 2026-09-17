@@ -2,6 +2,7 @@ import type { BaseComponentProps } from "@json-render/react";
 import MarkdownContent from "@/components/ui/markdown-content";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/i18n";
+import { formatViewValue } from "@/lib/view-spec";
 
 type HeadingProps = {
   text: string;
@@ -33,7 +34,7 @@ export function HeadingComponent({
         props.className,
       )}
     >
-      {props.text}
+      {formatViewValue(props.text)}
     </Tag>
   );
 }
@@ -88,7 +89,7 @@ export function TextComponent({ props }: BaseComponentProps<TextProps>) {
         props.className,
       )}
     >
-      {props.text}
+      {formatViewValue(props.text)}
     </p>
   );
 }
@@ -129,7 +130,7 @@ export function LinkComponent({
         }
       }}
     >
-      {props.label}
+      {formatViewValue(props.label)}
     </a>
   );
 }

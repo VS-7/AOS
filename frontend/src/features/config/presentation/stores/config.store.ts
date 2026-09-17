@@ -6,6 +6,7 @@ import {
 } from "@/features/config/interfaces/config.interfaces";
 import { api } from "@/lib/aos-facade";
 import { applyConfiguredLocale } from "@/lib/i18n";
+import { replacing } from "@/app/builders/replace-state";
 
 function unwrapConfig(data: unknown): Config | null {
   if (!data || typeof data !== "object") return null;
@@ -20,8 +21,7 @@ function unwrapConfig(data: unknown): Config | null {
  *
  * Onboarding asks for a language and writes it to `region.language`; without
  * this the answer only ever reached the agents, and the screens the person
- * chose it on stayed in English. A language picked in this browser wins over
- * it — see `applyConfiguredLocale`.
+ * chose it on stayed in English. See `applyConfiguredLocale`.
  */
 function adoptLanguage(config: Config | null): void {
   applyConfiguredLocale(config?.region?.language);
@@ -41,16 +41,33 @@ export const ConfigStore = AosStore.create("config")
     const data = unwrapConfig(response.data);
     adoptLanguage(data);
     if (data) {
-      ctx.state.set(data);
+      ctx.state.set(replacing(ctx.state.get(), data));
       return data;
     }
     return ctx.state.get();
   })
+  /**
+   * Takes the configuration a `config_update` answered with as the state,
+   * without asking again.
+   *
+   * The settings forms saved through the facade and never wrote back here,
+   * so returning to General or Profile showed the values from before the
+   * save, and the next autosave sent them — undoing it. `replacing`, because
+   * the answer omits an emptied field and a merge would keep the old one.
+   */
+  .addAction("adopt", (ctx) => (config: Config | null | undefined) => {
+    const data = unwrapConfig(config);
+    if (!data) return;
+    ctx.state.set(replacing(ctx.state.get(), data));
+    adoptLanguage(data);
+  })
   .addAction("update", (ctx) => async (params: ConfigUpdateInput) => {
-    const response = await api.config.update.mutate({ body: params });
-    const data = unwrapConfig(response.data);
+    // A refusal used to fall through to "return the current state", which
+    // the caller (the model-slot picker) cannot tell from a save: the slot
+    // it had already shown as chosen stayed on screen, unsaved, in silence.
+    const data = unwrapConfig(await api.config.update.mutateOrThrow({ body: params }));
     if (data) {
-      ctx.state.set(data);
+      ctx.state.set(replacing(ctx.state.get(), data));
       return data;
     }
     return ctx.state.get();

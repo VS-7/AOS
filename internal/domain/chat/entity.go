@@ -12,6 +12,8 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+
+	"github.com/OWNER/aos/internal/core/apperr"
 )
 
 // Kind is the surface a conversation belongs to.
@@ -225,9 +227,14 @@ type TokenUsage struct {
 }
 
 // RunError is a failure, in the form a caller can act on.
+//
+// Actions is the error's own call to action, kept because the record is all a
+// conversation has: the card for a failed turn is drawn from it alone, and
+// without it "the model was refused" could not say which setting to change.
 type RunError struct {
-	Code    string `json:"code" jsonschema:"Stable error code."`
-	Message string `json:"message" jsonschema:"What went wrong."`
+	Code    string                `json:"code" jsonschema:"Stable error code."`
+	Message string                `json:"message" jsonschema:"What went wrong."`
+	Actions []apperr.CallToAction `json:"cta,omitempty" jsonschema:"What to do about it."`
 }
 
 // AgentParticipants returns the agents in the conversation.

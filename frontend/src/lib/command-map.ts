@@ -120,6 +120,19 @@ export type MapEntry = CommandKey | CommandDescriptor | HttpHandler | null;
 const s = (p: Record<string, unknown>, k: string): string => String(p[k] ?? "");
 
 /**
+ * A workspace path out of the first of `keys` that holds one, without the
+ * trailing slash `@pierre/trees` marks a directory with — the daemon's paths
+ * name a directory without it.
+ */
+const pathOf = (p: Record<string, unknown>, ...keys: string[]): string => {
+  for (const key of keys) {
+    const value = s(p, key).replace(/\/+$/, "");
+    if (value) return value;
+  }
+  return "";
+};
+
+/**
  * The marker the composer puts on material it attached rather than the person
  * typed (`COMPOSER_PROMPT_PART_PREFIX` in `composer.helper.ts`, and the same
  * string the message renderer hides on).
@@ -555,6 +568,9 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // `routine.View` has never carried — the history panel was empty for every
   // routine — while `routines_runs` was a live command nothing called.
   "routine.runs": { key: "routines_runs", renameIn: { routine: "id" } },
+  // A webhook's token is shown once; this is the only way to get another.
+  // Unmapped, a routine whose token was lost had a webhook nobody could call.
+  "routine.rotate": { key: "routines_rotate", renameIn: { routine: "id" } },
 
   // Every `tasks_*` command that names one task takes `id`
   // (`internal/domain/task/schema.go`'s `GetInput`/`UpdateInput`/
@@ -569,34 +585,37 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // worktree options as one editable `{enabled, base, branch}` object —
   // that grouping is the form's own UI decision and is untouched here.
   // What changes is purely the *wire* shape: `CreateInput.Worktree` is a
-  // bare `bool`, `Base` is a separate top-level field, and there is no
-  // `branch` field on create at all (branching is the separate
-  // `task.branch` command) — so `branch` has nowhere to go and is
-  // dropped, same as any other field Go's decoder doesn't recognize.
+  // bare `bool`, and `Base` and `Branch` are separate top-level fields.
+  // `branch` used to be dropped here because create had no field for it,
+  // so the name typed in the dialog never reached the checkout.
   "task.create": {
     key: "tasks_create",
     coerceIn: {
       worktree: (value) => {
-        const w = value as { enabled?: boolean; base?: string } | undefined;
-        return w?.enabled ? { worktree: true, ...(w.base ? { base: w.base } : {}) } : { worktree: false };
+        const w = value as { enabled?: boolean; base?: string; branch?: string } | undefined;
+        return w?.enabled
+          ? { worktree: true, ...(w.base ? { base: w.base } : {}), ...(w.branch ? { branch: w.branch } : {}) }
+          : { worktree: false };
       },
     },
     wrapOut: "task",
   },
+  // Cuts the task's checkout. Answers the bare `Worktree`.
+  "task.branch": { key: "tasks_branch", renameIn: { task: "id" } },
   "task.delete": { key: "tasks_delete", renameIn: { task: "id" } },
   "task.getById": { key: "tasks_get", renameIn: { task: "id" }, wrapOut: "task", mapOut: withTaskStats },
-  // `coerceIn` on `task.list`: `(main)/index.tsx`'s filter bar is a
-  // genuine multi-select — that UI decision is untouched. What Go's
-  // `ListInput` actually accepts for `type`/`project`/`goal` is one
-  // scalar `string` each (`internal/domain/task/schema.go`), not a list —
-  // an array into a string field is a hard 400 — so only the first
-  // selection reaches Go; the rest of the UI's selection state is
-  // unaffected, it just doesn't all filter server-side yet. `limit` is
-  // `int`; the quoted-string form some call sites send fails Go's strict
-  // unmarshal the same way.
+  // `coerceIn` on `task.list`: Go's `ListInput` takes one scalar each for
+  // `priority`/`type`/`project`/`goal` (`internal/domain/task/schema.go`),
+  // and an array into a scalar field is a hard refusal. The task list page
+  // no longer sends these (it filters what it loaded, as "any of"); other
+  // callers that pass a list get its first value. `priority` was missing
+  // here, and a priority filter emptied the list. `limit` is `int`; the
+  // quoted-string form some call sites send fails Go's strict unmarshal the
+  // same way.
   "task.list": {
     key: "tasks_list",
     coerceIn: {
+      priority: (value) => (Array.isArray(value) ? value[0] : value),
       type: (value) => (Array.isArray(value) ? value[0] : value),
       project: (value) => (Array.isArray(value) ? value[0] : value),
       goal: (value) => (Array.isArray(value) ? value[0] : value),
@@ -720,9 +739,25 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
     ),
   "session.get": () => authApi.session(),
   "password.change": (p) => authApi.changePassword(s(p, "current"), s(p, "next")),
-  "file.create": (p) => fileApi.write(s(p, "path"), s(p, "content")),
-  "file.delete": (p) => fileApi.remove(s(p, "path")),
-  "file.diff": (p) => fileApi.diff(s(p, "path")),
+  // The explorer's writes. Paths lose the trailing slash the tree puts on a
+  // directory, and the explorer's own names (`fromPath`/`toPath`) are read
+  // before the short ones: every rename, drag and cut used to send the long
+  // names to a map reading the short ones, and asked the daemon to move ""
+  // to "". `context` (a task worktree) is not sent because the daemon cannot
+  // resolve one yet — the explorer hides the switcher until it can.
+  //
+  // `file.create` is the explorer's New File / New Folder, and it never goes
+  // through `write`: a directory went there as a zero-byte file under the
+  // folder's name, and a file created over an existing one replaced it.
+  "file.create": (p) =>
+    s(p, "type") === "directory"
+      ? fileApi.mkdir(pathOf(p, "path"))
+      : fileApi.create(pathOf(p, "path"), s(p, "content")),
+  "file.copy": (p) => fileApi.copy(pathOf(p, "fromPath", "from"), pathOf(p, "toPath", "to")),
+  "file.delete": (p) => fileApi.remove(pathOf(p, "path")),
+  // `{snapshot: {oldFile, newFile}}`, which the Changes panel reads — see
+  // `diffForPanel`.
+  "file.diff": (p) => fileExplorer.diffForPanel(s(p, "path")),
   // The three screens the port left unmapped, assembled from what the daemon
   // publishes — see lib/file-explorer.ts. Until this, the sidebar's file tree,
   // the Changes panel and the composer's @-mention picker all rendered empty,
@@ -735,8 +770,10 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // answers `{path, nodes}` and all three call sites read `.files` off a
   // `WorkspaceFile[]`, so this resolved to `undefined` at every one of them.
   "file.list": (p) => fileExplorer.list(s(p, "path"), p["recursive"] === true),
-  "file.move": (p) => fileApi.move(s(p, "from"), s(p, "to")),
-  "file.read": (p) => fileApi.read(s(p, "path")),
+  "file.move": (p) => fileApi.move(pathOf(p, "fromPath", "from"), pathOf(p, "toPath", "to")),
+  // `{content, file, truncated, editable}`, which the editor reads — see
+  // `readForEditor` for what reading the bare answer used to destroy.
+  "file.read": (p) => fileExplorer.readForEditor(s(p, "path")),
   "file.write": (p) => fileApi.write(s(p, "path"), s(p, "content")),
 
   // The catalogue of what a routine can react to. Go's `activity_events`
@@ -854,10 +891,9 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // something the caller sent, it is the whole meaning of this mapping, and
   // `coerceIn` only fires on keys the payload already has.
   //
-  // The caller also sends `delegate: true`, which `tasks_set-status` has no
-  // field for and the daemon ignores. Starting the task is what the button
-  // says it does; delegating it is a separate capability that does not exist
-  // yet, and is listed as such rather than half-sent here.
+  // Starting the task is what the name says it does; delegating it to a
+  // background run is a separate capability the daemon does not have, and the
+  // `delegate: true` callers used to send is no longer sent.
   "task.start": {
     key: "tasks_set-status",
     renameIn: { task: "id" },
@@ -898,9 +934,10 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // on those three; `records-create` has no record id to rename at all.
   //
   // `collections_get` answers bare (`*Collection`); the loader reads
-  // `collection.data.collection` — `wrapOut: "collection"`. `collections_
-  // create` has no live caller yet — the "add collection" flow was never
-  // ported — so nothing here is asserted for it beyond the field names.
+  // `collection.data.collection` — `wrapOut: "collection"`.
+  // The sidebar's New collection dialog; before it, only an agent could
+  // declare a collection.
+  "collection.create": "collections_create",
   "collection.createRecord": "collections_records-create",
   "collection.delete": { key: "collections_delete", renameIn: { collection: "id" } },
   "collection.deleteRecord": { key: "collections_records-delete", renameIn: { record: "id" } },
@@ -972,7 +1009,12 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   "skill.install": "skills_install",
   "skill.list": "skills_list",
   "skill.update": { key: "skills_update", renameIn: { skill: "id" } },
-  "token.regenerate": null,
+  // The account's API token, through the identity surface for the same reason
+  // as `user.list` below: identity is outside the command registry. `get`
+  // answers `{token: {prefix, createdAt} | null}`; `regenerate` retires the
+  // current one and answers the new value, once.
+  "token.get": () => authApi.apiToken(),
+  "token.regenerate": () => authApi.regenerateApiToken(),
   // task-10: the `toolset` domain is lit — `internal/domain/toolset/
   // commands.go` registers get/get-config/update-config/delete for the UI
   // (list/call are agent/CLI-only, per the closed table).
@@ -1007,6 +1049,10 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // `{toolset, connectionType, requirements}` — the field names this side
   // already read — with each variable marked set or missing and no values.
   "toolset.getConfig": { key: "toolsets_get-config", renameIn: { toolset: "id" } },
+  // What the sheet's Tools tab lists. It read `toolset.tools` off
+  // toolsets_get, a field no toolset has; toolsets_tools connects and asks,
+  // answering `{tools: [{name, description, inputSchema}]}`.
+  "toolset.listTools": { key: "toolsets_tools", renameIn: { toolset: "id" } },
   "toolset.updateConfig": {
     key: "toolsets_update-config",
     renameIn: { toolset: "id" },
@@ -1138,7 +1184,26 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
   // (workspace home, goal's own (main) page, and the Goals tab inside a
   // project's detail page) all read response.data?.goals and got an empty
   // list regardless of what actually existed.
-  "goal.list": { key: "goals_list", wrapOut: "goals", mapOut: withDeadline },
+  // `coerceIn`: goals_list's Query takes `status` as []Status and `limit` as
+  // int. The Goals page kept its status filter in the URL as one
+  // comma-joined string and the project's Goals tab sent limit "50", and Go
+  // refused both as undecodable — a status filter emptied the list and the
+  // Goals tab never listed the project's goals. `project` is one id in Go.
+  "goal.list": {
+    key: "goals_list",
+    coerceIn: {
+      status: (value) => {
+        const list = (Array.isArray(value) ? value : String(value ?? "").split(","))
+          .map((item) => String(item).trim())
+          .filter(Boolean);
+        return list.length > 0 ? list : undefined;
+      },
+      limit: (value) => (typeof value === "string" && value.trim() !== "" ? Number(value) : value),
+      project: (value) => (Array.isArray(value) ? value[0] : value),
+    },
+    wrapOut: "goals",
+    mapOut: withDeadline,
+  },
   "goal.getById": { key: "goals_get", renameIn: { goal: "id" }, wrapOut: "goal", mapOut: withDeadline },
   // goals_create answers bare too; the live caller (goal/($id)/index.tsx)
   // reads result.data?.goal?.id to navigate to the new goal after creating
@@ -1162,24 +1227,27 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
 
   // `marketplace.list` is the ported UI's name for a search/browse call —
   // maps to `marketplace_discovery`, not a literal `marketplace_list` (no
-  // such command; discovery is the list-equivalent). `getByName` maps to
-  // `marketplace_get`, which takes `source` — `renameIn: { name: "source" }`
-  // is a guess at the UI's own param name, not yet confirmed against the
-  // call site; `install` has no live caller yet.
-  // The marketplace screens read `.items` off the list and `.skill` off the
-  // detail, and sent `query`/`category`/`page`/`pageSize`. Go answers a bare
-  // `[]Listing` and a bare `*Listing`, and its search takes `text`/`tag` —
-  // so the list rendered nothing (`data.items` was undefined on an array)
-  // and the search box filtered nothing. `page`/`pageSize` have no Go
-  // counterpart at all and are dropped rather than sent to be ignored.
+  // such command; discovery is the list-equivalent).
+  // The marketplace screens read `.items` off the list, and sent
+  // `query`/`category`/`page`/`pageSize`. Go answers a bare `[]Listing` and
+  // its search takes `text`/`tag`. `page`/`pageSize` have no Go counterpart
+  // at all and are dropped rather than sent to be ignored. The items stay
+  // Go's Listing: the marketplace feature's `toMarketplaceListing` turns
+  // them into what its cards render, next to the rest of that shape.
   "marketplace.list": {
     key: "marketplace_discovery",
     renameIn: { query: "text", category: "tag" },
     coerceIn: { page: () => ({}), pageSize: () => ({}) },
     wrapOut: "items",
   },
-  "marketplace.getByName": { key: "marketplace_get", renameIn: { name: "source" }, wrapOut: "skill" },
-  "marketplace.install": "marketplace_install",
+  // One listing, by the `source` ("owner/repo") the plugin page routes by.
+  // It was wrapped as `.skill` for a page that also required an `inventory`
+  // Go never sends, so every plugin page was "Page not found".
+  "marketplace.getByName": { key: "marketplace_get", renameIn: { name: "source" }, wrapOut: "listing" },
+  // What the Install button calls: a registry package by its source and the
+  // registry that listed it. The button used to call skills_install with a
+  // made-up "aos/registry" source, which is not a package anywhere.
+  "marketplace.install": { key: "marketplace_install", wrapOut: "skill" },
 
   // Same bug class as goal.* just above: projects_list/-get/-create all
   // answer bare (internal/domain/project/service.go). Three live readers
@@ -1216,7 +1284,7 @@ export const COMMAND_MAP: Record<string, MapEntry> = {
 
 /** The domains the Go backend does not have yet, whole. */
 export const DORMANT_DOMAINS: ReadonlySet<string> = new Set([
-  "token", "user",
+  "user",
 ]);
 
 /** Whether the whole domain is dormant — what the route shows as a panel. */

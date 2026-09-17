@@ -2,9 +2,11 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 
+	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/collections"
 	"github.com/OWNER/aos/internal/core/identity"
 	"github.com/OWNER/aos/internal/core/slug"
@@ -119,7 +121,12 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Agent, error) {
 		id = normalizeID(slug.Generate(in.Name))
 	}
 	if id == "" {
-		return nil, errInvalidID(in.ID)
+		return nil, errInvalidID(strings.TrimSpace(in.ID), in.Name)
+	}
+	// Asked first, so the refusal can name the agent that has the id; the
+	// repository's own conflict below still catches a create that races this.
+	if existing, err := s.repo.Get(ctx, collections.Key{"id": id}); err == nil {
+		return nil, errAlreadyExists(id, existing)
 	}
 	leader := normalizeID(in.Leader)
 	if err := s.checkLeaderChain(ctx, id, leader); err != nil {
@@ -150,6 +157,11 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Agent, error) {
 		a.Name = a.ID
 	}
 	if err := s.repo.Create(ctx, a); err != nil {
+		if errors.Is(err, apperr.ErrConflict) {
+			if existing, getErr := s.repo.Get(ctx, collections.Key{"id": id}); getErr == nil {
+				return nil, errAlreadyExists(id, existing)
+			}
+		}
 		return nil, err
 	}
 	// Demotion happens after the write, so a failure to create does not leave
@@ -182,6 +194,9 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Agent, error) {
 	if in.Sandbox != nil {
 		current.Sandbox = in.Sandbox
 	}
+	if in.Channels != nil {
+		current.Channels = *in.Channels
+	}
 	if in.Leader != nil {
 		leader := normalizeID(*in.Leader)
 		if err := s.checkLeaderChain(ctx, id, leader); err != nil {
@@ -211,13 +226,16 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Agent, error) {
 // routines and its event log.
 func (s *Service) Delete(ctx context.Context, in DeleteInput) (DeleteOutput, error) {
 	id := normalizeID(in.ID)
-	if _, err := s.repo.Get(ctx, collections.Key{"id": id}); err != nil {
+	existing, err := s.repo.Get(ctx, collections.Key{"id": id})
+	if err != nil {
 		return DeleteOutput{ID: id, Deleted: false}, err
 	}
 	if err := s.repo.Delete(ctx, collections.Key{"id": id}); err != nil {
 		return DeleteOutput{ID: id}, err
 	}
-	s.notify(ctx, "deleted", &Agent{ID: id})
+	// The record as it was, not a bare id: the activity says "Deleted agent:
+	// Zeta Del", and by now the name exists nowhere else.
+	s.notify(ctx, "deleted", existing)
 	return DeleteOutput{ID: id, Deleted: true}, nil
 }
 

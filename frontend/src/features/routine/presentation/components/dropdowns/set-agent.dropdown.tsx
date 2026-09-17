@@ -1,12 +1,9 @@
 import {
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarAgentFallback } from "@/components/ui/avatar";
 import { aos } from "@/app/aos";
-import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
-import { ROUTINE_RESERVED_AGENT_CONFIG } from "@/features/routine/presentation/consts/routine";
 import { t } from "@/lib/i18n";
 
 interface SetRoutineAgentDropdownProps {
@@ -14,6 +11,14 @@ interface SetRoutineAgentDropdownProps {
   onAgentChange: (agent: string) => void;
 }
 
+/**
+ * The agents a new routine can belong to.
+ *
+ * Only real agents: Go resolves no "orchestrator" or "all agents" target, and
+ * offering them made Create fail with AOS_ROUTINE_NO_SUCH_AGENT. It is offered
+ * only while creating — a routine lives in its agent's directory, and Go has
+ * no move, so choosing another agent for a saved one could only be refused.
+ */
 export function SetRoutineAgentDropdown({
   currentAgent,
   onAgentChange,
@@ -22,35 +27,6 @@ export function SetRoutineAgentDropdown({
 
   return (
     <div className="flex flex-col gap-1">
-      <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-        {t("Workspace targets")}
-      </DropdownMenuLabel>
-
-      {RoutineHelper.RESERVED_AGENTS.map((agentId) => (
-        <DropdownMenuItem
-          key={agentId}
-          onClick={() => onAgentChange(agentId)}
-          className="flex flex-col items-start gap-0.5"
-        >
-          <div className="flex w-full items-center gap-2">
-            <Avatar size="sm">
-              <AvatarAgentFallback name={agentId} />
-            </Avatar>
-            <span className="truncate">
-              {ROUTINE_RESERVED_AGENT_CONFIG[agentId].label}
-            </span>
-            {currentAgent === agentId && (
-              <span className="ml-auto text-xs text-muted-foreground">✓</span>
-            )}
-          </div>
-          <span className="pl-8 text-[10px] text-muted-foreground">
-            {ROUTINE_RESERVED_AGENT_CONFIG[agentId].description}
-          </span>
-        </DropdownMenuItem>
-      ))}
-
-      <DropdownMenuSeparator />
-
       <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
         {t("Agents")}
       </DropdownMenuLabel>

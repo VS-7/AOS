@@ -17,7 +17,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { EmojiPicker } from "frimousse";
 import {
   AudioLines,
   CheckIcon,
@@ -35,6 +34,7 @@ import type { AgentThinkingSummary } from "@/features/agent/presentation/helpers
 import type { Chat, ChatMessage } from "@/features/chat/interfaces/chat.interfaces";
 import type { WorkspaceDirectoryUser } from "@/features/workspace/interfaces/directory.interfaces";
 import { ToolBlock } from "@/features/chat/presentation/components/message/tool-part";
+import { ChatEmojiPicker } from "@/features/chat/presentation/components/message/emoji-picker";
 import { ChatThreadHelper } from "@/features/chat/presentation/helpers/chat-thread.helper";
 import { ChatInlineMarkupHelper } from "@/features/chat/presentation/helpers/chat-inline-markup.helper";
 import { toast } from "sonner";
@@ -53,22 +53,29 @@ import { t } from "@/lib/i18n";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂"] as const;
 
-function pluralizeThinkingLabel(count: number, singular: string): string {
-  if (count === 1) {
-    return singular;
-  }
+/**
+ * One counter of the thinking header, as the words around its number.
+ *
+ * The number is drawn separately (it slides), so the label is the translated
+ * phrase with the number taken out — "{{count}} reads" in English, "{{count}}
+ * leituras" in Portuguese. English plural rules were hard-coded here before,
+ * which no catalogue could translate.
+ */
+const THINKING_COUNTERS = [
+  { key: "reads", one: "{{count}} read", many: "{{count}} reads" },
+  { key: "writes", one: "{{count}} write", many: "{{count}} writes" },
+  { key: "searches", one: "{{count}} search", many: "{{count}} searches" },
+  { key: "executions", one: "{{count}} run", many: "{{count}} runs" },
+  { key: "browsing", one: "{{count}} page visited", many: "{{count}} pages visited" },
+  { key: "actions", one: "{{count}} other action", many: "{{count}} other actions" },
+  { key: "errors", one: "{{count}} error", many: "{{count}} errors" },
+] as const;
 
-  if (
-    singular.endsWith("s") ||
-    singular.endsWith("x") ||
-    singular.endsWith("z") ||
-    singular.endsWith("ch") ||
-    singular.endsWith("sh")
-  ) {
-    return `${singular}es`;
-  }
-
-  return `${singular}s`;
+function thinkingCounterPhrase(
+  counter: (typeof THINKING_COUNTERS)[number],
+  count: number,
+): string {
+  return t(count === 1 ? counter.one : counter.many, { count });
 }
 
 function getDurationParts(
@@ -106,21 +113,25 @@ function getDurationParts(
 
 function AgentThinkingHeader({ summary }: { summary: AgentThinkingSummary }) {
   const durationParts = getDurationParts(summary.elapsedMs);
-  const counters = [
-    { count: summary.reads, label: "read" },
-    { count: summary.writes, label: "write" },
-    { count: summary.searches, label: "search" },
-    { count: summary.executions, label: "run" },
-    { count: summary.browsing, label: "browse" },
-    { count: summary.errors, label: "error" },
-  ].filter((item) => item.count > 0);
-  const prefix = summary.isRunning ? "Working for" : "Worked for";
+  // Every call lands in one counter. Management and unrecognised tools had
+  // none, so a turn of eighteen calls could read "2 searches • 1 run".
+  const counts: Record<(typeof THINKING_COUNTERS)[number]["key"], number> = {
+    reads: summary.reads,
+    writes: summary.writes,
+    searches: summary.searches,
+    executions: summary.executions,
+    browsing: summary.browsing,
+    actions: summary.management + summary.other,
+    errors: summary.errors,
+  };
+  const counters = THINKING_COUNTERS.map((counter) => ({
+    counter,
+    count: counts[counter.key],
+  })).filter((item) => item.count > 0);
+  const prefix = summary.isRunning ? t("Working for") : t("Worked for");
   const ariaLabel = [
     `${prefix} ${AgentToolThinkingHelper.formatElapsed(summary.elapsedMs)}`,
-    ...counters.map(
-      (item) =>
-        `${item.count} ${pluralizeThinkingLabel(item.count, item.label)}`,
-    ),
+    ...counters.map((item) => thinkingCounterPhrase(item.counter, item.count)),
   ].join(" • ");
 
   return (
@@ -138,37 +149,18 @@ function AgentThinkingHeader({ summary }: { summary: AgentThinkingSummary }) {
         ))}
       </span>
       {counters.map((item) => (
-        <React.Fragment key={item.label}>
+        <React.Fragment key={item.counter.key}>
           <span className="text-muted-foreground/50">•</span>
           <span className="inline-flex items-center gap-1">
             <SlidingNumber value={item.count} />
-            <span>{pluralizeThinkingLabel(item.count, item.label)}</span>
+            <span>
+              {t(item.count === 1 ? item.counter.one : item.counter.many, { count: "" }).trim()}
+            </span>
           </span>
         </React.Fragment>
       ))}
     </span>
   );
-}
-
-function formatReactionTooltip(
-  actors: string[],
-  emoji: string,
-  currentUserName: string,
-): string {
-  const formatted = actors.map((a) =>
-    a.trim() === currentUserName.trim() ? "You" : a,
-  );
-
-  if (formatted.length === 1) {
-    return `${formatted[0]} reacted with ${emoji}`;
-  }
-
-  if (formatted.length === 2) {
-    return `${formatted[0]} and ${formatted[1]} reacted with ${emoji}`;
-  }
-
-  const othersCount = formatted.length - 2;
-  return `${formatted[0]}, ${formatted[1]}, and ${othersCount} other${othersCount > 1 ? "s" : ""} reacted with ${emoji}`;
 }
 
 export interface ChatMessageReaction {
@@ -344,14 +336,14 @@ export function ChatMessageItem({
                 description={step.description}
                 descriptionFade={Boolean(step.description && hasDetails)}
                 trailing={
-                  <ThinkingStepDetails summary="Details" mode="trigger" />
+                  <ThinkingStepDetails summary={t("Details")} mode="trigger" />
                 }
                 status={step.status}
                 index={index}
                 isLast={index === agentThinkingSteps.length - 1}
               >
                 <ThinkingStepDetails
-                  summary="Details"
+                  summary={t("Details")}
                   details={step.details}
                   mode="content"
                   className="pt-1"
@@ -445,7 +437,7 @@ export function ChatMessageItem({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-foreground">
-                  {part.filename || "Voice note"}
+                  {part.filename || t("Voice note")}
                 </p>
                 <p className="text-xs text-muted-foreground">{mediaType}</p>
               </div>
@@ -465,7 +457,7 @@ export function ChatMessageItem({
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-foreground">
-                {part.filename || "Attachment"}
+                {part.filename || t("Attachment")}
               </p>
               <p className="text-xs text-muted-foreground">{mediaType}</p>
             </div>
@@ -623,14 +615,16 @@ export function ChatMessageItem({
                         : "text-muted-foreground hover:text-foreground",
                     )}
                     disabled={reactionsDisabled}
-                    label={`${reaction.emoji} reaction`}
+                    label={t("{{emoji}} reaction", { emoji: reaction.emoji })}
                     onClick={() => onToggleReaction(reaction.emoji)}
                     size="xs"
-                    tooltip={formatReactionTooltip(
-                      reaction.actors,
-                      reaction.emoji,
-                      userName,
-                    )}
+                    tooltip={ChatThreadHelper.formatReactionTooltip({
+                      actors: reaction.actors,
+                      emoji: reaction.emoji,
+                      selfUserId,
+                      usersById,
+                      agents,
+                    })}
                     variant="ghost"
                   >
                     <span className="text-[11px] leading-none">
@@ -707,9 +701,9 @@ function ChatMessageCompactActions({
           key={emoji}
           className="size-5 rounded-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           disabled={disabled}
-          label={`Add ${emoji} reaction`}
+          label={t("Add {{emoji}} reaction", { emoji })}
           onClick={() => onToggleReaction(emoji)}
-          tooltip={`React with ${emoji}`}
+          tooltip={t("React with {{emoji}}", { emoji })}
           variant="ghost"
         >
           <span className="text-[11px] leading-none">{emoji}</span>
@@ -733,16 +727,16 @@ function ChatMessageCompactActions({
           className="w-[23rem] p-0"
           sideOffset={8}
         >
-          <ChatMessageEmojiPicker onSelectEmoji={onSelectEmoji} />
+          <ChatEmojiPicker onSelectEmoji={onSelectEmoji} />
         </PopoverContent>
       </Popover>
 
       <MessageAction
         className="size-5 rounded-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground"
         disabled={textDisabled}
-        label={copied ? "Copied" : "Copy message"}
+        label={copied ? t("Copied") : t("Copy message")}
         onClick={onCopy}
-        tooltip={copied ? "Copied" : "Copy message"}
+        tooltip={copied ? t("Copied") : t("Copy message")}
         variant="ghost"
       >
         {copied ? (
@@ -752,63 +746,5 @@ function ChatMessageCompactActions({
         )}
       </MessageAction>
     </MessageActions>
-  );
-}
-
-function ChatMessageEmojiPicker({
-  onSelectEmoji,
-}: {
-  onSelectEmoji: (emoji: string) => void;
-}) {
-  return (
-    <EmojiPicker.Root
-      className="isolate flex h-[25rem] w-full flex-col bg-popover text-popover-foreground"
-      onEmojiSelect={({ emoji }: { emoji: string }) => onSelectEmoji(emoji)}
-    >
-      <div className="border-b border-border/70 p-3">
-        <EmojiPicker.Search
-          className="h-9 w-full rounded-lg border border-border/70 bg-background px-3 text-sm outline-hidden transition-colors placeholder:text-muted-foreground focus:border-ring"
-          placeholder={t("Search emoji")}
-        />
-      </div>
-
-      <EmojiPicker.Viewport className="relative flex-1 outline-hidden">
-        <EmojiPicker.Loading className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-          {t("Loading emojis...")}
-        </EmojiPicker.Loading>
-        <EmojiPicker.Empty className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-          {({ search }: { search: string }) => `No emoji found for "${search}"`}
-        </EmojiPicker.Empty>
-        <EmojiPicker.List
-          className="pb-3"
-          components={{
-            CategoryHeader: ({ category, ...props }: any) => (
-              <div
-                className="bg-popover/95 px-3 py-2 text-[10px] font-semibold tracking-[0.2em] text-muted-foreground uppercase backdrop-blur-sm"
-                {...props}
-              >
-                {category.label}
-              </div>
-            ),
-            Row: ({ children, ...props }: any) => (
-              <div className="grid grid-cols-8 gap-1 px-2 py-0.5" {...props}>
-                {children}
-              </div>
-            ),
-            Emoji: ({ emoji, ...props }: any) => (
-              <button
-                className={cn(
-                  "flex size-9 items-center justify-center rounded-lg text-lg transition-colors outline-hidden",
-                  emoji.isActive ? "bg-muted" : "hover:bg-muted/70",
-                )}
-                {...props}
-              >
-                {emoji.emoji}
-              </button>
-            ),
-          }}
-        />
-      </EmojiPicker.Viewport>
-    </EmojiPicker.Root>
   );
 }

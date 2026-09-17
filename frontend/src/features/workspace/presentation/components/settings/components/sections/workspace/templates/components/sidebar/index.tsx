@@ -51,14 +51,20 @@ export function TemplatesSidebar() {
           onChange={(event) => setSearchQuery(event.target.value)}
         />
         <SplitPageLayout.SidebarHeaderActions>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="rounded-md"
-            onClick={startCreate}
-          >
-            <PlusSquareIcon />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="rounded-md"
+                onClick={startCreate}
+                aria-label={t("New template")}
+              >
+                <PlusSquareIcon />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t("New template")}</TooltipContent>
+          </Tooltip>
         </SplitPageLayout.SidebarHeaderActions>
       </SplitPageLayout.SidebarHeader>
 
@@ -72,8 +78,8 @@ export function TemplatesSidebar() {
                 </AnimatedEmptyState.Title>
                 <AnimatedEmptyState.Description>
                   {searchQuery
-                    ? `No results for "${searchQuery}"`
-                    : "Create a new template to make common outputs reusable."}
+                    ? t("No results for \"{{query}}\"", { query: searchQuery })
+                    : t("Create a new template to make common outputs reusable.")}
                 </AnimatedEmptyState.Description>
               </AnimatedEmptyState.Content>
             </AnimatedEmptyState>
@@ -84,7 +90,7 @@ export function TemplatesSidebar() {
               return (
                 <SplitPageLayout.SidebarGroup key={skill} id={`skill-${skill}`}>
                   <SplitPageLayout.SidebarGroupHeader
-                    label={skill === "global" ? "Global" : skill}
+                    label={skill === "global" ? t("Global") : skill}
                     count={items.length}
                   />
                   <SplitPageLayout.SidebarGroupContent variant="grouped">
@@ -101,10 +107,14 @@ export function TemplatesSidebar() {
                           {template.output ? (
                             <TooltipProvider>
                               <Tooltip>
+                                {/* A span, not a button: the card is already
+                                    the button, and a button inside a button is
+                                    invalid HTML that React logged on every
+                                    load. The hint needs no action of its own. */}
                                 <TooltipTrigger asChild>
-                                  <button type="button" className="shrink-0">
+                                  <span className="inline-flex shrink-0">
                                     <InfoIcon className="size-3 opacity-60" />
-                                  </button>
+                                  </span>
                                 </TooltipTrigger>
                                 <TooltipContent>
                                   <code className="text-sm font-mono">
@@ -128,7 +138,9 @@ export function TemplatesSidebar() {
       <SplitPageLayout.SidebarFooter>
         <span className="inline-flex items-center gap-2">
           <LayoutTemplate className="size-3.5 text-muted-foreground" />
-          {templates.length} template{templates.length !== 1 ? "s" : ""}
+          {templates.length === 1
+            ? t("1 template")
+            : t("{{count}} templates", { count: templates.length })}
         </span>
       </SplitPageLayout.SidebarFooter>
     </>

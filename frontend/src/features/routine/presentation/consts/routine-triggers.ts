@@ -1,10 +1,12 @@
 import type { LucideIcon } from "lucide-react";
 import { ActivityIcon, ClockIcon, WebhookIcon } from "lucide-react";
-import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
-import type { RoutineActivityFilter } from "@/features/routine/interfaces/routine.interfaces";
+import type {
+  RoutineActivityFilter,
+  RoutineTrigger,
+} from "@/features/routine/interfaces/routine.interfaces";
 import { t } from "@/lib/i18n";
 
-export type RoutineTriggerTypeId = Routine["triggers"][number]["type"];
+export type RoutineTriggerTypeId = RoutineTrigger["type"];
 
 export type RoutineScheduledPresetId =
   | "hourly"
@@ -12,6 +14,11 @@ export type RoutineScheduledPresetId =
   | "weekly"
   | "custom";
 
+/**
+ * A trigger as the editor holds it. A schedule keeps the preset, time and day
+ * it was built from beside the cron; the other two carry only what a person
+ * chooses. A webhook's secret is the daemon's and never passes through here.
+ */
 export type RoutineTriggerFormValue =
   | {
       type: "scheduled";
@@ -24,9 +31,7 @@ export type RoutineTriggerFormValue =
     }
   | {
       type: "webhook";
-      config: {
-        token?: string;
-      };
+      config: Record<string, never>;
     }
   | {
       type: "activity";
@@ -40,7 +45,6 @@ export type RoutineTriggerFormValue =
 export interface RoutineTriggerTypeDefinition {
   id: RoutineTriggerTypeId;
   label: string;
-  addLabel: string;
   description: string;
   icon: LucideIcon;
   searchableTerms: string[];
@@ -53,10 +57,10 @@ export const ROUTINE_SCHEDULED_PRESET_OPTIONS: Array<{
   id: RoutineScheduledPresetId;
   label: string;
 }> = [
-  { id: "hourly", label: "Hourly" },
-  { id: "daily", label: "Daily" },
-  { id: "weekly", label: "Weekly" },
-  { id: "custom", label: "Custom (cron)" },
+  { id: "hourly", get label() { return t("Hourly"); } },
+  { id: "daily", get label() { return t("Daily"); } },
+  { id: "weekly", get label() { return t("Weekly"); } },
+  { id: "custom", get label() { return t("Custom (cron)"); } },
 ];
 
 export const ROUTINE_TRIGGER_TYPE_REGISTRY: Record<
@@ -66,7 +70,6 @@ export const ROUTINE_TRIGGER_TYPE_REGISTRY: Record<
   scheduled: {
     id: "scheduled",
     get label() { return t("Scheduled"); },
-    addLabel: "Scheduled",
     get description() { return t("Run this routine on a recurring schedule."); },
     icon: ClockIcon,
     searchableTerms: ["cron", "schedule", "hourly", "daily", "weekly"],
@@ -90,21 +93,14 @@ export const ROUTINE_TRIGGER_TYPE_REGISTRY: Record<
   webhook: {
     id: "webhook",
     get label() { return t("Webhook triggered"); },
-    addLabel: "Webhook triggered",
     get description() { return t("Fire this routine from an external HTTP request."); },
     icon: WebhookIcon,
     searchableTerms: ["webhook", "http", "url", "api"],
-    createDefault: () => ({
-      type: "webhook",
-      config: {
-        token: "",
-      },
-    }),
+    createDefault: () => ({ type: "webhook", config: {} }),
   },
   activity: {
     id: "activity",
     get label() { return t("On activity"); },
-    addLabel: "On activity",
     get description() { return t("Fire when a workspace activity event matches."); },
     icon: ActivityIcon,
     searchableTerms: ["activity", "event", "task", "chat", "notification"],

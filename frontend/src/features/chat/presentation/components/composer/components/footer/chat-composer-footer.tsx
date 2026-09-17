@@ -21,7 +21,11 @@ interface ChatComposerFooterProps {
   isStoppingChat: boolean
   onOpenCommand: () => void
   onStop: () => void
-  onToggleRecording: () => void
+  /**
+   * Starts or stops a voice note. Omitted while an attachment cannot reach the
+   * agent: the button recorded a clip that was dropped on send.
+   */
+  onToggleRecording?: () => void
 }
 
 export function ChatComposerFooter({
@@ -48,7 +52,7 @@ export function ChatComposerFooter({
     <PromptInputFooter className="items-center gap-3 px-3 py-2">
       <PromptInputTools className="flex flex-1 items-center gap-2">
         <Button
-          aria-label={t("Add files, folders, skills, instructions, or mentions")}
+          aria-label={t("Add files, folders, or mentions")}
           className={toolButtonClass}
           onClick={onOpenCommand}
           size="icon-sm"
@@ -60,8 +64,9 @@ export function ChatComposerFooter({
       </PromptInputTools>
 
       <div className="flex items-center gap-2">
+        {onToggleRecording ? (
         <Button
-          aria-label={isRecording ? "Stop recording voice note" : "Record a voice note"}
+          aria-label={isRecording ? t("Stop recording voice note") : t("Record a voice note")}
           className={cn(
             toolButtonClass,
             isRecording &&
@@ -78,6 +83,7 @@ export function ChatComposerFooter({
             <HugeiconsIcon icon={Mic02Icon} className="size-5" />
           )}
         </Button>
+        ) : null}
 
         <PromptInputSubmit
           className="size-8 rounded-md shadow-none"

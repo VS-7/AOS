@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -655,4 +656,131 @@ func (a answers) RequestApproval(context.Context, event.ApprovalRequest) (event.
 		res.UpdatedInput = json.RawMessage(a.updated)
 	}
 	return res, nil
+}
+
+// TestACompactedTurnStillReportsEveryCallItMade. Compaction prunes the
+// working transcript, and the calls it prunes were still read back out of it
+// when the answer was stored — so the stored answer kept every result and lost
+// the calls that produced the earliest ones. The calls are reported beside
+// the results, where no prune reaches.
+func TestACompactedTurnStillReportsEveryCallItMade(t *testing.T) {
+	const steps = 20
+	script := make([]fake.Step, 0, steps+1)
+	for i := range steps {
+		id := "call_" + strconv.Itoa(i)
+		script = append(script, fake.Step{Calls: []agentloop.ToolCall{fake.Call(id, "Read", map[string]any{"n": i})}})
+	}
+	script = append(script, fake.Step{Text: "done"})
+
+	big := strings.Repeat("x", 9_000)
+	tool := &recording{name: "Read", fn: func(json.RawMessage) (any, error) { return big, nil }}
+	l := agentloop.New(agentloop.Deps{
+		Provider: &fake.Provider{Script: script},
+		Tools:    toolexec.NewRegistry().Add(tool),
+		Compact:  &agentloop.Compactor{Threshold: 40_000, Policy: agentloop.DefaultPolicy()},
+		Clock:    &clockx.Stepping{At: refTime, Step: time.Second},
+		Log:      quiet(),
+	})
+	res, err := l.Run(context.Background(), state())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Compactions == 0 {
+		t.Fatal("the turn never compacted, so it proves nothing")
+	}
+	if len(res.Calls) != steps || len(res.ToolCalls) != steps {
+		t.Fatalf("calls = %d, results = %d, want %d of each", len(res.Calls), len(res.ToolCalls), steps)
+	}
+	for i := range steps {
+		if res.Calls[i].ID != res.ToolCalls[i].CallID {
+			t.Fatalf("call %d is %s and its result answers %s", i, res.Calls[i].ID, res.ToolCalls[i].CallID)
+		}
+	}
+}
+
+// refused is the error providers.Client makes of a non-2xx answer.
+func refused(status int, body string) error {
+	return apperr.New("PROVIDER_REFUSED").
+		Msgf("the codex provider answered %d: %s", status, body).
+		Issue("provider", "codex").
+		Issue("status", status).
+		Status(apperr.StatusBadGateway)
+}
+
+// The Codex backend stopped serving gpt-5.4-mini to ChatGPT logins, and every
+// agent without a model of its own failed every turn with
+// AGENT_PROVIDER_FAILED — the code for an outage or a rate limit, with a call
+// to action about credentials. A refusal of the model is its own failure, and
+// it has to say so, because the fix is choosing another model.
+func TestARefusedModelIsReportedAsTheModel(t *testing.T) {
+	s := state()
+	s.Model = "gpt-5.4-mini"
+	p := &fake.Provider{ProviderName: "codex", Script: []fake.Step{{
+		Err: refused(400, `{"detail":"The 'gpt-5.4-mini' model is not supported when using Codex with a ChatGPT account."}`),
+	}}}
+
+	_, err := loop(t, p, toolexec.NewRegistry(), agentloop.NoHooks{}).Run(context.Background(), s)
+	app, ok := apperr.As(err)
+	if !ok || app.Code != "AOS_AGENT_MODEL_UNAVAILABLE" {
+		t.Fatalf("err = %v, want AOS_AGENT_MODEL_UNAVAILABLE", err)
+	}
+	if app.Issues["model"] != "gpt-5.4-mini" || app.Issues["provider"] != "codex" || len(app.Actions) == 0 {
+		t.Errorf("error = %+v, want the provider, the model and a next step", app)
+	}
+	if !strings.Contains(err.Error(), "gpt-5.4-mini") {
+		t.Errorf("message = %q, want the model named", err.Error())
+	}
+}
+
+// Only a refusal that is about the model. A bad request that merely mentions
+// the word — or a rate limit — stays what it was.
+func TestOtherRefusalsAreNotBlamedOnTheModel(t *testing.T) {
+	for name, cause := range map[string]error{
+		"context length": refused(400, `{"error":{"message":"This model's maximum context length is 128000 tokens."}}`),
+		"orphan output":  refused(400, `{"error":{"message":"No tool call found for function call output with call_id call_1."}}`),
+		"rate limit":     refused(429, `{"error":{"message":"Rate limit reached for gpt-5.4-mini: model is not available right now."}}`),
+		"not an apperr":  errors.New("connection reset"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := state()
+			s.Model = "gpt-5.4-mini"
+			p := &fake.Provider{Script: []fake.Step{{Err: cause}}}
+			_, err := loop(t, p, toolexec.NewRegistry(), agentloop.NoHooks{}).Run(context.Background(), s)
+			if app, ok := apperr.As(err); !ok || app.Code != "AOS_AGENT_PROVIDER_FAILED" {
+				t.Fatalf("err = %v, want AOS_AGENT_PROVIDER_FAILED", err)
+			}
+		})
+	}
+}
+
+// TestEveryStepReachesTheNextRequestWhenCallIDsRepeat. Google names a call
+// "<tool>-<position in the answer>", so a turn that starts three steps with
+// Read asks for "Read-1" three times. Pairing by first occurrence sent the
+// third request one call for three results, and the model turns in between
+// vanished: Gemini refuses that request, so every tool-using turn there died on
+// its third model call.
+func TestEveryStepReachesTheNextRequestWhenCallIDsRepeat(t *testing.T) {
+	p := &fake.Provider{ProviderName: "google", Script: []fake.Step{
+		{Calls: []agentloop.ToolCall{fake.Call("Read-1", "Read", map[string]any{"n": 1})}},
+		{Calls: []agentloop.ToolCall{fake.Call("Read-1", "Read", map[string]any{"n": 2})}},
+		{Calls: []agentloop.ToolCall{fake.Call("Read-1", "Read", map[string]any{"n": 3})}},
+		{Text: "done"},
+	}}
+	tool := &recording{name: "Read", fn: func(json.RawMessage) (any, error) { return "ok", nil }}
+	if _, err := loop(t, p, toolexec.NewRegistry().Add(tool), agentloop.NoHooks{}).Run(context.Background(), state()); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"u", "uCR", "uCRCR", "uCRCRCR"}
+	requests := p.Requests()
+	if len(requests) != len(want) {
+		t.Fatalf("the loop made %d requests, want %d", len(requests), len(want))
+	}
+	for n, req := range requests {
+		if got := shape(req.Messages); got != want[n] {
+			t.Errorf("request %d sent %s, want %s", n, got, want[n])
+		}
+		if problems := unpaired(req.Messages); len(problems) > 0 {
+			t.Errorf("request %d is one a strict provider refuses: %v", n, problems)
+		}
+	}
 }

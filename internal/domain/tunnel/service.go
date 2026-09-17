@@ -24,10 +24,11 @@ const (
 
 // Deps are what Service needs, narrowed to exactly what it reads.
 type Deps struct {
-	Config Config
-	Runner Runner
-	Clock  clockx.Clock
-	Log    *slog.Logger
+	Config      Config
+	Credentials Credentials
+	Runner      Runner
+	Clock       clockx.Clock
+	Log         *slog.Logger
 
 	// BackoffStart and BackoffMax override the supervisor's restart delay.
 	// Zero means the defaults above — overridden by service_test.go so the
@@ -41,6 +42,7 @@ type Deps struct {
 // service is the default Service.
 type service struct {
 	cfg    Config
+	creds  Credentials
 	runner Runner
 	clock  clockx.Clock
 	log    *slog.Logger
@@ -75,6 +77,7 @@ func NewService(deps Deps) Service {
 	}
 	return &service{
 		cfg:          deps.Config,
+		creds:        deps.Credentials,
 		runner:       deps.Runner,
 		clock:        clock,
 		log:          log,
@@ -86,8 +89,50 @@ func NewService(deps Deps) Service {
 
 func (s *service) Status(ctx context.Context) (State, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.state, nil
+	state := s.state
+	s.mu.Unlock()
+	return s.reporting(ctx, state), nil
+}
+
+// reporting fills State.Authenticated in before the state leaves the service.
+//
+// The guard is read rather than remembered: the switch that depends on it
+// lives on a settings screen where authentication is turned on and API tokens
+// are issued, so the verdict changes under the reader's hands. A failure to
+// read it is not a failure to report the tunnel's state — the state is still
+// answered, with the guard reported as unmet.
+func (s *service) reporting(ctx context.Context, state State) State {
+	authenticated, err := s.authenticated(ctx)
+	if err != nil {
+		s.log.Warn("could not read the tunnel's authentication guard", "error", err)
+	}
+	state.Authenticated = authenticated
+	return state
+}
+
+// authenticated reports whether the API this tunnel would publish actually
+// asks callers for a credential: security on, and at least one account
+// holding an active API token. Both halves are read fresh — see Start.
+func (s *service) authenticated(ctx context.Context) (bool, error) {
+	cfg, err := s.cfg.Raw(ctx)
+	if err != nil {
+		return false, err
+	}
+	return s.authenticatedWith(ctx, cfg)
+}
+
+// authenticatedWith is authenticated over a configuration the caller has
+// already read, so Start does not read it twice.
+func (s *service) authenticatedWith(ctx context.Context, cfg RawConfig) (bool, error) {
+	if !cfg.SecurityEnabled {
+		return false, nil
+	}
+	// No Credentials port wired is a misconfiguration, and one that would
+	// open the door: fail closed rather than assume the tokens exist.
+	if s.creds == nil {
+		return false, nil
+	}
+	return s.creds.HasActiveAPIToken(ctx)
 }
 
 // Start publishes the local daemon. Before spawning anything it verifies the
@@ -98,7 +143,7 @@ func (s *service) Start(ctx context.Context) (State, error) {
 	if s.state.Status == Running || s.state.Status == Starting {
 		state := s.state
 		s.mu.Unlock()
-		return state, nil
+		return s.reporting(ctx, state), nil
 	}
 	s.mu.Unlock()
 
@@ -106,7 +151,11 @@ func (s *service) Start(ctx context.Context) (State, error) {
 	if err != nil {
 		return State{}, err
 	}
-	if !cfg.SecurityEnabled || cfg.APIToken == "" {
+	authenticated, err := s.authenticatedWith(ctx, cfg)
+	if err != nil {
+		return State{}, err
+	}
+	if !authenticated {
 		return State{}, errInsecureExposure()
 	}
 	if cfg.Hostname == "" || cfg.Token == "" {
@@ -133,7 +182,10 @@ func (s *service) Start(ctx context.Context) (State, error) {
 	s.proc = proc
 	s.state = State{Status: Running, URL: url, PID: proc.PID(), StartedAt: &started}
 	s.done = make(chan struct{})
+	// The guard above let this Start through, so the state this call reports
+	// says so; the stored state leaves it to Status, which re-reads it.
 	state := s.state
+	state.Authenticated = true
 	s.mu.Unlock()
 
 	go s.supervise(cfg.Hostname, cfg.Token)
@@ -238,7 +290,7 @@ func (s *service) Stop(ctx context.Context) (State, error) {
 	if s.state.Status != Running && s.state.Status != Starting {
 		state := s.state
 		s.mu.Unlock()
-		return state, nil
+		return s.reporting(ctx, state), nil
 	}
 	s.stopping = true
 	proc := s.proc
@@ -257,5 +309,5 @@ func (s *service) Stop(ctx context.Context) (State, error) {
 	s.proc = nil
 	state := s.state
 	s.mu.Unlock()
-	return state, nil
+	return s.reporting(ctx, state), nil
 }

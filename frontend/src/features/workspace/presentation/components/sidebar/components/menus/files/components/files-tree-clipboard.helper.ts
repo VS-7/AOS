@@ -1,96 +1,33 @@
 import { toast } from "sonner";
 import { api } from "@/lib/aos-facade";
+import { t } from "@/lib/i18n";
 import type { FileExplorerContext } from "@/features/file/interfaces/file.interfaces";
 import {
   basenameOf,
+  copyDestinationPath,
   joinWorkspacePath,
-  lookupPathIndex,
 } from "@/features/file/presentation/helpers/files-explorer.helper";
 import type { FilesClipboardState } from "@/features/file/presentation/stores/files.store";
 
-async function copyFileNode(
-  sourcePath: string,
-  targetPath: string,
-  context: FileExplorerContext,
-): Promise<void> {
-  const readResponse = await api.file.read.query({
-    query: { path: sourcePath.replace(/\/+$/, ""), context },
-  });
-
-  if (readResponse.error || !readResponse.data) {
-    throw new Error(
-      (readResponse.error as { message?: string })?.message ||
-        `Unable to read "${sourcePath}".`,
-    );
-  }
-
-  const createResponse = await api.file.create.mutate({
-    body: {
-      path: targetPath,
-      type: "file",
-      content: readResponse.data.content,
-      context,
-    },
-  });
-
-  if (createResponse.error) {
-    throw new Error(
-      (createResponse.error as { message?: string })?.message ||
-        `Unable to create "${targetPath}".`,
-    );
-  }
-}
-
-async function copyDirectoryRecursive(
-  sourcePath: string,
-  targetPath: string,
-  context: FileExplorerContext,
-): Promise<void> {
-  const createDirResponse = await api.file.create.mutate({
-    body: {
-      path: targetPath.replace(/\/+$/, ""),
-      type: "directory",
-      context,
-    },
-  });
-
-  if (createDirResponse.error) {
-    throw new Error(
-      (createDirResponse.error as { message?: string })?.message ||
-        `Unable to create "${targetPath}".`,
-    );
-  }
-
-  const listResponse = await api.file.list.query({
-    query: {
-      path: sourcePath.replace(/\/+$/, ""),
-      recursive: false,
-      includeIgnored: false,
-      context,
-    },
-  });
-
-  if (listResponse.error || !listResponse.data) {
-    throw new Error(
-      (listResponse.error as { message?: string })?.message ||
-        `Unable to list "${sourcePath}".`,
-    );
-  }
-
-  for (const entry of listResponse.data.files) {
-    const childTarget = joinWorkspacePath(targetPath, entry.name);
-
-    if (entry.type === "directory") {
-      await copyDirectoryRecursive(entry.path, childTarget, context);
-      continue;
-    }
-
-    await copyFileNode(entry.path, childTarget, context);
-  }
+function refusal(error: unknown, fallback: string): Error {
+  const message = (error as { message?: string } | undefined)?.message;
+  return new Error(message || fallback);
 }
 
 /**
- * Pastes clipboard paths into a target directory using move (cut) or copy semantics.
+ * Pastes clipboard paths into a target directory using move (cut) or copy
+ * semantics.
+ *
+ * A copy is one request, made by the daemon, whether the source is a file or
+ * a whole folder. It used to be done here: read the file through the JSON
+ * API, then write back a `content` field the answer never had — so every copy
+ * came out empty, and a copy pasted beside its original was written over the
+ * original. Reading and writing back could not have worked for a picture
+ * either, which the API carries as Base64.
+ *
+ * The copy never replaces anything: it takes the first free "name copy" name
+ * the explorer knows of, and the daemon refuses a destination that is taken
+ * anyway, for the one that appeared since the tree was last read.
  */
 export async function pasteFilesClipboard(params: {
   clipboard: FilesClipboardState;
@@ -99,45 +36,39 @@ export async function pasteFilesClipboard(params: {
   pathIndex?: Record<string, { type: "file" | "directory" }>;
 }): Promise<void> {
   const { clipboard, targetParentPath, explorerContext, pathIndex } = params;
+  const taken = new Set(Object.keys(pathIndex ?? {}));
 
   for (const sourcePath of clipboard.paths) {
-    const name = basenameOf(sourcePath);
-    const destinationPath = joinWorkspacePath(targetParentPath, name);
+    const source = sourcePath.replace(/\/+$/, "");
+    const destination = joinWorkspacePath(targetParentPath, basenameOf(source));
 
     if (clipboard.mode === "cut") {
+      // Pasting a cut item back where it is has nothing to move, and the
+      // daemon would refuse it as a destination that already exists.
+      if (destination === source) continue;
+
       const moveResponse = await api.file.move.mutate({
-        body: {
-          fromPath: sourcePath,
-          toPath: destinationPath,
-          context: explorerContext,
-        },
+        body: { fromPath: source, toPath: destination, context: explorerContext },
       });
-
       if (moveResponse.error) {
-        throw new Error(
-          (moveResponse.error as { message?: string })?.message ||
-            `Unable to move "${sourcePath}".`,
-        );
+        throw refusal(moveResponse.error, t("Unable to move \"{{path}}\".", { path: source }));
       }
-
       continue;
     }
 
-    const indexed = lookupPathIndex(pathIndex, sourcePath);
-    const isDirectory =
-      indexed?.type === "directory" || /\/$/.test(sourcePath);
-
-    if (isDirectory) {
-      await copyDirectoryRecursive(sourcePath, destinationPath, explorerContext);
-      continue;
+    const target = copyDestinationPath(destination, taken);
+    const copyResponse = await api.file.copy.mutate({
+      body: { fromPath: source, toPath: target, context: explorerContext },
+    });
+    if (copyResponse.error) {
+      throw refusal(copyResponse.error, t("Unable to copy \"{{path}}\".", { path: source }));
     }
-
-    await copyFileNode(sourcePath, destinationPath, explorerContext);
+    // A second item with the same name in one paste must not pick the name
+    // the first one just took.
+    taken.add(target);
   }
 
   toast.success(
-    clipboard.mode === "cut"
-      ? "Moved to destination."
-      : "Pasted to destination.",
+    clipboard.mode === "cut" ? t("Moved to destination.") : t("Pasted to destination."),
   );
 }

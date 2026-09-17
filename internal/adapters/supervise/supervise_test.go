@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -86,6 +87,47 @@ func TestAliveIsFalseForNothingAndForGarbage(t *testing.T) {
 	}
 }
 
+// TestDescribeNamesWhatAProcessIsAndHowOldItIs is what tells a record whose
+// pid was handed out again from a daemon that is still running: the pid is
+// the same number either way, and only what it is running and how long it has
+// been running differ.
+func TestDescribeNamesWhatAProcessIsAndHowOldItIs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the platform does not answer this question here; see describe in platform_windows.go")
+	}
+	procs := supervise.NewProcesses()
+
+	pid, err := procs.Start(ctx(), gateway.Command{Path: sleepBinary(t), Args: []string{"30"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = procs.Kill(pid) })
+
+	info, err := procs.Describe(pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(info.CommandLine, "sleep") {
+		t.Errorf("the command line of a sleep is %q", info.CommandLine)
+	}
+	// Seconds is the resolution ps reports, so a process started just now is
+	// somewhere between no time at all and a moment old — but it is an
+	// answer, and a zero would be read as "the platform will not say".
+	if info.Elapsed < 0 || info.Elapsed > time.Minute {
+		t.Errorf("a process started just now has been running for %s", info.Elapsed)
+	}
+
+	// Nothing to report is reported as nothing, not as a failure: the caller
+	// takes only a mismatch as evidence, and an error it cannot act on would
+	// be one more reason to signal a pid nobody identified.
+	for _, absent := range []int{0, -1, 2147483646} {
+		info, err := procs.Describe(absent)
+		if err != nil || info != (gateway.ProcessInfo{}) {
+			t.Errorf("pid %d answered %+v, %v", absent, info, err)
+		}
+	}
+}
+
 // TestTheHealthProbeDistinguishesServingFromListening is the point of probing
 // rather than checking liveness: a server that answers 500 is running and is
 // not serving.
@@ -108,6 +150,55 @@ func TestTheHealthProbeDistinguishesServingFromListening(t *testing.T) {
 	host, port = splitHostPort(t, broken.URL)
 	if err := health.Probe(ctx(), host, port); err == nil {
 		t.Fatal("a daemon answering 500 was reported healthy")
+	}
+}
+
+// An update restarts only the daemon its supervisor started, and is done only
+// when the daemon answering is the new release: both questions are asked of
+// the health answer, which says which process and which release it is.
+func TestIdentifyReadsWhichDaemonAnswers(t *testing.T) {
+	health := supervise.NewHealth()
+
+	daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/health" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"name":"aos","status":"ok","version":"v0.10.0","pid":4242}`))
+	}))
+	defer daemon.Close()
+	host, port := splitHostPort(t, daemon.URL)
+	id, err := health.Identify(ctx(), host, port)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id.Version != "v0.10.0" || id.PID != 4242 || id.Name != "aos" {
+		t.Fatalf("identity = %+v", id)
+	}
+
+	older := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"name":"aos","status":"ok","version":"v0.9.0"}`))
+	}))
+	defer older.Close()
+	host, port = splitHostPort(t, older.URL)
+	if id, err := health.Identify(ctx(), host, port); err != nil || id.PID != 0 || id.Version != "v0.9.0" {
+		t.Fatalf("a release that does not name its process: %+v, %v", id, err)
+	}
+
+	for name, handler := range map[string]http.HandlerFunc{
+		"an error":         func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusInternalServerError) },
+		"not a health one": func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("<html>")) },
+	} {
+		srv := httptest.NewServer(handler)
+		host, port := splitHostPort(t, srv.URL)
+		if _, err := health.Identify(ctx(), host, port); err == nil {
+			t.Errorf("an answer that is %s identified a daemon", name)
+		}
+		srv.Close()
+	}
+	health.Timeout = 500 * time.Millisecond
+	if _, err := health.Identify(ctx(), "127.0.0.1", 1); err == nil {
+		t.Fatal("something answered on port 1")
 	}
 }
 

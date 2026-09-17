@@ -49,32 +49,35 @@ const telegramFormSchema = z.object({
     .default([]),
 });
 
-const CHANNELS = [
+// A function, not a constant: the descriptions are read in the interface's
+// language at render, and a module-level t() would freeze them in whatever
+// language was active when the module loaded.
+const channels = () => [
   {
     provider: "telegram" as const,
     label: "Telegram",
-    description: "Connect a Telegram bot token and allow specific chat ids.",
+    description: t("Connect a Telegram bot token and allow specific chat ids."),
     icon: TelegramIcon,
     comingSoon: false,
   },
   {
     provider: "discord" as const,
     label: "Discord",
-    description: "Channel bindings for Discord will arrive in a later release.",
+    description: t("Channel bindings for Discord will arrive in a later release."),
     icon: DiscordIcon,
     comingSoon: true,
   },
   {
     provider: "slack" as const,
     label: "Slack",
-    description: "Slack support is planned, but not enabled yet.",
+    description: t("Slack support is planned, but not enabled yet."),
     icon: SlackIcon,
     comingSoon: true,
   },
   {
     provider: "whatsapp" as const,
     label: "WhatsApp",
-    description: "WhatsApp support is planned, but not enabled yet.",
+    description: t("WhatsApp support is planned, but not enabled yet."),
     icon: WhatsAppIcon,
     comingSoon: true,
   },
@@ -167,7 +170,7 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
       }
 
       console.error(error);
-      toast.error(error.message || "Failed to update Telegram channel");
+      toast.error(error.message || t("Failed to update Telegram channel"));
     },
   });
 
@@ -184,7 +187,7 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
   }, [form, telegramConfig, agent.id]);
 
   const telegramToken = form.watch("token") ?? "";
-  const telegramStatus = telegramToken.trim().length > 0 ? "Configured" : "Not configured";
+  const telegramConfigured = telegramToken.trim().length > 0;
 
   return (
     <Form form={form} className="flex h-full flex-1 flex-col overflow-y-auto">
@@ -198,7 +201,7 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
           </div>
 
           <Accordion type="single" collapsible defaultValue="telegram" className="w-full">
-            {CHANNELS.map((channel) => {
+            {channels().map((channel) => {
               const Icon = channel.icon;
               const isTelegram = channel.provider === "telegram";
 
@@ -221,10 +224,14 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
                         </span>
                       </span>
                       <Badge
-                        variant={isTelegram && telegramStatus === "Configured" ? "secondary" : "outline"}
+                        variant={isTelegram && telegramConfigured ? "secondary" : "outline"}
                         className="shrink-0"
                       >
-                        {isTelegram ? telegramStatus : "Coming soon"}
+                        {isTelegram
+                          ? telegramConfigured
+                            ? t("Configured")
+                            : t("Not configured")
+                          : t("Coming soon")}
                       </Badge>
                     </span>
                   </AccordionTrigger>
@@ -320,7 +327,7 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
 
                         <div className="flex items-center justify-end border-t border-border/60 pt-4">
                           <Button type="submit" disabled={form.isLoading}>
-                            {form.isLoading ? "Saving..." : "Save Telegram"}
+                            {form.isLoading ? t("Saving...") : t("Save Telegram")}
                           </Button>
                         </div>
                       </div>

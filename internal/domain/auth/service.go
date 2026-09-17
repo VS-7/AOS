@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -166,13 +167,25 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Session, error) {
 // whether or not a candidate exists, so a caller cannot learn from the timing
 // whether a token is merely wrong or is one character off.
 func (s *Service) Authenticate(ctx context.Context, bearer string) (*User, error) {
+	user, _, err := s.Credential(ctx, bearer)
+	return user, err
+}
+
+// Credential is Authenticate, also answering which of the account's
+// credentials the bearer is.
+//
+// Most routes only need the account. A few must also know the kind of
+// credential presented: the API token is handed to MCP clients and agents, and
+// the route that replaces it must not accept it, or whoever holds it could
+// revoke the person's token and keep the new one.
+func (s *Service) Credential(ctx context.Context, bearer string) (*User, Token, error) {
 	presented := strings.TrimSpace(bearer)
 	if presented == "" {
-		return nil, errUnauthenticated()
+		return nil, Token{}, errUnauthenticated()
 	}
 	users, err := s.store.Load(ctx)
 	if err != nil {
-		return nil, errStoreFailed("Authenticate", err)
+		return nil, Token{}, errStoreFailed("Authenticate", err)
 	}
 
 	want := hashToken(presented)
@@ -193,20 +206,17 @@ func (s *Service) Authenticate(ctx context.Context, bearer string) (*User, error
 		}
 	}
 	if match == nil {
-		return nil, errUnauthenticated()
+		return nil, Token{}, errUnauthenticated()
 	}
 
 	// Recording last use is a write on a read path. It is done because a token
 	// nobody can tell the age of is a token nobody will ever revoke, and it is
 	// best-effort because failing an authenticated request over an audit field
-	// would be the wrong trade.
+	// would be the wrong trade — so a failed save is not returned.
 	match.Tokens[matchToken].LastUsed = &now
-	if err := s.store.Save(ctx, users); err != nil {
-		out := *match
-		return &out, nil
-	}
+	_ = s.store.Save(ctx, users)
 	out := *match
-	return &out, nil
+	return &out, match.Tokens[matchToken], nil
 }
 
 // IssueTokenInput names a new credential for an account.
@@ -235,6 +245,88 @@ func (s *Service) IssueToken(ctx context.Context, in IssueTokenInput) (Token, st
 	users[idx].UpdatedAt = s.clock.Now()
 	if err := s.store.Save(ctx, users); err != nil {
 		return Token{}, "", errStoreFailed("IssueToken", err)
+	}
+	return token, plain, nil
+}
+
+// APITokenName names the credential an account hands to REST and MCP clients.
+// One per account: regenerating replaces it, and the session and the
+// terminal's own credential are other names that it never touches.
+const APITokenName = "api"
+
+// APIToken describes the account's active API credential — the record, never
+// the value, which is kept only as a hash — or nil when it has none.
+func (s *Service) APIToken(ctx context.Context, userID string) (*Token, error) {
+	users, err := s.store.Load(ctx)
+	if err != nil {
+		return nil, errStoreFailed("APIToken", err)
+	}
+	idx := indexOf(users, userID)
+	if idx < 0 {
+		return nil, errUserNotFound(userID)
+	}
+	now := s.clock.Now()
+	var current *Token
+	for j := range users[idx].Tokens {
+		t := users[idx].Tokens[j]
+		if t.Name == APITokenName && t.Active(now) {
+			current = &t
+		}
+	}
+	return current, nil
+}
+
+// AnyActiveAPIToken reports whether any account holds an API credential that
+// still authenticates. It answers a yes/no about the installation, never
+// which account or which token, because the one caller that asks — the
+// tunnel's exposure guard — only needs to know whether a remote caller could
+// have a credential to present.
+func (s *Service) AnyActiveAPIToken(ctx context.Context) (bool, error) {
+	users, err := s.store.Load(ctx)
+	if err != nil {
+		return false, errStoreFailed("AnyActiveAPIToken", err)
+	}
+	now := s.clock.Now()
+	for _, u := range users {
+		for _, t := range u.Tokens {
+			if t.Name == APITokenName && t.Active(now) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+// RegenerateAPIToken retires the account's API credential and issues a new
+// one, returning its plain value once.
+//
+// Regenerating is the only way to see a value again, so it is also how a lost
+// one is replaced — which is why the old one stops working at once rather
+// than after a grace period: a token somebody lost is a token somebody else
+// may have.
+func (s *Service) RegenerateAPIToken(ctx context.Context, userID string) (Token, string, error) {
+	users, err := s.store.Load(ctx)
+	if err != nil {
+		return Token{}, "", errStoreFailed("RegenerateAPIToken", err)
+	}
+	idx := indexOf(users, userID)
+	if idx < 0 {
+		return Token{}, "", errUserNotFound(userID)
+	}
+	plain, token, err := s.mintToken(APITokenName, nil)
+	if err != nil {
+		return Token{}, "", err
+	}
+	now := s.clock.Now()
+	for j := range users[idx].Tokens {
+		if users[idx].Tokens[j].Name == APITokenName && users[idx].Tokens[j].RevokedAt == nil {
+			users[idx].Tokens[j].RevokedAt = &now
+		}
+	}
+	users[idx].Tokens = append(users[idx].Tokens, token)
+	users[idx].UpdatedAt = now
+	if err := s.store.Save(ctx, users); err != nil {
+		return Token{}, "", errStoreFailed("RegenerateAPIToken", err)
 	}
 	return token, plain, nil
 }
@@ -348,6 +440,35 @@ type UpdateProfileInput struct {
 	UserID string
 	Name   string
 	Email  string
+	// Image replaces the avatar when set: a data URI, or "" to remove it. Nil
+	// leaves it as it is, so a caller that only renames does not erase it.
+	Image *string
+}
+
+// MaxImageBytes bounds an avatar. It is read with the account on every
+// session check, so it stays the size of a thumbnail — the interface resizes
+// a picked file to well under this before sending it.
+const MaxImageBytes = 256 << 10
+
+// avatarPrefixes are the inline images an <img> draws and nothing else does:
+// no remote address (a request on every render, to wherever it points) and
+// no SVG (a document, which can carry script).
+var avatarPrefixes = []string{"data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,", "data:image/gif;base64,"}
+
+// validateImage refuses an avatar the interface could not draw safely.
+func validateImage(image string) error {
+	if image == "" {
+		return nil
+	}
+	if len(image) > MaxImageBytes {
+		return errImageInvalid(fmt.Sprintf("it is %d bytes, over the %d byte limit", len(image), MaxImageBytes))
+	}
+	for _, prefix := range avatarPrefixes {
+		if strings.HasPrefix(image, prefix) {
+			return nil
+		}
+	}
+	return errImageInvalid("it is not an inline PNG, JPEG, WebP or GIF image")
 }
 
 // UpdateProfile changes an account's name and email.
@@ -369,6 +490,11 @@ func (s *Service) UpdateProfile(ctx context.Context, in UpdateProfileInput) (Pub
 	if name == "" {
 		return Public{}, errNameRequired()
 	}
+	if in.Image != nil {
+		if err := validateImage(*in.Image); err != nil {
+			return Public{}, err
+		}
+	}
 
 	email := normalizeEmail(in.Email)
 	if email != "" && email != users[idx].Email {
@@ -381,6 +507,9 @@ func (s *Service) UpdateProfile(ctx context.Context, in UpdateProfileInput) (Pub
 	}
 
 	users[idx].Name = name
+	if in.Image != nil {
+		users[idx].Image = *in.Image
+	}
 	users[idx].UpdatedAt = s.clock.Now()
 	if err := s.store.Save(ctx, users); err != nil {
 		return Public{}, errStoreFailed("UpdateProfile", err)

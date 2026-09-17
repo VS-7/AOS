@@ -1,11 +1,11 @@
 import { useState } from "react";
 import type { FormEvent, JSX } from "react";
 import { login } from "@/lib/auth";
-import { DomainError } from "@/lib/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/ui/logo";
 import { t } from "@/lib/i18n";
+import { signInErrorMessage } from "./sign-in-error";
 
 interface LoginPageProps {
   /** Called once a session exists — the caller re-checks status and moves on. */
@@ -35,7 +35,7 @@ export function LoginPage({ onSignedIn }: LoginPageProps): JSX.Element {
       await login(identifier, password);
       onSignedIn();
     } catch (err) {
-      setError(err instanceof DomainError ? err.message : t("Something went wrong."));
+      setError(signInErrorMessage(err));
     } finally {
       setPending(false);
     }
@@ -44,7 +44,7 @@ export function LoginPage({ onSignedIn }: LoginPageProps): JSX.Element {
   return (
     <div className="flex h-screen w-full flex-col items-center justify-center bg-background p-8">
       <div className="flex w-full max-w-[400px] flex-col items-center gap-8 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full text-primary-foreground shadow-sm">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full text-foreground shadow-sm">
           <Logo className="h-10 w-10" />
         </div>
 

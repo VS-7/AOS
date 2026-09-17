@@ -76,13 +76,13 @@ func errIsDirectory(op, path string) error {
 		CTA(apperr.CallToAction{Label: "list it instead of reading or writing it directly"})
 }
 
-func errAlreadyExists(path string) error {
+func errAlreadyExists(op, path string) error {
 	return apperr.New("FILE_ALREADY_EXISTS").
-		Causer("file.Service.Move").
+		Causer("file.Service."+op).
 		Msgf("%q already exists", path).
 		Issue("path", path).
 		Status(apperr.StatusConflict).
-		CTA(apperr.CallToAction{Label: "move to a different destination, or remove the existing path first"})
+		CTA(apperr.CallToAction{Label: "choose a name nothing is using yet, or remove the existing path first"})
 }
 
 func errRootRemoval() error {
@@ -101,4 +101,23 @@ func errGitFailed(op, path string, cause error) error {
 		Issue("path", path).
 		Status(apperr.StatusInternalServerError).
 		Wrap(cause)
+}
+
+func errPathRequired(op string) error {
+	return apperr.New("FILE_PATH_REQUIRED").
+		Causer("file.Service."+op).
+		Msgf("%s needs a path inside the workspace, and none was given", op).
+		Issue("operation", op).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{Label: "name the file or directory to act on, relative to the workspace root"})
+}
+
+func errCopyIntoItself(from, to string) error {
+	return apperr.New("FILE_COPY_INTO_ITSELF").
+		Causer("file.Service.Copy").
+		Msgf("%q cannot be copied into %q, which is inside it", from, to).
+		Issue("from", from).
+		Issue("to", to).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{Label: "paste the copy somewhere outside the directory being copied"})
 }

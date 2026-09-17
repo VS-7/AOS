@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,21 +14,22 @@ import {
 } from "@/components/ui/avatar";
 import type { Task } from "@/features/task/interfaces/task.interfaces";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
-import { assigneeInitials, resolveAssignee } from "@/features/task/presentation/helpers/assignee.helper";
+import { assigneeInitials, resolveTaskAssignee } from "@/features/task/presentation/helpers/assignee.helper";
 import { TASK_PRIORITY_CONFIG } from "@/features/task/presentation/consts/task";
 import { TaskActionsDropdown } from "@/features/task/presentation/components/dropdowns";
 import { SetAssigneeDropdown } from "@/features/task/presentation/components/dropdowns/set-assignee.dropdown";
 import { SetTypeDropdown } from "@/features/task/presentation/components/dropdowns/set-type.dropdown";
+import { useTaskActions } from "@/features/task/presentation/hooks/task-actions.hook";
+import { useAssigneeDirectory } from "@/features/task/presentation/hooks/assignee-directory.hook";
 import { aos } from "@/app/aos";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 import { useDraggable } from "@dnd-kit/core";
 import { GripVertical } from "lucide-react";
 import { Icon } from "@/components/ui/icon";
 import { ProjectSelectorDropdown } from "@/components/ui/project-selector-dropdown";
 import { ProjectHelper } from "@/features/project/presentation/helpers/project.helper";
-import { t } from "@/lib/i18n";
 
 interface TaskKanbanCardProps {
   task: Task;
@@ -46,169 +47,22 @@ export const TaskKanbanCard = React.memo(function TaskKanbanCard({
     disabled: isDragOverlay,
   });
   const router = useRouter();
-  const directory = aos.stores.workspace.useState(
-    (state) => state.directory,
-  );
-  const self = aos.stores.auth.useState((state) => state.user);
+  const directory = useAssigneeDirectory();
   const projects = aos.stores.projects.useState((state) => state.items);
   const currentWorkspace = aos.stores.workspace.useState(
     (state) => state.current,
   );
   const taskType = currentWorkspace?.tasks?.find((t) => t.id === task.type);
   const project = projects.find((p) => p.id === task.project);
+  const actions = useTaskActions(task, { onChanged: () => void router.invalidate() });
 
   const status = TaskHelper.getStatus(task.status);
   const StatusIcon = status.icon;
   const priority = TASK_PRIORITY_CONFIG[task.priority];
   const PriorityIcon = priority.icon;
 
-  const assigneeView = resolveAssignee(
-    { ...directory, self },
-    task.assigned,
-  );
+  const assigneeView = resolveTaskAssignee(directory, task);
   const isAgent = assigneeView?.type === "agent";
-
-  const handlePriorityChange = useCallback(
-    async (priority: Task["priority"]) => {
-      try {
-        await aos.client.task.update.mutateOrThrow({
-          params: { task: task.id },
-          body: { priority },
-        });
-        toast.success(
-          `Priority updated to ${TASK_PRIORITY_CONFIG[priority].label}`,
-        );
-        router.invalidate();
-      } catch (error) {
-        toast.error(t("Failed to update priority"));
-      }
-    },
-    [task.id, router],
-  );
-
-  const handleAssigneeChange = useCallback(
-    async (assignee: string | undefined) => {
-      try {
-        await aos.client.task.update.mutateOrThrow({
-          params: { task: task.id },
-          body: { assigned: assignee },
-        });
-        const assignedView = resolveAssignee(
-          { ...directory, self },
-          assignee,
-        );
-        toast.success(
-          assignee
-            ? `Assigned to ${assignedView?.name || assignee}`
-            : "Unassigned",
-        );
-        router.invalidate();
-      } catch (error) {
-        toast.error(t("Failed to update assignee"));
-      }
-    },
-    [task.id, router, directory, self],
-  );
-
-  const handleStatusChange = useCallback(
-    async (status: Task["status"]) => {
-      // `task.setStatus`, not `task.update`: a task's status is *moved*, not
-      // written. `tasks_update` refuses it outright
-      // (AOS_TASK_STATUS_NOT_WRITABLE, "a task's status is moved, not
-      // written") — so picking a status here showed "Moved to In Progress"
-      // and left the task exactly where it was.
-      try {
-        await aos.client.task.setStatus.mutateOrThrow({
-          params: { task: task.id },
-          body: { status },
-        });
-        toast.success(`Moved to ${TaskHelper.getStatus(status).label}`);
-        router.invalidate();
-      } catch (error) {
-        toast.error(t("Failed to update status"));
-      }
-    },
-    [task.id, router],
-  );
-
-  const handleDueDateChange = useCallback(
-    async (dueAt: string | undefined) => {
-      try {
-        await aos.client.task.update.mutateOrThrow({
-          params: { task: task.id },
-          body: { dueAt },
-        });
-        toast.success(dueAt ? `Due date set` : "Due date removed");
-        router.invalidate();
-      } catch (error) {
-        toast.error(t("Failed to update due date"));
-      }
-    },
-    [task.id, router],
-  );
-
-  const handleDelete = useCallback(async () => {
-    try {
-      await aos.client.task.delete.mutateOrThrow({ params: { task: task.id } });
-      toast.success(`Task ${task.id} deleted`);
-      router.invalidate();
-    } catch (error) {
-      toast.error(t("Failed to delete task"));
-    }
-  }, [task.id, router]);
-
-  const handleCopyIdentifier = useCallback(() => {
-    navigator.clipboard.writeText(task.id);
-    toast.success(`${task.id} copied`);
-  }, [task.id]);
-
-  const handleCopyPrompt = useCallback(() => {
-    const promptText = [
-      `Task ${task.id}: ${task.name}`,
-      task.summary ? `Summary: ${task.summary}` : undefined,
-      task.content ? `Content:\n${task.content}` : undefined,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
-    navigator.clipboard.writeText(promptText);
-    toast.success(t("Prompt copied"));
-  }, [task.id, task.name, task.summary, task.content]);
-
-  const handleOpenWorktree = useCallback(() => {
-    toast.message(t("Open worktree coming soon"));
-  }, []);
-
-  const handleTypeChange = useCallback(
-    async (type: string) => {
-      try {
-        await aos.client.task.update.mutateOrThrow({
-          params: { task: task.id },
-          body: { type },
-        });
-        toast.success(`Type updated`);
-        router.invalidate();
-      } catch (error) {
-        toast.error(t("Failed to update type"));
-      }
-    },
-    [task.id, router],
-  );
-
-  const handleProjectChange = useCallback(
-    async (projectId: string | undefined) => {
-      try {
-        await aos.client.task.update.mutateOrThrow({
-          params: { task: task.id },
-          body: { project: projectId },
-        });
-        toast.success(projectId ? `Project updated` : "Project removed");
-        router.invalidate();
-      } catch (error) {
-        toast.error(t("Failed to update project"));
-      }
-    },
-    [task.id, router],
-  );
 
   return (
     <div
@@ -234,8 +88,8 @@ export const TaskKanbanCard = React.memo(function TaskKanbanCard({
           <GripVertical className="size-3.5" />
         </div>
         <StatusIcon className={`size-4 shrink-0 ${status.color}`} />
-        <span className="font-mono text-xs text-muted-foreground">
-          {task.id}
+        <span className="font-mono text-xs text-muted-foreground" title={task.id}>
+          {TaskHelper.shortId(task.id)}
         </span>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -244,7 +98,7 @@ export const TaskKanbanCard = React.memo(function TaskKanbanCard({
                 <Avatar size="sm">
                   <AvatarAgentFallback
                     size={26}
-                    name={(assigneeView?.name || "").toLowerCase()}
+                    name={assigneeView.name.toLowerCase()}
                   />
                 </Avatar>
               ) : assigneeView ? (
@@ -262,27 +116,17 @@ export const TaskKanbanCard = React.memo(function TaskKanbanCard({
                   </AvatarFallback>
                 </Avatar>
               )}
+              <span className="sr-only">{assigneeView?.name || t("Unassigned")}</span>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" className="w-64">
             <SetAssigneeDropdown
               currentAssignee={task.assigned}
-              onAssigneeChange={handleAssigneeChange}
+              onAssigneeChange={actions.setAssignee}
             />
           </DropdownMenuContent>
         </DropdownMenu>
-        <TaskActionsDropdown
-          task={task}
-          onPriorityChange={handlePriorityChange}
-          onAssigneeChange={handleAssigneeChange}
-          onTypeChange={handleTypeChange}
-          onStatusChange={handleStatusChange}
-          onDueDateChange={handleDueDateChange}
-          onDelete={handleDelete}
-          onCopyIdentifier={handleCopyIdentifier}
-          onCopyPrompt={handleCopyPrompt}
-          onOpenWorktree={handleOpenWorktree}
-        />
+        <TaskActionsDropdown task={task} actions={actions} />
       </div>
 
       <Link
@@ -305,16 +149,16 @@ export const TaskKanbanCard = React.memo(function TaskKanbanCard({
             <DropdownMenuTrigger asChild>
               <Badge
                 variant="outline"
-                className="cursor-pointer capitalize gap-1"
+                className="cursor-pointer gap-1"
               >
                 <div className="block size-2 border rounded-full" style={{ borderColor: taskType?.color }} />
-                {task.type}
+                {taskType?.label || task.type || t("No type")}
               </Badge>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               <SetTypeDropdown
                 currentType={task.type}
-                onTypeChange={handleTypeChange}
+                onTypeChange={actions.setType}
               />
             </DropdownMenuContent>
           </DropdownMenu>
@@ -337,7 +181,7 @@ export const TaskKanbanCard = React.memo(function TaskKanbanCard({
             <DropdownMenuContent align="start" className="w-72">
               <ProjectSelectorDropdown
                 currentProject={task.project}
-                onProjectChange={handleProjectChange}
+                onProjectChange={actions.setProject}
               />
             </DropdownMenuContent>
           </DropdownMenu>

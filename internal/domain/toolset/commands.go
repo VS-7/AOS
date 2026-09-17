@@ -99,6 +99,34 @@ read the error, one variable at a time.`,
 		Handler:     svc.GetConfig,
 	})
 
+	command.MustRegister(reg, command.Command[GetInput, ToolsOutput]{
+		Group:   "toolsets",
+		Name:    "tools",
+		Summary: "List the tools a toolset publishes.",
+		Doc: `Connects to the toolset, asks what it publishes, and closes: each tool's name,
+description and argument schema — what toolsets_call needs to be called right.
+
+It reaches the target exactly as toolsets_call does — a disabled toolset
+refuses, variables are resolved, a skill's network allowlist applies — but runs
+no tool, so it records no activity.`,
+		Examples: []command.Example{
+			{Description: "see what a toolset offers before calling it", Input: GetInput{ID: "gh"}},
+		},
+		// Out of the agent's tool list: a turn already offers the model as many
+		// tools as one request may carry (TestTheToolListFitsInOneRequest), and
+		// this exists for the desktop's toolset sheet. The HTTP surface, the CLI
+		// and the window still reach it.
+		Registry: false,
+		// Announced as the reach it is, not as the read it looks like: it
+		// starts the configured stdio command or opens the configured
+		// connection exactly as toolsets_call does, and an MCP client may
+		// approve a read-only tool without asking.
+		Annotations: command.Annotations{
+			Title: "List a toolset's tools", DestructiveHint: true, OpenWorldHint: true,
+		},
+		Handler: svc.Tools,
+	})
+
 	command.MustRegister(reg, command.Command[CallInput, CallOutput]{
 		Group:   "toolsets",
 		Name:    "call",
@@ -153,6 +181,7 @@ func statusPtr(s Status) *Status { return &s }
 // compile-time proof that the handlers match the command signature.
 var (
 	_ func(context.Context, GetInput) (*Toolset, error)          = (*Service)(nil).Get
+	_ func(context.Context, GetInput) (ToolsOutput, error)       = (*Service)(nil).Tools
 	_ func(context.Context, CallInput) (CallOutput, error)       = (*Service)(nil).Call
 	_ func(context.Context, UpdateConfigInput) (*Toolset, error) = (*Service)(nil).UpdateConfig
 	_ func(context.Context, DeleteInput) (DeleteOutput, error)   = (*Service)(nil).Delete

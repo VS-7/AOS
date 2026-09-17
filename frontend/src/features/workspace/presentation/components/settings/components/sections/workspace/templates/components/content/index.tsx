@@ -21,7 +21,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { MarkdownEditor } from "@/components/ui/markdown-editor";
+import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { SettingsContentContainer } from "../../../../../content-container";
@@ -70,7 +70,12 @@ export function SelectedTemplateContent() {
 
   async function handleCopyId() {
     if (!selectedTemplate?.id) return;
-    await navigator.clipboard.writeText(selectedTemplate.id);
+    try {
+      await navigator.clipboard.writeText(selectedTemplate.id);
+      toast.success(t("Copied"));
+    } catch {
+      toast.error(t("Failed to copy"));
+    }
   }
 
   return (
@@ -79,7 +84,7 @@ export function SelectedTemplateContent() {
         <SplitPageLayout.ContentHeaderMain>
           <SplitPageLayout.ContentTitle>
             {title?.trim() ||
-              (isCreateMode ? "New Template" : selectedTemplate?.name)}
+              (isCreateMode ? t("New Template") : selectedTemplate?.name)}
           </SplitPageLayout.ContentTitle>
         </SplitPageLayout.ContentHeaderMain>
 
@@ -115,8 +120,7 @@ export function SelectedTemplateContent() {
                     <AlertDialogHeader>
                       <AlertDialogTitle>{t("Delete this template?")}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        {t("This action removes")}{" "}
-                        <strong>{selectedTemplate.name}</strong> permanently.
+                        {t("This action removes {{name}} permanently.", { name: selectedTemplate.name })}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -128,7 +132,7 @@ export function SelectedTemplateContent() {
                         disabled={isDeleting}
                         onClick={deleteSelectedTemplate}
                       >
-                        {isDeleting ? "Deleting..." : "Delete template"}
+                        {isDeleting ? t("Deleting...") : t("Delete template")}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -145,10 +149,10 @@ export function SelectedTemplateContent() {
             >
               <Save />
               {form.isLoading
-                ? "Saving..."
+                ? t("Saving...")
                 : isCreateMode
-                  ? "Create template"
-                  : "Save changes"}
+                  ? t("Create template")
+                  : t("Save changes")}
             </Button>
           </div>
         </SplitPageLayout.ContentHeaderActions>
@@ -214,10 +218,17 @@ export function SelectedTemplateContent() {
                   <FormItem>
                     <FormLabel className="opacity-60">{t("Content")}</FormLabel>
                     <FormControl>
-                      <MarkdownEditor
+                      {/* Plain text, not MarkdownEditor. A template body is
+                          Liquid source, and a markdown round-trip rewrites
+                          it: MDX parsing dropped every {{ output }} tag, and
+                          re-serializing escaped the braces of the rest, so a
+                          one-character edit saved "Hi {{ name }}" as "Hi !". */}
+                      <Textarea
+                        {...field}
                         value={field.value ?? ""}
-                        onValueChange={field.onChange}
+                        spellCheck={false}
                         placeholder={t("Write the Liquid template body...")}
+                        className="min-h-64 resize-y font-mono text-sm leading-relaxed"
                       />
                     </FormControl>
                     <FormMessage />

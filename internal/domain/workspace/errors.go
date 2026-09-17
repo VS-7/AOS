@@ -1,6 +1,9 @@
 package workspace
 
 import (
+	"fmt"
+	"strconv"
+
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/build"
 )
@@ -110,6 +113,50 @@ func errUnknownField(path string) error {
 		Status(apperr.StatusBadRequest).
 		CTA(apperr.CallToAction{
 			Label:   "read the workspace to see the fields it has",
+			Command: build.Name + " workspace get",
+			Tool:    "workspace_get",
+		})
+}
+
+func errInvalidValue(field string, value any, want string, example map[string]any) error {
+	shown := fmt.Sprint(value)
+	if text, ok := value.(string); ok {
+		// Quoted, so a blank name reads as "" rather than as nothing at all.
+		shown = strconv.Quote(text)
+	}
+	return apperr.New("WORKSPACE_INVALID_VALUE").
+		Causer("workspace.Service.Update").
+		Msgf("%s cannot be %s: it takes %s", field, shown, want).
+		Issue("field", field).
+		Issue("value", value).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{
+			Label: "set " + field + " to " + want,
+			Tool:  "workspace_update",
+			Input: map[string]any{"set": example},
+		})
+}
+
+// errInvalidTaskType names the entry of the task-type list that was refused,
+// and which of its fields, so a form can point at the row rather than at the
+// whole list. index is -1 when the list itself is the problem.
+func errInvalidTaskType(index int, field, value, want string) error {
+	path := "tasks"
+	if index >= 0 {
+		path = fmt.Sprintf("tasks[%d].%s", index, field)
+	}
+	msg := fmt.Sprintf("the task types need %s", want)
+	if index >= 0 {
+		msg = fmt.Sprintf("task type %d (%s) needs %s", index+1, strconv.Quote(value), want)
+	}
+	return apperr.New("WORKSPACE_INVALID_TASK_TYPE").
+		Causer("workspace.Service.Update").
+		Msgf("%s", msg).
+		Issue("field", path).
+		Issue("value", value).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{
+			Label:   "read the task types, fix that entry and send the whole list again",
 			Command: build.Name + " workspace get",
 			Tool:    "workspace_get",
 		})

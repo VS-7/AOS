@@ -20,8 +20,8 @@ validation and the authorisation every other caller gets.
 ## When to use
 - **After a collection exists and needs a screen:** scaffold one, or compose
   a tree by hand with create
-- **A skill-scoped view:** list returns it with its Skill field; get, render
-  and delete need that field back to resolve it
+- **A skill-scoped view:** list returns it with its Skill field; get, render,
+  execute-action and delete need that field back to resolve it
 
 ## When NOT to use
 - Not to run logic — every action is a command call, never code

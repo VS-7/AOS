@@ -25,6 +25,8 @@ import {
 } from "../components/command/chat-composer-skills-command-menu";
 import { useChatComposerAudio } from "./use-chat-composer-audio";
 import { t } from "@/lib/i18n";
+import { errorMessage } from "@/lib/aos-facade";
+import { useChatActions } from "@/features/chat/presentation/hooks/use-chat-actions";
 
 interface UseChatComposerParams extends ChatComposerProps {
   commandRef: React.RefObject<HTMLDivElement | null>;
@@ -47,6 +49,11 @@ export function useChatComposer({
   const attachments = usePromptInputAttachments();
   const audio = useChatComposerAudio();
   const pendingMessageIdRef = React.useRef<string | null>(null);
+  // What was in the composer when the pending message left it. The composer
+  // empties on send, which reads as "delivered"; a refused send puts the
+  // words back rather than losing them along with the echo.
+  const unsentTextRef = React.useRef("");
+  const [refusedText, setRefusedText] = React.useState<string | null>(null);
   const latestSyncedValueRef = React.useRef<string>("");
 
   const [commandOpen, setCommandOpen] = React.useState(false);
@@ -98,6 +105,7 @@ export function useChatComposer({
         }
 
         pendingMessageIdRef.current = null;
+        unsentTextRef.current = "";
         setMentionState(null);
         setCommandOpen(false);
         setCommandQuery("");
@@ -111,33 +119,19 @@ export function useChatComposer({
           pendingMessageIdRef.current = null;
         }
 
-        toast.error(
-          error?.error?.message || error?.message || "Unable to send message.",
-        );
+        setRefusedText(unsentTextRef.current || null);
+        unsentTextRef.current = "";
+
+        toast.error(errorMessage(error) ?? t("Unable to send message."));
       },
     });
 
-  // `chat.clear`, not `chat.update`: this used to send `{messages: []}` to the
-  // update command, which has no such field — a rename that could drop a
-  // transcript by carrying one field too many is a rename nobody can trust, so
-  // Go keeps the two apart and so does this.
-  const { mutate: clearChatContext, loading: isClearingContext } =
-    aos.client.chat.clear.useMutation({
-      onSuccess: () => {
-        toast.success(t("Chat context cleared."));
-        // The transcript is gone on the server; the live merge only adds, so
-        // it has to be told to take the server's version whole. Without this
-        // every cleared message stayed on screen.
-        onCleared?.();
-      },
-      onError: (error: any) => {
-        toast.error(
-          error?.error?.message ||
-            error?.message ||
-            "Unable to clear chat context.",
-        );
-      },
-    });
+  // `chat.clear`, not `chat.update`: a rename that could drop a transcript by
+  // carrying one field too many is a rename nobody can trust, so Go keeps the
+  // two apart. The clear itself is shared with the header menu, confirmation
+  // included — `/clear` and Enter used to throw the transcript away at once.
+  const { clear: clearChatContext, isClearing: isClearingContext } =
+    useChatActions(chat, { onCleared });
 
   const { mutate: stopChat, loading: isStoppingChat } =
     aos.client.chat.stop.useMutation({
@@ -145,17 +139,17 @@ export function useChatComposer({
         // `onSuccess` receives the full `Envelope`, not the unwrapped
         // payload the original generated mutation hook handed its own
         // `onSuccess` — see `aos-facade.ts`'s `useMutation` doc comment.
+        // `chats_stop` answers `{chat, stopped}` and nothing to read aloud,
+        // so the words are this side's.
         if (result?.data?.stopped) {
-          toast.success(result.data.message ?? "Chat stopped.");
+          toast.success(t("Chat stopped."));
           return;
         }
 
-        toast.info(result?.data?.message ?? "No active run was found to stop.");
+        toast.info(t("No active run was found to stop."));
       },
-      onError: (error: any) => {
-        toast.error(
-          error?.error?.message || error?.message || "Unable to stop chat.",
-        );
+      onError: (error: unknown) => {
+        toast.error(errorMessage(error) ?? t("Unable to stop chat."));
       },
     });
 
@@ -341,6 +335,20 @@ export function useChatComposer({
   }, []);
 
   const isBusy = isSending || audio.isRecording;
+
+  // Put a refused message back once the send has settled, not from inside
+  // `onError`: that runs while the editor is still disabled for the send, and
+  // re-enabling it re-reads the (empty) document and writes that back over
+  // anything restored a moment earlier. Only into an empty composer —
+  // anything typed since is newer.
+  React.useEffect(() => {
+    if (isSending || refusedText === null) return;
+    if (!latestSyncedValueRef.current.trim()) {
+      latestSyncedValueRef.current = refusedText;
+      controller.textInput.setInput(refusedText);
+    }
+    setRefusedText(null);
+  }, [controller.textInput, isSending, refusedText]);
   const hasContent =
     latestSyncedValueRef.current.trim().length > 0 ||
     attachments.files.length > 0;
@@ -371,7 +379,12 @@ export function useChatComposer({
         controller.textInput.setInput(nextValue);
       }
 
-      const nextMention = ComposerHelper.getActiveMention(nextValue, caret);
+      // A DM with an agent has nobody else to name (resolveMentionTargets
+      // answers none), so an `@` there is just a character: opening the
+      // mention menu showed an empty list.
+      const nextMention = isDirectMessage
+        ? null
+        : ComposerHelper.getActiveMention(nextValue, caret);
       setMentionState(nextMention);
 
       if (nextMention) {
@@ -398,7 +411,7 @@ export function useChatComposer({
       setSkillsOpen(false);
       setSkillsQuery("");
     },
-    [controller.textInput],
+    [controller.textInput, isDirectMessage],
   );
 
   React.useEffect(() => {
@@ -436,6 +449,18 @@ export function useChatComposer({
     [closeCommand, closeSkillsCommand, editorRef],
   );
 
+  // Removes the `/…` a command was chosen from. A command acts on the
+  // conversation, not on the message being written, so the trigger must not
+  // stay behind as text: `/stop` used to leave a literal "/" in the composer.
+  const dropSlashTrigger = React.useCallback(() => {
+    const current = latestSyncedValueRef.current;
+    const trigger = ComposerHelper.getActiveSkillTrigger(current, current.length);
+    if (!trigger) return;
+    const nextValue = `${current.slice(0, trigger.range.start)}${current.slice(trigger.range.end)}`;
+    latestSyncedValueRef.current = nextValue;
+    controller.textInput.setInput(nextValue);
+  }, [controller.textInput]);
+
   const handleSlashCommandSelect = React.useCallback(
     (item: ChatComposerSlashCommandItem) => {
       if (item.disabled) {
@@ -443,6 +468,7 @@ export function useChatComposer({
       }
 
       if (item.id === "stop") {
+        dropSlashTrigger();
         void stopChat({
           params: { chat: chat.id },
           body: {},
@@ -453,26 +479,9 @@ export function useChatComposer({
       }
 
       if (item.id === "clear") {
-        const trigger = ComposerHelper.getActiveSkillTrigger(
-          latestSyncedValueRef.current,
-          latestSyncedValueRef.current.length,
-        );
-
-        // Drop the in-flight "/clear" token from the editor before we clear
-        // the persisted chat context, so the user does not see the literal
-        // command lingering in the composer after the mutation succeeds.
-        if (trigger) {
-          const nextValue = `${latestSyncedValueRef.current.slice(0, trigger.range.start)}${latestSyncedValueRef.current.slice(trigger.range.end)}`;
-          latestSyncedValueRef.current = nextValue;
-          controller.textInput.setInput(nextValue);
-        }
-
-        clearChatContext({
-          params: { chat: chat.id },
-        });
-
+        dropSlashTrigger();
         closeSkillsCommand();
-        editorRef.current?.focus();
+        void clearChatContext().then(() => editorRef.current?.focus());
         return;
       }
 
@@ -503,6 +512,7 @@ export function useChatComposer({
       clearChatContext,
       closeSkillsCommand,
       controller.textInput,
+      dropSlashTrigger,
       editorRef,
       stopChat,
     ],
@@ -562,6 +572,7 @@ export function useChatComposer({
       };
 
       pendingMessageIdRef.current = nextMessage.id;
+      unsentTextRef.current = latestSyncedValueRef.current || controller.textInput.value;
       onSent?.(nextMessage);
 
       // C5 of the final review ("honest empty state" policy, R26):

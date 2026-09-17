@@ -54,6 +54,10 @@ type ServeOptions struct {
 // finish, and then the process stops waiting. A daemon that hangs on shutdown
 // is a daemon the supervisor has to kill, which is how work gets lost.
 func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
+	// From here on this process is the daemon, and the update service must
+	// not treat it as a supervisor that can restart the daemon — see
+	// updateSupervisor.
+	a.serving.Store(true)
 	resolver := a.env
 	host := opts.Host
 	if host == "" {
@@ -102,8 +106,17 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 		AuthRoutes: authapi.New(authapi.Config{Service: a.Auth, Log: log, Clock: a.Clock, Paths: a.Paths}),
 		Bot:        botapi.New(botapi.Config{Registry: a.Bots, Log: log}),
 		Artifacts: artifactapi.New(artifactapi.Config{
-			Artifacts:       a.Artifacts,
-			Files:           a.ArtifactFiles,
+			Artifacts: a.Artifacts,
+			Files:     a.ArtifactFiles,
+			// The workspace the request names, the same routing every command
+			// gets (scopeFor) — see artifactapi.Config.Scope.
+			Scope: func(ctx context.Context) (artifactapi.Artifacts, artifactapi.Files, error) {
+				target, err := a.scopeFor(ctx)
+				if err != nil {
+					return nil, nil, err
+				}
+				return target.Artifacts, target.ArtifactFiles, nil
+			},
 			Auth:            a.Auth,
 			SecurityEnabled: securityEnabled,
 			Log:             log,
@@ -125,6 +138,7 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 		}),
 		SecurityEnabled: securityEnabled,
 		DocsEnabled:     !resolver.IsProduction(),
+		RoutineWebhooks: routineWebhooks{app: a},
 		// The window's own origins belong here as much as they do on the
 		// event channel. The interface reaches two surfaces by plain fetch
 		// rather than through the Wails bridge — the file explorer and the
@@ -199,8 +213,18 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 		errs <- nil
 	}()
 
+	// The worker runs for as long as this process is the daemon, and only
+	// then. It was built by New and never started by anything but a test, so
+	// no scheduled routine fired, no retention ran, and work a crashed worker
+	// held was never handed back. Started once the socket is open, so a
+	// daemon that cannot listen leaves nothing running behind the error.
+	stopWorker := a.startWorker(ctx, log)
+
 	select {
 	case err := <-errs:
+		stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+		defer cancel()
+		stopWorker(stopCtx)
 		return err
 	case <-ctx.Done():
 	}
@@ -214,11 +238,46 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 	defer cancel()
 
+	// The requests and the background work wind down together, inside the one
+	// timeout, rather than the worker's wait starting only after the
+	// requests' has used it up.
+	workerStopped := make(chan struct{})
+	go func() {
+		defer close(workerStopped)
+		stopWorker(stopCtx)
+	}()
 	if err := srv.Shutdown(stopCtx); err != nil {
 		log.Warn("in-flight requests did not finish in time", "err", err)
 		_ = srv.Close()
 	}
+	// A request can be answered before its work is done — a routine accepted
+	// from a webhook runs a whole turn after the 202. Shutdown waits for that
+	// too, or says it gave up.
+	if !server.WaitBackground(stopCtx) {
+		log.Warn("work a request left running did not finish in time")
+	}
+	<-workerStopped
 	return <-errs
+}
+
+// startWorker starts the pool that drains the queue and runs the periodic
+// ticks, and returns what stops it. A daemon with no queue — the database
+// would not open — has no pool, and says so where it already said why.
+func (a *App) startWorker(ctx context.Context, log *slog.Logger) func(context.Context) {
+	if a.Worker == nil {
+		return func(context.Context) {}
+	}
+	if err := a.Worker.Start(ctx); err != nil {
+		log.Warn("the background worker did not start: scheduled routines will not fire", "err", err)
+		return func(context.Context) {}
+	}
+	return func(stopCtx context.Context) {
+		if err := a.Worker.Stop(stopCtx); err != nil {
+			// The jobs still running keep their lease, and the next daemon's
+			// first tick hands them back once it lapses.
+			log.Warn("background work did not finish in time", "err", err)
+		}
+	}
 }
 
 // guardExposure refuses to serve beyond loopback without authentication.

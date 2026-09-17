@@ -84,6 +84,18 @@ func errNameRequired() error {
 		})
 }
 
+// errImageInvalid refuses an avatar the interface could not draw safely.
+func errImageInvalid(reason string) error {
+	return apperr.New("AUTH_IMAGE_INVALID").
+		Causer("auth.Service.UpdateProfile").
+		Msgf("the avatar cannot be used: %s", reason).
+		Issue("image", reason).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{
+			Label: "pick a smaller PNG, JPEG or WebP picture",
+		})
+}
+
 // errEmailTaken refuses a second account on one address.
 //
 // Login accepts either the username or the email, so two accounts sharing one

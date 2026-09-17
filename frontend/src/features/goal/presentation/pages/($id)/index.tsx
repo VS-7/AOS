@@ -1,15 +1,14 @@
 import * as React from "react";
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import { z } from "zod";
 import {
   CalendarDays,
+  Check,
   ChevronDown,
   Copy,
   Folder,
   Link2,
-  ListChecks,
   Save,
   Target,
   Trash2,
@@ -51,7 +50,6 @@ import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Page, PageBody } from "@/components/ui/page";
 import { SplitPageLayout } from "@/components/ui/split-page-layout";
 import { Textarea } from "@/components/ui/textarea";
-import { Icon } from "@/components/ui/icon";
 import { DateTimeInput } from "@/components/ui/date-time-input";
 import {
   Tooltip,
@@ -60,10 +58,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ProjectSelectorDropdown } from "@/components/ui/project-selector-dropdown";
-import { cn } from "@/lib/utils";
 import {
   type GoalPriority,
-  type GoalStatus,
   type GoalWithContext,
 } from "@/features/goal/interfaces/goal.interfaces";
 import {
@@ -74,8 +70,17 @@ import {
   GOAL_PRIORITY_CONFIG,
   GOAL_PRIORITY_ORDER,
   GOAL_STATUS_CONFIG,
+  GOAL_STATUS_ORDER,
 } from "@/features/goal/presentation/consts/goal";
-import { GoalHelper } from "@/features/goal/presentation/helpers/goal.helper";
+import {
+  goalCreateBody,
+  goalUpdateBody,
+  prefillProject,
+  type GoalFormFields,
+} from "@/features/goal/presentation/helpers/goal-form";
+import { shareableLink } from "@/features/goal/presentation/helpers/goal-link";
+import { useStatusTabs } from "@/features/goal/presentation/helpers/status-tabs";
+import { hasSluggableCharacter } from "@/features/project/presentation/helpers/project-form";
 import { TabsSubtle, TabsSubtleItem } from "@/components/ui/tabs-subtle";
 import { TaskListRow } from "@/features/task/presentation/pages/(main)/components/list/components/task-list-row.component";
 import {
@@ -83,11 +88,28 @@ import {
   TASK_STATUS_ORDER,
 } from "@/features/task/presentation/consts/task";
 import type { Task } from "@/features/task/interfaces/task.interfaces";
-import { t } from "@/lib/i18n";
+import { t, useTranslation } from "@/lib/i18n";
 
 const goalFormSchema = z.object({
-  title: z.string().trim().min(1, "Title is required"),
+  // The messages are resolved when the schema validates, not when this
+  // module loads, so they follow the language the person has at that moment.
+  // The daemon derives the goal's id from its title, and a title of only
+  // symbols derives none and is refused — so that is said here, on the field.
+  title: z
+    .string()
+    .trim()
+    .superRefine((value, ctx) => {
+      if (!value) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: t("Title is required") });
+      } else if (!hasSluggableCharacter(value)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: t("Use at least one letter or number in the title"),
+        });
+      }
+    }),
   description: z.string().optional(),
+  measure: z.string().optional(),
   content: z.string().optional(),
   priority: GoalPrioritySchema.default("no_priority"),
   project: z.string().optional(),
@@ -97,33 +119,28 @@ const goalFormSchema = z.object({
 
 type GoalFormValues = z.infer<typeof goalFormSchema>;
 
+const GoalDetailsSearchSchema = z.object({
+  /** Preselects the project of a goal created from a project's Goals tab. */
+  project: z.string().optional(),
+});
+
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
-  return "Unable to save this goal.";
+  return t("Unable to save this goal.");
 }
 
-function toDateInputValue(value?: string) {
-  if (!value) return "";
-  return value.slice(0, 10);
-}
-
-function toDeadlineValue(value?: string) {
-  if (!value) return undefined;
-
-  const trimmedValue = value.trim();
-  if (!trimmedValue) return undefined;
-
-  return new Date(`${trimmedValue}T00:00:00.000Z`).toISOString();
-}
-
-function buildFormValues(goal: GoalWithContext | null): GoalFormValues {
+function buildFormValues(
+  goal: GoalWithContext | null,
+  prefill: { project?: string } = {},
+): GoalFormValues {
   if (!goal) {
     return {
       title: "",
       description: "",
+      measure: "",
       content: "",
       priority: "no_priority",
-      project: "",
+      project: prefill.project ?? "",
       deadline: "",
       status: "active",
     };
@@ -132,22 +149,20 @@ function buildFormValues(goal: GoalWithContext | null): GoalFormValues {
   return {
     title: goal.title,
     description: goal.description ?? "",
+    measure: goal.measure ?? "",
     content: goal.content ?? "",
     priority: goal.priority ?? "no_priority",
     project: goal.project ?? "",
-    deadline: toDateInputValue(goal.deadline),
+    // Kept as the daemon wrote it. Cutting it to a date here is what made
+    // every save send it back rewritten to midnight UTC.
+    deadline: goal.deadline ?? "",
     status: goal.status ?? "active",
   };
 }
 
-/** Igniter browser client stringifies query arrays with `String(arr)`; Schema.object expects JSON. */
-function toJsonArrayQueryParam(values: string[]) {
-  return JSON.stringify(values);
-}
-
-async function copyToClipboard(value: string, label: string) {
+async function copyToClipboard(value: string, message: string) {
   await navigator.clipboard.writeText(value);
-  toast.success(`${label} copied`);
+  toast.success(message);
 }
 
 interface HeaderIconButtonProps {
@@ -176,12 +191,82 @@ function HeaderIconButton({ children, label, onClick }: HeaderIconButtonProps) {
   );
 }
 
+/**
+ * The tasks that serve this goal, by status.
+ *
+ * It used to render only when the goal had tasks, open on "Todo" whatever
+ * they were, and show a bare icon row — and it never had any, because the
+ * loader asked for the literal goal id '["id"]'. It is always there now, opens
+ * on the first status with tasks, counts each, and says when there are none.
+ */
+function GoalTasksSection({ tasks }: { tasks: Task[] }) {
+  // Subscribing re-renders the tab labels when the language changes.
+  const { t } = useTranslation();
+  const { selected, select, counts } = useStatusTabs(TASK_STATUS_ORDER, tasks);
+  const visible = React.useMemo(
+    () => tasks.filter((task) => task.status === selected).slice(0, 15),
+    [tasks, selected],
+  );
+
+  return (
+    <section className="border-t pt-6">
+      <header className="flex items-center gap-1 pb-4">
+        <h3 className="text-sm font-medium">{t("Tasks")}</h3>
+        <span className="text-sm text-muted-foreground">
+          {t("{{count}} total", { count: tasks.length })}
+        </span>
+      </header>
+
+      {tasks.length === 0 ? (
+        <div className="flex h-12 w-full items-center justify-center rounded-md border-2 border-dotted">
+          <span className="text-xs text-muted-foreground/60">
+            {t("No tasks serve this goal yet.")}
+          </span>
+        </div>
+      ) : (
+        <>
+          <TabsSubtle
+            activeLabel
+            selectedIndex={TASK_STATUS_ORDER.indexOf(selected)}
+            onSelect={(index) => select(TASK_STATUS_ORDER[index])}
+          >
+            {TASK_STATUS_ORDER.map((status, index) => (
+              <TabsSubtleItem
+                key={status}
+                index={index}
+                label={TASK_STATUS_CONFIG[status].label}
+                icon={TASK_STATUS_CONFIG[status].icon}
+                count={counts[status] || undefined}
+              />
+            ))}
+          </TabsSubtle>
+
+          {visible.length === 0 ? (
+            <div className="mt-3 flex h-12 w-full items-center justify-center rounded-md border-2 border-dotted">
+              <span className="text-xs text-muted-foreground/60">
+                {t("No tasks in this status.")}
+              </span>
+            </div>
+          ) : (
+            <div className="mt-3 divide-y rounded-md border bg-card">
+              {visible.map((task) => (
+                <TaskListRow key={task.id} task={task} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 export const GoalDetailsPage = aos
   .page("/goals/$id")
   .withMetadata({
     title: "Goal",
     description: "Create and edit goals",
   })
+  .withQuery(GoalDetailsSearchSchema)
   .use(WorkspacePageMiddleware())
   .withLoader(async ({ client, request, response }) => {
     const isCreate = request.params.id === "new";
@@ -205,10 +290,10 @@ export const GoalDetailsPage = aos
       client.goal.getById.query({
         params: { goal: request.params.id },
       }),
+      // The goal's id, as is. It was sent JSON-encoded ('["id"]'), which
+      // tasks_list compares verbatim, so the goal page never listed a task.
       client.task.list.query({
-        query: {
-          goal: toJsonArrayQueryParam([request.params.id]) as unknown as string[],
-        },
+        query: { goal: request.params.id },
       }),
     ]);
     const goal = goalResult.data?.goal;
@@ -225,57 +310,49 @@ export const GoalDetailsPage = aos
     };
   })
   .withComponent(({ route }) => {
-    const router = useRouter();
     const navigate = useNavigate();
+    const router = useRouter();
+    const { t } = useTranslation();
     const { mode, goal, goalTasks } = route.useLoaderData();
+    const search = route.useSearch();
     const goalId = route.useParams().id;
     const isEditMode = mode === "edit";
     const projects = aos.stores.projects.useState((state) => state.items);
-
-    const [selectedTaskStatus, setSelectedTaskStatus] =
-      React.useState<Task["status"]>("todo");
-
-    const filteredTasks = React.useMemo(() => {
-      return goalTasks
-        .filter((task) => task.status === selectedTaskStatus)
-        .slice(0, 15);
-    }, [goalTasks, selectedTaskStatus]);
-
-    const TASK_TABS = React.useMemo(
-      () =>
-        TASK_STATUS_ORDER.map((status) => ({
-          status,
-          ...TASK_STATUS_CONFIG[status],
-        })),
-      [],
-    );
 
     React.useEffect(() => {
       aos.stores.viewport.actions.toggle("page.details.visible", true);
     }, []);
 
+    // react-hook-form applies `values` only on mount: moving from one goal to
+    // another on this same route kept the first goal's fields on screen.
+    const resetForm = React.useRef<() => void>(() => {});
+    React.useEffect(() => {
+      resetForm.current();
+    }, [goalId]);
+
+    // Only a project this workspace has — see prefillProject.
+    const prefill = React.useMemo(
+      () => prefillProject(projects, search.project),
+      [projects, search.project],
+    );
+
     const form = aos.useForm({
       schema: goalFormSchema,
-      values: buildFormValues(goal),
+      values: buildFormValues(goal, prefill),
       onSubmit: async (values: GoalFormValues) => {
-        const body = {
-          title: values.title.trim(),
-          description: values.description?.trim() || undefined,
-          content: values.content?.trim() || undefined,
-          priority: values.priority,
-          project: values.project?.trim() || undefined,
-          deadline: toDeadlineValue(values.deadline),
-          status: values.status,
-        };
-
         if (isEditMode && goal) {
           const result = await aos.client.goal.update.mutate({
             params: { goal: goalId },
-            body,
+            body: goalUpdateBody(
+              values as GoalFormFields,
+              buildFormValues(goal) as GoalFormFields,
+            ),
           });
 
           if (result?.error) {
-            toast.error(getErrorMessage(result.error));
+            toast.error(t("Could not save the goal"), {
+              description: getErrorMessage(result.error),
+            });
             return;
           }
 
@@ -285,39 +362,60 @@ export const GoalDetailsPage = aos
           return;
         }
 
-        const result = await aos.client.goal.create.mutate({ body });
+        const result = await aos.client.goal.create.mutate({
+          body: goalCreateBody(values as GoalFormFields),
+        });
 
         const createdGoalId = result?.data?.goal?.id;
 
         if (result?.error || !createdGoalId) {
-          toast.error(getErrorMessage(result?.error));
+          const code = (result?.error as { code?: string } | undefined)?.code;
+          // A title the daemon cannot take is the title's problem: say it on
+          // the field, where the person is going to fix it.
+          if (code === "AOS_GOAL_ALREADY_EXISTS") {
+            form.setError("title", {
+              message: t("A goal with this title already exists. Choose another title."),
+            });
+            return;
+          }
+          if (code === "AOS_GOAL_TITLE_REQUIRED") {
+            form.setError("title", {
+              message: t("Use at least one letter or number in the title"),
+            });
+            return;
+          }
+          toast.error(t("Could not create the goal"), {
+            description: getErrorMessage(result?.error),
+          });
           return;
         }
 
         toast.success(t("Goal created."));
         void aos.stores.goals.actions.refresh();
-        await router.invalidate();
         await navigate({ to: "/goals/$id", params: { id: createdGoalId } });
       },
     });
+
+    resetForm.current = () => form.reset(buildFormValues(goal, prefill));
 
     const { mutate: deleteGoal, loading: isDeleting } =
       aos.client.goal.delete.useMutation({
         onSuccess: async () => {
           toast.success(t("Goal deleted."));
+          // Leave first. Invalidating while still on /goals/$id reran this
+          // page's loader for the goal just removed, which answered
+          // GOAL_NOT_FOUND before the navigation happened.
+          await navigate({ to: "/goals", replace: true });
           void aos.stores.goals.actions.refresh();
-          await router.invalidate();
-          await navigate({ to: "/goals" });
         },
         onError: (error) => {
-          toast.error(getErrorMessage(error));
+          toast.error(t("Could not delete the goal"), {
+            description: getErrorMessage(error),
+          });
         },
       });
 
     const statusValue = form.watch("status");
-    const priorityValue = form.watch("priority");
-    const deadlineValue = form.watch("deadline");
-
     const status =
       GOAL_STATUS_CONFIG[statusValue] ?? GOAL_STATUS_CONFIG.active;
     const StatusIcon = status.icon;
@@ -325,16 +423,7 @@ export const GoalDetailsPage = aos
       (project) => project.id === form.watch("project"),
     );
 
-    const deadlineFormatted = GoalHelper.formatDeadline(
-      toDeadlineValue(deadlineValue),
-    );
-    const isOverdue = GoalHelper.isOverdue(toDeadlineValue(deadlineValue));
-    const goalLink =
-      isEditMode && goal
-        ? typeof window === "undefined"
-          ? `/goals/${goal.id}`
-          : new URL(`/goals/${goal.id}`, window.location.origin).toString()
-        : null;
+    const link = isEditMode && goal ? shareableLink(`/goals/${goal.id}`) : null;
 
     return (
       <DormantGate feature="goal">
@@ -350,18 +439,18 @@ export const GoalDetailsPage = aos
                       {status.label}
                     </Badge>
                     <SplitPageLayout.ContentTitle>
-                      {isEditMode ? goal?.title : "New Goal"}
+                      {isEditMode ? goal?.title : t("New Goal")}
                     </SplitPageLayout.ContentTitle>
                   </SplitPageLayout.ContentHeaderMain>
 
                   <SplitPageLayout.ContentHeaderActions>
                     <TooltipProvider>
                       <div className="flex items-center gap-2">
-                        {isEditMode && goalLink ? (
+                        {link ? (
                           <HeaderIconButton
-                            label={t("Copy link")}
+                            label={link.label}
                             onClick={() =>
-                              void copyToClipboard(goalLink, "Goal link")
+                              void copyToClipboard(link.value, link.copied)
                             }
                           >
                             <Link2 />
@@ -372,7 +461,7 @@ export const GoalDetailsPage = aos
                           <HeaderIconButton
                             label={t("Copy ID")}
                             onClick={() =>
-                              void copyToClipboard(goal.id, "Goal ID")
+                              void copyToClipboard(goal.id, t("Goal ID copied"))
                             }
                           >
                             <Copy />
@@ -405,8 +494,9 @@ export const GoalDetailsPage = aos
                                   {t("Delete this goal?")}
                                 </AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  {t("This action removes")}{" "}
-                                  <strong>{goal.title}</strong> permanently.
+                                  {t("This permanently removes {{name}}. Tasks that serve it are kept, without the goal.", {
+                                    name: goal.title,
+                                  })}
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
@@ -420,7 +510,7 @@ export const GoalDetailsPage = aos
                                     deleteGoal({ params: { goal: goal.id } })
                                   }
                                 >
-                                  {isDeleting ? "Deleting..." : "Delete goal"}
+                                  {isDeleting ? t("Deleting...") : t("Delete goal")}
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
@@ -439,10 +529,10 @@ export const GoalDetailsPage = aos
                       >
                         <Save />
                         {form.isLoading
-                          ? "Saving..."
+                          ? t("Saving...")
                           : isEditMode
-                            ? "Save changes"
-                            : "Create goal"}
+                            ? t("Save changes")
+                            : t("Create goal")}
                       </Button>
                     </div>
                   </SplitPageLayout.ContentHeaderActions>
@@ -489,6 +579,30 @@ export const GoalDetailsPage = aos
                       )}
                     />
 
+                    {/* The criterion that makes a goal checkable rather than
+                        aspirational — the daemon's own guidance asks for one,
+                        and no screen showed or edited it. */}
+                    <FormField
+                      control={form.control}
+                      name="measure"
+                      render={({ field }) => (
+                        <FormItem className="space-y-2">
+                          <FormLabel className="opacity-60">
+                            {t("Measure")}
+                          </FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder={t("How will you know this goal was achieved?")}
+                              className="min-h-10 max-h-48 resize-none border-0 rounded-none bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0 overflow-y-auto"
+                              {...field}
+                              value={field.value ?? ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
                     <FormField
                       control={form.control}
                       name="content"
@@ -507,41 +621,7 @@ export const GoalDetailsPage = aos
                       )}
                     />
 
-                    {isEditMode && goalTasks.length > 0 ? (
-                      <section className="border-t pt-6">
-                        <header className="flex items-center gap-1 pb-4">
-                          <h3 className="text-sm font-medium">{t("Tasks")}</h3>
-                          <span className="text-sm text-muted-foreground">
-                            {goalTasks.length} total
-                          </span>
-                        </header>
-
-                        <TabsSubtle
-                          activeLabel
-                          selectedIndex={TASK_STATUS_ORDER.indexOf(
-                            selectedTaskStatus,
-                          )}
-                          onSelect={(index) =>
-                            setSelectedTaskStatus(TASK_STATUS_ORDER[index])
-                          }
-                        >
-                          {TASK_TABS.map((tab, index) => (
-                            <TabsSubtleItem
-                              key={tab.status}
-                              index={index}
-                              label={tab.label}
-                              icon={tab.icon}
-                            />
-                          ))}
-                        </TabsSubtle>
-
-                        {<div className="mt-3 divide-y rounded-md border bg-card">
-                            {filteredTasks.map((task) => (
-                              <TaskListRow key={task.id} task={task} />
-                            ))}
-                          </div>}
-                      </section>
-                    ) : null}
+                    {isEditMode ? <GoalTasksSection tasks={goalTasks} /> : null}
                   </div>
                 </SplitPageLayout.ContentBody>
               </SplitPageLayout.Content>
@@ -591,28 +671,26 @@ export const GoalDetailsPage = aos
                                         </button>
                                       </DropdownMenuTrigger>
                                       <DropdownMenuContent align="start">
-                                        {Object.entries(GOAL_STATUS_CONFIG).map(
-                                          ([value, config]) => {
-                                            const Icon = config.icon;
+                                        {GOAL_STATUS_ORDER.map((value) => {
+                                          const config = GOAL_STATUS_CONFIG[value];
+                                          const Icon = config.icon;
 
-                                            return (
-                                              <DropdownMenuItem
-                                                key={value}
-                                                onClick={() =>
-                                                  field.onChange(
-                                                    value as GoalStatus,
-                                                  )
-                                                }
-                                                className="flex items-center gap-2"
-                                              >
-                                                <Icon
-                                                  className={`size-4 ${config.color}`}
-                                                />
-                                                <span>{config.label}</span>
-                                              </DropdownMenuItem>
-                                            );
-                                          },
-                                        )}
+                                          return (
+                                            <DropdownMenuItem
+                                              key={value}
+                                              onClick={() => field.onChange(value)}
+                                              className="flex items-center gap-2"
+                                            >
+                                              <Icon
+                                                className={`size-4 ${config.color}`}
+                                              />
+                                              <span>{config.label}</span>
+                                              {field.value === value ? (
+                                                <Check className="ml-auto size-3.5" />
+                                              ) : null}
+                                            </DropdownMenuItem>
+                                          );
+                                        })}
                                       </DropdownMenuContent>
                                     </DropdownMenu>
                                   </SplitPageLayout.WidgetItem>
@@ -670,6 +748,9 @@ export const GoalDetailsPage = aos
                                                 className={`size-4 ${config.colorClass}`}
                                               />
                                               <span>{config.label}</span>
+                                              {field.value === value ? (
+                                                <Check className="ml-auto size-3.5" />
+                                              ) : null}
                                             </DropdownMenuItem>
                                           );
                                         })}
@@ -698,6 +779,7 @@ export const GoalDetailsPage = aos
                                         onValueChange={(value) =>
                                           field.onChange(value ?? "")
                                         }
+                                        clearLabel={t("Remove deadline")}
                                         variant="ghost"
                                         className="h-8"
                                         size="sm"
@@ -729,7 +811,7 @@ export const GoalDetailsPage = aos
                                         >
                                           <span className="truncate">
                                             {currentProject?.name ||
-                                              "No project"}
+                                              t("No project")}
                                           </span>
                                           <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
                                         </button>

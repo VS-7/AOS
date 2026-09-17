@@ -89,8 +89,8 @@ export function getLocale(): Locale {
 }
 
 /**
- * Switches language, remembers the choice, and re-renders everything reading
- * it through `useTranslation`.
+ * Switches language, remembers it for the next launch's first paint, and
+ * re-renders everything reading it through `useTranslation`.
  */
 export function setLocale(next: Locale): void {
   if (next === activeLocale) return;
@@ -202,14 +202,28 @@ export function useTranslation(): I18nValue {
 }
 
 /**
- * Adopts the language the workspace configuration records, unless the person
- * has since picked one in this browser.
+ * Puts the interface in the language the configuration records.
  *
- * Onboarding writes `region.language`, so this is what makes the choice made
- * there apply to the interface rather than only to what the agents are told.
+ * `region.language` is the one place the language is chosen: onboarding and
+ * the Profile picker write it, and so can the CLI or another window. What
+ * `setLocale` keeps in this browser's storage is only the last language
+ * shown, so the next launch paints its first frame — the login page included,
+ * before any configuration is readable — in it rather than flashing English.
+ *
+ * It used to be the other way round: any stored value counted as a personal
+ * choice and the configuration was ignored, and the first configuration a
+ * window read was stored. So from the first launch on, a language changed
+ * anywhere else never applied, and the picker (reading the configuration)
+ * and the interface (reading storage) disagreed. A language with no
+ * catalogue leaves the interface as it is.
  */
 export function applyConfiguredLocale(language: string | null | undefined): void {
-  if (readStoredLocale()) return;
   const match = normalizeLocale(language);
   if (match) setLocale(match);
 }
+
+/** The tag written to `region.language` for each language the interface has. */
+export const LOCALE_TAGS: Record<Locale, string> = {
+  en: "en-US",
+  "pt-BR": "pt-BR",
+};

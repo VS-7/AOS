@@ -113,8 +113,13 @@ export function resolveAssignee(
 
 /**
  * Resolves a task into its assignee identity, preferring the backend rich
- * projection (`task.assignee`) when present and falling back to the local
- * directory for raw list records.
+ * projection (`task.assignee`) when it names someone and falling back to the
+ * local directory otherwise.
+ *
+ * The daemon resolves agents only (internal/app/continuity.go), so a task
+ * owned by a person comes back as `{type: "unknown"}` with no name, and an
+ * unassigned one as `{id: "", type: "unknown"}`. Trusting either put the raw
+ * user id in the sidebar, and a "?" avatar next to "Unassigned".
  */
 export function resolveTaskAssignee(
   directory: AssigneeDirectoryInput,
@@ -124,21 +129,21 @@ export function resolveTaskAssignee(
   },
 ): AssigneeIdentity | null {
   const projection = task.assignee;
-  if (projection) {
+  if (!task.assigned && !projection?.id) {
+    return null;
+  }
+  if (projection?.id && projection.type !== "unknown" && projection.name) {
     return {
       id: projection.id,
       type: projection.type,
-      // Go's `ResolvedAssignee.Name` is `omitempty` (optional); `id` is
-      // the same id-as-name fallback `resolveAssignee` below already uses
-      // for an unresolved assignee.
-      name: projection.name ?? projection.id,
+      name: projection.name,
       image: projection.image,
       username: projection.username,
       role: projection.role,
     };
   }
 
-  return resolveAssignee(directory, task.assigned);
+  return resolveAssignee(directory, task.assigned || projection?.id);
 }
 
 /** People candidates for the assignee dropdown (members + current user). */

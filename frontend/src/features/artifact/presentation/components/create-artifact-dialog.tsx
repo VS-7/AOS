@@ -31,28 +31,39 @@ import type {
 import { ArtifactHelper } from "@/features/artifact/presentation/helpers/artifact.helper";
 import { ArtifactStore } from "@/features/artifact/presentation/stores/artifact.store";
 import { t } from "@/lib/i18n";
+import { MIN_ARTIFACT_PASSWORD_LENGTH, isArtifactPasswordRefused } from "../helpers/artifact-access";
 
-const VISIBILITY_OPTIONS: Array<{
+// A function, so the labels are in the language the person has when the
+// dialog opens rather than the one this module was loaded in.
+function visibilityOptions(): Array<{
   value: ArtifactVisibility;
   label: string;
   description: string;
-}> = [
-  {
-    value: "private",
-    label: "Private",
-    description: "Only you can open it.",
-  },
-  {
-    value: "workspace",
-    label: "Workspace",
-    description: "Any authenticated member of this workspace can open it.",
-  },
-  {
-    value: "by_password",
-    label: "By password",
-    description: "Anyone holding the password can open it — set one after creating.",
-  },
-];
+}> {
+  return [
+    {
+      value: "private",
+      label: t("Private"),
+      description: t("Only you can open it."),
+    },
+    {
+      value: "workspace",
+      label: t("Workspace"),
+      description: t("Any authenticated member of this workspace can open it."),
+    },
+    {
+      value: "by_password",
+      label: t("By password"),
+      // Set here, with the artifact. "Set one after creating" pointed at a
+      // screen that does not exist, and an artifact with no password refuses
+      // everybody.
+      description: t("Anyone holding the password can open it."),
+    },
+  ];
+}
+
+/** The shortest password the dialog accepts — the daemon's own minimum. */
+const MIN_PASSWORD_LENGTH = MIN_ARTIFACT_PASSWORD_LENGTH;
 
 interface CreateArtifactDialogProps {
   children: React.ReactNode;
@@ -71,23 +82,38 @@ export function CreateArtifactDialog({ children }: CreateArtifactDialogProps) {
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [visibility, setVisibility] = React.useState<ArtifactVisibility>("private");
+  const [password, setPassword] = React.useState("");
+  const options = visibilityOptions();
+  const needsPassword = visibility === "by_password";
+  const passwordTooShort = needsPassword && isArtifactPasswordRefused(password);
 
   const { mutate: createArtifact, loading: isCreating } =
     aos.client.artifact.create.useMutation({
-      onSuccess: async (response) => {
+      onSuccess: async (response, variables) => {
         const created = response?.data as ArtifactListItem | undefined;
         if (!created) {
           toast.error(t("Unable to create artifact."));
           return;
         }
+        // A by_password artifact asks everybody for its password, its creator
+        // included, and this is the one moment the dialog already has it: the
+        // one it was just created with.
+        const typed = (variables as { body?: { password?: string } } | undefined)?.body?.password;
         await ArtifactStore.actions.refresh();
         resetAndClose();
-        toast.success(`Created "${created.name}".`);
+        if (created.visibility === "by_password") {
+          toast.success(t("Created \"{{name}}\".", { name: created.name }), {
+            description: t("Share its address together with the password."),
+          });
+          ArtifactHelper.openInBrowserTab(created, { password: typed });
+          return;
+        }
+        toast.success(t("Created \"{{name}}\".", { name: created.name }));
         ArtifactHelper.openInBrowserTab(created);
       },
       onError: (error: any) => {
         toast.error(
-          error?.error?.message || error?.message || "Unable to create artifact.",
+          error?.error?.message || error?.message || t("Unable to create artifact."),
         );
       },
     });
@@ -97,6 +123,7 @@ export function CreateArtifactDialog({ children }: CreateArtifactDialogProps) {
     setName("");
     setDescription("");
     setVisibility("private");
+    setPassword("");
   }
 
   function handleOpenChange(nextOpen: boolean) {
@@ -105,19 +132,23 @@ export function CreateArtifactDialog({ children }: CreateArtifactDialogProps) {
       setName("");
       setDescription("");
       setVisibility("private");
+      setPassword("");
     }
   }
 
   function handleSubmit(event?: React.FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (!trimmed || passwordTooShort) return;
 
     createArtifact({
       body: {
         name: trimmed,
         description: description.trim() || undefined,
         visibility,
+        // Stored with the artifact in the same call, so it is never reachable
+        // half-configured.
+        ...(needsPassword ? { password } : {}),
       },
     });
   }
@@ -171,7 +202,7 @@ export function CreateArtifactDialog({ children }: CreateArtifactDialogProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {VISIBILITY_OPTIONS.map((option) => (
+                {options.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>
@@ -179,9 +210,28 @@ export function CreateArtifactDialog({ children }: CreateArtifactDialogProps) {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              {VISIBILITY_OPTIONS.find((o) => o.value === visibility)?.description}
+              {options.find((o) => o.value === visibility)?.description}
             </p>
           </div>
+
+          {needsPassword ? (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="artifact-password">{t("Password")}</Label>
+              <Input
+                id="artifact-password"
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                disabled={isCreating}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("At least {{count}} characters. Share it only with who should open the artifact.", {
+                  count: MIN_PASSWORD_LENGTH,
+                })}
+              </p>
+            </div>
+          ) : null}
 
           <DialogFooter>
             <Button
@@ -192,7 +242,7 @@ export function CreateArtifactDialog({ children }: CreateArtifactDialogProps) {
             >
               {t("Cancel")}
             </Button>
-            <Button type="submit" size="sm" disabled={isCreating || !name.trim()}>
+            <Button type="submit" size="sm" disabled={isCreating || !name.trim() || passwordTooShort}>
               {isCreating ? (
                 <HugeiconsIcon icon={Loading03Icon} className="size-4 animate-spin" />
               ) : (

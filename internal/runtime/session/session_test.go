@@ -42,7 +42,7 @@ func TestAStoredConversationBecomesWhatTheModelReads(t *testing.T) {
 		{Role: chat.RoleSystem, Parts: []chat.Part{{Type: chat.PartText, Text: "ignored"}}},
 	}}
 
-	got := transcript(stored)
+	got := transcript(stored, speaker{})
 	if len(got) != 3 {
 		t.Fatalf("got %d messages: %+v", len(got), got)
 	}
@@ -66,7 +66,7 @@ func TestAnAssistantTurnWithNothingInItIsDropped(t *testing.T) {
 	got := transcript(&chat.Chat{Messages: []chat.Message{
 		{Role: chat.RoleAssistant, CreatedAt: at},
 		{Role: chat.RoleUser, Parts: []chat.Part{{Type: chat.PartText, Text: "hello"}}},
-	}})
+	}}, speaker{})
 	if len(got) != 1 || got[0].Role != agentloop.RoleUser {
 		t.Fatalf("got %+v", got)
 	}
@@ -77,7 +77,7 @@ func TestAnAssistantTurnWithNothingInItIsDropped(t *testing.T) {
 func TestAnAgentWithNoPolicyGetsTheStrictOne(t *testing.T) {
 	r := &Runner{deps: Deps{WorkspaceRoot: t.TempDir()}}
 
-	box, err := r.sandboxFor(&agent.Agent{ID: "atlas"})
+	box, err := r.sandboxFor(context.Background(), &agent.Agent{ID: "atlas"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestAnAgentWithNoPolicyGetsTheStrictOne(t *testing.T) {
 func TestTheAgentsFileDecidesWhatItMayReach(t *testing.T) {
 	r := &Runner{deps: Deps{WorkspaceRoot: t.TempDir()}}
 
-	box, err := r.sandboxFor(&agent.Agent{
+	box, err := r.sandboxFor(context.Background(), &agent.Agent{
 		ID: "builder",
 		Sandbox: &agent.Sandbox{
 			Permissions: []string{"read", "write", "execute"},
@@ -106,7 +106,7 @@ func TestTheAgentsFileDecidesWhatItMayReach(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,6 +248,7 @@ func TestAnAnswerCarriesOnlyTheToolCallsOfItsOwnTurn(t *testing.T) {
 				{ID: "new-1", Name: "tasks_list"},
 			}},
 		},
+		Calls:     []agentloop.ToolCall{{ID: "new-1", Name: "tasks_list"}},
 		ToolCalls: []agentloop.ToolResult{{CallID: "new-1", Name: "tasks_list"}},
 	}
 

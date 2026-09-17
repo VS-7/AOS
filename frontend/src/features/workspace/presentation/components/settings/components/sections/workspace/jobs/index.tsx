@@ -49,13 +49,17 @@ function statusLabel(status: string): string {
 }
 
 /**
- * The execution queue, which was invisible.
+ * The queue of deferred work, and whether it is healthy.
  *
- * Every turn an agent takes, every routine that fires and every task the
- * system runs on its own goes through this queue, and the window showed
- * nothing between "asked" and "answered" — a job that was retrying, or dead,
- * or held by a worker that stopped reporting, looked exactly like a job that
- * was simply taking a while.
+ * It is not where turns run. Chat turns, task runs and routines fired by hand,
+ * by a webhook or by an activity start directly (`internal/runtime/session`'s
+ * Dispatch, the routine executor) — so this page used to say "every turn,
+ * routine and background task runs through this queue" above a list that
+ * stayed empty however many turns ran, with a Recover button that could never
+ * be pressed and a Purge that always removed nothing. What the queue does hold
+ * is a scheduled routine's run: the daemon's tick queues it and the worker's
+ * slots run it, so one long run does not hold up every other schedule. The
+ * page says that, and offers an action only when there is something for it.
  *
  * `stale` is the one that matters most and the reason `recover` is a button
  * here: a job still marked claimed whose lease has lapsed is not busy, its
@@ -128,6 +132,7 @@ export function WorkspaceJobsSection(): React.JSX.Element {
   const stale = stats?.stale ?? [];
   const dead = stats?.dead ?? [];
   const busy = isRecovering || isPurging;
+  const finished = (stats?.byStatus?.succeeded ?? 0) + (stats?.byStatus?.dead ?? 0);
 
   return (
     <SettingsSectionShell>
@@ -135,7 +140,7 @@ export function WorkspaceJobsSection(): React.JSX.Element {
         <FormSectionHeader>
           <FormSectionTitle>{t("Jobs")}</FormSectionTitle>
           <FormSectionDescription>
-            {t("Every turn, routine and background task runs through this queue.")}
+            {t("Scheduled routine runs wait here until the daemon's worker runs them. Chat turns, task runs and routines fired any other way start directly, so they do not appear in this queue.")}
           </FormSectionDescription>
         </FormSectionHeader>
 
@@ -165,18 +170,22 @@ export function WorkspaceJobsSection(): React.JSX.Element {
               >
                 {t("Refresh")}
               </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                disabled={busy || stale.length === 0}
-                onClick={() => void recoverJobs({})}
-              >
-                {t("Recover stalled")}
-              </Button>
-              <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={purge}>
-                {t("Purge finished")}
-              </Button>
+              {stale.length > 0 ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => void recoverJobs({})}
+                >
+                  {t("Recover stalled")}
+                </Button>
+              ) : null}
+              {finished > 0 ? (
+                <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={purge}>
+                  {t("Purge finished")}
+                </Button>
+              ) : null}
             </div>
           </FormSectionItem>
 

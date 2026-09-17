@@ -52,11 +52,11 @@ Create a template. Content is validated as Liquid before anything is written; a 
   "properties": {
     "id": {
       "type": "string",
-      "description": "Identifier for the template. Also its file name: lowercase, digits, hyphen and underscore only."
+      "description": "Identifier for the template. Also its file name: lowercase, digits, hyphen and underscore only. Derived from Name when omitted."
     },
     "name": {
       "type": "string",
-      "description": "Human name of the template."
+      "description": "Human name of the template. The id is derived from it when none is given."
     },
     "description": {
       "type": "string",
@@ -119,7 +119,6 @@ Create a template. Content is validated as Liquid before anything is written; a 
     }
   },
   "required": [
-    "id",
     "name",
     "content",
     "_reasoning"

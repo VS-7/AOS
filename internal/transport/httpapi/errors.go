@@ -85,3 +85,23 @@ func errNoAuthenticator() error {
 			Label: "this is a build or wiring fault; the daemon cannot verify anybody while security is enabled",
 		})
 }
+
+func errWebhookNoToken() error {
+	return apperr.New("HTTP_WEBHOOK_NO_TOKEN").
+		Causer("httpapi.routineWebhook").
+		Msgf("this request is not authorised to fire that routine").
+		Status(apperr.StatusUnauthorized).
+		CTA(apperr.CallToAction{
+			Label: "send the routine's webhook token as \"Authorization: Bearer <token>\"; it is shown once, when the trigger is created",
+			Tool:  "routines_rotate",
+		})
+}
+
+func errWebhookUnreadable(err error) error {
+	return apperr.New("HTTP_WEBHOOK_UNREADABLE").
+		Causer("httpapi.routineWebhook").
+		Msgf("the webhook's body could not be read").
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{Label: "deliver it again"}).
+		Wrap(err)
+}

@@ -4,10 +4,7 @@ import {
 } from "@/features/task/presentation/components/dropdowns";
 import { SetStatusDropdown } from "@/features/task/presentation/components/dropdowns/set-status.dropdown";
 import { SetTypeDropdown } from "@/features/task/presentation/components/dropdowns/set-type.dropdown";
-import {
-  TaskPriority,
-  TaskWithContext,
-} from "@/features/task/interfaces/task.interfaces";
+import type { TaskWithContext } from "@/features/task/interfaces/task.interfaces";
 import {
   Avatar,
   AvatarAgentFallback,
@@ -36,39 +33,28 @@ import { DependenciesWidget } from "./components/dependencies-widget";
 import { aos } from "@/app/aos";
 import { TaskHelper } from "@/features/task/presentation/helpers/task.helper";
 import { assigneeInitials, resolveTaskAssignee } from "@/features/task/presentation/helpers/assignee.helper";
+import { allowedMoves } from "@/features/task/presentation/helpers/task-lifecycle.helper";
 import { TASK_PRIORITY_CONFIG } from "@/features/task/presentation/consts/task";
 import { ProjectSelectorDropdown } from "@/components/ui/project-selector-dropdown";
 import { GoalSelectorDropdown } from "@/components/ui/goal-selector-dropdown";
-import { DateTimeInput } from "@/components/ui/date-time-input";
+import { TaskDueDatePicker } from "@/features/task/presentation/components/due-date/task-due-date";
+import { useAssigneeDirectory } from "@/features/task/presentation/hooks/assignee-directory.hook";
+import type { TaskActions } from "@/features/task/presentation/hooks/task-actions.hook";
 import { Icon } from "@/components/ui/icon";
 import { ProjectHelper } from "@/features/project/presentation/helpers/project.helper";
 import { t } from "@/lib/i18n";
 
-interface TaskDetailsSidebarProps {
+interface TaskOverviewTabProps {
   task: TaskWithContext;
-  onStatusChange: (status: TaskWithContext["status"]) => void;
-  onPriorityChange: (priority: TaskPriority) => void;
-  onTypeChange: (type: string) => void;
-  onAssigneeChange: (assignee: string | undefined) => void;
-  onDueDateChange: (dueAt: string | undefined) => void;
-  onProjectChange: (project: string | undefined) => void;
-  onGoalChange: (goal: string | undefined) => void;
+  actions: TaskActions;
 }
 
-export function TaskOverviewTab({
-  task,
-  onAssigneeChange,
-  onDueDateChange,
-  onPriorityChange,
-  onStatusChange,
-  onTypeChange,
-  onProjectChange,
-  onGoalChange,
-}: TaskDetailsSidebarProps) {
-  const directory = aos.stores.workspace.useState((state) => state.directory);
-  const self = aos.stores.auth.useState((state) => state.user);
+export function TaskOverviewTab({ task, actions }: TaskOverviewTabProps) {
+  const directory = useAssigneeDirectory();
   const projects = aos.stores.projects.useState((state) => state.items);
   const goals = aos.stores.goals.useState((state) => state.items);
+  const workspace = aos.stores.workspace.useState((state) => state.current);
+  const taskType = workspace?.tasks?.find((type) => type.id === task.type);
 
   const statusCfg = TaskHelper.getStatus(task.status);
   const StatusIcon = statusCfg.icon;
@@ -76,10 +62,7 @@ export function TaskOverviewTab({
   const priorityCfg = TASK_PRIORITY_CONFIG[task.priority];
   const PriorityIcon = priorityCfg.icon;
 
-  const assignee = resolveTaskAssignee(
-    { ...directory, self },
-    { assigned: task.assigned, assignee: task.assignee },
-  );
+  const assignee = resolveTaskAssignee(directory, task);
   const currentProject = projects.find(
     (project) => project.id === task.project,
   );
@@ -105,9 +88,8 @@ export function TaskOverviewTab({
               <DropdownMenuContent align="start">
                 <SetStatusDropdown
                   currentStatus={task.status}
-                  onStatusChange={(s) =>
-                    onStatusChange(s as TaskWithContext["status"])
-                  }
+                  allowed={allowedMoves(task)}
+                  onStatusChange={actions.setStatus}
                 />
               </DropdownMenuContent>
             </DropdownMenu>
@@ -131,7 +113,7 @@ export function TaskOverviewTab({
               <DropdownMenuContent align="start">
                 <SetPriorityDropdown
                   currentPriority={task.priority}
-                  onPriorityChange={onPriorityChange}
+                  onPriorityChange={actions.setPriority}
                 />
               </DropdownMenuContent>
             </DropdownMenu>
@@ -145,15 +127,15 @@ export function TaskOverviewTab({
             </span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs hover:bg-accent capitalize">
-                  {task.type}
+                <button className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs hover:bg-accent">
+                  {taskType?.label || task.type || t("No type")}
                   <ChevronDown className="ml-auto size-3 shrink-0 opacity-60" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
                 <SetTypeDropdown
                   currentType={task.type}
-                  onTypeChange={onTypeChange}
+                  onTypeChange={actions.setType}
                 />
               </DropdownMenuContent>
             </DropdownMenu>
@@ -189,14 +171,14 @@ export function TaskOverviewTab({
                       </AvatarFallback>
                     </Avatar>
                   )}
-                  {assignee?.name || "Unassigned"}
+                  {assignee?.name || t("Unassigned")}
                   <ChevronDown className="ml-auto size-3 shrink-0 opacity-60" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-64">
                 <SetAssigneeDropdown
                   currentAssignee={task.assigned}
-                  onAssigneeChange={onAssigneeChange}
+                  onAssigneeChange={actions.setAssignee}
                 />
               </DropdownMenuContent>
             </DropdownMenu>
@@ -208,14 +190,7 @@ export function TaskOverviewTab({
             <span className="w-16 shrink-0 text-xs text-muted-foreground">
               {t("Due Date")}
             </span>
-            <DateTimeInput
-              value={task.dueAt}
-              onValueChange={onDueDateChange}
-              showTime
-              variant="ghost"
-              size="sm"
-              className="h-auto w-auto min-w-0 flex-1 justify-start rounded px-1.5 py-0.5 text-xs"
-            />
+            <TaskDueDatePicker value={task.dueAt} onChange={actions.setDueDate} />
           </SplitPageLayout.WidgetItem>
 
           <SplitPageLayout.WidgetItem>
@@ -232,7 +207,7 @@ export function TaskOverviewTab({
                     className="size-3.5 shrink-0 text-muted-foreground"
                   />
                   <span className="line-clamp-1 text-left">
-                    {currentProject?.name || "No project"}
+                    {currentProject?.name || t("No project")}
                   </span>
                   <ChevronDown className="ml-auto size-3 shrink-0 opacity-60" />
                 </button>
@@ -240,7 +215,7 @@ export function TaskOverviewTab({
               <DropdownMenuContent align="start" className="w-64">
                 <ProjectSelectorDropdown
                   currentProject={task.project}
-                  onProjectChange={onProjectChange}
+                  onProjectChange={actions.setProject}
                 />
               </DropdownMenuContent>
             </DropdownMenu>
@@ -255,7 +230,7 @@ export function TaskOverviewTab({
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-2 rounded px-1.5 py-0.5 text-xs hover:bg-accent">
                   <span className="line-clamp-1 text-left">
-                    {currentGoal?.title || "No goal"}
+                    {currentGoal?.title || t("No goal")}
                   </span>
                   <ChevronDown className="ml-auto size-3 shrink-0 opacity-60" />
                 </button>
@@ -263,7 +238,7 @@ export function TaskOverviewTab({
               <DropdownMenuContent align="start" className="w-64">
                 <GoalSelectorDropdown
                   currentGoal={task.goal}
-                  onGoalChange={onGoalChange}
+                  onGoalChange={actions.setGoal}
                 />
               </DropdownMenuContent>
             </DropdownMenu>
@@ -284,15 +259,15 @@ export function TaskOverviewTab({
               <span className="w-16 shrink-0 text-xs text-muted-foreground">
                 {t("Worktree")}
               </span>
-              <span className="text-xs">
-                {task.worktree.branch
-                  ? `/${task.worktree.branch}`
-                  : `/task/${task.id}`}
-                {task.worktree.path && (
-                  <code className="ml-1 text-xs text-muted-foreground">
-                    → {task.worktree.path}
-                  </code>
-                )}
+              {/* The branch the daemon cuts, not a made-up "/task/<id>", and a
+                  path only once the checkout exists. */}
+              <span className="flex min-w-0 flex-col text-xs">
+                <span className="truncate" title={TaskHelper.branchName(task, workspace?.git?.branchPrefix)}>
+                  {TaskHelper.branchName(task, workspace?.git?.branchPrefix)}
+                </span>
+                <code className="truncate text-muted-foreground" title={task.worktree.path}>
+                  {task.worktree.path || t("Not created yet")}
+                </code>
               </span>
             </SplitPageLayout.WidgetItem>
           )}
@@ -325,7 +300,7 @@ export function TaskOverviewTab({
         </SplitPageLayout.Widget>
       )}
 
-      <DependenciesWidget task={task} />
+      <DependenciesWidget task={task} actions={actions} />
 
       <TodoWidget taskId={task.id} />
     </>

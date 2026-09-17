@@ -7,22 +7,35 @@ import type { RoutineTriggerFormValue } from "@/features/routine/presentation/co
 import { RoutineTriggersHelper } from "@/features/routine/presentation/helpers/routine-triggers.helper";
 import { RoutineTriggerAddMenu } from "./routine-trigger-add-menu";
 import { ScheduledTriggerRow } from "./scheduled-trigger-row";
-import { WebhookTriggerRow } from "./webhook-trigger-row";
+import { WebhookTriggerRow, type WebhookTriggerState } from "./webhook-trigger-row";
 import { ActivityTriggerRow } from "./activity-trigger-row";
 import { t } from "@/lib/i18n";
+
+/** What the daemon said about the schedule as it is saved. */
+export interface SavedSchedule {
+  cron?: string;
+  nextRun?: string;
+  /** Warnings already in the interface's language. */
+  warnings: string[];
+}
 
 interface RoutineTriggersPanelProps {
   value: RoutineTriggerFormValue[];
   onChange: (next: RoutineTriggerFormValue[]) => void;
-  fireUrl?: string | null;
+  webhook?: WebhookTriggerState;
+  saved?: SavedSchedule;
   activityEvents: ActivityEventDefinition[];
+  /** Validation messages for each trigger, by index. */
+  errors?: string[][];
 }
 
 export function RoutineTriggersPanel({
   value,
   onChange,
-  fireUrl,
+  webhook,
+  saved,
   activityEvents,
+  errors = [],
 }: RoutineTriggersPanelProps) {
   const availableTypes = RoutineTriggersHelper.getAvailableTriggerTypes(
     value,
@@ -30,6 +43,11 @@ export function RoutineTriggersPanel({
   );
   const scheduledCount = RoutineTriggersHelper.countScheduledTriggers(value);
   const canAdd = RoutineTriggersHelper.canAddTriggers(value, activityEvents);
+  const firstCron = value.find((trigger) => trigger.type === "scheduled");
+  // The daemon's answers describe the saved schedule; once the cron on screen
+  // differs they would describe something that is no longer being edited.
+  const scheduleIsSaved =
+    firstCron?.type === "scheduled" && saved?.cron === firstCron.config.cron;
 
   function handleAdd(trigger: RoutineTriggerFormValue) {
     onChange([...value, trigger]);
@@ -58,6 +76,9 @@ export function RoutineTriggersPanel({
                 value={trigger}
                 onChange={(next) => handleUpdate(index, next)}
                 onRemove={() => handleRemove(index)}
+                savedNextRun={
+                  scheduleIsSaved && trigger === firstCron ? saved?.nextRun : undefined
+                }
               />
             ) : trigger.type === "activity" ? (
               <ActivityTriggerRow
@@ -68,10 +89,19 @@ export function RoutineTriggersPanel({
               />
             ) : (
               <WebhookTriggerRow
-                fireUrl={fireUrl}
+                webhook={webhook}
                 onRemove={() => handleRemove(index)}
               />
             )}
+            {(errors[index] ?? []).map((message) => (
+              <p
+                key={message}
+                data-slot="form-message"
+                className="px-3 pb-2 text-xs text-destructive"
+              >
+                {t(message)}
+              </p>
+            ))}
           </div>
         ))}
 
@@ -102,6 +132,18 @@ export function RoutineTriggersPanel({
           {t("Only the first cron trigger will be used")}
         </p>
       ) : null}
+
+      {scheduleIsSaved
+        ? (saved?.warnings ?? []).map((warning) => (
+            <p
+              key={warning}
+              className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500"
+            >
+              <span aria-hidden>⚠</span>
+              {warning}
+            </p>
+          ))
+        : null}
     </div>
   );
 }

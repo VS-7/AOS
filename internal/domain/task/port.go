@@ -46,8 +46,70 @@ type Worktrees interface {
 	// a prune that stops working.
 	Remove(ctx context.Context, path string) error
 
-	// List reports the checkouts that exist, so the prune can see what it has.
-	List(ctx context.Context) ([]string, error)
+	// List reports the checkouts of this repository that exist under root,
+	// other than the main working tree, so the prune can see what it has.
+	// Whether one is under root is decided once links are resolved, the way
+	// git reports a checkout, and each is spelled under root as the caller
+	// wrote it — so the paths compare with the ones Branch placed there
+	// whatever link the state directory is reached through.
+	List(ctx context.Context, root string) ([]string, error)
+
+	// Exists reports whether path is one of this repository's checkouts, is
+	// still on disk, and — once links are resolved — sits under root. A task's
+	// recorded path is read back from a file that is copied, restored and
+	// edited, and it becomes a sandbox root: it is asked about rather than
+	// believed.
+	Exists(ctx context.Context, root, path string) bool
+
+	// Source reports what a checkout for spec would be cut from, before
+	// anything is created or pruned — so a workspace with nothing to cut from
+	// is refused with the reason rather than with git's last words.
+	Source(ctx context.Context, spec WorktreeSpec) (WorktreeSource, error)
+
+	// WorkspaceIn is the directory the workspace is inside one of its
+	// checkouts: the checkout itself when the workspace is its repository's
+	// top, the workspace's folder inside it when the workspace is a folder of
+	// a project. found is false, and the directory the checkout, when that
+	// folder is not in the checkout or leads out of it.
+	//
+	// It depends on where the workspace sits in its repository and on the
+	// checkout, never on the task's branch: it is asked on every turn.
+	WorkspaceIn(ctx context.Context, checkout string) (dir string, found bool, err error)
+}
+
+// WorktreeSource is the repository a task's checkout would come from.
+type WorktreeSource struct {
+	// Dir is the workspace directory checkouts are cut from.
+	Dir string
+
+	// Toplevel is the top of the working tree Dir belongs to, or "" when it
+	// belongs to none.
+	Toplevel string
+
+	// Own reports whether that working tree is Dir itself. When it is not, the
+	// workspace is a directory inside somebody's repository — a monorepo's
+	// subfolder — and a checkout is of that repository, holding the workspace
+	// at Subdir.
+	Own bool
+
+	// BaseExists reports whether there is something to check out: the branch
+	// already exists, or the base (HEAD when none is named) is a commit. A
+	// repository nobody has committed to has neither.
+	BaseExists bool
+
+	// BranchExists reports whether the repository already has the branch, in
+	// which case a checkout goes on from its commits rather than cutting it
+	// from the base.
+	BranchExists bool
+
+	// Subdir is where the workspace sits inside Toplevel when that repository
+	// is not its own, as a relative path; "" when it is.
+	Subdir string
+
+	// SubdirCommitted reports whether what would be checked out holds Subdir.
+	// A folder the enclosing repository never committed is not in a checkout
+	// of it, and a task rooted there would find nothing.
+	SubdirCommitted bool
 }
 
 // WorktreeSpec is what it takes to cut one.
@@ -79,11 +141,23 @@ type Policy interface {
 
 // WorktreePolicy is the workspace's isolation configuration.
 type WorktreePolicy struct {
-	BranchPrefix       string
-	Limit              int
-	DeleteOld          bool
-	OnCreateScript     string
-	Root               string // where checkouts are placed
+	BranchPrefix   string
+	Limit          int
+	DeleteOld      bool
+	OnCreateScript string
+
+	// Root is where this workspace places its checkouts: its own directory,
+	// never shared with another workspace. Two workspaces that are folders of
+	// one repository cut checkouts from that one repository, and a root they
+	// shared made each one's checkouts look like the other's leftovers.
+	Root string
+
+	// LegacyRoot is the installation-wide directory checkouts were placed in
+	// before each workspace had a root of its own. A task's checkout recorded
+	// there, named after the task, is still the task's; anything else in it
+	// may belong to any workspace, so it is never counted or pruned.
+	LegacyRoot string
+
 	DefaultBase        string
 	EnabledByDefault   bool
 	ScriptTimeoutHint  time.Duration

@@ -19,6 +19,7 @@ import (
 	"github.com/OWNER/aos/internal/core/apperr"
 	"github.com/OWNER/aos/internal/core/command"
 	"github.com/OWNER/aos/internal/domain/file"
+	"github.com/OWNER/aos/internal/transport/fileapi/contentpolicy"
 )
 
 // maxBodyBytes bounds a write body. A file the UI edits is text a person is
@@ -44,6 +45,9 @@ func New(cfg Config) http.Handler {
 	r.Get("/read", s.read)
 	r.Get("/content", s.content)
 	r.Put("/write", s.write)
+	r.Put("/create", s.create)
+	r.Put("/mkdir", s.mkdir)
+	r.Put("/copy", s.copyPath)
 	r.Put("/move", s.move)
 	r.Delete("/delete", s.delete)
 	r.Get("/diff", s.diff)
@@ -86,6 +90,9 @@ func (s *server) read(w http.ResponseWriter, r *http.Request) {
 // an <img> cannot decode one. http.ServeContent does the rest — Range (so a
 // video can seek), 304 against If-Modified-Since, and the Content-Length the
 // player needs to draw a scrub bar.
+//
+// The bytes are the workspace's, and agents write them: anything that could
+// be a document running script goes out sandboxed — see contentpolicy.
 func (s *server) content(w http.ResponseWriter, r *http.Request) {
 	out, err := s.svc.Content(r.Context(), file.ReadInput{Path: r.URL.Query().Get("path")})
 	if err != nil {
@@ -98,6 +105,7 @@ func (s *server) content(w http.ResponseWriter, r *http.Request) {
 	// the domain already knows the type from the extension, and sniffing
 	// reads the first 512 bytes back off the handle to guess it again.
 	w.Header().Set("Content-Type", out.MediaType)
+	contentpolicy.Apply(w.Header())
 	http.ServeContent(w, r, out.Name, out.ModTime, out.Body)
 }
 
@@ -111,6 +119,49 @@ func (s *server) write(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, map[string]string{"path": in.Path})
+}
+
+// create is write's refusing twin: the explorer's New File, which must not
+// replace a file that is already there.
+func (s *server) create(w http.ResponseWriter, r *http.Request) {
+	var in file.WriteInput
+	if !s.decode(w, r, &in) {
+		return
+	}
+	if err := s.svc.Create(r.Context(), in); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, map[string]string{"path": in.Path})
+}
+
+func (s *server) mkdir(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Path string `json:"path"`
+	}
+	if !s.decode(w, r, &in) {
+		return
+	}
+	if err := s.svc.Mkdir(r.Context(), in.Path); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, map[string]string{"path": in.Path})
+}
+
+func (s *server) copyPath(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+	}
+	if !s.decode(w, r, &in) {
+		return
+	}
+	if err := s.svc.Copy(r.Context(), in.From, in.To); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, map[string]string{"path": in.To})
 }
 
 func (s *server) move(w http.ResponseWriter, r *http.Request) {

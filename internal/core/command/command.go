@@ -85,6 +85,25 @@ func (s Surface) String() string {
 // non-empty `_reasoning`.
 func (s Surface) RequiresReasoning() bool { return s == SurfaceMCP || s == SurfaceAgent }
 
+type surfaceKey struct{}
+
+// SurfaceOf is the surface a call came through, as Invoke records it on the
+// handler's context. ok is false for a call that did not come through Invoke:
+// a service called by another service, or by a test.
+//
+// A handler rarely needs it; identity says who is calling. It does not say
+// through what: `aosd --mcp` carries neither an account nor an agent, and a
+// tool call through it looked exactly like a person at a terminal, which is
+// what let an MCP client install updates.
+func SurfaceOf(ctx context.Context) (Surface, bool) {
+	s, ok := ctx.Value(surfaceKey{}).(Surface)
+	return s, ok
+}
+
+func withSurface(ctx context.Context, s Surface) context.Context {
+	return context.WithValue(ctx, surfaceKey{}, s)
+}
+
 // GroupDoc describes a group of commands: the text that becomes the composite
 // tool's description and the group's page in the generated documentation.
 type GroupDoc struct {

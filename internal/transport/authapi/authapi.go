@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
@@ -79,6 +80,8 @@ func New(cfg Config) http.Handler {
 	r.Post("/password", s.changePassword)
 	r.Post("/profile", s.updateProfile)
 	r.Get("/users", s.users)
+	r.Get("/api-token", s.apiToken)
+	r.Post("/api-token", s.regenerateAPIToken)
 	return r
 }
 
@@ -253,7 +256,7 @@ func (s *server) changePassword(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, map[string]any{})
 }
 
-// updateProfile changes the signed-in account's name and email.
+// updateProfile changes the signed-in account's name, email and avatar.
 //
 // Same shape as session on the way out — {"user": {...}} — so the interface
 // can drop the answer straight into the store it read session into, rather
@@ -267,12 +270,15 @@ func (s *server) updateProfile(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Name  string `json:"name"`
 		Email string `json:"email"`
+		// A pointer, so a body that does not mention the avatar leaves it
+		// alone and one that sends "" removes it.
+		Image *string `json:"image"`
 	}
 	if !s.decode(w, r, &in) {
 		return
 	}
 	updated, err := s.svc.UpdateProfile(r.Context(), auth.UpdateProfileInput{
-		UserID: user.ID, Name: in.Name, Email: in.Email,
+		UserID: user.ID, Name: in.Name, Email: in.Email, Image: in.Image,
 	})
 	if err != nil {
 		s.writeError(w, err)
@@ -281,12 +287,85 @@ func (s *server) updateProfile(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, map[string]any{"user": updated})
 }
 
+// apiTokenView is what a client is told about an API credential: enough to
+// tell which one is configured, nothing that authenticates.
+type apiTokenView struct {
+	Prefix     string     `json:"prefix"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+}
+
+// apiToken describes the signed-in account's API credential, or answers
+// {"token": null} when it has none.
+//
+// Settings > Developers shows it, so a person can tell whether the token in
+// their MCP client is the current one. Identity sits outside the command
+// registry (see the package doc), so this is a route and not a command.
+func (s *server) apiToken(w http.ResponseWriter, r *http.Request) {
+	user, err := s.authenticate(r)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	current, err := s.svc.APIToken(r.Context(), user.ID)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if current == nil {
+		s.writeJSON(w, map[string]any{"token": nil})
+		return
+	}
+	s.writeJSON(w, map[string]any{"token": apiTokenView{Prefix: current.Prefix, CreatedAt: current.CreatedAt, LastUsedAt: current.LastUsed}})
+}
+
+// regenerateAPIToken replaces the signed-in account's API credential and
+// answers the new value — the only time it is ever answered.
+//
+// It revokes the token every MCP client the person configured is using, so two
+// callers that can authenticate are still refused. The API token itself: it is
+// what those clients and agents hold, and accepting it let any of them replace
+// the person's token and keep the new one. And a request a browser sends
+// without asking — the session cookie is SameSite=Lax, and a page on any other
+// 127.0.0.1 port is the same site, so a plain form there posted here with the
+// cookie attached. A form cannot send application/json, and a script that does
+// needs a preflight the daemon's CORS policy answers only for the window. That
+// check runs first, so a forged request touches no credential at all.
+func (s *server) regenerateAPIToken(w http.ResponseWriter, r *http.Request) {
+	if !sentAsJSON(r) {
+		s.writeError(w, errNotJSON())
+		return
+	}
+	user, presented, err := s.svc.Credential(r.Context(), bearerOf(r))
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if presented.Name == auth.APITokenName {
+		s.writeError(w, errAPITokenReplacingItself())
+		return
+	}
+	token, plain, err := s.svc.RegenerateAPIToken(r.Context(), user.ID)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, map[string]any{"token": plain, "prefix": token.Prefix, "createdAt": token.CreatedAt})
+}
+
 func (s *server) authenticate(r *http.Request) (*auth.User, error) {
 	bearer := bearerOf(r)
 	if bearer == "" {
 		return nil, errUnauthenticated()
 	}
 	return s.svc.Authenticate(r.Context(), bearer)
+}
+
+// sentAsJSON reports whether r declares a JSON body, which only a request a
+// browser would preflight can.
+func sentAsJSON(r *http.Request) bool {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	return err == nil && mediaType == "application/json"
 }
 
 func (s *server) decode(w http.ResponseWriter, r *http.Request, v any) bool {

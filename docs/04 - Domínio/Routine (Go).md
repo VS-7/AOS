@@ -188,6 +188,23 @@ dependência nova; `TestCronParsing` cobre 9 expressões válidas e 13 inválida
 rotina que nunca dispara, e nada mais no sistema diria isso. É reportado a cada
 tick e vira `warning` no `routines get`.
 
+**Um gatilho `activity` é entregue pela fila, não dentro da mutação.** Cada
+disparo é um turno inteiro, e entregue inline quem publicou a atividade esperava
+por ele: mover uma task esperava o turno de toda rotina que a mudança disparava,
+e um "Run now" esperava toda rotina que ouvia `routine.fired`. `OnActivity` passa
+cada disparo a um `Reactor`; no daemon ele vira um job `aos.routine` na fila de
+rotinas, com o id do workspace explícito e a cadeia de disparos (`Chain`) no
+payload, e o pool o executa via `Service.Take`. Um processo sem worker drenando a
+fila (`aosd <comando>`, `aosd mcp`) e um diretório que o registro não sabe nomear
+com certeza continuam disparando inline — o `aos` não é esse caso: ele chama o
+daemon por HTTP, e quem publica é o daemon. A cadeia viaja com o job porque é ela
+que limita o que um evento externo dispara: nenhuma rotina já na cadeia, nada
+depois de `MaxChain`, e um disparo que reagiu a uma atividade do namespace
+`routine` não dispara mais nada por esse namespace (uma reação a "uma rotina
+rodou" tem um nível só). `TestAnActivityHandsItsFiringsOnInsteadOfRunningThem`,
+`TestAMoveDoesNotWaitForTheRoutineItSetsOff`,
+`TestRoutineFiringsAreReactedToOneLevelDeep`.
+
 **Um filtro sobre campo ausente nunca casa, nem sob `neq`.** A leitura ingênua
 faria "type is not bug" disparar para todo evento do namespace que não tem
 `type` — que é a maioria deles.

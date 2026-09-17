@@ -1,8 +1,8 @@
 import { AosTriggerGroup } from "@/app/builders/trigger";
 import z from "zod";
 import type { ViewportTabState } from "../stores/viewport.store";
-import { normalizeBrowserUrl } from "../stores/browser.store";
-import { reloadHere } from "@/lib/wails";
+import { resolveBrowserInput } from "../stores/browser.store";
+import { openExternal, reloadHere } from "@/lib/wails";
 
 export const tabsGroup = AosTriggerGroup.create("Tabs")
   .withOrder(0) // Priorities tabs
@@ -127,8 +127,17 @@ export const tabsGroup = AosTriggerGroup.create("Tabs")
         // `window.aos.browser.navigate` this used to also call, which was
         // always a no-op (window.d.ts documents that bridge as permanently
         // undefined here).
-        const url = normalizeBrowserUrl((input as { url: string }).url);
-        stores.viewport.actions.updateTab(activeId, { url, status: "loading" });
+        const target = resolveBrowserInput((input as { url: string }).url);
+        if (!target) return;
+        if (target.kind === "search") {
+          // No search engine lets itself be framed here (browser.store.ts),
+          // so the search opens where it can be read, and the tab and its
+          // address bar stay on the page they were showing.
+          void openExternal(target.url);
+          stores.browser.actions.setAddressBarValue(tab.url ?? "");
+          return;
+        }
+        stores.viewport.actions.updateTab(activeId, { url: target.url, status: "loading" });
       }
     },
   })

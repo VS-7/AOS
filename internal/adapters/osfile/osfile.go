@@ -92,6 +92,31 @@ func (FS) WriteFile(_ context.Context, path string, data []byte) error {
 	return os.WriteFile(path, data, 0o644) //nolint:gosec // workspace files are not secrets
 }
 
+// CopyFile streams from into a file it creates exclusively: O_EXCL is what
+// makes "never replace what is there" hold even when something lands at the
+// destination between the domain's existence check and this call.
+func (FS) CopyFile(_ context.Context, from, to string) (err error) {
+	src, err := os.Open(from) //nolint:gosec // path was resolved and confined by pathx before this call
+	if err != nil {
+		return wrapNotExist(err)
+	}
+	defer func() { _ = src.Close() }()
+
+	dst, err := os.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644) //nolint:gosec // resolved and confined by pathx; workspace files are not secrets
+	if err != nil {
+		return err
+	}
+	// The close of a written file is where a full disk surfaces; dropping its
+	// error would report a truncated copy as a finished one.
+	defer func() {
+		if cerr := dst.Close(); err == nil {
+			err = cerr
+		}
+	}()
+	_, err = io.Copy(dst, src)
+	return err
+}
+
 func (FS) MkdirAll(_ context.Context, path string) error {
 	return os.MkdirAll(path, 0o755) //nolint:gosec // matches the permissions a person creating the directory by hand would get
 }

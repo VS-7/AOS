@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -336,5 +337,113 @@ func TestTheAvatarIsWritable(t *testing.T) {
 	}
 	if cleared.Image != "" {
 		t.Errorf("image = %q, want it cleared", cleared.Image)
+	}
+}
+
+// The Channels tab saves a Telegram binding with `agents update`, and the
+// input had no field for it: the decoder dropped the list and the save
+// answered with an unchanged agent. Channels are replaced whole, like the
+// sandbox, so removing a binding really removes it.
+func TestChannelsAreWritableAndReplacedWhole(t *testing.T) {
+	svc, _ := newService(t)
+	if _, err := svc.Create(ctx(), agent.CreateInput{
+		ID:       "luara",
+		Role:     "Orchestrator",
+		Channels: []agent.Channel{{Provider: "discord", Data: map[string]any{"guild": "1"}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	telegram := []agent.Channel{{Provider: "telegram", Data: map[string]any{"token": "123:abc", "allowedIds": []any{"42"}}}}
+	got, err := svc.Update(ctx(), agent.UpdateInput{ID: "luara", Channels: &telegram})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Channels) != 1 || got.Channels[0].Provider != "telegram" {
+		t.Fatalf("channels = %+v, want only the telegram binding that was sent", got.Channels)
+	}
+	if got.Role != "Orchestrator" {
+		t.Errorf("role = %q, want it left alone", got.Role)
+	}
+
+	role := "Lead"
+	kept, err := svc.Update(ctx(), agent.UpdateInput{ID: "luara", Role: &role})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kept.Channels) != 1 {
+		t.Errorf("channels = %+v, want them left alone by an update that did not send any", kept.Channels)
+	}
+
+	none := []agent.Channel{}
+	cleared, err := svc.Update(ctx(), agent.UpdateInput{ID: "luara", Channels: &none})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cleared.Channels) != 0 {
+		t.Errorf("channels = %+v, want them cleared", cleared.Channels)
+	}
+}
+
+// A person creating an agent from the settings screen types a name, and the
+// id is made from it. A name with nothing to make an id from was refused as
+// `"" is not a usable agent slug` with a CTA to run `aos agents create atlas`
+// — an empty quote, a field the form does not have, and a terminal command.
+func TestANameWithNothingToMakeAnIDFromIsRefusedByName(t *testing.T) {
+	svc, _ := newService(t)
+	_, err := svc.Create(ctx(), agent.CreateInput{Name: "!!!"})
+	if !errors.Is(err, apperr.ErrInvalid) {
+		t.Fatalf("error = %v", err)
+	}
+	e, _ := apperr.As(err)
+	if !strings.Contains(e.Message, `"!!!"`) || strings.Contains(e.Message, `""`) {
+		t.Errorf("message = %q, want it to quote the name that was typed", e.Message)
+	}
+	if len(e.Actions) == 0 || !strings.Contains(e.Actions[0].Label, "letters or digits") {
+		t.Errorf("actions = %+v, want to be told what a usable name has", e.Actions)
+	}
+}
+
+// The duplicate reached the caller as the storage layer's sentence — `record
+// id=luara already exists in collection "agents"` — which names a collection
+// and a key rather than the agent that is in the way.
+func TestCreateNamesTheAgentThatAlreadyHasTheID(t *testing.T) {
+	svc, _ := newService(t)
+	if _, err := svc.Create(ctx(), agent.CreateInput{Name: "Luara"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := svc.Create(ctx(), agent.CreateInput{Name: "Luára"})
+	if !errors.Is(err, apperr.ErrConflict) {
+		t.Fatalf("error = %v", err)
+	}
+	e, _ := apperr.As(err)
+	if e.Code != "AOS_AGENT_ALREADY_EXISTS" {
+		t.Errorf("code = %q, want the agent domain's own", e.Code)
+	}
+	if !strings.Contains(e.Message, "Luara") || !strings.Contains(e.Message, "luara") {
+		t.Errorf("message = %q, want the existing agent and the id", e.Message)
+	}
+}
+
+type recordingNotifier struct{ got []agent.Agent }
+
+func (r *recordingNotifier) AgentChanged(_ context.Context, _ string, a *agent.Agent) {
+	r.got = append(r.got, *a)
+}
+
+// The activity for a deletion said "Deleted agent: zeta-del": the notifier
+// was handed a record with only the id, so the name was already gone.
+func TestDeleteReportsTheAgentByName(t *testing.T) {
+	notes := &recordingNotifier{}
+	svc := agent.NewService(fakes.NewRepo[agent.Agent]("agents"), clockx.Fixed{At: refTime}, agent.WithNotifier(notes))
+	if _, err := svc.Create(ctx(), agent.CreateInput{Name: "Zeta Del"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Delete(ctx(), agent.DeleteInput{ID: "zeta-del"}); err != nil {
+		t.Fatal(err)
+	}
+	last := notes.got[len(notes.got)-1]
+	if last.ID != "zeta-del" || last.Name != "Zeta Del" {
+		t.Errorf("deleted = %+v, want the agent as it was", last)
 	}
 }

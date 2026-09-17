@@ -21,13 +21,23 @@ export const ChatStore = AosStore.create("agents")
     const response = await api.chat.list.query({});
 
     return {
-      items: response.data?.chats || [],
+      items: (response.data?.chats ?? []) as Chat[],
     };
   })
   .addAction('refresh', (ctx) => async () => {
     // Same call as the preload, for the same reason.
     const response = await api.chat.list.query({});
-    ctx.state.set({ items: response.data?.chats })
-    return { items: response.data?.chats }
+    // A list that could not be read is not an empty list, and it is certainly
+    // not `undefined`: storing the missing field made every sidebar tab call
+    // `.filter` on nothing while rendering, and the error boundary took the
+    // whole window down with it — on a transient daemon error, or a restart
+    // while the sidebar remounted. What was on screen stays until a read
+    // succeeds.
+    if (response.error) {
+      return { items: ctx.state.get().items };
+    }
+    const items = (response.data?.chats ?? []) as Chat[];
+    ctx.state.set({ items });
+    return { items };
   })
   .build();

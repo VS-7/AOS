@@ -64,18 +64,21 @@ export function ChatComposerSkillsCommandMenu({
             <PromptInputCommandGroup heading={t("Commands")}>
               {slashCommands.map((item) => {
                 const Icon = item.id === "stop" ? SquareIcon : EraserIcon
-                const badge = item.id === "stop" ? "Stop" : "Clear"
+                const badge = item.id === "stop" ? t("Stop") : t("Clear")
+                const label = t(item.label)
 
                 return (
                   <PromptInputCommandItem
                     disabled={item.disabled}
                     key={item.id}
                     onSelect={() => onCommandSelect(item)}
-                    value={item.searchValue}
+                    // The English words stay searchable beside the translated
+                    // label, so "/stop" finds Stop in any language.
+                    value={`${item.searchValue} ${label}`}
                   >
                     <HugeiconsIcon icon={Icon} className="size-4 text-muted-foreground" />
                     <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                      {item.label}
+                      {label}
                     </span>
                     <span className="rounded-full border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
                       {badge}
@@ -86,6 +89,10 @@ export function ChatComposerSkillsCommandMenu({
             </PromptInputCommandGroup>
           ) : null}
 
+          {/* Only with skills under it: cmdk draws a group's heading even when
+              the group is empty, which read as a "Skills" section with nothing
+              in it. */}
+          {selectableSkills.length > 0 ? (
           <PromptInputCommandGroup heading={t("Skills")}>
             {selectableSkills.map((reference) => (
               <PromptInputCommandItem
@@ -102,6 +109,7 @@ export function ChatComposerSkillsCommandMenu({
               </PromptInputCommandItem>
             ))}
           </PromptInputCommandGroup>
+          ) : null}
 
           {trigger ? (
             <div className="border-t px-3 py-2 text-[11px] text-muted-foreground">

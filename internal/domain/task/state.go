@@ -39,5 +39,11 @@ func (s Status) NextStates() []string {
 	return out
 }
 
+// nextStatuses is the same list, typed, and never nil. A view publishes it, and
+// a finished task's answer is "nowhere", which an absent list does not say.
+func (s Status) nextStatuses() []Status {
+	return append(make([]Status, 0, len(transitions[s])), transitions[s]...)
+}
+
 // Terminal reports whether the task is done and will not move again.
 func (s Status) Terminal() bool { return s == Finished }

@@ -15,8 +15,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { ImageUpload } from "@/components/ui/image-upload";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Textarea } from "@/components/ui/textarea";
 import {
   TabsSubtle,
@@ -29,12 +29,45 @@ import { AgentTasksTab } from "./tasks";
 import { AgentChannelsTab } from "./channels";
 import { AgentRoutinesTab } from "./routines";
 import { t } from "@/lib/i18n";
+import { agentSlug } from "../../../../contexts/agent-form";
+import { useAgents } from "../../../../contexts/agents.context";
+
+/**
+ * The id a new agent will get, shown while its name is typed.
+ *
+ * The id is made from the name and is the agent's identity from then on —
+ * its directory, every reference to it. A form that never showed it could
+ * only find out it was unusable, or taken, from the daemon.
+ */
+function NewAgentId({ name }: { name: string }) {
+  const { agents } = useAgents();
+  if (!name.trim()) return null;
+  const id = agentSlug(name);
+  if (!id) {
+    return (
+      <p className="text-xs text-destructive">
+        {t("Use a name with letters or digits: the agent's id is made from it.")}
+      </p>
+    );
+  }
+  const taken = agents.find((agent) => agent.id === id);
+  return (
+    <p className={taken ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
+      {taken
+        ? t("{{name}} already uses the id {{id}}. Choose another name.", { name: taken.name || taken.id, id })
+        : t("Id: {{id}}", { id })}
+    </p>
+  );
+}
 
 interface AgentContentTabsProps {
   agent?: Agent;
   form: any;
   isCreateMode: boolean;
   isLoadingInstructions: boolean;
+  /** The instructions could not be read: there is nothing to edit. */
+  instructionsFailed?: boolean;
+  onRetryInstructions?: () => void;
 }
 
 export function AgentContentTabs({
@@ -42,6 +75,8 @@ export function AgentContentTabs({
   form,
   isCreateMode,
   isLoadingInstructions,
+  instructionsFailed = false,
+  onRetryInstructions,
 }: AgentContentTabsProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const idPrefix = `agent-content-${agent?.id ?? "new"}`;
@@ -115,6 +150,7 @@ export function AgentContentTabs({
                       {...field}
                     />
                   </FormControl>
+                  {isCreateMode ? <NewAgentId name={field.value ?? ""} /> : null}
                   <FormMessage />
                 </FormItem>
               )}
@@ -165,12 +201,36 @@ export function AgentContentTabs({
                 <FormItem>
                   <FormLabel className="opacity-60">{t("Instructions")}</FormLabel>
                   <FormControl>
-                    <MarkdownEditor
+                    {/* Plain text, not MarkdownEditor: these are the words the
+                        model reads. The rich editor re-serialised whatever it
+                        loaded — `<rules>` saved as `\<rules>`, `-` bullets as
+                        `*`, HTML comments dropped, trailing spaces as
+                        `&#x20;` — so a one-character edit rewrote the whole
+                        AGENT.md and changed the instructions themselves. */}
+                    <Textarea
+                      {...field}
                       value={field.value ?? ""}
-                      onValueChange={field.onChange}
-                      placeholder={t("Write the system instructions for this agent...")}
+                      spellCheck={false}
+                      // Until the agent's own instructions arrive the field
+                      // holds nothing; typing into it then would save that
+                      // nothing over AGENT.md. The same holds when they could
+                      // not be read at all.
+                      disabled={isLoadingInstructions || instructionsFailed}
+                      placeholder={
+                        isLoadingInstructions
+                          ? t("Loading instructions…")
+                          : instructionsFailed
+                            ? t("The instructions could not be loaded.")
+                            : t("Write the system instructions for this agent...")
+                      }
+                      className="min-h-64 resize-y font-mono text-sm leading-relaxed"
                     />
                   </FormControl>
+                  {instructionsFailed && onRetryInstructions ? (
+                    <Button type="button" variant="secondary" size="sm" className="w-fit" onClick={onRetryInstructions}>
+                      {t("Try again")}
+                    </Button>
+                  ) : null}
                   <FormMessage />
                 </FormItem>
               )}

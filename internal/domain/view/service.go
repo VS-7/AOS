@@ -124,9 +124,11 @@ type ScaffoldInput struct {
 // by index — an index shifts when the tree is edited, a label does not).
 // Input is merged over the action's own declared Input, so a caller supplies
 // only what the button's own declaration did not already fix, such as which
-// record was clicked.
+// record was clicked. Skill is the same optional qualifier GetInput takes: a
+// button on a skill's own view has to find that view before its action.
 type ExecuteActionInput struct {
 	ID    string         `json:"id" jsonschema:"Identifier of the view the action belongs to." validate:"required,notblank"`
+	Skill string         `json:"skill,omitempty" jsonschema:"The skill the view ships with, when it is skill-scoped."`
 	Label string         `json:"label" jsonschema:"Label of the action within the view's tree, as declared." validate:"required,notblank"`
 	Input map[string]any `json:"input,omitempty" jsonschema:"Arguments to invoke the command with, merged over the action's own declared input."`
 
@@ -287,7 +289,7 @@ func (s *Service) Scaffold(ctx context.Context, in ScaffoldInput) (*View, error)
 // otherwise a view would be a way to call anything in it from a button
 // nobody wrote into the tree.
 func (s *Service) ExecuteAction(ctx context.Context, in ExecuteActionInput) (json.RawMessage, error) {
-	v, err := s.Get(ctx, GetInput{ID: in.ID})
+	v, err := s.Get(ctx, GetInput{ID: in.ID, Skill: in.Skill})
 	if err != nil {
 		return nil, err
 	}

@@ -14,6 +14,13 @@ export interface UseChatResult {
   persistedMessageIds: string[];
   isLoading: boolean;
   isRefreshing: boolean;
+  /**
+   * Why the conversation could not be read, when it could not. `chat` keeps
+   * the last snapshot that did load, so a caller that only checked `chat`
+   * went on showing a deleted conversation — with a composer writing into
+   * nothing.
+   */
+  error: (Error & { code?: string }) | null;
   refresh: () => void;
   /**
    * Refetches and applies the server's transcript verbatim, dropping whatever
@@ -262,6 +269,7 @@ export function useChat({ chatId, enabled = true }: UseChatParams): UseChatResul
     messages,
     persistedMessageIds,
     isLoading: chatQuery.isLoading,
+    error: (chatQuery.error as (Error & { code?: string }) | null) ?? null,
     isRefreshing: chatQuery.isFetching,
     refresh: chatQuery.refetch,
     replaceAndRefresh,

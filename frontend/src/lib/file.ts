@@ -1,6 +1,7 @@
-import { DomainError, bridgeFetch, unwrap } from "./client";
+import { DAEMON_UNREACHABLE_CODE, DomainError, bridgeFetch, unwrap } from "./client";
 import { getWorkspace, isDesktop } from "./client";
 import { daemonURL } from "./daemon-origin";
+import { isDesktopWindow } from "./wails";
 
 /** Mirrors internal/domain/file.Node. */
 export interface FileNode {
@@ -70,31 +71,44 @@ function headers(extra?: Record<string, string>): Record<string, string> {
 }
 
 /**
- * One call to /api/file, over whichever transport this page actually has.
+ * One call to /api/file, over the transport this page has.
  *
- * The bridge first, and it is not an optimisation: inside the desktop window
- * a plain fetch to the daemon is cross-origin, carries no cookie and no
+ * The bridge inside the desktop window, and it is not an optimisation: a plain
+ * fetch to the daemon from there is cross-origin, carries no cookie and no
  * bearer, and is refused — so the file tree, the editor and every diff were
  * empty there. The bridge attaches the credential the window already holds
- * (internal/transport/wailsvc.DomainService.Fetch). In a browser tab there is
- * no bridge, `Call.ByName` rejects, and the fetch below is right: the daemon
- * serves the page, so the request is same-origin and the session cookie goes
- * with it.
+ * (internal/transport/wailsvc.DomainService.Fetch). In a browser tab the
+ * daemon serves the page, the request is same-origin and the session cookie
+ * goes with it.
+ *
+ * Never one after the other. This used to fall back to a bare fetch whenever
+ * the bridge rejected, which inside the window meant an anonymous request
+ * after every Go-side failure: a daemon that was down came back as a refused
+ * connection with no code, rather than as the AOS_DAEMON_UNREACHABLE the
+ * bridge had already answered.
  */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const method = init?.method ?? "GET";
   const headers = (init?.headers ?? {}) as Record<string, string>;
   const body = typeof init?.body === "string" ? init.body : "";
 
-  try {
+  if (isDesktopWindow) {
     const answer = await bridgeFetch(method, path, headers["content-type"] ?? "", body);
     return unwrap(parseBody(answer.body, answer.status));
-  } catch (err) {
-    if (err instanceof DomainError) throw err;
-    // No bridge here — a browser tab. Fall through to fetch.
   }
 
-  const response = await fetch(daemonURL(path), init);
+  let response: Response;
+  try {
+    response = await fetch(daemonURL(path), init);
+  } catch {
+    // A refused connection rejects with a bare TypeError ("Load failed"),
+    // which is what every file screen showed after the daemon stopped.
+    throw new DomainError({
+      code: DAEMON_UNREACHABLE_CODE,
+      message: "the daemon is not answering",
+      status: 503,
+    });
+  }
   let payload: unknown;
   try {
     payload = await response.json();
@@ -156,6 +170,41 @@ export async function write(path: string, content: string): Promise<{ path: stri
     method: "PUT",
     headers: headers({ "content-type": "application/json" }),
     body: JSON.stringify({ path, content }),
+  });
+}
+
+/**
+ * A new file, refused (409) when anything is already at `path` — the
+ * explorer's "New File". `write` overwrites on purpose, because it is the
+ * editor's save; creating through it is how a paste used to empty a file.
+ */
+export async function create(path: string, content: string): Promise<{ path: string }> {
+  return request(`/api/file/create`, {
+    method: "PUT",
+    headers: headers({ "content-type": "application/json" }),
+    body: JSON.stringify({ path, content }),
+  });
+}
+
+/** A new, empty directory, refused when `path` is taken. */
+export async function mkdir(path: string): Promise<{ path: string }> {
+  return request(`/api/file/mkdir`, {
+    method: "PUT",
+    headers: headers({ "content-type": "application/json" }),
+    body: JSON.stringify({ path }),
+  });
+}
+
+/**
+ * A copy of a file or a whole directory, made by the daemon and refused when
+ * `to` is taken. Copying here instead of reading and writing back keeps a
+ * binary intact and a large file whole.
+ */
+export async function copy(from: string, to: string): Promise<{ path: string }> {
+  return request(`/api/file/copy`, {
+    method: "PUT",
+    headers: headers({ "content-type": "application/json" }),
+    body: JSON.stringify({ from, to }),
   });
 }
 

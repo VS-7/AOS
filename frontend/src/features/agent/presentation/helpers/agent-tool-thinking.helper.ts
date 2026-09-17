@@ -1,5 +1,281 @@
 import type { IconName } from "@/lib/icon-context";
 import type { ChatMessage } from "@/features/chat/interfaces/chat.interfaces";
+import { t } from "@/lib/i18n";
+
+/**
+ * What a daemon command does, by the verb its tool name ends in.
+ *
+ * Every Go command is an agent tool named `<group>_<verb>` (`projects_get`,
+ * `todos_set-status`). The configs below are keyed by the original's tool
+ * names, which Go does not have beyond the file and shell tools, so every
+ * domain call fell back to "Used an agent tool" under its raw name and was
+ * counted by nothing in the header.
+ */
+const DOMAIN_VERB_ACTIONS: Record<string, AgentThinkingActionKind> = {
+  get: "read",
+  list: "read",
+  read: "read",
+  "read-all": "read",
+  show: "read",
+  status: "read",
+  stats: "read",
+  me: "read",
+  inventory: "read",
+  graph: "read",
+  reflect: "read",
+  events: "read",
+  runs: "read",
+  tools: "read",
+  components: "read",
+  check: "read",
+  diff: "read",
+  "get-config": "read",
+  "records-get": "read",
+  "records-list": "read",
+  search: "search",
+  find: "search",
+  query: "search",
+  recall: "search",
+  discover: "search",
+  discovery: "search",
+  create: "write",
+  update: "write",
+  delete: "write",
+  store: "write",
+  forget: "write",
+  purge: "write",
+  install: "write",
+  uninstall: "write",
+  rotate: "write",
+  clear: "write",
+  branch: "write",
+  assign: "write",
+  move: "write",
+  rename: "write",
+  archive: "write",
+  add: "write",
+  remove: "write",
+  react: "write",
+  scaffold: "write",
+  plan: "write",
+  "update-config": "write",
+  introspect: "write",
+  decide: "write",
+  "set-password": "write",
+  "records-create": "write",
+  "records-update": "write",
+  "records-delete": "write",
+  run: "execute",
+  fire: "execute",
+  start: "execute",
+  stop: "execute",
+  restart: "execute",
+  send: "execute",
+  render: "execute",
+  call: "execute",
+  apply: "execute",
+  download: "execute",
+  recover: "execute",
+  retry: "execute",
+  cancel: "execute",
+  "execute-action": "execute",
+};
+
+/**
+ * Commands whose verb names the wrong action: activity's "read" marks an
+ * entry as read, which changes it.
+ */
+const DOMAIN_COMMAND_ACTIONS: Record<string, AgentThinkingActionKind> = {
+  activity_read: "write",
+  "activity_read-all": "write",
+};
+
+const DOMAIN_ACTION_ICONS: Record<AgentThinkingActionKind, IconName> = {
+  read: "search",
+  search: "search",
+  write: "copy",
+  execute: "play",
+  browse: "globe",
+  manage: "settings",
+  other: "settings",
+};
+
+const DOMAIN_ACTION_DESCRIPTIONS: Record<AgentThinkingActionKind, string> = {
+  read: "Read workspace records",
+  search: "Searched workspace records",
+  write: "Changed workspace records",
+  execute: "Started an action in the workspace",
+  browse: "Browsed",
+  manage: "Managed workspace records",
+  other: "Used a workspace command",
+};
+
+/**
+ * The title of every daemon command an agent can call, as its own catalogue
+ * key.
+ *
+ * Not the verb alone through `t()`: a one-word key is shared with every other
+ * screen, where it means something else — "List" is the noun "Lista", "Run"
+ * the noun "Execução" — so the rows read "Tarefas · Lista". A key that names
+ * its group cannot collide, and says in Portuguese what the call did. The
+ * helper's test holds this map to the generated registry, so a new command
+ * without a title fails there rather than rendering in English.
+ */
+export const DOMAIN_COMMAND_TITLES: Record<string, string> = {
+  "activity_delete": "Activity · Delete entry",
+  "activity_events": "Activity · List events",
+  "activity_get": "Activity · Read entry",
+  "activity_list": "Activity · List",
+  "activity_purge": "Activity · Purge old entries",
+  "activity_read": "Activity · Mark as read",
+  "activity_read-all": "Activity · Mark all as read",
+  "agents_create": "Agents · Create",
+  "agents_delete": "Agents · Delete",
+  "agents_get": "Agents · Read",
+  "agents_list": "Agents · List",
+  "agents_me": "Agents · Identify self",
+  "agents_update": "Agents · Update",
+  "approvals_decide": "Approvals · Decide",
+  "approvals_list": "Approvals · List",
+  "artifacts_create": "Artifacts · Create",
+  "artifacts_delete": "Artifacts · Delete",
+  "artifacts_get": "Artifacts · Read",
+  "artifacts_list": "Artifacts · List",
+  "artifacts_set-password": "Artifacts · Set password",
+  "artifacts_update": "Artifacts · Update",
+  "chats_clear": "Chats · Clear",
+  "chats_create": "Chats · Create",
+  "chats_delete": "Chats · Delete",
+  "chats_get": "Chats · Read",
+  "chats_list": "Chats · List",
+  "chats_react": "Chats · React",
+  "chats_send": "Chats · Send message",
+  "chats_stop": "Chats · Stop turn",
+  "chats_update": "Chats · Update",
+  "collections_create": "Collections · Create",
+  "collections_delete": "Collections · Delete",
+  "collections_get": "Collections · Read",
+  "collections_list": "Collections · List",
+  "collections_records-create": "Collections · Create record",
+  "collections_records-delete": "Collections · Delete record",
+  "collections_records-get": "Collections · Read record",
+  "collections_records-list": "Collections · List records",
+  "collections_records-update": "Collections · Update record",
+  "comments_create": "Comments · Create",
+  "comments_delete": "Comments · Delete",
+  "comments_get": "Comments · Read",
+  "comments_list": "Comments · List",
+  "comments_update": "Comments · Update",
+  "config_get": "Config · Read",
+  "config_update": "Config · Update",
+  "gateway_restart": "Gateway · Restart",
+  "gateway_start": "Gateway · Start",
+  "gateway_status": "Gateway · Status",
+  "gateway_stop": "Gateway · Stop",
+  "goals_create": "Goals · Create",
+  "goals_delete": "Goals · Delete",
+  "goals_get": "Goals · Read",
+  "goals_list": "Goals · List",
+  "goals_update": "Goals · Update",
+  "instructions_create": "Instructions · Create",
+  "instructions_delete": "Instructions · Delete",
+  "instructions_get": "Instructions · Read",
+  "instructions_list": "Instructions · List",
+  "instructions_update": "Instructions · Update",
+  "jobs_get": "Jobs · Read",
+  "jobs_list": "Jobs · List",
+  "jobs_purge": "Jobs · Purge finished",
+  "jobs_recover": "Jobs · Recover stalled",
+  "jobs_stats": "Jobs · Queue stats",
+  "marketplace_discovery": "Marketplace · Search registries",
+  "marketplace_get": "Marketplace · Read",
+  "marketplace_install": "Marketplace · Install",
+  "memories_forget": "Memories · Forget",
+  "memories_graph": "Memories · Map graph",
+  "memories_recall": "Memories · Recall",
+  "memories_reflect": "Memories · Read in full",
+  "memories_store": "Memories · Store",
+  "models_list": "Models · List",
+  "projects_create": "Projects · Create",
+  "projects_delete": "Projects · Delete",
+  "projects_get": "Projects · Read",
+  "projects_list": "Projects · List",
+  "projects_update": "Projects · Update",
+  "routines_create": "Routines · Create",
+  "routines_delete": "Routines · Delete",
+  "routines_fire": "Routines · Run now",
+  "routines_get": "Routines · Read",
+  "routines_list": "Routines · List",
+  "routines_rotate": "Routines · Rotate webhook token",
+  "routines_runs": "Routines · Run history",
+  "routines_update": "Routines · Update",
+  "skills_create": "Skills · Create",
+  "skills_delete": "Skills · Delete",
+  "skills_install": "Skills · Install",
+  "skills_list": "Skills · List",
+  "skills_update": "Skills · Update",
+  "tasks_branch": "Tasks · Create branch",
+  "tasks_create": "Tasks · Create",
+  "tasks_delete": "Tasks · Delete",
+  "tasks_get": "Tasks · Read",
+  "tasks_list": "Tasks · List",
+  "tasks_set-status": "Tasks · Set status",
+  "tasks_update": "Tasks · Update",
+  "templates_create": "Templates · Create",
+  "templates_delete": "Templates · Delete",
+  "templates_get": "Templates · Read",
+  "templates_list": "Templates · List",
+  "templates_render": "Templates · Render",
+  "templates_update": "Templates · Update",
+  "themes_delete": "Themes · Delete",
+  "themes_get": "Themes · Read",
+  "themes_install": "Themes · Install",
+  "themes_list": "Themes · List",
+  "todos_create": "Todos · Create",
+  "todos_delete": "Todos · Delete",
+  "todos_get": "Todos · Read",
+  "todos_list": "Todos · List",
+  "todos_set-status": "Todos · Set status",
+  "todos_update": "Todos · Update",
+  "toolsets_call": "Toolsets · Call tool",
+  "toolsets_delete": "Toolsets · Delete",
+  "toolsets_get": "Toolsets · Read",
+  "toolsets_get-config": "Toolsets · Read configuration",
+  "toolsets_list": "Toolsets · List",
+  "toolsets_tools": "Toolsets · List tools",
+  "toolsets_update-config": "Toolsets · Update configuration",
+  "tunnel_start": "Tunnel · Start",
+  "tunnel_status": "Tunnel · Status",
+  "tunnel_stop": "Tunnel · Stop",
+  "update_apply": "Update · Apply",
+  "update_check": "Update · Check",
+  "update_download": "Update · Download",
+  "update_status": "Update · Status",
+  "views_components": "Views · List components",
+  "views_create": "Views · Create",
+  "views_delete": "Views · Delete",
+  "views_execute-action": "Views · Execute action",
+  "views_get": "Views · Read",
+  "views_list": "Views · List",
+  "views_render": "Views · Render",
+  "views_scaffold": "Views · Scaffold",
+  "workspace_create": "Workspace · Create",
+  "workspace_delete": "Workspace · Delete",
+  "workspace_get": "Workspace · Read",
+  "workspace_introspect": "Workspace · Register repository",
+  "workspace_inventory": "Workspace · Inventory",
+  "workspace_list": "Workspace · List",
+  "workspace_update": "Workspace · Update",
+};
+
+/** `set-status` → `Set status`: the command's own word, readable. */
+function humanizeCommandWord(word: string): string {
+  const spaced = word.replace(/[-_]+/g, " ").trim();
+  return spaced ? spaced[0].toUpperCase() + spaced.slice(1) : spaced;
+}
+
+/** Go's tool naming: a lowercase group, an underscore, the verb path. */
+const DOMAIN_TOOL_NAME = /^[a-z][a-z0-9-]*_[a-z0-9_-]+$/;
 
 /**
  * @description Action category used to summarize agent tool activity in chat thinking steps.
@@ -310,15 +586,44 @@ export class AgentToolThinkingHelper {
   public static getToolConfig(toolName: string): AgentToolThinkingConfig {
     const normalizedName = this.normalizeToolName(toolName);
 
-    return (
-      this.TOOL_CONFIGS[normalizedName] ?? {
-        title: normalizedName || "Use tool",
-        description: "Used an agent tool",
-        icon: "settings",
-        category: "tool",
-        action: "other",
-      }
-    );
+    const known = this.TOOL_CONFIGS[normalizedName];
+    if (known) {
+      return { ...known, title: t(known.title), description: t(known.description) };
+    }
+
+    if (DOMAIN_TOOL_NAME.test(normalizedName)) {
+      return this.getDomainToolConfig(normalizedName);
+    }
+
+    return {
+      title: normalizedName || t("Use tool"),
+      description: t("Used an agent tool"),
+      icon: "settings",
+      category: "tool",
+      action: "other",
+    };
+  }
+
+  /**
+   * A daemon command, described by its group and verb: `projects_get` reads
+   * as "Projects · Read" and counts as a read.
+   */
+  private static getDomainToolConfig(toolName: string): AgentToolThinkingConfig {
+    const [group, ...rest] = toolName.split("_");
+    const verb = rest.join("-");
+    const action =
+      DOMAIN_COMMAND_ACTIONS[toolName] ?? DOMAIN_VERB_ACTIONS[verb] ?? (verb.startsWith("set-") ? "write" : "other");
+    const title = DOMAIN_COMMAND_TITLES[toolName];
+
+    return {
+      // A tool outside the registry (a connected toolset's) has no entry, and
+      // its words are its own name: shown as they are, never looked up.
+      title: title ? t(title) : `${humanizeCommandWord(group)} · ${humanizeCommandWord(rest.join(" "))}`,
+      description: t(DOMAIN_ACTION_DESCRIPTIONS[action]),
+      icon: DOMAIN_ACTION_ICONS[action],
+      category: group,
+      action,
+    };
   }
 
   /**
@@ -425,7 +730,7 @@ export class AgentToolThinkingHelper {
         return {
           id: `${message.id}:reasoning:${index}`,
           kind: "reasoning",
-          label: "Reasoning",
+          label: t("Reasoning"),
           description: this.compactText(part.text ?? ""),
           icon: "brain",
           status: this.toStepStatus(part.state),
@@ -437,7 +742,7 @@ export class AgentToolThinkingHelper {
       return {
         id: `${message.id}:text:${index}`,
         kind: "text",
-        label: "Drafted response",
+        label: t("Drafted response"),
         description: this.compactText(part.text ?? ""),
         icon: "dot",
         status: this.toStepStatus(part.state),
@@ -596,18 +901,33 @@ export class AgentToolThinkingHelper {
       index: displayIndex,
       toolName,
       state: part.state,
-      details: this.getToolDetails(part),
+      details: this.getToolDetails(part, toolName),
     };
   }
 
   private static getStateAwareLabel(config: AgentToolThinkingConfig, state?: string): string {
-    if (state === "output-error") return `${config.title} failed`;
-    if (state === "output-denied") return `${config.title} denied`;
-    if (state === "approval-requested") return `Confirm ${config.title.toLowerCase()}`;
+    if (state === "output-error") return t("{{tool}} failed", { tool: config.title });
+    if (state === "output-denied") return t("{{tool}} denied", { tool: config.title });
+    if (state === "approval-requested") return t("Confirm {{tool}}", { tool: config.title });
     return config.title;
   }
 
+  /**
+   * The line under a step's title.
+   *
+   * For a call that failed or was refused, what went wrong — ahead of the
+   * agent's reasoning for making the call. The reasoning came first, so a
+   * failed `tasks_branch` read "The assigned task is configured for an
+   * isolated worktree…" and the error itself appeared nowhere.
+   */
   private static describeToolPart(config: AgentToolThinkingConfig, part: AgentMessagePart): string {
+    if (part.state && this.ERROR_STATES.has(part.state)) {
+      const failure = part.errorText ?? this.getOutputError(part.output)?.message;
+      if (failure) {
+        return this.compactText(failure);
+      }
+    }
+
     const reasoning = this.getReasoning(part.input);
     if (reasoning) {
       return this.compactText(reasoning);
@@ -620,11 +940,17 @@ export class AgentToolThinkingHelper {
     return config.description;
   }
 
-  private static getToolDetails(part: AgentMessagePart): string[] {
-    const details: string[] = [];
+  /**
+   * What the Details disclosure lists: the tool that was called, the inputs
+   * worth recognising it by, and — for a failure — the error with its code
+   * and the reasoning the description gave up its place for. Every step has
+   * at least the tool's name, so every row offers Details rather than some.
+   */
+  private static getToolDetails(part: AgentMessagePart, toolName: string): string[] {
+    const details: string[] = [`tool: ${toolName}`];
 
     if (part.input && typeof part.input === "object") {
-      for (const key of ["file_path", "pattern", "query", "command", "task", "agent", "url"]) {
+      for (const key of ["file_path", "path", "pattern", "query", "command", "id", "task", "goal", "project", "agent", "title", "status", "url"]) {
         const value = (part.input as Record<string, unknown>)[key];
         if (typeof value === "string" && value.trim()) {
           details.push(`${key}: ${this.compactText(value, 96)}`);
@@ -632,7 +958,35 @@ export class AgentToolThinkingHelper {
       }
     }
 
+    if (part.state && this.ERROR_STATES.has(part.state)) {
+      const failure = this.getOutputError(part.output);
+      const message = part.errorText ?? failure?.message;
+      if (failure?.code || message) {
+        details.push(`error: ${[failure?.code, message].filter(Boolean).join(" — ")}`);
+      }
+      const reasoning = this.getReasoning(part.input);
+      if (reasoning) {
+        details.push(`reasoning: ${this.compactText(reasoning, 240)}`);
+      }
+    }
+
     return details;
+  }
+
+  /** The runtime's error envelope on a tool result, when it is one. */
+  private static getOutputError(output: unknown): { code?: string; message?: string } | null {
+    if (!output || typeof output !== "object" || Array.isArray(output)) {
+      return null;
+    }
+    const record = output as Record<string, unknown>;
+    const code = typeof record.code === "string" ? record.code : undefined;
+    const message =
+      typeof record.message === "string"
+        ? record.message
+        : typeof record.error === "string"
+          ? record.error
+          : undefined;
+    return code || message ? { code, message } : null;
   }
 
   private static getReasoning(input: unknown): string | null {

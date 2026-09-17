@@ -1,6 +1,7 @@
 import type { ArtifactListItem } from "@/features/artifact/interfaces/artifact.interfaces";
 import type { ViewportTabState } from "@/features/workspace/presentation/stores/viewport.store";
 import { aos } from "@/app/aos";
+import { addressWithPassword, requestArtifactAccess } from "./artifact-access";
 
 /**
  * Presentation helpers for workspace artifacts in the sidebar and commander.
@@ -30,9 +31,15 @@ export class ArtifactHelper {
   /**
    * Opens an artifact in a browser tab, reusing an existing tab when possible.
    *
+   * A by_password artifact asks everybody for its password, its creator
+   * included, and opened at its bare address the tab showed the daemon's
+   * refusal as raw JSON. Without a password given here, it is asked for
+   * first — see `ArtifactAccessDialog`.
+   *
    * @param artifact - Artifact list item with resolved URLs.
+   * @param options.password - The password to open a by_password artifact with.
    */
-  public static openInBrowserTab(artifact: ArtifactListItem): void {
+  public static openInBrowserTab(artifact: ArtifactListItem, options: { password?: string } = {}): void {
     const viewportTabs = aos.stores.viewport.state.tabs;
 
     const existingTab = viewportTabs.items.find(
@@ -46,9 +53,14 @@ export class ArtifactHelper {
       return;
     }
 
+    if (artifact.visibility === "by_password" && !options.password) {
+      requestArtifactAccess(artifact, "open");
+      return;
+    }
+
     aos.stores.viewport.actions.createTab({
       type: "browser",
-      url: artifact.urls.local,
+      url: addressWithPassword(artifact.urls.local, options.password),
       title: artifact.name,
       metadata: {
         artifactId: artifact.id,

@@ -107,6 +107,10 @@ export const GoalSchema = z.object({
     .string()
     .optional()
     .describe("ISO timestamp for when the goal should be achieved."),
+  measure: z
+    .string()
+    .optional()
+    .describe("How to tell the goal was actually served, not just attempted."),
   status: GoalStatusSchema.describe(
     "Current lifecycle status of the goal. Defaults to 'active'.",
   ),

@@ -93,7 +93,7 @@ type UpdateInput struct {
 
 	Name     *string         `json:"name,omitempty" cli:"flag" jsonschema:"New name."`
 	Status   *Status         `json:"status,omitempty" cli:"flag" jsonschema:"enabled or disabled."`
-	Triggers *[]TriggerInput `json:"triggers,omitempty" jsonschema:"New triggers. Replaces the old ones whole; a webhook among them mints a new token."`
+	Triggers *[]TriggerInput `json:"triggers,omitempty" jsonschema:"New triggers. Replaces the old ones whole. A webhook keeps the token it already has; one added where there was none mints a token, returned once."`
 	Scope    *Scope          `json:"scope,omitempty" jsonschema:"New scope."`
 	Content  *string         `json:"content,omitempty" jsonschema:"New prompt."`
 
@@ -172,6 +172,10 @@ type RunsOutput struct {
 type ScheduleOutput struct {
 	Fired  []string `json:"fired,omitempty" jsonschema:"Routines that fired."`
 	Failed []string `json:"failed,omitempty" jsonschema:"Routines that fired and failed."`
+
+	// Running lists the routines that were due while an earlier firing was
+	// still waiting or running, and so were not fired again.
+	Running []string `json:"running,omitempty" jsonschema:"Routines that were due while an earlier firing was still waiting or running."`
 
 	// Broken lists the routines whose cron does not parse. They will never fire
 	// and nothing else in the system would say so.

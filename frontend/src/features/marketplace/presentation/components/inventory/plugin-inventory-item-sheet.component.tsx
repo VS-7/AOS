@@ -38,7 +38,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { aos } from "@/app/aos";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/aos-facade";
 import { t } from "@/lib/i18n";
+import { mergeEnv } from "@/features/marketplace/presentation/helpers/marketplace.helper";
 
 interface PluginInventoryItemSheetProps {
   item: MarketplaceSkillComponentItem | null;
@@ -106,13 +108,18 @@ function ToolsetInventoryBody({
   const [activeTab, setActiveTab] = React.useState("tools");
   const [envValues, setEnvValues] = React.useState<Record<string, string>>({});
 
-  const detailQuery = aos.client.toolset.getById.useQuery({
-    params: { toolset: toolsetId },
-    query: {},
-  });
-
   const configQuery = aos.client.toolset.getConfig.useQuery({
     params: { toolset: toolsetId },
+  });
+
+  // Listing connects — a process spawned, a server asked — so it runs only
+  // while the Tools tab shows. That is the tab the sheet opens on, so every
+  // open lists the tools; another tab asks nothing, and the minute of
+  // staleTime keeps a switch back to Tools from connecting again.
+  const toolsQuery = aos.client.toolset.listTools.useQuery({
+    params: { toolset: toolsetId },
+    enabled: activeTab === "tools",
+    staleTime: 60_000,
   });
 
   const { mutate: deleteToolset, loading: isDeleting } =
@@ -123,9 +130,7 @@ function ToolsetInventoryBody({
         await router.invalidate();
       },
       onError: (error: unknown) => {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to delete toolset",
-        );
+        toast.error(t("Failed to delete toolset"), { description: errorMessage(error) });
       },
     });
 
@@ -136,23 +141,19 @@ function ToolsetInventoryBody({
         await configQuery.refetch();
       },
       onError: (error: unknown) => {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to save config",
-        );
+        toast.error(t("Failed to save config"), { description: errorMessage(error) });
       },
     });
 
-  const toolset =
-    detailQuery.data && "toolset" in detailQuery.data
-      ? detailQuery.data.toolset
-      : undefined;
   const tools: Array<{ name: string; description?: string }> =
-    toolset?.tools ?? [];
+    toolsQuery.data?.tools ?? [];
   const requirements = configQuery.data?.requirements ?? [];
+  // The toolset's own environment as it is now — what a save merges into.
+  const currentEnv: Record<string, string> | undefined = configQuery.data?.toolset?.env;
   const connectionType =
     item.connectionType ??
     configQuery.data?.connectionType ??
-    toolset?.connection?.type;
+    configQuery.data?.toolset?.type;
 
   const hasConfig = requirements.length > 0;
 
@@ -184,7 +185,7 @@ function ToolsetInventoryBody({
         </TabsList>
 
         <TabsContent value="tools" className="mt-3">
-          {detailQuery.isLoading ? (
+          {toolsQuery.isLoading ? (
             <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
               <HugeiconsIcon
                 icon={Loading03Icon}
@@ -192,10 +193,15 @@ function ToolsetInventoryBody({
               />
               {t("Loading tools…")}
             </div>
-          ) : detailQuery.error ? (
-            <p className="text-[13px] text-muted-foreground">
-              {t("Could not connect to list tools. Configure env vars if required, then reopen.")}
-            </p>
+          ) : toolsQuery.error ? (
+            <div className="space-y-1">
+              <p className="text-[13px] text-muted-foreground">
+                {t("Could not connect to list tools. Configure env vars if required, then reopen.")}
+              </p>
+              {errorMessage(toolsQuery.error) ? (
+                <p className="font-mono text-[11px] text-muted-foreground/80">{errorMessage(toolsQuery.error)}</p>
+              ) : null}
+            </div>
           ) : tools.length === 0 ? (
             <p className="text-[13px] text-muted-foreground">
               {t("No tools discovered for this toolset.")}
@@ -255,7 +261,7 @@ function ToolsetInventoryBody({
                     variant={req.isSet ? "secondary" : "outline"}
                     className="text-[10px]"
                   >
-                    {req.isSet ? "Set" : "Missing"}
+                    {req.isSet ? t("Set") : t("Missing")}
                   </Badge>
                 </div>
                 <Input
@@ -263,7 +269,7 @@ function ToolsetInventoryBody({
                   type="password"
                   autoComplete="off"
                   placeholder={
-                    req.isSet ? "Leave blank to keep current" : "Enter value"
+                    req.isSet ? t("Leave blank to keep current") : t("Enter value")
                   }
                   value={envValues[req.lookupKey] ?? ""}
                   onChange={(event) =>
@@ -279,17 +285,15 @@ function ToolsetInventoryBody({
               size="sm"
               disabled={isSaving}
               onClick={() => {
-                const values: Record<string, string> = {};
-                for (const [key, value] of Object.entries(envValues)) {
-                  if (value.trim()) values[key] = value.trim();
-                }
+                // The whole environment, not just what was typed: Go replaces
+                // Env wholesale, and a partial map erased every other variable.
                 saveConfig({
                   params: { toolset: toolsetId },
-                  body: { values },
+                  body: { values: mergeEnv(currentEnv, envValues) },
                 });
               }}
             >
-              {isSaving ? "Saving…" : "Save to .env"}
+              {isSaving ? t("Saving…") : t("Save to .env")}
             </Button>
           </TabsContent>
         ) : null}

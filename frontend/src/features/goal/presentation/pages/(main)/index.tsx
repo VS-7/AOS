@@ -22,16 +22,14 @@ export const GoalsPage = aos
   })
   .withQuery(GoalsPageSearchSchema)
   .use(WorkspacePageMiddleware())
-  .withLoader(async ({ client, request }) => {
-    const query = request.query || {};
-
-    const response = await client.goal.list.query({
-      query: {
-        query: query.query?.trim() || undefined,
-        status: query.status as any,
-        project: query.project || undefined,
-      },
-    });
+  .withLoader(async ({ client }) => {
+    // Every goal, unfiltered: the filters live in the URL and are applied by
+    // GoalsProvider, which can do what goals_list cannot — several projects
+    // at once, and text that matches a description. Forwarding them sent the
+    // comma-joined status string Go refused, a comma-joined project Go
+    // compared as one id, and a search Go ran over id and title only, so each
+    // emptied the list before the provider saw it.
+    const response = await client.goal.list.query({ query: {} });
 
     const goals = response.data?.goals || [];
     return { goals };

@@ -178,6 +178,10 @@ to a person and the system tracks it without executing it.
       "type": "string",
       "description": "Branch the checkout is cut from."
     },
+    "branch": {
+      "type": "string",
+      "description": "Branch the checkout is cut on. Generated from the workspace prefix and the task slug when left out."
+    },
     "content": {
       "type": "string",
       "description": "The description and plan, in Markdown."

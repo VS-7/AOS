@@ -3,12 +3,30 @@ import * as React from "react"
 import { CheckCheck, Clock } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { aos } from "@/app/aos"
+import { errorMessage } from "@/lib/aos-facade"
 
 export function InboxHeader() {
   const unreadCount = aos.stores.activity.useState((s) => s.unreadCount)
   const { markAllAsRead } = aos.stores.activity.useActions()
+  // A slow or frozen daemon used to leave this button enabled and unchanged
+  // for as long as the call took, inviting a second and third click with
+  // nothing to say the first one was still on its way.
+  const [isMarking, setIsMarking] = React.useState(false)
+
+  const handleMarkAll = React.useCallback(async () => {
+    setIsMarking(true)
+    try {
+      await markAllAsRead()
+      toast.success(t("All activities marked as read"))
+    } catch (error) {
+      toast.error(t("Failed to mark activities as read"), { description: errorMessage(error) })
+    } finally {
+      setIsMarking(false)
+    }
+  }, [markAllAsRead])
 
   return (
     <div className="flex items-center gap-2 p-6 shrink-0">
@@ -31,13 +49,12 @@ export function InboxHeader() {
             variant="ghost" 
             size="icon" 
             className="h-7 w-7 text-muted-foreground" 
-            onClick={() => markAllAsRead().then(
-              () => toast.success(t("All activities marked as read")),
-              (err) => toast.error(err?.message ?? "Failed to mark activities as read"),
-            )}
-            disabled={unreadCount === 0}
+            onClick={() => void handleMarkAll()}
+            disabled={unreadCount === 0 || isMarking}
+            aria-busy={isMarking}
+            aria-label={t("Mark all as read")}
           >
-            <CheckCheck className="size-4" />
+            {isMarking ? <Spinner /> : <CheckCheck className="size-4" />}
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">

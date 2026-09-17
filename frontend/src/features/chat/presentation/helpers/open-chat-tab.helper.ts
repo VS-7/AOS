@@ -1,4 +1,5 @@
 import { aos } from "@/app/aos";
+import { t } from "@/lib/i18n";
 import type { Chat } from "@/features/chat/interfaces/chat.interfaces";
 import type { ViewportTabState } from "@/features/workspace/presentation/stores/viewport.store";
 
@@ -133,6 +134,9 @@ export async function openAgentDmTab(params: {
   const listResponse = await aos.client.chat.list.query({
     query: { kind: "dm" },
   });
+  // A list that could not be read is not an empty list: treating it as one
+  // went on to create a second DM with someone who already had one.
+  if (listResponse.error) throw listResponse.error;
   const chats = (listResponse?.data?.chats ?? []) as Chat[];
   const existingId = findAgentDmChatId(chats, params.agentId);
   if (existingId) {
@@ -153,8 +157,11 @@ export async function openAgentDmTab(params: {
   const chat = (
     createResponse as { data?: { chat?: Chat }; error?: unknown } | null | undefined
   )?.data?.chat;
-  if ((createResponse as { error?: unknown } | null)?.error || !chat?.id) {
-    throw new Error("Unable to open agent DM.");
+  // The refusal itself, when there is one: callers toast `error.message`,
+  // and a fixed "Unable to open …" told the person nothing about why.
+  if (createResponse.error) throw createResponse.error;
+  if (!chat?.id) {
+    throw new Error(t("Unable to open agent DM."));
   }
   return openChatTab({
     chatId: chat.id,
@@ -197,6 +204,26 @@ export function findUserDmChatId(
 }
 
 /**
+ * The people the Team tab offers a conversation with: everyone in the
+ * workspace directory but the person looking at it.
+ *
+ * The directory lists every account, the viewer included — the task assignee
+ * pickers read the same list and need to offer "me". Offering the viewer a DM
+ * with themselves opened a conversation nobody could delete, whose messages
+ * the orchestrator answered.
+ *
+ * @param users - Workspace directory users.
+ * @param selfUserId - The signed-in user, when known.
+ * @returns The users other than the viewer.
+ */
+export function teamPeople<T extends { id: string }>(
+  users: T[],
+  selfUserId: string | undefined,
+): T[] {
+  return selfUserId ? users.filter((user) => user.id !== selfUserId) : users;
+}
+
+/**
  * Finds or creates a private user↔user DM, then opens it as a viewport tab.
  *
  * Same fix as `openAgentDmTab` just above, for the same reason: there is no
@@ -217,6 +244,9 @@ export async function openUserDmTab(params: {
   const listResponse = await aos.client.chat.list.query({
     query: { kind: "dm" },
   });
+  // A list that could not be read is not an empty list: treating it as one
+  // went on to create a second DM with someone who already had one.
+  if (listResponse.error) throw listResponse.error;
   const chats = (listResponse?.data?.chats ?? []) as Chat[];
   const selfUserId = aos.stores.auth.state.user?.id;
   const existingId = selfUserId
@@ -233,7 +263,9 @@ export async function openUserDmTab(params: {
   const participants: Array<{ type: "user"; id: string }> = [
     { type: "user", id: params.userId },
   ];
-  if (selfUserId) {
+  // Not twice: a peer who is the signed-in person is already named above, and
+  // naming them again stored the same user as both participants.
+  if (selfUserId && selfUserId !== params.userId) {
     participants.push({ type: "user", id: selfUserId });
   }
   const createResponse = await aos.client.chat.create.mutate({
@@ -246,13 +278,37 @@ export async function openUserDmTab(params: {
   const chat = (
     createResponse as { data?: { chat?: Chat }; error?: unknown } | null | undefined
   )?.data?.chat;
-  if ((createResponse as { error?: unknown } | null)?.error || !chat?.id) {
-    throw new Error("Unable to open user DM.");
+  // The refusal itself, when there is one: callers toast `error.message`,
+  // and a fixed "Unable to open …" told the person nothing about why.
+  if (createResponse.error) throw createResponse.error;
+  if (!chat?.id) {
+    throw new Error(t("Unable to open user DM."));
   }
   return openChatTab({
     chatId: chat.id,
     title: params.title ?? chat.title ?? params.userId,
   });
+}
+
+/**
+ * Names a chat's tab after the conversation, once the conversation is known.
+ *
+ * A tab opened from a deep link (`/chats/<id>`) or restored from a previous
+ * session has only the id to go on, and nothing renamed it later: the tab
+ * read "42ea4b04-1569-45cc-aa6c…" beside a header reading "Luara", for good.
+ *
+ * @param chatId - Chat whose tab to rename.
+ * @param title - What the conversation is called.
+ */
+export function syncChatTabTitle(chatId: string, title: string): void {
+  const next = title.trim();
+  if (!next) return;
+  const tab = aos.stores.viewport.state.tabs.items.find(
+    (item) => item.type === "chat" && getTabChatId(item) === chatId,
+  );
+  if (tab && tab.title !== next) {
+    aos.stores.viewport.actions.updateTab(tab.id, { title: next });
+  }
 }
 
 /**

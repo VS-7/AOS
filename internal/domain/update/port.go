@@ -2,6 +2,7 @@ package update
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -18,61 +19,167 @@ type Service interface {
 	// binaries, and Download never calls it.
 	Download(ctx context.Context, in DownloadInput) (DownloadOutput, error)
 
-	// Apply swaps in a Staged release and restarts the daemon at a safe
-	// point: after in-flight turns finish (bounded by a grace period), with
-	// the previous binaries kept until the new ones report healthy.
+	// Apply swaps in the release Download staged and restarts the daemon at a
+	// safe point: after in-flight turns finish (bounded by a grace period),
+	// with the previous binaries kept until the new ones report healthy.
 	Apply(ctx context.Context, in ApplyInput) (ApplyOutput, error)
 
-	// Status reports the current version and channel without checking the
-	// network.
+	// Status reports the current version, the last check and what is staged,
+	// without checking the network.
 	Status(ctx context.Context, in StatusInput) (Status, error)
 }
 
+// The two ways a ReleaseSource fails that Check and Download report
+// differently from any other failure. An adapter wraps them into the error it
+// returns; everything else it returns is "the channel answered, badly".
+//
+// They exist because the old contract had one error for all three, and it
+// named the network: a release published without a signature read as
+// "could not reach the release channel … check network access".
+var (
+	// ErrNotPublished: the address answered, and nothing is there — a
+	// manifest, a signature or an asset that was never uploaded.
+	ErrNotPublished = errors.New("update: nothing is published at that address")
+	// ErrUnreachable: the address did not answer at all.
+	ErrUnreachable = errors.New("update: the release channel could not be reached")
+)
+
+// ErrStagedChanged is what an Installer wraps when the staged copy it was
+// about to put in place is not the one Apply verified. Apply proves the
+// staged files and then waits — for work in flight, up to minutes — before
+// it swaps, so the bytes are proven once more by the Installer as it copies
+// them rather than taken as unchanged since.
+var ErrStagedChanged = errors.New("update: the staged copy changed after it was verified")
+
 // ReleaseSource is the one network-facing port: read a channel's manifest,
 // fetch bytes. "Distribuição por releases assinados, agnóstica de forja" —
-// the design's own decision — is why this is two generic operations and not
+// the design's own decision — is why this is generic operations and not
 // anything that names GitHub.
 type ReleaseSource interface {
-	// Latest returns the newest release published on channel, or nil when
-	// the channel has none. An empty channel is not an error: Check's own
-	// contract is to report that state, not to fail on it.
+	// Configured reports whether this installation has a release feed at
+	// all. It is a question of its own rather than a nil release from
+	// Latest, because "no feed" and "a feed with nothing on this channel"
+	// were once the same answer, and both came out as "you are on the
+	// newest release".
+	Configured() bool
+	// Latest returns the newest release published on channel. A channel
+	// with no manifest is an error wrapping ErrNotPublished.
 	Latest(ctx context.Context, channel Channel) (*Release, error)
 	// Fetch downloads the bytes at url — an asset, a checksums file, or a
 	// signature file; the caller knows which.
 	Fetch(ctx context.Context, url string) ([]byte, error)
 }
 
-// Installer is where Download and Apply touch the filesystem. Kept as a
-// port for the same reason every domain here keeps real I/O behind one:
-// service_test.go proves the verify-then-refuse behavior in memory, with no
-// disk and no binary actually at risk of being swapped mid-test.
+// Stager is where Download leaves verified bytes for Apply. Every method
+// takes a binary name rather than a path: where a staged file lives is the
+// adapter's to decide, so nothing a caller or a release feed sends can name
+// a path at all.
+type Stager interface {
+	// Stage writes data as binary's staged copy and returns where it went.
+	Stage(ctx context.Context, binary string, data []byte) (path string, err error)
+	// Digest is the hex SHA-256 of binary's staged copy, read now — what
+	// Apply compares against the signed checksums just before swapping.
+	Digest(ctx context.Context, binary string) (string, error)
+	// Discard removes every staged copy. Nothing staged is not an error.
+	Discard(ctx context.Context) error
+}
+
+// Installer is where Apply touches the live binaries. Kept as a port for the
+// same reason every domain here keeps real I/O behind one: the tests prove
+// the verify-then-refuse behavior in memory, with no binary actually at risk
+// of being swapped mid-test.
 type Installer interface {
-	// Stage writes verified bytes to a scratch location under name, safe to
-	// rename over a live binary later. Returns the path Apply will use.
-	Stage(ctx context.Context, name string, data []byte) (path string, err error)
-	// PathOf resolves where a named binary currently lives on this machine
-	// — what Apply treats as the swap target.
-	PathOf(ctx context.Context, binary string) (string, error)
-	// SwapIn renames staged over target, first moving whatever is at target
-	// to target+".prev" so Rollback can undo exactly this swap.
-	SwapIn(ctx context.Context, staged, target string) error
-	// Rollback restores target from the backup SwapIn made. Calling it
-	// without a prior SwapIn for that target is a no-op, not an error —
-	// Apply's own rollback path does not need to track which binaries it
-	// actually got to before the failure that triggered it.
-	Rollback(ctx context.Context, target string) error
+	// Target resolves where binary lives on this machine, and whether it is
+	// installed there. A binary that is not installed is not added by an
+	// update: the layout an installer produced is the layout that stays.
+	Target(ctx context.Context, binary string) (path string, installed bool, err error)
+	// SwapIn puts binary's staged copy in place, keeping the binary it
+	// replaces so Rollback can undo exactly this swap. The staged copy stays
+	// where it is until Discard, so a rolled-back update can be retried.
+	//
+	// digest is the hex SHA-256 Apply verified the staged copy against. The
+	// bytes SwapIn actually puts in place must hash to it; when they do not,
+	// nothing is replaced and the error wraps ErrStagedChanged.
+	SwapIn(ctx context.Context, binary, digest string) error
+	// Rollback restores binary from the copy SwapIn kept. Calling it without a
+	// prior SwapIn is a no-op, not an error.
+	Rollback(ctx context.Context, binary string) error
+	// Commit drops the copy SwapIn kept, once the new binary is proven.
+	Commit(ctx context.Context, binary string) error
+	// Tidy removes every copy a SwapIn kept that a Commit could not remove —
+	// on Windows, the file of a program still running, like the process
+	// that ran the install. Apply calls it only when no install is under
+	// way, so no copy it removes is one a rollback still needs.
+	Tidy(ctx context.Context) error
+	// Reinstall says why the binaries here cannot be replaced one at a time,
+	// or nothing when they can. A macOS application bundle cannot — its
+	// signature seals every file in it, so replacing one breaks the seal of
+	// the whole application — and neither can a directory this account
+	// cannot write, where the swap could only fail halfway.
+	Reinstall(ctx context.Context) ReinstallReason
+}
+
+// Store keeps the Record between calls, and between daemon restarts.
+//
+// Every process that updates this installation shares one record: the daemon
+// and each workspace's service inside it, and `aosd update apply` in a
+// terminal. So there is no Save. A Check that read the record, asked the
+// network and then wrote it back used to overwrite a Download that had
+// staged a release in between, and Apply then found nothing staged.
+type Store interface {
+	Load(ctx context.Context) (Record, error)
+	// Update reads the record, lets change modify it, and writes it back,
+	// with no other Update — in this process or another — in between. A
+	// change that returns an error writes nothing.
+	Update(ctx context.Context, change func(*Record) error) error
+}
+
+// Lock keeps one Download or Apply at a time on an installation, across
+// every process that can run one. Two at once swapped over each other's
+// backups, and a download beside an install discarded the files it was
+// putting in place.
+type Lock interface {
+	// TryLock takes the lock without waiting; ok is false when another
+	// call holds it. unlock releases it, and so does the end of the process
+	// holding it, so an install that was killed does not leave the
+	// installation locked.
+	TryLock(ctx context.Context) (unlock func(), ok bool, err error)
 }
 
 // DaemonSupervisor is the narrow slice of the gateway this domain needs:
-// restart the daemon process the new binaries were just swapped into, and
-// ask whether it is answering. internal/app wires the real
+// which daemon answers for this installation, and restarting the one it
+// started onto the binaries just swapped in. internal/app wires the real
 // gateway.Service behind this — update does not import another domain
 // directly, the same discipline internal/domain/tunnel's own Config port
 // documents.
 type DaemonSupervisor interface {
+	// Observe reports, changing nothing, which daemon answers for this
+	// installation and whether it is the process the supervisor started.
+	// Apply asks before it swaps anything — inside the daemon, or beside a
+	// daemon somebody started by hand, a restart cannot bring the new version
+	// up — and again after the restart, to see the new version answering
+	// rather than anything at all.
+	Observe(ctx context.Context) (Daemon, error)
+	// Restart stops the daemon the supervisor started, when one runs, and
+	// starts one on the binaries in place.
 	Restart(ctx context.Context) error
-	Healthy(ctx context.Context) bool
 }
+
+// Operators says who may change this installation's binaries. Checking an
+// update is anyone's question; installing one replaces the programs every
+// account on the machine runs, which is an administrator's decision.
+type Operators interface {
+	// MayInstall answers for the caller on ctx. A caller that is not a
+	// person at all — an agent, an MCP client — is refused with an error
+	// wrapping ErrNotAPerson, so the refusal can say so rather than ask
+	// for an administrator.
+	MayInstall(ctx context.Context) (bool, error)
+}
+
+// ErrNotAPerson is an Operators refusal of a call made by an agent or through
+// an MCP client. An update restarts the daemon serving the agent's own turn,
+// and docs/08 - Entrega/Auto-Update.md has a person confirm an install.
+var ErrNotAPerson = errors.New("update: installing an update is a person's decision")
 
 // ActiveWork reports how many turns are in flight right now, so Apply can
 // wait for them before it restarts the daemon out from under them.

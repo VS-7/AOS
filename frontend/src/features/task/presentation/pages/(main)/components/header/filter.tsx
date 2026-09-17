@@ -51,45 +51,41 @@ export function TasksFilter() {
   );
 
   const getStatusButtonLabel = () => {
-    if (selectedStatuses.length === 0) return "Status";
+    if (selectedStatuses.length === 0) return t("Status");
     if (selectedStatuses.length === 1) {
-      return `Status: ${TaskHelper.getStatus(selectedStatuses[0]).label}`;
+      return `${t("Status")}: ${TaskHelper.getStatus(selectedStatuses[0]).label}`;
     }
-    return `Status (${selectedStatuses.length})`;
+    return `${t("Status")} (${selectedStatuses.length})`;
   };
 
   const getPriorityButtonLabel = () => {
-    if (selectedPriorities.length === 0) return "Priority";
+    if (selectedPriorities.length === 0) return t("Priority");
     if (selectedPriorities.length === 1) {
-      return `Priority: ${TASK_PRIORITY_CONFIG[selectedPriorities[0]].label}`;
+      return `${t("Priority")}: ${TASK_PRIORITY_CONFIG[selectedPriorities[0]].label}`;
     }
-    return `Priority (${selectedPriorities.length})`;
+    return `${t("Priority")} (${selectedPriorities.length})`;
   };
 
-  // C5 of the final review ("honest empty state" policy, R26):
-  // `command-map.ts`'s `task.list` entry can only send Go's `ListInput` one
-  // scalar `type`/`project`/`goal` each — a genuine wire limitation, not a
-  // UI bug — so checking a second box here doesn't broaden what the server
-  // returns, only what shows in the button. Before this, that was silent:
-  // the button read "(3)" as if all three were filtering. Disclosed here,
-  // not fixed at the wire — there's no server capability yet to widen into.
-  const ONLY_FIRST_APPLIES = " (only the first applies)";
-
+  // Every selection in this bar now filters, as "any of these": the page
+  // applies them itself (`filterTasks`) instead of sending tasks_list the
+  // first value of each, which is what the "(only the first applies)" label
+  // used to disclose.
   const getTypeButtonLabel = () => {
-    if (selectedTypes.length === 0) return "Type";
+    if (selectedTypes.length === 0) return t("Type");
     if (selectedTypes.length === 1) {
-      return `Type: ${selectedTypes[0]}`;
+      const type = currentWorkspace?.tasks?.find((entry) => entry.id === selectedTypes[0]);
+      return `${t("Type")}: ${type?.label || selectedTypes[0]}`;
     }
-    return `Type (${selectedTypes.length})${ONLY_FIRST_APPLIES}`;
+    return `${t("Type")} (${selectedTypes.length})`;
   };
 
   const getProjectButtonLabel = () => {
-    if (selectedProjects.length === 0) return "Project";
+    if (selectedProjects.length === 0) return t("Project");
     if (selectedProjects.length === 1) {
       const proj = projects.find((p) => p.id === selectedProjects[0]);
-      return `Project: ${proj ? proj.name : selectedProjects[0]}`;
+      return `${t("Project")}: ${proj ? proj.name : selectedProjects[0]}`;
     }
-    return `Project (${selectedProjects.length})${ONLY_FIRST_APPLIES}`;
+    return `${t("Project")} (${selectedProjects.length})`;
   };
 
   const selectedProjectIcon =
@@ -100,12 +96,12 @@ export function TasksFilter() {
       : "Folder";
 
   const getGoalButtonLabel = () => {
-    if (selectedGoals.length === 0) return "Goal";
+    if (selectedGoals.length === 0) return t("Goal");
     if (selectedGoals.length === 1) {
       const goal = goals.find((g) => g.id === selectedGoals[0]);
-      return `Goal: ${goal ? goal.title : selectedGoals[0]}`;
+      return `${t("Goal")}: ${goal ? goal.title : selectedGoals[0]}`;
     }
-    return `Goal (${selectedGoals.length})${ONLY_FIRST_APPLIES}`;
+    return `${t("Goal")} (${selectedGoals.length})`;
   };
 
   const activeTypeConfig =
@@ -139,6 +135,8 @@ export function TasksFilter() {
             const Icon = config.icon;
             return (
               <DropdownMenuCheckboxItem
+                // Several can be picked: the menu stays open for the next one.
+                onSelect={(event) => event.preventDefault()}
                 key={status}
                 checked={selectedStatuses.includes(status)}
                 onCheckedChange={() => handleToggleStatus(status)}
@@ -174,6 +172,7 @@ export function TasksFilter() {
             const Icon = config.icon;
             return (
               <DropdownMenuCheckboxItem
+                onSelect={(event) => event.preventDefault()}
                 key={priority}
                 checked={selectedPriorities.includes(
                   priority as TaskPriority,
@@ -234,6 +233,7 @@ export function TasksFilter() {
             );
             return (
               <DropdownMenuCheckboxItem
+                onSelect={(event) => event.preventDefault()}
                 key={type}
                 checked={selectedTypes.includes(type)}
                 onCheckedChange={() => handleToggleType(type)}
@@ -277,6 +277,7 @@ export function TasksFilter() {
           )}
           {projects.map((project) => (
             <DropdownMenuCheckboxItem
+              onSelect={(event) => event.preventDefault()}
               key={project.id}
               checked={selectedProjects.includes(project.id)}
               onCheckedChange={() => handleToggleProject(project.id)}
@@ -316,6 +317,7 @@ export function TasksFilter() {
           )}
           {goals.map((goal) => (
             <DropdownMenuCheckboxItem
+              onSelect={(event) => event.preventDefault()}
               key={goal.id}
               checked={selectedGoals.includes(goal.id)}
               onCheckedChange={() => handleToggleGoal(goal.id)}

@@ -1,13 +1,16 @@
 import { z } from "zod";
 import type { ActivityEventDefinition } from "@/features/activity/interfaces/activity.interfaces";
 import { ActivityEventHelper } from "@/features/activity/presentation/helpers/activity-event.helper";
-import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
+import type {
+  Routine,
+  RoutineTriggerInput,
+} from "@/features/routine/interfaces/routine.interfaces";
 import {
-  ROUTINE_SCHEDULED_PRESET_OPTIONS,
   type RoutineScheduledPresetId,
   type RoutineTriggerFormValue,
   type RoutineTriggerTypeId,
 } from "@/features/routine/presentation/consts/routine-triggers";
+import { getLocale, t } from "@/lib/i18n";
 
 export type { RoutineTriggerFormValue } from "@/features/routine/presentation/consts/routine-triggers";
 
@@ -18,27 +21,40 @@ export const RoutineScheduledPresetSchema = z.enum([
   "custom",
 ]);
 
+// Messages are catalogue keys: FormMessage translates what it renders.
 export const RoutineActivityFilterFormSchema = z.object({
-  path: z.string().min(1, "Field is required"),
+  field: z.string().refine((value) => value.trim() !== "", "Field is required"),
   operator: z.enum(["eq", "neq", "contains"]),
   value: z.string(),
 });
+
+/**
+ * The shape the daemon parses, checked here only as far as counting fields:
+ * a cron that is not five of them cannot be right, and saying so beside the
+ * input beats a refusal after Save. The daemon still has the last word on
+ * what each field may hold.
+ */
+const cronSchema = z
+  .string()
+  .refine((value) => value.trim() !== "", "Cron expression is required")
+  .refine(
+    (value) => value.trim() === "" || value.trim().split(/\s+/).length === 5,
+    "A cron expression has five fields: minute, hour, day of month, month and day of week",
+  );
 
 export const RoutineTriggerFormSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("scheduled"),
     config: z.object({
       preset: RoutineScheduledPresetSchema,
-      cron: z.string().min(1, "Cron expression is required"),
+      cron: cronSchema,
       time: z.string().default("09:00"),
       day: z.string().default("1"),
     }),
   }),
   z.object({
     type: z.literal("webhook"),
-    config: z.object({
-      token: z.string().optional(),
-    }),
+    config: z.object({}).strip(),
   }),
   z.object({
     type: z.literal("activity"),
@@ -53,29 +69,34 @@ export const RoutineTriggerFormSchema = z.discriminatedUnion("type", [
 export type RoutineTriggerFormInput = z.infer<typeof RoutineTriggerFormSchema>;
 
 export const ROUTINE_WEEKDAY_OPTIONS = [
-  { value: "1", label: "Monday" },
-  { value: "2", label: "Tuesday" },
-  { value: "3", label: "Wednesday" },
-  { value: "4", label: "Thursday" },
-  { value: "5", label: "Friday" },
-  { value: "6", label: "Saturday" },
-  { value: "0", label: "Sunday" },
+  { value: "1", get label() { return t("Monday"); } },
+  { value: "2", get label() { return t("Tuesday"); } },
+  { value: "3", get label() { return t("Wednesday"); } },
+  { value: "4", get label() { return t("Thursday"); } },
+  { value: "5", get label() { return t("Friday"); } },
+  { value: "6", get label() { return t("Saturday"); } },
+  { value: "0", get label() { return t("Sunday"); } },
 ] as const;
 
+/** Every half hour of the day, the choices a new schedule is offered. */
+const HALF_HOURS = Array.from({ length: 48 }, (_, index) => {
+  const hour = Math.floor(index / 2)
+    .toString()
+    .padStart(2, "0");
+  const minute = index % 2 === 0 ? "00" : "30";
+  return `${hour}:${minute}`;
+});
+
 export class RoutineTriggersHelper {
+  /** A stored routine's triggers, as the editor holds them. */
   public static buildFormTriggers(
     routine: Routine | null,
   ): RoutineTriggerFormValue[] {
     if (!routine) return [];
 
-    return routine.triggers.map((trigger) => {
+    return routine.triggers.map((trigger): RoutineTriggerFormValue => {
       if (trigger.type === "webhook") {
-        return {
-          type: "webhook",
-          config: {
-            token: trigger.config.token,
-          },
-        };
+        return { type: "webhook", config: {} };
       }
 
       if (trigger.type === "activity") {
@@ -83,8 +104,16 @@ export class RoutineTriggersHelper {
           type: "activity",
           config: {
             namespace: trigger.config.namespace,
-            event: trigger.config.event,
-            filters: trigger.config.filters ?? [],
+            event: trigger.config.event ?? "",
+            // Beside `config`, not inside it: that is where Go keeps them.
+            filters: (trigger.filters ?? []).map((filter) => ({
+              field: filter.field,
+              operator: filter.operator,
+              value:
+                typeof filter.value === "string"
+                  ? filter.value
+                  : JSON.stringify(filter.value ?? ""),
+            })),
           },
         };
       }
@@ -100,44 +129,38 @@ export class RoutineTriggersHelper {
     });
   }
 
+  /**
+   * The editor's triggers as `routine.TriggerInput`, the flat shape create
+   * and update take. A webhook carries nothing: the daemon keeps the token a
+   * routine already has, and mints one only for a webhook that is new.
+   */
   public static toApiTriggers(
     triggers: RoutineTriggerFormValue[],
-    existingRoutine: Routine | null,
-  ): Routine["triggers"] {
-    return triggers.map((trigger) => {
+  ): RoutineTriggerInput[] {
+    return triggers.map((trigger): RoutineTriggerInput => {
       if (trigger.type === "webhook") {
-        const existingToken = existingRoutine?.triggers.find(
-          (item) => item.type === "webhook",
-        )?.config.token;
-
-        return {
-          type: "webhook",
-          config: {
-            token: trigger.config.token || existingToken || "",
-          },
-        };
+        return { type: "webhook" };
       }
 
       if (trigger.type === "activity") {
+        const filters = trigger.config.filters ?? [];
         return {
           type: "activity",
-          config: {
-            namespace: trigger.config.namespace,
-            event: trigger.config.event,
-            filters:
-              trigger.config.filters && trigger.config.filters.length > 0
-                ? trigger.config.filters
-                : undefined,
-          },
+          namespace: trigger.config.namespace,
+          event: trigger.config.event,
+          ...(filters.length > 0
+            ? {
+                filters: filters.map((filter) => ({
+                  field: filter.field.trim(),
+                  operator: filter.operator,
+                  value: filter.value,
+                })),
+              }
+            : {}),
         };
       }
 
-      return {
-        type: "scheduled",
-        config: {
-          cron: trigger.config.cron,
-        },
-      };
+      return { type: "scheduled", cron: trigger.config.cron };
     });
   }
 
@@ -150,8 +173,8 @@ export class RoutineTriggersHelper {
       return { preset: "hourly", time: "09:00", day: "1" };
     }
 
-    const dailyMatch = cron.match(/^(\d+)\s+(\d+)\s+\*\s+\*\s+\*$/);
-    if (dailyMatch) {
+    const dailyMatch = cron.trim().match(/^(\d{1,2})\s+(\d{1,2})\s+\*\s+\*\s+\*$/);
+    if (dailyMatch && this._isClockTime(dailyMatch[2], dailyMatch[1])) {
       return {
         preset: "daily",
         time: this._formatTime(dailyMatch[2], dailyMatch[1]),
@@ -159,8 +182,8 @@ export class RoutineTriggersHelper {
       };
     }
 
-    const weeklyMatch = cron.match(/^(\d+)\s+(\d+)\s+\*\s+\*\s+(\d)$/);
-    if (weeklyMatch) {
+    const weeklyMatch = cron.trim().match(/^(\d{1,2})\s+(\d{1,2})\s+\*\s+\*\s+([0-6])$/);
+    if (weeklyMatch && this._isClockTime(weeklyMatch[2], weeklyMatch[1])) {
       return {
         preset: "weekly",
         time: this._formatTime(weeklyMatch[2], weeklyMatch[1]),
@@ -169,6 +192,16 @@ export class RoutineTriggersHelper {
     }
 
     return { preset: "custom", time: "09:00", day: "1" };
+  }
+
+  /**
+   * The times a schedule's picker offers: every half hour, plus the one it
+   * already has. A cron written elsewhere at :15 is still a daily or weekly
+   * schedule, and a picker without its time showed it blank.
+   */
+  public static timeOptions(current: string): string[] {
+    if (!current || HALF_HOURS.includes(current)) return HALF_HOURS;
+    return [...HALF_HOURS, current].sort();
   }
 
   public static buildCronFromScheduledConfig(config: {
@@ -200,33 +233,21 @@ export class RoutineTriggersHelper {
     day: string;
     cron: string;
   }): string {
-    if (config.preset === "hourly") return "Every hour";
-    if (config.preset === "daily") return "Every day";
+    if (config.preset === "hourly") return t("Every hour");
+    if (config.preset === "daily") return t("Every day");
     if (config.preset === "weekly") {
       const dayLabel =
         ROUTINE_WEEKDAY_OPTIONS.find((option) => option.value === config.day)
-          ?.label ?? "Monday";
-      return `Every week on ${dayLabel}`;
+          ?.label ?? t("Monday");
+      return t("Every week on {{day}}", { day: dayLabel });
     }
 
-    return "Custom schedule";
+    return t("Custom schedule");
   }
 
-  public static getNextRunLabel(cron: string): string | null {
-    // [Rationale]: Cron evaluation lives in the backend routine automation
-    // service. The presentation layer only needs a human-readable label for
-    // the three supported presets (`hourly`, `daily`, `weekly`). We avoid
-    // pulling `cron-parser` into the frontend bundle and only show a label
-    // when the schedule matches one of those presets.
-    const inferred = this.inferScheduledConfig(cron);
-    const now = new Date();
-
-    const nextRunAt = this._resolve_next_occurrence(inferred, now);
-    if (!nextRunAt) {
-      return null;
-    }
-
-    const formatter = new Intl.DateTimeFormat(undefined, {
+  /** A moment, in the interface's language rather than the machine's. */
+  public static formatNextRun(at: Date): string {
+    const formatter = new Intl.DateTimeFormat(getLocale(), {
       weekday: "short",
       month: "short",
       day: "numeric",
@@ -234,8 +255,57 @@ export class RoutineTriggersHelper {
       minute: "2-digit",
       timeZoneName: "short",
     });
+    return t("Next run {{when}}", { when: formatter.format(at) });
+  }
 
-    return `Next run ${formatter.format(nextRunAt)}`;
+  /**
+   * When a schedule fires next.
+   *
+   * The daemon's answer (`routine.nextRun`) is the one to show for a schedule
+   * that is saved: it evaluates any cron, not just the presets. `savedNextRun`
+   * is passed only when the cron on screen is the saved one; an edit not yet
+   * saved gets the local calculation, which covers the presets.
+   */
+  public static getNextRunLabel(cron: string, savedNextRun?: string): string | null {
+    if (savedNextRun) {
+      const at = new Date(savedNextRun);
+      if (!Number.isNaN(at.getTime())) return this.formatNextRun(at);
+    }
+
+    const inferred = this.inferScheduledConfig(cron);
+    const nextRunAt = this._resolve_next_occurrence(inferred, new Date());
+    return nextRunAt ? this.formatNextRun(nextRunAt) : null;
+  }
+
+  /**
+   * The daemon's warnings about a routine, in the interface's language when
+   * they are ones it knows. They arrive as English sentences; the two the
+   * scheduler writes are recognised and said again here, and anything else
+   * is shown as the daemon wrote it rather than hidden.
+   */
+  public static describeWarnings(routine: Pick<Routine, "warnings" | "effectiveInterval"> | null): string[] {
+    return (routine?.warnings ?? []).map((warning) => {
+      if (warning.includes("more often than")) {
+        return t(
+          "This schedule is finer than the scheduler's {{interval}} tick, so it fires once per tick. That is the real resolution of the system.",
+          { interval: this.humanInterval(routine?.effectiveInterval) },
+        );
+      }
+      if (warning.includes("does not parse")) {
+        return t("This cron expression does not parse, so the routine never fires on a schedule.");
+      }
+      return warning;
+    });
+  }
+
+  /** Go's duration string ("15m0s", "1h0m0s") as a person writes it. */
+  public static humanInterval(interval?: string): string {
+    if (!interval) return "15 min";
+    const hours = Number(interval.match(/(\d+)h/)?.[1] ?? 0);
+    const minutes = Number(interval.match(/(\d+)m/)?.[1] ?? 0);
+    if (hours > 0 && minutes > 0) return `${hours} h ${minutes} min`;
+    if (hours > 0) return `${hours} h`;
+    return `${minutes} min`;
   }
 
   /**
@@ -388,6 +458,27 @@ export class RoutineTriggersHelper {
     b: { namespace: string; event: string },
   ): boolean {
     return a.namespace === b.namespace && a.event === b.event;
+  }
+
+  /**
+   * An activity event's name for a person: its title, in the interface's
+   * language when the catalogue has it, and the raw key only when the daemon
+   * gave no title at all.
+   */
+  public static eventTitle(definition: ActivityEventDefinition | undefined, namespace: string, event: string): string {
+    const title = definition?.title?.trim();
+    if (title) return t(title);
+    return event ? `${namespace} · ${event.replace(/_/g, " ")}` : namespace;
+  }
+
+  /** The longer sentence under an event's title, translated when catalogued. */
+  public static eventDescription(definition: ActivityEventDefinition | undefined): string {
+    const description = definition?.description?.trim();
+    return description ? t(description) : "";
+  }
+
+  private static _isClockTime(hour: string, minute: string): boolean {
+    return Number(hour) <= 23 && Number(minute) <= 59;
   }
 
   private static _formatTime(hour: string, minute: string): string {

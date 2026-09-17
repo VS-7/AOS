@@ -42,11 +42,22 @@ type Scaffolder interface {
 // Git is the version-control surface a workspace touches at creation. It is a
 // port because it shells out, and internal/domain may not import os/exec.
 type Git interface {
-	// IsRepository reports whether dir is already under version control.
+	// IsRepository reports whether dir is already a repository of its own —
+	// its top level, not a directory somewhere inside another one.
 	IsRepository(ctx context.Context, dir string) (bool, error)
+
+	// EnclosingRepository reports the top of the repository dir sits inside
+	// when dir is not a repository of its own, or "" when it is one or sits
+	// inside none. It is what separates a directory nobody versions from a
+	// subfolder of somebody's project.
+	EnclosingRepository(ctx context.Context, dir string) (string, error)
 
 	// Init creates a repository at dir.
 	Init(ctx context.Context, dir string) error
+
+	// CommitEmpty records a commit with nothing in it, so a repository Init
+	// just made has a branch to cut a task's checkout from.
+	CommitEmpty(ctx context.Context, dir, message string) error
 
 	// OriginURL returns the URL of the "origin" remote, or "" when there is
 	// none. It is how `workspace introspect` names a workspace after its repo.

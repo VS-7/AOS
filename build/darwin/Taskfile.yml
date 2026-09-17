@@ -151,7 +151,42 @@ tasks:
       # not get covered by the seal — it invalidates it.
       - cp "{{.BIN_DIR}}/aosd" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
       - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
+      # The bundle says which build it is, before the seal covers the plist.
+      # Info.plist is a template with 0.1.0 and "Development build" in it, and
+      # it used to be copied as it stood: Finder's Get Info showed AOS 0.1.0
+      # for every release, and nobody outside Settings › Updates could tell
+      # which version was installed or whether a reinstall had worked.
+      - task: '{{if eq OS "darwin"}}plist:version{{else}}plist:skip{{end}}'
       - task: '{{if eq OS "darwin"}}codesign:adhoc{{else}}codesign:skip{{end}}'
+
+  plist:version:
+    summary: Writes the build's version into the bundle's Info.plist (macOS only)
+    internal: true
+    vars:
+      PLIST: '{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Info.plist'
+      # CFBundleShortVersionString is "three period-separated integers", so
+      # the git-describe suffixes (-fase9, -3-gabc1234, -dirty) are cut and a
+      # build with no tag at all ("dev", a bare hash) says 0.0.0 rather than
+      # something the Finder cannot parse. The full string goes in
+      # CFBundleGetInfoString, where a person reads it.
+      SHORT:
+        sh: |
+          v="{{.VERSION}}"; v="${v#v}"; v="${v%%-*}"
+          case "$v" in
+            [0-9]*.[0-9]*.[0-9]*) echo "$v" ;;
+            [0-9]*.[0-9]*) echo "$v.0" ;;
+            *) echo 0.0.0 ;;
+          esac
+    cmds:
+      - plutil -replace CFBundleShortVersionString -string "{{.SHORT}}" "{{.PLIST}}"
+      - plutil -replace CFBundleVersion -string "{{.SHORT}}" "{{.PLIST}}"
+      - plutil -replace CFBundleGetInfoString -string "AOS {{.VERSION}}" "{{.PLIST}}"
+
+  plist:skip:
+    summary: Leaves Info.plist as the template when not on macOS
+    internal: true
+    cmds:
+      - 'echo "Skipping the Info.plist version (plutil is not available on {{OS}})."'
 
   codesign:adhoc:
     summary: Ad-hoc signs the app bundle (macOS only)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"path"
+	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -212,10 +214,73 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (*Workspace, error
 	next.CreatedAt = current.CreatedAt
 	next.UpdatedAt = s.clock.Now()
 
+	if err := validateChanges(*current, &next); err != nil {
+		return nil, err
+	}
+
 	if err := s.store.Save(ctx, &next); err != nil {
 		return nil, errStoreFailed("written", err)
 	}
 	return &next, nil
+}
+
+// hexColour is the accent a workspace is drawn with: #rgb, #rrggbb or
+// #rrggbbaa.
+var hexColour = regexp.MustCompile(`^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$`)
+
+// validateChanges refuses a patch that leaves the workspace unusable.
+//
+// Create validates its input and Update validated nothing: clearing the name
+// in Settings autosaved, and the switcher then showed "No Workspace" as if
+// none were selected; a colour of "notacolor" and a worktree limit of zero were
+// stored as sent. Only what the patch changed is judged, so a record written
+// before a rule existed is not refused an unrelated edit.
+func validateChanges(before Workspace, next *Workspace) error {
+	if next.Name != before.Name {
+		next.Name = strings.TrimSpace(next.Name)
+		if next.Name == "" || slug.Generate(next.Name) == "" {
+			return errInvalidValue("name", next.Name, "a name with at least one letter or digit", map[string]any{"name": before.Name})
+		}
+	}
+	// Empty is allowed: the colour is optional, and none means the default.
+	if next.Color != before.Color && next.Color != "" && !hexColour.MatchString(next.Color) {
+		return errInvalidValue("color", next.Color, "a hex colour such as "+DefaultColor, map[string]any{"color": DefaultColor})
+	}
+	if limit := next.Worktrees.WorktreeLimit; limit != before.Worktrees.WorktreeLimit && (limit < 1 || limit > 50) {
+		return errInvalidValue("worktrees.worktreeLimit", limit, "a number of worktrees between 1 and 50", map[string]any{"worktrees.worktreeLimit": DefaultWorktrees().WorktreeLimit})
+	}
+	if !slices.Equal(next.Tasks, before.Tasks) {
+		return validateTaskTypes(next.Tasks)
+	}
+	return nil
+}
+
+// validateTaskTypes refuses a taxonomy a task could not be filed under.
+//
+// A task names its type by id, and that id is what selects the instructions
+// injected into its prompt: a type with no id cannot be named, one with no
+// label cannot be shown, and two sharing an id make every task of that id
+// ambiguous. Spaces around either are trimmed rather than refused — they are
+// never part of what the person meant.
+func validateTaskTypes(tasks []TaskType) error {
+	if len(tasks) == 0 {
+		return errInvalidTaskType(-1, "tasks", "", "at least one task type")
+	}
+	seen := make(map[string]bool, len(tasks))
+	for i := range tasks {
+		tasks[i].ID = strings.TrimSpace(tasks[i].ID)
+		tasks[i].Label = strings.TrimSpace(tasks[i].Label)
+		switch {
+		case tasks[i].ID == "":
+			return errInvalidTaskType(i, "id", tasks[i].Label, "an id, such as \"bug\"")
+		case tasks[i].Label == "":
+			return errInvalidTaskType(i, "label", tasks[i].ID, "a label, such as \"Bug\"")
+		case seen[tasks[i].ID]:
+			return errInvalidTaskType(i, "id", tasks[i].ID, "an id no other task type already uses")
+		}
+		seen[tasks[i].ID] = true
+	}
+	return nil
 }
 
 // Delete unregisters a workspace.

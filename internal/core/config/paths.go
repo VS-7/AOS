@@ -92,6 +92,11 @@ func (p Paths) Workspace(id string) string { return filepath.Join(p.Workspaces()
 // it once and never again.
 func (p Paths) LocalToken() string { return filepath.Join(p.Root, "local.token") }
 
+// DesktopToken is the desktop window's own session, beside LocalToken: the
+// token its last sign-in minted, or empty after it signed out (see
+// cmd/aos-desktop's windowSession).
+func (p Paths) DesktopToken() string { return filepath.Join(p.Root, "desktop.token") }
+
 // Index is derived data: safe to delete, rebuilt on demand. It lives under
 // ~/.aos rather than inside the user's repository so it is never committed
 // (ADR-0013).
@@ -100,7 +105,9 @@ func (p Paths) Index(workspaceID string) string {
 }
 
 // SecretFiles lists the files audited at boot for loose permissions.
-func (p Paths) SecretFiles() []string { return []string{p.Config(), p.Users(), p.LocalToken()} }
+func (p Paths) SecretFiles() []string {
+	return []string{p.Config(), p.Users(), p.LocalToken(), p.DesktopToken()}
+}
 
 // Ensure creates the directory skeleton with restrictive permissions.
 func (p Paths) Ensure() error {

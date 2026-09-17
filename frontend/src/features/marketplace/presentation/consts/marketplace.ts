@@ -33,17 +33,3 @@ export const MARKETPLACE_INVENTORY_ORDER = [
   "artifacts",
   "routines",
 ] as const;
-
-export const MARKETPLACE_INVENTORY_FOLDERS: Record<
-  (typeof MARKETPLACE_INVENTORY_ORDER)[number],
-  string
-> = {
-  toolsets: "toolsets",
-  collections: "collections",
-  views: "views",
-  hooks: "hooks",
-  instructions: "instructions",
-  templates: "templates",
-  artifacts: "artifacts",
-  routines: "routines",
-};

@@ -51,6 +51,13 @@ interface ColorPickerProps
   format?: ColorFormat;
   defaultFormat?: ColorFormat;
   onFormatChange?: (format: ColorFormat) => void;
+  /**
+   * The format `onValueChange` always reports, whatever the format dropdown
+   * shows. For a value stored in one notation — a workspace accent or a theme
+   * colour, both hex — so that choosing how to *see* the channels does not
+   * rewrite the stored value into a notation its owner refuses.
+   */
+  valueFormat?: ColorFormat;
   swatches?: string[];
   hideEyedropper?: boolean;
 }
@@ -661,6 +668,7 @@ function FormatDropdown({
       </button>
       {open && rect && typeof document !== "undefined" && createPortal(
         <div
+          data-color-picker-menu=""
           style={{
             position: "fixed",
             top: rect.bottom + 6,
@@ -980,6 +988,7 @@ const ColorPicker = forwardRef<HTMLDivElement, ColorPickerProps>(
       format,
       defaultFormat = "hex",
       onFormatChange,
+      valueFormat,
       swatches,
       hideEyedropper,
       className,
@@ -1033,25 +1042,28 @@ const ColorPicker = forwardRef<HTMLDivElement, ColorPickerProps>(
         const merged = { ...hsv, ...next };
         setHsv(merged);
         const p = buildParsed(merged.h, merged.s, merged.v, merged.a);
-        const formatted = formatValueByFormat(p, currentFormat);
+        const formatted = formatValueByFormat(p, valueFormat ?? currentFormat);
         lastEmittedRef.current = formatted;
         if (!isControlled) setInternalValue(formatted);
         onValueChange?.(formatted, p);
       },
-      [hsv, currentFormat, isControlled, onValueChange]
+      [hsv, currentFormat, valueFormat, isControlled, onValueChange]
     );
 
     const handleFormatChange = useCallback(
       (f: ColorFormat) => {
         if (!isFormatControlled) setInternalFormat(f);
         onFormatChange?.(f);
+        // A value kept in a fixed notation has not changed: only its display
+        // did, so there is nothing to report.
+        if (valueFormat) return;
         // Re-emit value in new format
         const formatted = formatValueByFormat(parsed, f);
         lastEmittedRef.current = formatted;
         if (!isControlled) setInternalValue(formatted);
         onValueChange?.(formatted, parsed);
       },
-      [isFormatControlled, isControlled, onFormatChange, onValueChange, parsed]
+      [isFormatControlled, isControlled, onFormatChange, onValueChange, parsed, valueFormat]
     );
 
     const handleHexCommit = useCallback(
@@ -1067,12 +1079,12 @@ const ColorPicker = forwardRef<HTMLDivElement, ColorPickerProps>(
         };
         setHsv(merged);
         const next = buildParsed(merged.h, merged.s, merged.v, merged.a);
-        const formatted = formatValueByFormat(next, currentFormat);
+        const formatted = formatValueByFormat(next, valueFormat ?? currentFormat);
         lastEmittedRef.current = formatted;
         if (!isControlled) setInternalValue(formatted);
         onValueChange?.(formatted, next);
       },
-      [hsv.h, currentFormat, isControlled, onValueChange]
+      [hsv.h, currentFormat, valueFormat, isControlled, onValueChange]
     );
 
     const handleSwatchPick = useCallback(
@@ -1326,6 +1338,10 @@ const ColorPickerPopover = forwardRef<HTMLDivElement, ColorPickerPopoverProps>(
     useEffect(() => {
       if (!open) return;
       const onClick = (e: MouseEvent) => {
+        // The format menu is portalled to the body, outside this panel. A
+        // press on one of its items counted as a press outside and closed the
+        // whole picker before the item could be chosen.
+        if ((e.target as Element | null)?.closest?.("[data-color-picker-menu]")) return;
         if (
           !panelRef.current?.contains(e.target as Node) &&
           !triggerRef.current?.contains(e.target as Node)

@@ -41,7 +41,6 @@ export function ChatRunsList({
           kind="run"
           isActive={currentChatId === chat.id}
           index={index}
-          subtitle={chat.routine}
         />
       ))}
     </SidebarMenu>

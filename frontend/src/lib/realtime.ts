@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { Events } from "@wailsio/runtime";
-import { getWorkspace, system } from "./client";
+import { getWorkspace } from "./client";
+import { declaredDaemon } from "./wails";
 
 /** One event from the daemon's realtime channel. */
 export interface RealtimeEvent {
@@ -55,57 +56,16 @@ function backoffFor(attempt: number): number {
 }
 
 /**
- * The origin to open the event channel against.
+ * The origin a browser tab opens the event channel against: its own.
  *
- * Same-origin is right in a browser, where the daemon serves the bundle
- * itself. It is wrong in the desktop window, where the page comes from the
- * application binary's own embedded assets: `window.location.host` there is
- * the asset host, which serves no `/ws`, so the socket connected to nothing
- * and every live update in the application silently never arrived. The
- * daemon's real address is known to the Go side and asked for here.
- *
- * Resolved once and remembered — it cannot change while the window is open,
- * and a reconnect should not pay for the bridge call again.
+ * Only a browser tab opens a socket — the desktop window's channel arrives over
+ * the bridge (see `useRealtime`) — and there the daemon serves the page, so the
+ * page's origin is the daemon's. This used to ask the Wails bridge first, which
+ * a browser tab does not have: every page load paid a rejected
+ * `POST /wails/runtime` before the socket opened.
  */
-let daemonOrigin: string | null = null;
-
-/**
- * Read at module load, before anything can navigate.
- *
- * The window states the daemon's address in its own URL, and the router
- * rewrites that URL on the first navigation — which happens well before the
- * socket is ready to open, since it waits for a workspace first. Reading it
- * lazily meant reading it after it was already gone.
- */
-const declaredDaemon =
-  typeof window === "undefined"
-    ? null
-    : new URLSearchParams(window.location.search).get("daemon");
-
-async function originForSocket(): Promise<string> {
-  if (daemonOrigin !== null) return daemonOrigin;
-
-  // What the window declared (`cmd/aos-desktop`'s
-  // WebviewWindowOptions.URL) — see declaredDaemon above.
-  if (declaredDaemon) {
-    daemonOrigin = declaredDaemon.replace(/\/+$/, "");
-    return daemonOrigin;
-  }
-
-  // Failing that, ask the bridge.
-  try {
-    const address = await system.daemonAddress();
-    if (address) {
-      daemonOrigin = address.replace(/\/+$/, "");
-      return daemonOrigin;
-    }
-  } catch {
-    // No Wails host — a browser tab, where the page's own origin is the
-    // daemon and the answer below is right.
-  }
-
-  daemonOrigin = window.location.origin;
-  return daemonOrigin;
+function socketOrigin(): string {
+  return window.location.origin;
 }
 
 /**
@@ -139,10 +99,9 @@ export function useRealtime(queryClient: QueryClient): ConnectionState {
       // failed call cannot tell "gone" from "refused"). Without it the
       // indicator read "open" from the moment the page loaded, whatever the
       // relay was actually doing.
+      const followHealth = daemonHealthFollower(queryClient, setState);
       const offDaemon = Events.On("aos:daemon", (event: { data?: unknown }) => {
-        const payload = event?.data as { healthy?: boolean } | Array<{ healthy?: boolean }> | undefined;
-        const one = Array.isArray(payload) ? payload[0] : payload;
-        setState(one?.healthy === false ? "reconnecting" : "open");
+        followHealth(event?.data);
       });
       const off = Events.On("aos:realtime", (event: { data?: unknown }) => {
         const payload = event?.data as RealtimeEvent | RealtimeEvent[] | undefined;
@@ -180,28 +139,19 @@ export function useRealtime(queryClient: QueryClient): ConnectionState {
         return;
       }
 
-      void openAt(workspace);
+      openAt(workspace);
     };
 
-    const openAt = async (workspace: string) => {
-      const origin = await originForSocket();
-      if (closed) return;
-      if (!/^https?:/.test(origin)) {
-        // Nothing named a reachable daemon, and this page's own origin is
-        // not one either (the desktop's `wails://` scheme). Opening a
-        // socket at it throws; saying so beats a silent dead channel.
-        console.error(
-          `[realtime] no daemon address to open the event channel against (origin ${origin}) — live updates are off`,
-        );
-        setState("closed");
-        return;
-      }
-      const url = `${origin.replace(/^http/, "ws")}/ws?workspace=${encodeURIComponent(workspace)}`;
+    const openAt = (workspace: string) => {
+      const url = `${socketOrigin().replace(/^http/, "ws")}/ws?workspace=${encodeURIComponent(workspace)}`;
 
       const ws = new WebSocket(url);
       socket.current = ws;
 
       ws.onopen = () => {
+        // A reconnect, not the first open: events were missed while the
+        // socket was down, so what the screens hold may be stale.
+        if (attempt > 0) void queryClient.invalidateQueries();
         attempt = 0;
         setState("open");
       };
@@ -234,6 +184,33 @@ export function useRealtime(queryClient: QueryClient): ConnectionState {
   }, [queryClient]);
 
   return state;
+}
+
+/**
+ * Follows the daemon's health as the desktop process relays it, and refetches
+ * everything when it comes back.
+ *
+ * While the daemon was down every screen that asked got a failure — or, from a
+ * surface that swallowed it, an empty answer — and nothing asked again when it
+ * returned: the banner cleared and Files went on saying there were no files
+ * until somebody clicked something. The transition from unhealthy to healthy
+ * is the one moment every cached read is known to be suspect.
+ *
+ * Accepts the payload bare or as a one-element array, as Wails delivers it in
+ * different versions.
+ */
+export function daemonHealthFollower(
+  queryClient: Pick<QueryClient, "invalidateQueries">,
+  setState: (state: ConnectionState) => void,
+): (payload: unknown) => void {
+  let healthy = true;
+  return (payload) => {
+    const one = (Array.isArray(payload) ? payload[0] : payload) as { healthy?: boolean } | undefined;
+    const now = one?.healthy !== false;
+    if (now && !healthy) void queryClient.invalidateQueries();
+    healthy = now;
+    setState(now ? "open" : "reconnecting");
+  };
 }
 
 /**

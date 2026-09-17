@@ -1,4 +1,5 @@
 import { cn, timeAgoCompact } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 interface ChatActivityStampProps {
   at?: string | Date | null;
@@ -13,7 +14,10 @@ export function ChatActivityStamp({ at, className }: ChatActivityStampProps) {
     return null;
   }
 
-  const label = timeAgoCompact(at);
+  // The compact units (m, h, d) read the same in both languages; "now" does
+  // not, and it is the stamp every row shows right after a send.
+  const compact = timeAgoCompact(at);
+  const label = compact === "now" ? t("now") : compact;
   const absolute =
     at instanceof Date ? at.toLocaleString() : new Date(at).toLocaleString();
 

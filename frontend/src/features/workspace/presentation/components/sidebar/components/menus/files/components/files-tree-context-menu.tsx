@@ -17,6 +17,7 @@ import type {
   ContextMenuOpenContext,
 } from "@pierre/trees";
 import { api } from "@/lib/aos-facade";
+import { aos } from "@/app/aos";
 import { useAlert } from "@/components/ui/alert-provider";
 import { DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -27,7 +28,6 @@ import type {
 } from "@/features/file/interfaces/file.interfaces";
 import {
   explorerContextsEqual,
-  lookupPathIndex,
   parentPathOf,
 } from "@/features/file/presentation/helpers/files-explorer.helper";
 import type { FilesClipboardState } from "@/features/file/presentation/stores/files.store";
@@ -130,9 +130,14 @@ export function FilesTreeContextMenu({
       : parentPathOf(item.path).replace(/\/+$/, "")
     : "";
 
-  const absolutePath = item
-    ? (lookupPathIndex(snapshot?.pathIndex, item.path)?.absolutePath as string | undefined)
-    : undefined;
+  // The daemon names paths relative to the workspace; the absolute one is the
+  // workspace's own directory joined to it. The index never carried one, so
+  // "Reveal in Finder" — which needs it — was never offered, and "Copy Path"
+  // could only copy the relative path.
+  const relativePath = item ? item.path.replace(/\/+$/, "") : "";
+  const workspaceRoot = aos.stores.workspace.state.current?.path?.replace(/\/+$/, "");
+  const absolutePath =
+    item && workspaceRoot ? `${workspaceRoot}/${relativePath}` : undefined;
 
   const canPaste =
     !readOnly &&
@@ -161,9 +166,9 @@ export function FilesTreeContextMenu({
     if (!item) return;
 
     const accepted = await confirm({
-      title: `Delete "${item.name}"?`,
-      description: "This action cannot be undone.",
-      confirmText: "Delete",
+      title: t("Delete \"{{name}}\"?", { name: item.name }),
+      description: t("This action cannot be undone."),
+      confirmText: t("Delete"),
       variant: "destructive",
     });
 
@@ -181,7 +186,7 @@ export function FilesTreeContextMenu({
     if (response.error) {
       toast.error(
         (response.error as { message?: string })?.message ||
-          `Unable to delete "${item.name}".`,
+          t("Unable to delete \"{{name}}\".", { name: item.name }),
       );
       return;
     }
@@ -210,7 +215,7 @@ export function FilesTreeContextMenu({
       onFilesChanged();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Unable to paste items.",
+        error instanceof Error ? error.message : t("Unable to paste items."),
       );
     }
   }
@@ -269,7 +274,7 @@ export function FilesTreeContextMenu({
           <MenuButton
             onClick={() => {
               context.close();
-              writeClipboard(item.path);
+              writeClipboard(absolutePath ?? relativePath);
             }}
           >
             <Copy className="size-4" />
@@ -278,7 +283,7 @@ export function FilesTreeContextMenu({
           <MenuButton
             onClick={() => {
               context.close();
-              writeClipboard(item.name);
+              writeClipboard(relativePath);
             }}
           >
             <ClipboardCopy className="size-4" />

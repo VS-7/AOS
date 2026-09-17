@@ -77,6 +77,30 @@ func onboard(t *testing.T, svc *auth.Service) auth.OnboardingOutput {
 	return out
 }
 
+// A route that must tell an API token from the person's own session is told
+// which credential was presented, not only whose it is.
+func TestCredentialSaysWhichCredentialWasPresented(t *testing.T) {
+	svc, _ := newService(t)
+	out := onboard(t, svc)
+	_, api, err := svc.RegenerateAPIToken(ctx(), out.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for bearer, want := range map[string]string{out.Token: "initial", api: auth.APITokenName} {
+		user, presented, err := svc.Credential(ctx(), bearer)
+		if err != nil {
+			t.Fatalf("%s: %v", want, err)
+		}
+		if user.ID != out.User.ID || presented.Name != want {
+			t.Errorf("credential = %s/%q, want %s/%q", user.ID, presented.Name, out.User.ID, want)
+		}
+	}
+	if _, _, err := svc.Credential(ctx(), "aos_not-a-real-token"); !errors.Is(err, apperr.ErrUnauthorized) {
+		t.Errorf("unknown bearer: error = %v", err)
+	}
+}
+
 // TestAPasswordOfElevenIsRejected pins the divergence: the original accepts
 // six, for an account that can run shell commands on the machine.
 func TestAPasswordOfElevenIsRejected(t *testing.T) {
@@ -587,6 +611,58 @@ func TestUpdateProfileChangesWhatTheInterfaceShows(t *testing.T) {
 	}
 }
 
+// TestUpdateProfileKeepsTheAvatar. The Profile page offered an avatar picker
+// and answered "Profile updated successfully!", but the account had nowhere
+// to keep an image: it was dropped on the way, and a reload showed initials.
+func TestUpdateProfileKeepsTheAvatar(t *testing.T) {
+	svc, _ := newService(t)
+	out := onboard(t, svc)
+	image := "data:image/webp;base64,UklGRhYAAABXRUJQVlA4"
+
+	updated, err := svc.UpdateProfile(ctx(), auth.UpdateProfileInput{UserID: out.User.ID, Name: "Vitor", Image: &image})
+	if err != nil {
+		t.Fatalf("UpdateProfile: %v", err)
+	}
+	if updated.Image != image {
+		t.Fatalf("answered image = %q", updated.Image)
+	}
+
+	// Not sending one leaves it as it is; sending "" removes it.
+	if read, _ := svc.UpdateProfile(ctx(), auth.UpdateProfileInput{UserID: out.User.ID, Name: "Vitor S"}); read.Image != image {
+		t.Errorf("an update that did not mention the avatar changed it: %q", read.Image)
+	}
+	empty := ""
+	if read, _ := svc.UpdateProfile(ctx(), auth.UpdateProfileInput{UserID: out.User.ID, Name: "Vitor S", Image: &empty}); read.Image != "" {
+		t.Errorf("an emptied avatar was kept: %q", read.Image)
+	}
+}
+
+// TestUpdateProfileRefusesAnAvatarItCannotShow. The value is drawn straight
+// into an <img> on every screen that shows the account, and it travels with
+// every session read: anything but a small inline image is refused.
+func TestUpdateProfileRefusesAnAvatarItCannotShow(t *testing.T) {
+	for name, image := range map[string]string{
+		"a remote address": "https://example.test/me.png",
+		"a script":         "data:text/html;base64,PHNjcmlwdD4=",
+		"too large":        "data:image/png;base64," + strings.Repeat("A", auth.MaxImageBytes),
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc, store := newService(t)
+			out := onboard(t, svc)
+			before := store.saves
+
+			_, err := svc.UpdateProfile(ctx(), auth.UpdateProfileInput{UserID: out.User.ID, Name: "Vitor", Image: &image})
+			app, ok := apperr.As(err)
+			if !ok || app.Code != "AOS_AUTH_IMAGE_INVALID" || app.HTTPStatus != apperr.StatusBadRequest {
+				t.Fatalf("err = %v, want AOS_AUTH_IMAGE_INVALID", err)
+			}
+			if store.saves != before {
+				t.Error("a refused avatar was still written")
+			}
+		})
+	}
+}
+
 // TestUpdateProfileRefusesToBlankTheName. An account with no name is an
 // account nobody can point at in the interface.
 func TestUpdateProfileRefusesToBlankTheName(t *testing.T) {
@@ -650,5 +726,75 @@ func TestUpdateProfileOfAnAccountThatIsNotThere(t *testing.T) {
 		UserID: "u-nobody", Name: "Ninguém",
 	}); !errors.Is(err, apperr.ErrNotFound) {
 		t.Fatalf("error = %v, want not found", err)
+	}
+}
+
+// TestRegeneratingTheAPITokenReplacesOnlyThatOne. Settings > Developers offered
+// "Generate API Token" and answered "isn't wired up in this build yet": the
+// domain could mint a token, and nothing let the person get one to put in an
+// MCP client. Regenerating is the only way to see a value again — it is kept
+// hashed — so it must retire the previous API token and leave the session and
+// the terminal's credential alone.
+func TestRegeneratingTheAPITokenReplacesOnlyThatOne(t *testing.T) {
+	svc, _ := newService(t)
+	out := onboard(t, svc)
+
+	if got, err := svc.APIToken(ctx(), out.User.ID); err != nil || got != nil {
+		t.Fatalf("a fresh account has an API token: %+v, %v", got, err)
+	}
+
+	_, first, err := svc.RegenerateAPIToken(ctx(), out.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, second, err := svc.RegenerateAPIToken(ctx(), out.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.Authenticate(ctx(), first); err == nil {
+		t.Error("the replaced API token still authenticates")
+	}
+	if _, err := svc.Authenticate(ctx(), second); err != nil {
+		t.Errorf("the new API token does not authenticate: %v", err)
+	}
+	if _, err := svc.Authenticate(ctx(), out.Token); err != nil {
+		t.Errorf("regenerating the API token signed the session out: %v", err)
+	}
+
+	current, err := svc.APIToken(ctx(), out.User.ID)
+	if err != nil || current == nil {
+		t.Fatalf("APIToken = %+v, %v", current, err)
+	}
+	if current.ID != record.ID || !strings.HasPrefix(second, current.Prefix) {
+		t.Errorf("APIToken = %+v, want the one just issued (%s…)", current, record.Prefix)
+	}
+}
+
+// The tunnel's exposure guard asks this before publishing the daemon: an
+// authenticated API nobody holds a credential for is a door nobody can open,
+// and a tunnel onto it publishes nothing usable. It is a yes/no about the
+// installation, so a token on any account counts, and a revoked one does not.
+func TestAnyActiveAPITokenTracksTheIssuedCredentials(t *testing.T) {
+	svc, _ := newService(t)
+	out := onboard(t, svc)
+
+	if any, err := svc.AnyActiveAPIToken(ctx()); err != nil || any {
+		t.Fatalf("a fresh installation holds an API token: %v, %v", any, err)
+	}
+
+	record, _, err := svc.RegenerateAPIToken(ctx(), out.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if any, err := svc.AnyActiveAPIToken(ctx()); err != nil || !any {
+		t.Fatalf("after issuing one: %v, %v", any, err)
+	}
+
+	if err := svc.RevokeToken(ctx(), out.User.ID, record.ID); err != nil {
+		t.Fatal(err)
+	}
+	if any, err := svc.AnyActiveAPIToken(ctx()); err != nil || any {
+		t.Fatalf("after revoking the only one: %v, %v", any, err)
 	}
 }

@@ -4,6 +4,11 @@
 // publishing a capability publishes its route — the original maintains 26
 // controllers by hand, and the drift between them and the tools is the reason
 // this layer generates instead.
+//
+// One route is written by hand: a routine's webhook (routine_webhook.go). It
+// cannot be a command, because every command answers to a session or API
+// token and the sender of a webhook holds neither — the routine's own token is
+// its credential, and the route exists to check exactly that one.
 package httpapi
 
 import (
@@ -13,7 +18,9 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -92,6 +99,12 @@ type Config struct {
 	// Nil leaves it unmounted.
 	Bot http.Handler
 
+	// RoutineWebhooks fires a routine from outside, at RoutineWebhookPath,
+	// outside the authenticated group for the reason Bot is: the sender proves
+	// itself with the routine's webhook token and nothing else. Nil leaves it
+	// unmounted.
+	RoutineWebhooks RoutineWebhooks
+
 	// Artifacts serves generated static applications at /v/artifacts/{id}/*,
 	// outside /api entirely — it is not a command surface and it authorises
 	// itself per artifact, per visibility, never against the guarded group's
@@ -119,6 +132,32 @@ type Config struct {
 type Server struct {
 	router chi.Router
 	cfg    Config
+
+	// background counts the work a request answered before finishing — a
+	// routine fired by webhook is accepted and then run, which outlives the
+	// response by a whole model turn. Shutdown waits for it: work the daemon
+	// accepted is work it finishes, and a workspace whose files are being
+	// written while the process exits is how half a run ends up on disk.
+	background sync.WaitGroup
+}
+
+// WaitBackground waits for the work requests left running, or until ctx ends.
+//
+// It answers whether everything finished, so the caller can say so in its log
+// rather than guess: what is still running at the deadline keeps running until
+// the process exits.
+func (s *Server) WaitBackground(ctx context.Context) bool {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.background.Wait()
+	}()
+	select {
+	case <-done:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // New builds the router.
@@ -158,6 +197,9 @@ func New(cfg Config) *Server {
 		}
 		if cfg.Bot != nil {
 			api.Mount("/bot", cfg.Bot)
+		}
+		if cfg.RoutineWebhooks != nil {
+			api.Post(strings.TrimPrefix(RoutineWebhookPath, "/api"), s.routineWebhook)
 		}
 
 		api.Group(func(guarded chi.Router) {
@@ -338,11 +380,17 @@ func (s *Server) invoke(d command.Descriptor, notice *command.DeprecationNotice)
 	}
 }
 
+// health says the daemon is serving, and which one it is. The process id is
+// how an update tells the daemon its supervisor started from one somebody
+// started by hand on the same port — the first is restarted onto the new
+// release, the second cannot be — and the version is how it sees the new
+// release answering rather than anything at all.
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":  "ok",
 		"version": build.Version,
 		"name":    build.Name,
+		"pid":     os.Getpid(),
 	})
 }
 

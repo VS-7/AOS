@@ -85,7 +85,7 @@ func TestAWorktreeIsARealCheckoutOnItsOwnBranch(t *testing.T) {
 		t.Fatalf("cutting a worktree moved the main checkout to %q", got)
 	}
 
-	listed, err := trees.List(ctx())
+	listed, err := trees.List(ctx(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestRemovingACheckoutThatIsAlreadyGoneIsNotAnError(t *testing.T) {
 	}
 	// The administrative record git keeps separately went with it, so the list
 	// does not report a worktree that is not there.
-	listed, err := trees.List(ctx())
+	listed, err := trees.List(ctx(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestANonRepositoryIsReportedRatherThanSilentlyDoingNothing(t *testing.T) {
 	}); err == nil {
 		t.Fatal("cutting a worktree outside a repository reported success")
 	}
-	if _, err := trees.List(ctx()); err == nil {
+	if _, err := trees.List(ctx(), ""); err == nil {
 		t.Fatal("listing worktrees outside a repository reported success")
 	}
 }
@@ -246,4 +246,44 @@ func sameFile(t *testing.T, a, b string) bool {
 		return false
 	}
 	return os.SameFile(fa, fb)
+}
+
+// The prune asks for the checkouts under a workspace's own root, spelled the
+// way it placed them. git reports every path with its links resolved, so a
+// state directory reached through a link — on another volume, or macOS's /var
+// — used to have no checkout under its root at all, and the prune never saw
+// one; and a checkout of the same repository under another root is another
+// workspace's, not one to count.
+func TestListingUnderARootReachedThroughALinkSpellsCheckoutsUnderIt(t *testing.T) {
+	repo := repository(t)
+	trees := gitcli.NewWorktrees(gitcli.New(), repo)
+	target := t.TempDir()
+	link := filepath.Join(t.TempDir(), "state")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("links are not available here: %v", err)
+	}
+	mine := filepath.Join(link, "worktrees", "api", "t-1")
+	theirs := filepath.Join(target, "worktrees", "web", "t-2")
+	for _, where := range []string{mine, theirs} {
+		if _, err := trees.Create(ctx(), task.WorktreeSpec{
+			TaskID: filepath.Base(where), Branch: "aos/" + filepath.Base(where), Base: "main", Path: where,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	listed, err := trees.List(ctx(), filepath.Join(link, "worktrees", "api"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0] != mine {
+		t.Fatalf("list under the root = %v, want exactly [%s] as it was placed", listed, mine)
+	}
+	all, err := trees.List(ctx(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("list with no root = %v, want both checkouts", all)
+	}
 }

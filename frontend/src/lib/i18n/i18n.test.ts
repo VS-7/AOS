@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, it, expect, beforeEach } from "vitest";
 import en from "./locales/en.json";
 import ptBR from "./locales/pt-BR.json";
-import { LOCALES, LOCALE_NAMES, normalizeLocale, detectLocale, getLocale, setLocale, t, translate } from "./index";
+import { LOCALES, LOCALE_NAMES, applyConfiguredLocale, normalizeLocale, detectLocale, getLocale, setLocale, t, translate } from "./index";
 
 /**
  * The one test that actually protects the feature: a key added to a screen and
@@ -184,6 +184,24 @@ describe("locale resolution", () => {
     expect(localStorage.getItem("aos.locale")).toBe("pt-BR");
     expect(t("Settings")).toBe("Configurações");
     expect(detectLocale()).toBe("pt-BR");
+  });
+
+  // The configuration is where the language is chosen — the Profile picker
+  // writes it, and so do onboarding, the CLI and another device. The first
+  // configuration a window read used to be copied into this browser's storage,
+  // where it then counted as a personal choice and every later configured
+  // language was ignored: the picker's select and the interface disagreed.
+  it("follows the configured language over the one this browser last showed", () => {
+    applyConfiguredLocale("en-US");
+    expect(getLocale()).toBe("en");
+
+    applyConfiguredLocale("pt-BR");
+    expect(getLocale()).toBe("pt-BR");
+    // Kept only so the next launch paints its first frame in that language.
+    expect(detectLocale()).toBe("pt-BR");
+
+    applyConfiguredLocale("fr-FR"); // no catalogue: the interface stays as it is
+    expect(getLocale()).toBe("pt-BR");
   });
 
   it("falls back to English, then to the key itself", () => {

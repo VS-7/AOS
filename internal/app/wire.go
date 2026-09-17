@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 
 	"github.com/OWNER/aos/internal/adapters/activitylog"
 	"github.com/OWNER/aos/internal/adapters/artifactfiles"
@@ -122,6 +123,17 @@ type Options struct {
 	// connections to the same database for no gain — the worker that drains
 	// it is started once, by Serve, on the primary.
 	sharedQueue job.Queue
+
+	// sharedServing is the primary's "this process is the daemon" flag. One
+	// flag for every workspace the process builds: a secondary that believed
+	// it was not the daemon would let an update restart the daemon from
+	// inside it. See updateSupervisor.
+	sharedServing *atomic.Bool
+
+	// sharedDraining is whether the primary's worker is running. A secondary
+	// builds no worker of its own, and its routines hand their reactions to
+	// the queue only while the primary's drains it (see routineReactor).
+	sharedDraining func() bool
 
 	// secondary marks a workspace built by another App, so it does not build
 	// a set of workspaces of its own and recurse forever.
@@ -244,7 +256,11 @@ type App struct {
 
 	// Worker drains the queue and runs the periodic tick. It is not started by
 	// New: a CLI process that runs one command must not begin executing the
-	// daemon's backlog.
+	// daemon's backlog. Serve starts it and stops it on shutdown.
+	//
+	// One for the installation, on the primary: the queue is one database
+	// for every workspace, and its ticks reach every workspace this process
+	// serves (see servedScopes). Nil on a workspace built by another App.
 	Worker *worker.Pool
 
 	// Subconscious is the background observer. Exported so a test can run one
@@ -269,6 +285,16 @@ type App struct {
 	// handle because the list grows with each phase, and a caller that has to
 	// remember which resources exist is a caller that will forget one.
 	closers []func() error
+
+	// serving is set by Serve, and shared with every workspace this App
+	// builds — see Options.sharedServing.
+	serving *atomic.Bool
+
+	// workspaceID is the id this set of services was pinned to — a secondary
+	// workspace's own, or the environment's AOS_WORKSPACE_ID — and "" for a
+	// primary nothing pinned. What the periodic ticks act as; see
+	// servedScopes for how an unpinned primary is named.
+	workspaceID string
 }
 
 // Close releases everything the application opened.
@@ -436,6 +462,18 @@ func New(opts Options) (*App, error) {
 		WorkingDir:    root,
 	})
 
+	// A workspace directory this installation made for itself is given a
+	// repository of its own if it was made before creation did that, and
+	// nothing else is touched — see workspace.Service.EnsureManagedRepository.
+	// Here rather than at Create because those workspaces were created long
+	// ago: the one this was found on sits inside a home directory that is a
+	// repository with no commit, and every task branched in it was refused.
+	if info, err := os.Stat(root); err == nil && info.IsDir() {
+		if _, warning := workspaceSvc.EnsureManagedRepository(context.Background(), root); warning != "" {
+			logger.Warn("the workspace has no repository of its own", "path", root, "reason", warning)
+		}
+	}
+
 	// Now that the registry is readable, the scope declared above can answer.
 	// Everything that publishes an event — chat, activity, collections,
 	// approvals — and the turn itself go through this one resolver, so there
@@ -473,7 +511,7 @@ func New(opts Options) (*App, error) {
 	// Supervision is bound to the same installation the rest of the process
 	// serves: the record, the lock and the log all live under the state
 	// directory, so two installations on one machine do not fight.
-	gatewaySvc := gateway.NewService(gateway.Deps{
+	gatewayDeps := gateway.Deps{
 		Processes: supervise.NewProcesses(),
 		Health:    supervise.NewHealth(),
 		Store:     supervise.NewStore(filepath.Join(paths.GatewayDir(), "gateway.json")),
@@ -491,7 +529,8 @@ func New(opts Options) (*App, error) {
 		// This copy lives inside the daemon: it answers `gateway status` over
 		// HTTP rather than supervising anything. See Deps.Inside.
 		Inside: true,
-	})
+	}
+	gatewaySvc := gateway.NewService(gatewayDeps)
 
 	// The hook bus and the approval channel. The log is append-only and lives
 	// beside the agent it records, which is what makes it reviewable in the
@@ -536,7 +575,8 @@ func New(opts Options) (*App, error) {
 		Setup:     setupScript{agents: agentSvc, tmp: paths.Outputs(), log: logger},
 		Policy: taskPolicy{
 			workspaces: workspaceSvc, active: active,
-			root: filepath.Join(paths.Data(), "worktrees"),
+			root:       worktreeRootFor(paths.Data(), root),
+			legacyRoot: filepath.Join(paths.Data(), "worktrees"),
 		},
 		Notifier: taskActivity{activities: activitySvc, log: logger},
 		Clock:    clock,
@@ -551,12 +591,15 @@ func New(opts Options) (*App, error) {
 		Repo: repos.comments, Parent: taskSvc, Clock: clock, IDs: idgen, Log: logger,
 	})
 
+	// Filled in below, once the queue is open and the worker exists.
+	reactor := &routineReactor{}
 	routineSvc := routine.NewService(routine.Deps{
 		Repo:      repos.routines,
 		Runs:      repos.runs,
 		Tokens:    tokens{},
 		Directory: agentDirectory{agents: agentSvc},
 		Notifier:  routineActivity{activities: activitySvc, log: logger},
+		Reactor:   reactor,
 		Clock:     clock,
 		IDs:       idgen,
 		Tick:      resolver.Duration(env.KeyJobsTick, job.DefaultTick),
@@ -704,10 +747,11 @@ func New(opts Options) (*App, error) {
 		Installer:  skillInstaller,
 	})
 	tunnelSvc := tunnel.NewService(tunnel.Deps{
-		Config: tunnelConfig{svc: configSvc},
-		Runner: cloudflaredproc.New(),
-		Clock:  clock,
-		Log:    logger,
+		Config:      tunnelConfig{svc: configSvc},
+		Credentials: tunnelCredentials{svc: authSvc},
+		Runner:      cloudflaredproc.New(),
+		Clock:       clock,
+		Log:         logger,
 	})
 
 	// Last of the eight: bot needs chatSvc, agentSvc and tunnelSvc, all
@@ -781,8 +825,10 @@ func New(opts Options) (*App, error) {
 		Log: logger,
 	})
 	runtime := session.New(session.Deps{
-		Agents:   agentSvc,
-		Chats:    chatSvc,
+		Agents: agentSvc,
+		Chats:  chatSvc,
+		// A turn on a task that has an isolated checkout is confined to it.
+		Tasks:    taskSvc,
 		Models:   models{config: configSvc, home: filepath.Dir(paths.Root)},
 		Registry: reg,
 		Bus:      hookBus,
@@ -838,6 +884,8 @@ func New(opts Options) (*App, error) {
 	if signatures == nil {
 		signatures = subconscious.NewMemorySignatures(clock.Now)
 	}
+	reactor.queue, reactor.ids = queue, idgen
+	reactor.workspace = boundWorkspace(scope, workspaceSvc, root)
 
 	// The background observer. It runs on its own slot so a cheap model can
 	// watch while an expensive one reasons, and it is handed to the runtime as
@@ -872,10 +920,35 @@ func New(opts Options) (*App, error) {
 	if self, err := os.Executable(); err == nil {
 		binDir = filepath.Dir(self)
 	}
+	serving := opts.sharedServing
+	if serving == nil {
+		serving = new(atomic.Bool)
+	}
+	installer := updateinstall.New(filepath.Join(paths.UpdateDir(), "staged"), binDir)
+	// The same supervision, from outside: what `aosd update apply` run from a
+	// terminal restarts the daemon with. See updateSupervisor.
+	outsideDeps := gatewayDeps
+	outsideDeps.Inside = false
+	feed, customFeed := updateFeed(resolver)
 	updateSvc := update.NewService(update.Deps{
-		Source:     releasesource.New(resolver.String(env.KeyUpdateBaseURL, "")),
-		Installer:  updateinstall.New(paths.UpdateDir(), binDir),
-		Supervisor: updateSupervisor{svc: gatewaySvc},
+		Source:     releasesource.New(feed),
+		CustomFeed: customFeed,
+		Stager:     installer,
+		Installer:  installer,
+		Store:      updateinstall.NewStore(filepath.Join(paths.UpdateDir(), "state.json")),
+		// One lock file for the installation: every workspace App builds its
+		// own update service over the same directory, and a terminal's
+		// `aosd update apply` is a process of its own.
+		Lock: updateinstall.NewLock(filepath.Join(paths.UpdateDir(), "update.lock")),
+		Supervisor: updateSupervisor{
+			inside:   gatewaySvc,
+			outside:  gateway.NewService(outsideDeps),
+			serving:  serving.Load,
+			host:     gatewayDeps.Host,
+			port:     gatewayDeps.Port,
+			identify: supervise.NewHealth().Identify,
+		},
+		Operators:  updateOperators{auth: authSvc},
 		ActiveWork: updateActiveWork{queue: queue},
 		Clock:      clock,
 		Sleeper:    supervise.Sleeper{},
@@ -885,26 +958,6 @@ func New(opts Options) (*App, error) {
 	update.Register(reg, updateSvc)
 
 	reg.Freeze()
-
-	var pool *worker.Pool
-	if queue != nil {
-		pool = worker.New(worker.Deps{
-			Queue: queue,
-			Handlers: map[string]job.Handler{
-				kindTurn: turnHandler{runtime: runtime},
-			},
-			Ticks: []worker.Tick{
-				{Name: "routines", Run: routineTick(routineSvc, active)},
-				{Name: "activity-retention", Run: activityRetention(activitySvc)},
-				{Name: "job-retention", Run: jobRetention(queue)},
-			},
-			Concurrency: resolver.Int(env.KeyJobsConcurrency, job.DefaultConcurrency),
-			TickRate:    resolver.Duration(env.KeyJobsTick, job.DefaultTick),
-			Lease:       job.DefaultLease,
-			Heartbeat:   job.DefaultHeartbeat,
-			Log:         logger,
-		})
-	}
 
 	built := &App{
 		Paths:      paths,
@@ -932,7 +985,6 @@ func New(opts Options) (*App, error) {
 		Jobs:         jobSvc,
 		Themes:       themeSvc,
 		Queue:        queue,
-		Worker:       pool,
 		Subconscious: observer,
 
 		CollectionRegistry: collReg,
@@ -953,9 +1005,17 @@ func New(opts Options) (*App, error) {
 		Update:        updateSvc,
 		Bots:          botRegistry,
 
-		Clock:   clock,
-		env:     resolver,
-		closers: closers,
+		Clock:       clock,
+		env:         resolver,
+		closers:     closers,
+		serving:     serving,
+		workspaceID: active,
+	}
+	// A secondary's reactions are drained by the primary's worker; the
+	// primary's by its own, which exists only once the block below has run.
+	reactor.draining = opts.sharedDraining
+	if !opts.secondary {
+		reactor.draining = built.draining
 	}
 
 	// The workspaces this process serves besides the one it opened.
@@ -975,23 +1035,53 @@ func New(opts Options) (*App, error) {
 			primary: built,
 			build: func(id, workspaceRoot string) (*App, error) {
 				return New(Options{
-					Env:           opts.Env,
-					Clock:         opts.Clock,
-					IDs:           opts.IDs,
-					WorkspaceRoot: workspaceRoot,
-					workspaceID:   id,
-					sharedEvents:  events,
-					sharedQueue:   queue,
-					secondary:     true,
+					Env:            opts.Env,
+					Clock:          opts.Clock,
+					IDs:            opts.IDs,
+					WorkspaceRoot:  workspaceRoot,
+					workspaceID:    id,
+					sharedEvents:   events,
+					sharedQueue:    queue,
+					sharedServing:  serving,
+					sharedDraining: built.draining,
+					secondary:      true,
 				})
 			},
 		}
 		built.Registry = built.workspaceRegistry()
 		built.closers = append(built.closers, built.scopes.close)
+
+		// The pool is built here, once the scopes exist, because its ticks
+		// reach through them: a routine is evaluated in the workspace that
+		// holds it, with that workspace's services and identity. A secondary
+		// builds none — a second pool on the shared queue would be a second
+		// drain, and its ticks would only ever see its own directory.
+		if queue != nil {
+			built.Worker = worker.New(worker.Deps{
+				Queue: queue,
+				Handlers: map[string]job.Handler{
+					kindTurn:    turnHandler{runtimeFor: built.runtimeFor},
+					kindRoutine: routineHandler{scopeFor: built.jobScope},
+				},
+				Ticks: []worker.Tick{
+					{Name: "routines", Run: built.everyScope(routineTick(queue, idgen))},
+					{Name: "activity-retention", Run: built.everyScope(activityRetention)},
+					{Name: "job-retention", Run: jobRetention(queue)},
+				},
+				Concurrency: resolver.Int(env.KeyJobsConcurrency, job.DefaultConcurrency),
+				TickRate:    resolver.Duration(env.KeyJobsTick, job.DefaultTick),
+				Lease:       job.DefaultLease,
+				Heartbeat:   job.DefaultHeartbeat,
+				Log:         logger,
+			})
+		}
 	}
 
 	return built, nil
 }
+
+// draining reports whether this App's worker is taking the queue's jobs.
+func (a *App) draining() bool { return a.Worker.Running() }
 
 // workspaceRoot adapts workspace.Service to file.Workspaces: the active
 // workspace's path, resolved fresh on every call rather than captured once,

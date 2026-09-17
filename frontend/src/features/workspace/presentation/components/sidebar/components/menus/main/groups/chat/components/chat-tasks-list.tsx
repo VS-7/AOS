@@ -13,6 +13,9 @@ interface ChatTasksListProps {
 
 /**
  * Tasks tab — chats linked via `chat.task`.
+ *
+ * A task thread is titled after its task, so the row shows that title alone;
+ * the subtitle it used to carry was the task's UUID.
  */
 export function ChatTasksList({
   chats,
@@ -41,7 +44,6 @@ export function ChatTasksList({
           kind="task"
           isActive={currentChatId === chat.id}
           index={index}
-          subtitle={chat.task}
         />
       ))}
     </SidebarMenu>

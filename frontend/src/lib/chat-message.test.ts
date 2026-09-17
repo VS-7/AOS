@@ -173,6 +173,40 @@ describe("execution metadata", () => {
     expect(answer.metadata.updatedAt).toBe("2026-09-01T10:02:30Z");
   });
 
+  // Answers stored before `replyTo` existed name nothing, so the Luara turn
+  // that ran from 13:45 to 13:50 read "Worked for 0s". The run that produced
+  // such an answer is still recognisable: same agent, and it completed at the
+  // very instant the answer was stored (Reply stamps both with one clock read).
+  it("finds the run of an answer stored before replyTo existed", () => {
+    const chat = toUiChat({
+      messages: [
+        {
+          id: "u-1",
+          role: "user",
+          runs: [{ agentId: "luara", status: "completed", startedAt: "2026-08-30T13:42:28.996373-03:00", completedAt: "2026-08-30T13:42:35.711516-03:00" }],
+          createdAt: "2026-08-30T13:42:28.988422-03:00",
+        },
+        { id: "a-1", role: "assistant", author: { type: "agent", id: "luara" }, parts: [{ type: "text", text: "oi" }], createdAt: "2026-08-30T13:42:35.711516-03:00" },
+        {
+          id: "u-2",
+          role: "user",
+          runs: [{ agentId: "luara", status: "completed", startedAt: "2026-08-30T13:45:18.44367-03:00", completedAt: "2026-08-30T13:50:54.541565-03:00" }],
+          createdAt: "2026-08-30T13:45:18.43391-03:00",
+        },
+        { id: "a-2", role: "assistant", author: { type: "agent", id: "luara" }, parts: [{ type: "text", text: "pronto" }], createdAt: "2026-08-30T13:50:54.541565-03:00" },
+        // Another agent's answer at an unrelated moment matches nothing.
+        { id: "a-3", role: "assistant", author: { type: "agent", id: "api-builder" }, parts: [{ type: "text", text: "?" }], createdAt: "2026-08-30T13:50:54.541565-03:00" },
+      ],
+    }) as { messages: Array<{ metadata: Record<string, any> }> };
+
+    const second = chat.messages[3].metadata.execution;
+    expect(second.sourceMessageId).toBe("u-2");
+    expect(second.startedAt).toBe("2026-08-30T13:45:18.44367-03:00");
+    expect(second.completedAt).toBe("2026-08-30T13:50:54.541565-03:00");
+    expect(chat.messages[1].metadata.execution.sourceMessageId).toBe("u-1");
+    expect(chat.messages[4].metadata.execution).toBeUndefined();
+  });
+
   it("reports a failed run as failed", () => {
     const chat = toUiChat({
       messages: [

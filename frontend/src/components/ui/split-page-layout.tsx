@@ -455,6 +455,7 @@ function ContentHeader({ children, className }: ContentHeaderProps) {
           size="icon"
           onClick={navigation.onBack}
           className="h-8 px-2 text-xs font-medium text-muted-foreground"
+          aria-label={t("Back")}
         >
           <ArrowLeft className="size-4" />
         </Button>
@@ -565,10 +566,13 @@ function DetailTab(_props: DetailTabProps) {
 // ─── Widget Components ────────────────────────────────────────────────────────
 
 function Widget({ children, className }: WidgetProps) {
+  // shrink-0: widgets sit in the detail tab's scrolling column, and
+  // `overflow-hidden` gives a flex item a zero minimum height, so a tall
+  // sidebar squeezed each widget and clipped its rows instead of scrolling.
   return (
     <div
       className={cn(
-        "flex flex-col overflow-hidden text-sm",
+        "flex shrink-0 flex-col overflow-hidden text-sm",
         className,
       )}
     >
@@ -630,6 +634,16 @@ function SplitPageLayoutRoot({
   const isMobile = useIsMobile();
   const sidebarVisible = aos.stores.viewport.useState(s => s.page.sidebar.visible);
   const detailsVisible = aos.stores.viewport.useState(s => s.page.details.visible);
+
+  // Tells the top bar this page has a sidebar to toggle, for as long as it is
+  // on screen. Nothing set `page.sidebar.enabled`, so the top bar could not
+  // tell a page with a sidebar from Home, where the toggle did nothing.
+  const hasSidebar = Boolean(sidebar);
+  React.useEffect(() => {
+    if (!hasSidebar) return;
+    aos.stores.viewport.actions.toggle("page.sidebar.enabled", true);
+    return () => aos.stores.viewport.actions.toggle("page.sidebar.enabled", false);
+  }, [hasSidebar]);
 
   const shouldUseStacked = variant === "stacked" || isMobile;
   const effectiveVariant: SplitPageLayoutVariant = Boolean(sidebar) && shouldUseStacked

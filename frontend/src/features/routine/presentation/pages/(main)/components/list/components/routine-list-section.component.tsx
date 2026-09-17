@@ -8,7 +8,10 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { RoutineHelper } from "@/features/routine/presentation/helpers/routine.helper";
-import type { Routine } from "@/features/routine/interfaces/routine.interfaces";
+import type {
+  Routine,
+  RoutineStatus,
+} from "@/features/routine/interfaces/routine.interfaces";
 import { RoutineListRow } from "./routine-list-row.component";
 import { t } from "@/lib/i18n";
 
@@ -33,7 +36,7 @@ const sectionVariants = {
 };
 
 interface RoutineListSectionProps {
-  status: Routine["status"];
+  status: RoutineStatus;
   routines: Routine[];
 }
 
@@ -83,7 +86,7 @@ export function RoutineListSection({ status, routines }: RoutineListSectionProps
                   transition={{ duration: 0.2 }}
                   className="flex h-11 items-center justify-center px-3 text-xs text-muted-foreground"
                 >
-                  {t("No routines in")} {config.label.toLowerCase()}
+                  {status === "enabled" ? t("No enabled routines") : t("No disabled routines")}
                 </motion.div>
               ) : (
                 routines.map((routine) => <RoutineListRow key={routine.id} routine={routine} />)

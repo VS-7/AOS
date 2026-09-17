@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"runtime"
-	"strconv"
 	"strings"
 
 	"github.com/OWNER/aos/internal/runtime/agentloop"
@@ -343,8 +342,20 @@ func toolDefs(tools []toolexec.Spec) []map[string]any {
 // where the public Gemini API has neither. Pairing by id instead of by
 // position is what keeps two tools called in one turn from being answered in
 // the wrong order.
+//
+// And as in Gemini, the results of one step go back as one turn with a part per
+// call: a step that called two tools, answered by two turns of one part each,
+// is refused for not answering the call turn part for part — and so is every
+// stored answer, which holds all of a turn's calls on one message.
 func contents(messages []agentloop.Message) []map[string]any {
 	out := make([]map[string]any, 0, len(messages))
+	var responses []map[string]any
+	flush := func() {
+		if len(responses) > 0 {
+			out = append(out, map[string]any{"role": "user", "parts": responses})
+			responses = nil
+		}
+	}
 	for _, m := range messages {
 		switch m.Role {
 		case agentloop.RoleTool:
@@ -352,12 +363,10 @@ func contents(messages []agentloop.Message) []map[string]any {
 			if m.CallID != "" {
 				response["id"] = m.CallID
 			}
-			out = append(out, map[string]any{
-				"role":  "user",
-				"parts": []map[string]any{{"functionResponse": response}},
-			})
+			responses = append(responses, map[string]any{"functionResponse": response})
 
 		case agentloop.RoleAssistant:
+			flush()
 			var parts []map[string]any
 			if m.Text != "" {
 				parts = append(parts, map[string]any{"text": m.Text})
@@ -385,11 +394,13 @@ func contents(messages []agentloop.Message) []map[string]any {
 			out = append(out, map[string]any{"role": "model", "parts": parts})
 
 		default:
+			flush()
 			out = append(out, map[string]any{
 				"role": "user", "parts": []map[string]any{{"text": m.Text}},
 			})
 		}
 	}
+	flush()
 	return out
 }
 
@@ -472,8 +483,9 @@ func translate(g generated, model string) agentloop.Response {
 			if id == "" {
 				// The public Gemini API names no call, and a model served
 				// through this one may not either. The loop pairs a result
-				// with its call by id, so position becomes it.
-				id = p.FunctionCall.Name + "-" + strconv.Itoa(index)
+				// with its call by id, so one is made up — unique, not just
+				// the position: see providers.CallID.
+				id = providers.CallID(p.FunctionCall.Name, index)
 			}
 			out.ToolCalls = append(out.ToolCalls, agentloop.ToolCall{
 				ID:        id,
