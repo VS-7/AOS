@@ -24,11 +24,11 @@ import type {
   Staged,
   UpdateStatus,
 } from "@/features/update/interfaces/update.interfaces";
+import { useFollow } from "./updates.follow";
 import {
   busyLine,
   canCheck,
   checkLine,
-  followed,
   messageOf,
   offerLine,
   offerOf,
@@ -37,16 +37,9 @@ import {
   reopenLine,
   statusLine,
   stillRunning,
+  unidentifiedLine,
   unsupervisedLine,
-  type Followed,
 } from "./updates.helper";
-
-/**
- * How often the status is read while a download or install runs that this
- * screen has no answer from. Short enough that the release shows up about
- * when it is staged; a status read changes nothing on the daemon.
- */
-const FOLLOW_EVERY_MS = 1500;
 
 /**
  * Keeping this installation current.
@@ -75,14 +68,41 @@ const FOLLOW_EVERY_MS = 1500;
 function UpdatesPanel(): React.JSX.Element {
   const [check, setCheck] = React.useState<CheckResult | null>(null);
   const [downloaded, setDownloaded] = React.useState<Staged | null>(null);
-  // A download or install whose answer never came back — see `stillRunning`
-  // — and when this screen started following it: only a status read after
-  // that can say how it ended.
-  const [following, setFollowing] = React.useState<(Followed & { since: number }) | null>(null);
 
   const statusQuery = aos.client.update.status.useQuery<UpdateStatus>();
   const status = statusQuery.data ?? null;
-  const follow = (call: Followed) => setFollowing({ ...call, since: Date.now() });
+
+  // A download or install whose answer never came back — see `stillRunning`
+  // — is followed through the status until it ends, or until the daemon has
+  // said nothing for long enough that it will not be told this way.
+  const { following, follow, running } = useFollow(
+    { status, dataUpdatedAt: statusQuery.dataUpdatedAt, refetch: statusQuery.refetch },
+    (call, end) => {
+      switch (end) {
+        case "staged":
+          setDownloaded(status?.staged ?? null);
+          toast.success(t("Downloaded and verified."));
+          break;
+        case "installed":
+          toast.success(t("{{version}} is installed.", { version: call.version }));
+          setCheck(null);
+          setDownloaded(null);
+          break;
+        case "ended":
+          toast.error(
+            call.kind === "download"
+              ? t("The download ended without a verified release staged. Download it again to see why.")
+              : t("The install ended without {{version}} running. Install it again to see why.", { version: call.version }),
+          );
+          break;
+        case "lost":
+          toast.error(
+            t("The daemon has not answered for a minute, so this screen cannot tell how it ended. Check for updates again once it is back."),
+          );
+          break;
+      }
+    },
+  );
 
   const { mutate: runCheck, loading: isChecking } = aos.client.update.check.useMutation({
     onSuccess: (result: any) => {
@@ -152,49 +172,13 @@ function UpdatesPanel(): React.JSX.Element {
     onError: (error: unknown, variables) => applyRefused(error, variables?.body?.version as string | undefined),
   });
 
-  // Read the status again and again while something runs that this screen
-  // has no answer from: its own lost call, or one it opened on.
-  const running = Boolean(following) || Boolean(status?.busy);
-  const { refetch } = statusQuery;
-  React.useEffect(() => {
-    if (!running) return;
-    const timer = window.setInterval(() => void refetch(), FOLLOW_EVERY_MS);
-    return () => window.clearInterval(timer);
-  }, [running, refetch]);
-
-  // A followed call ends when a status read after it began shows nothing
-  // running, and it ends as whatever that status shows.
-  React.useEffect(() => {
-    if (!following || statusQuery.dataUpdatedAt <= following.since) return;
-    switch (followed(following, status)) {
-      case "running":
-        return;
-      case "staged":
-        setDownloaded(status?.staged ?? null);
-        toast.success(t("Downloaded and verified."));
-        break;
-      case "installed":
-        toast.success(t("{{version}} is installed.", { version: following.version }));
-        setCheck(null);
-        setDownloaded(null);
-        break;
-      case "ended":
-        toast.error(
-          following.kind === "download"
-            ? t("The download ended without a verified release staged. Download it again to see why.")
-            : t("The install ended without {{version}} running. Install it again to see why.", { version: following.version }),
-        );
-        break;
-    }
-    setFollowing(null);
-  }, [following, status, statusQuery.dataUpdatedAt]);
-
   const busy = isChecking || isDownloading || isApplying || running;
   const answer = checkLine(check, status);
   const offer = offerOf(check, downloaded, status);
   const page = offer ? releasePage(offer.release) : null;
   const reopen = offer ? reopenLine(offer) : null;
   const stopFirst = offer ? unsupervisedLine(offer) : null;
+  const restartFirst = offer ? unidentifiedLine(offer) : null;
   const waiting = !check && status?.staged ? status.staged : null;
   const elsewhere = busyLine(status, Boolean(following));
 
@@ -260,6 +244,11 @@ function UpdatesPanel(): React.JSX.Element {
           </FormSectionHeader>
 
           <FormSectionContent>
+            {restartFirst ? (
+              <FormSectionItem>
+                <p className="text-sm text-muted-foreground">{restartFirst}</p>
+              </FormSectionItem>
+            ) : null}
             {offer.install.method === "terminal" && offer.staged && offer.install.command ? (
               <FormSectionItem>
                 <div className="min-w-0 space-y-2">
