@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { Link, File, FileText, Image, Code, Archive, Music, Video } from "lucide-react";
+import { t } from "@/lib/i18n";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -99,23 +100,32 @@ export function getIconForExtension(uri: string) {
   }
 }
 
+/**
+ * Relative time, in the language the person reads.
+ *
+ * The stamps were written in English in the source string ("2w ago", "just
+ * now") and stayed English on a pt-BR task page, next to comments the rest of
+ * which translates. Each unit is its own key — an abbreviation is not a word
+ * that survives a lookup table, "2w" is "2sem" — and the count is a variable,
+ * so a catalogue can reorder it.
+ */
 export function timeAgo(date: string | Date): string {
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - new Date(date).getTime()) / 1000);
 
-  if (diffInSeconds < 60) return "just now";
+  if (diffInSeconds < 60) return t("just now");
   const diffInMinutes = Math.floor(diffInSeconds / 60);
-  if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+  if (diffInMinutes < 60) return t("{{count}}m ago", { count: diffInMinutes });
   const diffInHours = Math.floor(diffInMinutes / 60);
-  if (diffInHours < 24) return `${diffInHours}h ago`;
+  if (diffInHours < 24) return t("{{count}}h ago", { count: diffInHours });
   const diffInDays = Math.floor(diffInHours / 24);
-  if (diffInDays < 7) return `${diffInDays}d ago`;
+  if (diffInDays < 7) return t("{{count}}d ago", { count: diffInDays });
   const diffInWeeks = Math.floor(diffInDays / 7);
-  if (diffInWeeks < 4) return `${diffInWeeks}w ago`;
+  if (diffInWeeks < 4) return t("{{count}}w ago", { count: diffInWeeks });
   const diffInMonths = Math.floor(diffInDays / 30);
-  if (diffInMonths < 12) return `${diffInMonths}mo ago`;
+  if (diffInMonths < 12) return t("{{count}}mo ago", { count: diffInMonths });
   const diffInYears = Math.floor(diffInDays / 365);
-  return `${diffInYears}y ago`;
+  return t("{{count}}y ago", { count: diffInYears });
 }
 
 /**

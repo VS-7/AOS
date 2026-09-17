@@ -3,8 +3,12 @@ import { aos } from "@/app/aos";
 import type { AssigneeDirectoryInput } from "@/features/task/presentation/helpers/assignee.helper";
 import type { WorkspaceDirectoryAgent } from "@/features/workspace/interfaces/directory.interfaces";
 
-// Asked once per window. An installation whose account list really is empty
-// would otherwise ask again every time a picker mounted.
+// Asked once per window while the request is in flight or has succeeded: an
+// installation whose account list really is empty would otherwise ask again
+// every time a picker mounted. A failure clears it again — the flag was set
+// before the call and never reset, so one transient bridge error at start-up
+// (the always-mounted task dialog makes this request on every load) left
+// every picker showing only the signed-in person until the window reloaded.
 let peopleRequested = false;
 
 /**
@@ -28,7 +32,9 @@ export function useAssigneeDirectory(): AssigneeDirectoryInput {
     if (users.length > 0 || peopleRequested) return;
     peopleRequested = true;
     void aos.stores.workspace.actions.refreshDirectory().catch(() => {
-      // The pickers still list the signed-in person and every agent.
+      // The pickers still list the signed-in person and every agent, and the
+      // next one to mount asks again.
+      peopleRequested = false;
     });
   }, [users.length]);
 

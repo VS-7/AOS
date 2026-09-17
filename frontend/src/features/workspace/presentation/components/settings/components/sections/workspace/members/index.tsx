@@ -180,7 +180,7 @@ export function WorkspaceMembersSection() {
         <FormSectionHeader>
           <FormSectionTitle>{t("Workspace Members")}</FormSectionTitle>
           <FormSectionDescription>
-            {t("Control which accounts can access this workspace and their membership role.")}
+            {t("Accounts with access to this workspace and their membership role.")}
           </FormSectionDescription>
         </FormSectionHeader>
 

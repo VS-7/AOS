@@ -75,6 +75,7 @@ import {
 import {
   goalCreateBody,
   goalUpdateBody,
+  prefillProject,
   type GoalFormFields,
 } from "@/features/goal/presentation/helpers/goal-form";
 import { shareableLink } from "@/features/goal/presentation/helpers/goal-link";
@@ -329,9 +330,15 @@ export const GoalDetailsPage = aos
       resetForm.current();
     }, [goalId]);
 
+    // Only a project this workspace has — see prefillProject.
+    const prefill = React.useMemo(
+      () => prefillProject(projects, search.project),
+      [projects, search.project],
+    );
+
     const form = aos.useForm({
       schema: goalFormSchema,
-      values: buildFormValues(goal, { project: search.project }),
+      values: buildFormValues(goal, prefill),
       onSubmit: async (values: GoalFormValues) => {
         if (isEditMode && goal) {
           const result = await aos.client.goal.update.mutate({
@@ -389,7 +396,7 @@ export const GoalDetailsPage = aos
       },
     });
 
-    resetForm.current = () => form.reset(buildFormValues(goal, { project: search.project }));
+    resetForm.current = () => form.reset(buildFormValues(goal, prefill));
 
     const { mutate: deleteGoal, loading: isDeleting } =
       aos.client.goal.delete.useMutation({

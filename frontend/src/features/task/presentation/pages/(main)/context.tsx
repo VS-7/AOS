@@ -406,8 +406,12 @@ export function TasksProvider({
   const handleDragOver = useCallback(
     (event: DragOverEvent) => {
       const overId = (event.over?.id as string | null) ?? null;
-      const resolved = resolveStatusFromId(overId);
-      if (resolved) setOverContainerId(resolved);
+      // Clear, rather than keep the last column that resolved: a column the
+      // lifecycle does not reach is a disabled droppable, and `over` is null
+      // over it. Holding the previous value there left the column the card
+      // had crossed lit as the drop target while the pointer sat on one that
+      // will refuse it, and releasing did nothing.
+      setOverContainerId(resolveStatusFromId(overId));
     },
     [resolveStatusFromId],
   );

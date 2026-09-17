@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { goalCreateBody, goalUpdateBody, type GoalFormFields } from "./goal-form";
+import { goalCreateBody, goalUpdateBody, prefillProject, type GoalFormFields } from "./goal-form";
 
 const filled: GoalFormFields = {
   title: " Launch V1 ",
@@ -56,5 +56,24 @@ describe("goalCreateBody", () => {
       deadline: "2026-08-31T18:00:00-03:00",
       status: "active",
     });
+  });
+});
+
+describe("prefillProject", () => {
+  const projects = [{ id: "p-real" }, { id: "p-other" }];
+
+  it("preselects a project the workspace has", () => {
+    expect(prefillProject(projects, "p-real")).toEqual({ project: "p-real" });
+  });
+
+  // /goals/new?project=nao-existe showed "No project" in the widget and still
+  // sent project:"nao-existe" on create, which goals_create accepts.
+  it("ignores an id the workspace does not have", () => {
+    expect(prefillProject(projects, "nao-existe")).toEqual({});
+  });
+
+  it("has nothing to preselect without the link", () => {
+    expect(prefillProject(projects, undefined)).toEqual({});
+    expect(prefillProject(projects, "")).toEqual({});
   });
 });

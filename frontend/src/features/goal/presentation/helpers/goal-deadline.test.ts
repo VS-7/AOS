@@ -35,7 +35,12 @@ describe.each(ZONES)("a goal deadline in %s", (zone) => {
     process.env.TZ = zone;
   });
   afterAll(() => {
-    process.env.TZ = machineZone;
+    // Deleted, not assigned: a machine with no TZ set (the usual case in CI)
+    // has `machineZone` undefined, and `process.env.TZ = undefined` writes
+    // the *string* "undefined" — a zone nothing resolves — over the rest of
+    // the worker's run.
+    if (machineZone === undefined) delete process.env.TZ;
+    else process.env.TZ = machineZone;
   });
 
   describe("is a calendar day", () => {
@@ -115,5 +120,16 @@ describe.each(ZONES)("a goal deadline in %s", (zone) => {
       vi.setSystemTime(new Date(2026, 7, 31, 18, 1));
       expect(isDeadlineOverdue(due)).toBe(true);
     });
+  });
+});
+
+// Each zone above restores what it found when it is done, and the zones run
+// one after another — so this runs after those restores, in whatever TZ they
+// left behind. On a machine with no TZ set, assigning `undefined` back wrote
+// the string "undefined", which resolves to no zone at all and would follow
+// every later file in this worker.
+describe("restoring the machine's zone", () => {
+  it("does not leave a zone nothing resolves", () => {
+    expect(process.env.TZ ?? "").not.toBe("undefined");
   });
 });

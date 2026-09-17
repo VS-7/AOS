@@ -770,3 +770,31 @@ func TestRegeneratingTheAPITokenReplacesOnlyThatOne(t *testing.T) {
 		t.Errorf("APIToken = %+v, want the one just issued (%s…)", current, record.Prefix)
 	}
 }
+
+// The tunnel's exposure guard asks this before publishing the daemon: an
+// authenticated API nobody holds a credential for is a door nobody can open,
+// and a tunnel onto it publishes nothing usable. It is a yes/no about the
+// installation, so a token on any account counts, and a revoked one does not.
+func TestAnyActiveAPITokenTracksTheIssuedCredentials(t *testing.T) {
+	svc, _ := newService(t)
+	out := onboard(t, svc)
+
+	if any, err := svc.AnyActiveAPIToken(ctx()); err != nil || any {
+		t.Fatalf("a fresh installation holds an API token: %v, %v", any, err)
+	}
+
+	record, _, err := svc.RegenerateAPIToken(ctx(), out.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if any, err := svc.AnyActiveAPIToken(ctx()); err != nil || !any {
+		t.Fatalf("after issuing one: %v, %v", any, err)
+	}
+
+	if err := svc.RevokeToken(ctx(), out.User.ID, record.ID); err != nil {
+		t.Fatal(err)
+	}
+	if any, err := svc.AnyActiveAPIToken(ctx()); err != nil || any {
+		t.Fatalf("after revoking the only one: %v, %v", any, err)
+	}
+}

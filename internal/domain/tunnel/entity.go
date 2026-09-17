@@ -25,4 +25,11 @@ type State struct {
 	PID       int        `json:"pid,omitempty"`
 	StartedAt *time.Time `json:"startedAt,omitempty"`
 	Error     string     `json:"error,omitempty"`
+
+	// Authenticated is the exposure guard's verdict at the time of the call:
+	// authentication is on and at least one account holds an active API
+	// token. Start refuses while it is false. It is reported so a screen can
+	// explain a switch nobody can turn on yet from the rule itself, instead
+	// of keeping a second copy of it that drifts.
+	Authenticated bool `json:"authenticated"`
 }

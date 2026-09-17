@@ -747,10 +747,11 @@ func New(opts Options) (*App, error) {
 		Installer:  skillInstaller,
 	})
 	tunnelSvc := tunnel.NewService(tunnel.Deps{
-		Config: tunnelConfig{svc: configSvc},
-		Runner: cloudflaredproc.New(),
-		Clock:  clock,
-		Log:    logger,
+		Config:      tunnelConfig{svc: configSvc},
+		Credentials: tunnelCredentials{svc: authSvc},
+		Runner:      cloudflaredproc.New(),
+		Clock:       clock,
+		Log:         logger,
 	})
 
 	// Last of the eight: bot needs chatSvc, agentSvc and tunnelSvc, all

@@ -55,3 +55,19 @@ export function goalCreateBody(values: GoalFormFields) {
     status: values.status,
   } as Record<string, string>;
 }
+
+/**
+ * The project a `?project=` link preselects, if the workspace has it.
+ *
+ * The link is data like any other: a crafted or stale one named an id the
+ * Project widget could not show — it reads "No project" when nothing matches
+ * — while the create still sent that id, and goals_create does not check it,
+ * so the goal was saved pointing at a project that does not exist.
+ */
+export function prefillProject(
+  projects: { id: string }[],
+  requested: string | undefined,
+): { project?: string } {
+  if (!requested) return {};
+  return projects.some((project) => project.id === requested) ? { project: requested } : {};
+}

@@ -16,6 +16,15 @@ type fakeConfig struct{ raw RawConfig }
 
 func (f fakeConfig) Raw(context.Context) (RawConfig, error) { return f.raw, nil }
 
+// fakeCredentials stands in for the accounts store: whether anybody holds an
+// API token a remote caller could present.
+type fakeCredentials struct {
+	active bool
+	err    error
+}
+
+func (f fakeCredentials) HasActiveAPIToken(context.Context) (bool, error) { return f.active, f.err }
+
 type fakeProcess struct {
 	pid  int
 	exit chan error
@@ -63,21 +72,61 @@ func TestStartRefusesWhenAPIIsNotAuthenticated(t *testing.T) {
 	}
 }
 
-func TestStartRefusesWhenAPITokenMissingEvenIfEnabled(t *testing.T) {
+// Security on with no account API token is authentication nobody can pass:
+// the credential a remote caller presents is the account token Settings >
+// Developers issues, so the guard asks for that and not for a config field
+// nothing authenticates against.
+func TestStartRefusesWhenNoAccountHoldsAnAPIToken(t *testing.T) {
 	svc := NewService(Deps{
-		Config: fakeConfig{raw: RawConfig{SecurityEnabled: true, APIToken: "", Hostname: "h", Token: "t"}},
-		Runner: &fakeRunner{},
-		Clock:  clockx.System{},
+		Config:      fakeConfig{raw: RawConfig{SecurityEnabled: true, Hostname: "h", Token: "t"}},
+		Credentials: fakeCredentials{active: false},
+		Runner:      &fakeRunner{},
+		Clock:       clockx.System{},
 	})
 	_, err := svc.Start(context.Background())
 	_ = mustAppErr(t, err, "TUNNEL_INSECURE_EXPOSURE")
 }
 
+func TestStartRefusesWhenCredentialsExistButSecurityIsOff(t *testing.T) {
+	svc := NewService(Deps{
+		Config:      fakeConfig{raw: RawConfig{SecurityEnabled: false, Hostname: "h", Token: "t"}},
+		Credentials: fakeCredentials{active: true},
+		Runner:      &fakeRunner{},
+		Clock:       clockx.System{},
+	})
+	_, err := svc.Start(context.Background())
+	_ = mustAppErr(t, err, "TUNNEL_INSECURE_EXPOSURE")
+}
+
+// The screen enables its switch from Status, so the guard has to be readable
+// without attempting a start.
+func TestStatusReportsWhetherTheGuardIsSatisfied(t *testing.T) {
+	cfg := fakeConfig{raw: RawConfig{SecurityEnabled: true, Hostname: "h", Token: "t"}}
+	svc := NewService(Deps{Config: cfg, Credentials: fakeCredentials{active: true}, Runner: &fakeRunner{}, Clock: clockx.System{}})
+	state, err := svc.Status(context.Background())
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !state.Authenticated {
+		t.Fatal("expected Status to report the guard as satisfied")
+	}
+
+	svc = NewService(Deps{Config: cfg, Credentials: fakeCredentials{active: false}, Runner: &fakeRunner{}, Clock: clockx.System{}})
+	state, err = svc.Status(context.Background())
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if state.Authenticated {
+		t.Fatal("expected Status to report the guard as unmet with no account API token")
+	}
+}
+
 func TestStartRefusesWhenHostnameOrTokenMissing_DistinctFromInsecureExposure(t *testing.T) {
 	svc := NewService(Deps{
-		Config: fakeConfig{raw: RawConfig{SecurityEnabled: true, APIToken: "api-tok", Hostname: "", Token: ""}},
-		Runner: &fakeRunner{},
-		Clock:  clockx.System{},
+		Config:      fakeConfig{raw: RawConfig{SecurityEnabled: true, Hostname: "", Token: ""}},
+		Credentials: fakeCredentials{active: true},
+		Runner:      &fakeRunner{},
+		Clock:       clockx.System{},
 	})
 	_, err := svc.Start(context.Background())
 	_ = mustAppErr(t, err, "TUNNEL_CONFIG_INCOMPLETE")
@@ -88,9 +137,10 @@ func TestStartMapsBinaryMissing(t *testing.T) {
 		return nil, errors.Join(ErrBinaryMissing, errors.New("exec: \"cloudflared\": executable file not found in $PATH"))
 	}}
 	svc := NewService(Deps{
-		Config: fakeConfig{raw: RawConfig{SecurityEnabled: true, APIToken: "api-tok", Hostname: "h", Token: "secret-token"}},
-		Runner: runner,
-		Clock:  clockx.System{},
+		Config:      fakeConfig{raw: RawConfig{SecurityEnabled: true, Hostname: "h", Token: "secret-token"}},
+		Credentials: fakeCredentials{active: true},
+		Runner:      runner,
+		Clock:       clockx.System{},
 	})
 	_, err := svc.Start(context.Background())
 	ae := mustAppErr(t, err, "TUNNEL_BINARY_MISSING")
@@ -104,9 +154,10 @@ func TestStartMapsReadinessTimeout(t *testing.T) {
 		return nil, errors.Join(ErrReadinessTimeout, errors.New("no connection reported"))
 	}}
 	svc := NewService(Deps{
-		Config: fakeConfig{raw: RawConfig{SecurityEnabled: true, APIToken: "api-tok", Hostname: "h", Token: "t"}},
-		Runner: runner,
-		Clock:  clockx.System{},
+		Config:      fakeConfig{raw: RawConfig{SecurityEnabled: true, Hostname: "h", Token: "t"}},
+		Credentials: fakeCredentials{active: true},
+		Runner:      runner,
+		Clock:       clockx.System{},
 	})
 	_, err := svc.Start(context.Background())
 	_ = mustAppErr(t, err, "TUNNEL_READINESS_TIMEOUT")
@@ -117,9 +168,10 @@ func TestStartSucceedsAndReportsURL(t *testing.T) {
 		return &fakeProcess{pid: 4242, exit: make(chan error, 1)}, nil
 	}}
 	svc := NewService(Deps{
-		Config: fakeConfig{raw: RawConfig{SecurityEnabled: true, APIToken: "api-tok", Hostname: "example.trycloudflare.com", Token: "t"}},
-		Runner: runner,
-		Clock:  clockx.System{},
+		Config:      fakeConfig{raw: RawConfig{SecurityEnabled: true, Hostname: "example.trycloudflare.com", Token: "t"}},
+		Credentials: fakeCredentials{active: true},
+		Runner:      runner,
+		Clock:       clockx.System{},
 	})
 	t.Cleanup(func() { _, _ = svc.Stop(context.Background()) })
 	state, err := svc.Start(context.Background())
@@ -150,9 +202,10 @@ func TestStartSucceedsAndReportsURL(t *testing.T) {
 
 func TestStopIsIdempotentAndReportsStopped(t *testing.T) {
 	svc := NewService(Deps{
-		Config: fakeConfig{raw: RawConfig{SecurityEnabled: true, APIToken: "api-tok", Hostname: "h", Token: "t"}},
-		Runner: &fakeRunner{},
-		Clock:  clockx.System{},
+		Config:      fakeConfig{raw: RawConfig{SecurityEnabled: true, Hostname: "h", Token: "t"}},
+		Credentials: fakeCredentials{active: true},
+		Runner:      &fakeRunner{},
+		Clock:       clockx.System{},
 	})
 	state, err := svc.Stop(context.Background())
 	if err != nil {
@@ -166,8 +219,8 @@ func TestStopIsIdempotentAndReportsStopped(t *testing.T) {
 func TestStopTerminatesTheRunningProcessAndPreservesConfig(t *testing.T) {
 	proc := &fakeProcess{pid: 1, exit: make(chan error, 1)}
 	runner := &fakeRunner{spawn: func(int) (Process, error) { return proc, nil }}
-	cfg := fakeConfig{raw: RawConfig{SecurityEnabled: true, APIToken: "api-tok", Hostname: "h", Token: "t"}}
-	svc := NewService(Deps{Config: cfg, Runner: runner, Clock: clockx.System{}})
+	cfg := fakeConfig{raw: RawConfig{SecurityEnabled: true, Hostname: "h", Token: "t"}}
+	svc := NewService(Deps{Config: cfg, Credentials: fakeCredentials{active: true}, Runner: runner, Clock: clockx.System{}})
 
 	if _, err := svc.Start(context.Background()); err != nil {
 		t.Fatalf("start: %v", err)
@@ -197,7 +250,8 @@ func TestSupervisorRestartsAfterUnexpectedDeath(t *testing.T) {
 		return p, nil
 	}}
 	svc := NewService(Deps{
-		Config:       fakeConfig{raw: RawConfig{SecurityEnabled: true, APIToken: "api-tok", Hostname: "h", Token: "t"}},
+		Config:       fakeConfig{raw: RawConfig{SecurityEnabled: true, Hostname: "h", Token: "t"}},
+		Credentials:  fakeCredentials{active: true},
 		Runner:       runner,
 		Clock:        clockx.System{},
 		BackoffStart: 10 * time.Millisecond,

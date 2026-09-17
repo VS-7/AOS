@@ -36,7 +36,43 @@ export function buildFormValues(routine: Routine | null): RoutineFormValues {
   };
 }
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+/**
+ * The same value, whatever order the keys were written in.
+ *
+ * The two sides of every comparison below are built by different hands: the
+ * form's values come out of the zod schema, which orders a scheduled config
+ * `{preset, cron, time, day}`, while `buildFormValues` writes it
+ * `{cron, preset, time, day}`. `JSON.stringify` is key-order sensitive, so
+ * those two never matched and a no-op Save resent the triggers of every
+ * routine that has a schedule — with each activity filter's value
+ * stringified on the way through.
+ */
+function stableOrder(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableOrder);
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.keys(record)
+        .sort()
+        .map((key) => [key, stableOrder(record[key])]),
+    );
+  }
+  return value;
+}
+
+const same = (a: unknown, b: unknown) =>
+  JSON.stringify(stableOrder(a)) === JSON.stringify(stableOrder(b));
+
+/**
+ * A prompt without the trailing newline the store adds to it.
+ *
+ * `collections`' codec writes a final newline, so a prompt typed without one
+ * is read back with one while the form still holds what was typed. Compared
+ * literally, that difference resent the prompt on every later save. Only one
+ * newline is discounted: a prompt that really ends in a blank line still
+ * differs from one that does not.
+ */
+const withoutStoredNewline = (prompt: string) => prompt.replace(/\n$/, "");
 
 /**
  * What an edit sends: only what changed.
@@ -52,7 +88,9 @@ export function buildUpdateBody(
   const initial = buildFormValues(routine);
   const body: Record<string, unknown> = {};
   if (values.name !== initial.name) body.name = values.name;
-  if (values.prompt !== initial.prompt) body.prompt = values.prompt;
+  if (withoutStoredNewline(values.prompt) !== withoutStoredNewline(initial.prompt)) {
+    body.prompt = values.prompt;
+  }
   if (!same(values.triggers, initial.triggers)) {
     body.triggers = RoutineTriggersHelper.toApiTriggers(values.triggers);
   }

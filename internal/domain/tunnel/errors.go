@@ -6,7 +6,8 @@ import (
 )
 
 // errInsecureExposure fires when Start is asked to publish the daemon while
-// the API itself is not authenticated. The original checks neither of the
+// the API itself is not authenticated: security switched off, or switched on
+// with no account holding an API token to present. The original checks neither of the
 // two things this guards — see the design note's own account of how the
 // reverse engineering found an unauthenticated API reachable through a
 // tunnel. This is the single most important refusal in this package.
@@ -31,11 +32,15 @@ func errInsecureExposure() error {
 				Tool:    "config_update",
 				Input:   map[string]any{"set": map[string]any{"security.enabled": true}},
 			},
+			// The second half of the guard is an account API token, the
+			// credential REST and MCP callers actually authenticate with.
+			// It is issued from the desktop, and nowhere else: identity sits
+			// outside the command registry, so there is no command to point
+			// at here — pointing at config.security.apiToken (as this did)
+			// named a field nothing authenticates against, leaving a refusal
+			// nobody could clear.
 			apperr.CallToAction{
-				Label:   "then set the token callers will present, and read it back with " + build.Name + " config get",
-				Command: build.Name + " config update --set set.security.apiToken=<a long random string>",
-				Tool:    "config_update",
-				Input:   map[string]any{"set": map[string]any{"security.apiToken": "<a long random string>"}},
+				Label: "then generate an API token in Settings > Developers, so remote callers have a credential to present",
 			},
 		)
 }

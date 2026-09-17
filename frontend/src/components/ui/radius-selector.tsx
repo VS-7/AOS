@@ -11,10 +11,15 @@ export type ThemeRadiusOption = {
   radius: string
 }
 
+// The labels are catalogue keys. "Medium" is not one of them: it is shared
+// with the priority scales, where pt-BR reads it as the feminine "Média"
+// (concordando com "prioridade"), and among these three masculine options it
+// was the odd one out. "Normal" is the same width in English and carries no
+// gender in Portuguese.
 export const themeRadiusOptions: ThemeRadiusOption[] = [
   { value: "none", label: "None", radius: "0rem" },
   { value: "sm", label: "Small", radius: "0.375rem" },
-  { value: "md", label: "Medium", radius: "0.75rem" },
+  { value: "md", label: "Normal", radius: "0.75rem" },
   { value: "lg", label: "Large", radius: "1rem" },
 ]
 
