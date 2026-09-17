@@ -80,7 +80,9 @@ func (s *Server) routineWebhook(w http.ResponseWriter, r *http.Request) {
 	// but not from its values: the workspace the run belongs to rides on them.
 	runCtx := context.WithoutCancel(r.Context())
 	log := loggerFrom(r, s.cfg.Log)
+	s.background.Add(1)
 	safe.Go(runCtx, "httpapi.routineWebhook", func(ctx context.Context) error {
+		defer s.background.Done()
 		if _, err := s.cfg.RoutineWebhooks.FireWebhook(ctx, in); err != nil {
 			// The run records its own failure; this line is for whoever reads
 			// the daemon log wondering why a delivery did nothing.

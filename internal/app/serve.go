@@ -250,6 +250,12 @@ func (a *App) Serve(ctx context.Context, opts ServeOptions) error {
 		log.Warn("in-flight requests did not finish in time", "err", err)
 		_ = srv.Close()
 	}
+	// A request can be answered before its work is done — a routine accepted
+	// from a webhook runs a whole turn after the 202. Shutdown waits for that
+	// too, or says it gave up.
+	if !server.WaitBackground(stopCtx) {
+		log.Warn("work a request left running did not finish in time")
+	}
 	<-workerStopped
 	return <-errs
 }

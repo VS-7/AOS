@@ -8,6 +8,96 @@ em que o release foi cortado.
 
 ## [Unreleased]
 
+## [v0.16.0-fase9] — 2026-09-16
+
+A rodada que atacou "aparece erro em quase toda tela". Uma varredura por todas
+as telas — feita contra a ponte real do desktop (o app compilado em modo
+servidor do Wails, o daemon de verdade e uma cópia do workspace do usuário) —
+encontrou 271 defeitos confirmados, cada um reproduzido e depois verificado de
+novo por um revisor independente. Todos foram corrigidos, e o que os revisores
+acharam depois virou mais uma rodada.
+
+### A causa do "erro em toda tela"
+
+**Uma recusa comum virava erro de credencial.** No desktop, qualquer falha de
+comando — "tarefa não encontrada", "nenhum registro configurado" — era
+reenviada por HTTP direto ao daemon, de uma origem que não carrega credencial
+nenhuma. A tela mostrava o erro da *segunda* tentativa: "esta requisição não
+carrega credencial válida", ou a faixa de "daemon não está respondendo". O log
+do daemon do usuário mostrava o padrão: todo 404 ou 412 seguido na hora por um
+401 na mesma rota. Dentro da janela, agora, a resposta do daemon é a resposta.
+
+### Adicionado
+
+- **Rotinas por webhook funcionam.** `FireWebhook` existia e nada o chamava:
+  agora há uma rota autenticada por token, e a tela mostra a URL e o segredo
+  uma vez. O token só vem do `Authorization: Bearer`, e uma requisição sem ele
+  é recusada antes de ler o corpo ou abrir qualquer workspace.
+- **O agendador roda.** A fila de jobs era construída e nunca iniciada fora dos
+  testes: rotinas agendadas nunca disparavam, retenção nunca rodava. O worker
+  sobe junto com o daemon, em cada workspace servido.
+- **Update com manifesto assinado, quando houver chave.** O pipeline publica o
+  manifesto e a assinatura se o segredo de assinatura existir, e falha alto
+  quando ele falta em vez de publicar um release que ninguém consegue instalar.
+
+### Corrigido
+
+- **Formulários voltaram a enviar.** O `Form` compartilhado engolia o submit:
+  Criar Tarefa, Criar Workspace, trocar senha, criar arquivo e mais estavam
+  mortos. `<form>` aninhado em `<form>` recarregava o app inteiro (um deles
+  colocava o token do bot do Telegram na URL).
+- **O editor parou de corromper texto.** O cursor pulava para o começo a cada
+  tecla, então o texto era salvo invertido; com valor vazio ele nem aparecia, e
+  por isso não dava para criar rotina. Prompts (instruções de agente, instrução,
+  rotina) agora são texto puro: o que foi digitado é exatamente o que o modelo
+  recebe.
+- **Arquivos: fim da perda de dados.** O editor abria vazio e Salvar escrevia
+  esse vazio por cima do arquivo real; copiar e colar criava arquivos de 0 byte;
+  renomear e mover sempre falhavam com `"" already exists`.
+- **Conversas que quebravam para sempre.** Ao compactar um turno longo, os
+  resultados de ferramenta eram gravados sem as chamadas, e todo turno seguinte
+  falhava com "No tool call found for function call output" — o erro do chat da
+  Luara. Transcrições já quebradas voltam a funcionar.
+- **Uma recusa não passa mais por sucesso.** `useMutation` nunca chegava ao
+  `onError`: salvar algo que o daemon recusou mostrava toast de sucesso.
+- **Rotina disparada por atividade não trava mais quem a disparou.** Mover uma
+  tarefa esperava um turno inteiro do modelo; agora a execução vai para a fila.
+  Uma rotina que reage ao próprio "rotina executou" não se multiplica mais.
+- **Em conversa de tarefa, a fala de outro agente é de outro agente.** A
+  delegação do orquestrador era enviada ao agente como se fosse fala dele — o
+  Gemini recusava a requisição inteira.
+- Telas e contratos: filtros que esvaziavam listas, campos que não podiam ser
+  limpos, views e coleções abertas por nome em vez de id, paleta de comandos
+  vazia, marketplace, atividades sempre "não lidas", e dezenas de outros.
+
+### Segurança
+
+- **HTML escrito por agente não roda mais como você.** `/api/file/content`
+  servia documentos do workspace como documento da origem da API — um script
+  ali lia a sessão. Agora vai com `sandbox` e `nosniff`, na janela e no
+  navegador. Artifacts idem, inclusive abertos direto pelo link.
+- **Rotacionar o token de API exige sessão.** O endpoint aceitava o próprio
+  token de API e o cookie de outra porta local (CSRF).
+- **`toolsets_tools` não é mais "somente leitura".** Ele sobe o processo do
+  toolset; clientes MCP auto-aprovam ferramentas marcadas como leitura.
+- **Parar o gateway confere identidade.** O pid do registro era sinalizado após
+  só checar se estava vivo; um pid reaproveitado levava SIGTERM — inclusive no
+  primeiro segundo de vida do processo estranho, que o sistema reporta sem idade.
+- **`update_apply` deixou de confiar em caminhos do chamador** (path traversal),
+  e um apply que não pode reiniciar o daemon recusa em vez de dizer que instalou.
+
+### Limitações conhecidas
+
+- O auto-update só entrega releases assinados: é preciso gerar a chave
+  (`go run ./tools/genreleasekey`), commitar a metade pública e guardar a
+  privada no segredo `AOS_RELEASE_SIGNING_KEY`. Até lá, atualize reinstalando.
+- Instalar pela janela ainda depende do terminal (`aosd update apply`), porque
+  o daemon não reinicia a si mesmo; no macOS o bundle é substituído
+  reinstalando.
+- Artifact privado aberto em aba de navegador continua recusado (a janela do
+  desktop funciona).
+
+
 ## [v0.15.2-fase9] — 2026-09-03
 
 Cinco telas que a interface pedia e nunca recebia. Cada correção tem teste que
@@ -388,7 +478,8 @@ fora da ordem das chamadas reais. Agora cada etapa embrulha a chamada que nomeia
 ## [v0.4.0-fase3] — 2026-08-15
 - Domínio núcleo: workspace, agent, memory, chat.
 
-[Unreleased]: https://github.com/VS-7/AOS/compare/v0.15.2-fase9...HEAD
+[Unreleased]: https://github.com/VS-7/AOS/compare/v0.16.0-fase9...HEAD
+[v0.16.0-fase9]: https://github.com/VS-7/AOS/compare/v0.15.2-fase9...v0.16.0-fase9
 [v0.15.2-fase9]: https://github.com/VS-7/AOS/compare/v0.15.1-fase9...v0.15.2-fase9
 [v0.15.1-fase9]: https://github.com/VS-7/AOS/compare/v0.15.0-fase9...v0.15.1-fase9
 [v0.15.0-fase9]: https://github.com/VS-7/AOS/compare/v0.14.1-fase9...v0.15.0-fase9

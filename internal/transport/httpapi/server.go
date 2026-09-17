@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -131,6 +132,32 @@ type Config struct {
 type Server struct {
 	router chi.Router
 	cfg    Config
+
+	// background counts the work a request answered before finishing — a
+	// routine fired by webhook is accepted and then run, which outlives the
+	// response by a whole model turn. Shutdown waits for it: work the daemon
+	// accepted is work it finishes, and a workspace whose files are being
+	// written while the process exits is how half a run ends up on disk.
+	background sync.WaitGroup
+}
+
+// WaitBackground waits for the work requests left running, or until ctx ends.
+//
+// It answers whether everything finished, so the caller can say so in its log
+// rather than guess: what is still running at the deadline keeps running until
+// the process exits.
+func (s *Server) WaitBackground(ctx context.Context) bool {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.background.Wait()
+	}()
+	select {
+	case <-done:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // New builds the router.
