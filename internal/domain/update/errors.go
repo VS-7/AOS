@@ -329,7 +329,12 @@ func errInstallationUnreadable(causer string, cause error) error {
 // is stopped first, where it was started.
 func errRestartUnavailable(install Install) error {
 	var actions []apperr.CallToAction
-	if install.Unsupervised {
+	switch {
+	case install.Unidentified:
+		// Not "stop the terminal you started it in": there is no such
+		// terminal. See Daemon.unidentified.
+		actions = append(actions, apperr.CallToAction{Label: restartUnidentified, Command: gatewayRestart})
+	case install.Unsupervised:
 		actions = append(actions, apperr.CallToAction{Label: stopUnsupervised})
 	}
 	actions = append(actions, apperr.CallToAction{
@@ -349,6 +354,16 @@ func errRestartUnavailable(install Install) error {
 // stopUnsupervised is what to do about a daemon the supervisor did not start,
 // said once for both refusals that meet one.
 const stopUnsupervised = "the daemon serving this installation was started by hand or by a service manager, not by the " + build.DisplayName + " application or `" + build.Name + " gateway`, so an install cannot restart it: stop it where it was started (the terminal running `" + build.Name + "d serve`, or its service) — the install then starts the new version itself"
+
+// gatewayRestart is the command that hands supervision back to whoever has
+// it, said in one place because three refusals point at it.
+const gatewayRestart = build.Name + " gateway restart"
+
+// restartUnidentified is what to do about a daemon that answers and cannot
+// be matched to the process the supervisor started — a release older than
+// the pid in its health answer, or a wrapper script the record names instead
+// of the daemon under it. See Daemon.unidentified.
+const restartUnidentified = "restart the daemon through its supervisor, then install again: the running release is older than the binaries on disk, or it was started through a wrapper the supervisor's record names instead of it"
 
 // errDaemonNotSupervised is Apply refusing up front, with nothing touched,
 // because the daemon answering for this installation is not the process its
@@ -371,9 +386,41 @@ func errDaemonNotSupervised(daemon Daemon, command string) error {
 		})
 }
 
+// errDaemonUnidentified: a daemon answers for this installation, the
+// supervisor's record names a live process, and neither says they are the
+// same one — so an install cannot tell whether a restart would replace the
+// daemon that is serving. See Daemon.unidentified for the two ways here.
+//
+// It used to answer UPDATE_DAEMON_NOT_SUPERVISED, which says the daemon was
+// started by hand and to go and stop the terminal running `aosd serve`.
+// There is no such terminal in either case, and the one thing that does help
+// — restarting through the supervisor — was the thing it did not say.
+func errDaemonUnidentified(daemon Daemon) error {
+	answering := "the daemon answering"
+	if daemon.PID > 0 {
+		answering = fmt.Sprintf("the daemon answering (process %d)", daemon.PID)
+	}
+	return apperr.New("UPDATE_DAEMON_UNIDENTIFIED").
+		Causer("update.Service.Apply").
+		Msgf("%s on %s does not say it is the process this installation's supervisor started (process %d), so an install cannot tell what a restart would replace; nothing was replaced", answering, daemon.Address, daemon.RecordedPID).
+		Issue("address", daemon.Address).
+		Issue("pid", daemon.PID).
+		Issue("recordedPid", daemon.RecordedPID).
+		Status(apperr.StatusConflict).
+		CTA(apperr.CallToAction{Label: restartUnidentified, Command: gatewayRestart})
+}
+
 // errDaemonNotAnswering: the supervisor's daemon is running and not
 // answering — still starting, or stuck — so what a restart would stop, and
 // whether the new version then came up, cannot be told apart from it.
+//
+// The restart it points at is safe to follow, which it was not when this was
+// written: the supervisor signalled the recorded pid after a liveness check
+// alone, so following the advice about a record left behind by a crash sent
+// SIGTERM to whatever process had been given that number since. It checks
+// that the process it is about to signal is still the daemon it started, and
+// clears the record instead when it is not — which is what `gateway status`
+// shows first.
 func errDaemonNotAnswering(daemon Daemon) error {
 	return apperr.New("UPDATE_DAEMON_NOT_ANSWERING").
 		Causer("update.Service.Apply").
@@ -382,8 +429,11 @@ func errDaemonNotAnswering(daemon Daemon) error {
 		Issue("pid", daemon.RecordedPID).
 		Status(apperr.StatusConflict).
 		CTA(apperr.CallToAction{
-			Label:   "restart the daemon, then install again",
-			Command: build.Name + " gateway restart",
+			Label:   "see what that process is: a daemon still opening its workspace answers late, and one that crashed leaves its record behind",
+			Command: build.Name + " gateway status",
+		}, apperr.CallToAction{
+			Label:   "then restart the daemon and install again — the supervisor stops the recorded process only while it is still the daemon it started, and clears the record when it is not",
+			Command: gatewayRestart,
 		})
 }
 

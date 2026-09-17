@@ -220,6 +220,11 @@ type fakeSupervisor struct {
 	// unsupervised: the daemon answering was started by hand, and the
 	// gateway has no record of it.
 	unsupervised bool
+	// mismatched: the gateway's record names a live process and the daemon
+	// answering does not say it is that one — answersAs is the pid it gives
+	// for itself, and 0 is a release from before the health answer had one.
+	mismatched bool
+	answersAs  int
 	// silent: the gateway's daemon is running and not answering.
 	silent bool
 	// idle: no daemon runs at all until a restart starts one.
@@ -252,6 +257,8 @@ func (f *fakeSupervisor) Observe(context.Context) (update.Daemon, error) {
 		d.Answering, d.PID, d.RecordedPID, d.Version = true, pid, pid, f.oldVersion
 	case f.unsupervised:
 		d.Answering, d.PID, d.Version = true, 777, f.oldVersion
+	case f.mismatched:
+		d.Answering, d.PID, d.RecordedPID, d.Version = true, f.answersAs, pid, f.oldVersion
 	case f.idle && f.restarts == 0:
 	case f.silent, f.newVersionSick && f.restarts == 1:
 		d.RecordedPID = pid
@@ -1573,6 +1580,55 @@ func TestTheDaemonStartedByHandSaysToStopItBeforeTheTerminalInstall(t *testing.T
 	}
 }
 
+// A daemon the supervisor did start, that cannot be matched to the record it
+// wrote, is not one "started by hand": it is a release older than the pid in
+// its health answer (install.sh replaced the binaries and restarted nothing),
+// or one started through a wrapper the record names instead of it. Both were
+// answered UPDATE_DAEMON_NOT_SUPERVISED — "stop it where it was started, the
+// terminal running `aosd serve`" — about a terminal nobody is running, while
+// the restart that does help went unsaid.
+func TestApplyRefusesADaemonItCannotMatchToItsRecord(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		answersAs int
+	}{
+		{name: "a release that does not say which process it is", answersAs: 0},
+		{name: "a wrapper script the record names instead of the daemon", answersAs: 4242},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			h.download(t, h.signedRelease(t, "v0.10.0", "aosd"))
+			h.supervisor.mismatched, h.supervisor.answersAs = true, tc.answersAs
+
+			out, err := h.svc.Check(context.Background(), update.CheckInput{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if out.Install == nil || !out.Install.Unidentified || out.Install.Unsupervised {
+				t.Fatalf("this daemon is unidentified, not started by hand: %+v", out.Install)
+			}
+
+			_, err = h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
+			e := wantCode(t, err, "UPDATE_DAEMON_UNIDENTIFIED")
+			if !strings.Contains(e.Message, "127.0.0.1:5326") || !strings.Contains(e.Message, "process 1000") {
+				t.Fatalf("the refusal should name both processes, got %q", e.Message)
+			}
+			if len(e.Actions) != 1 || e.Actions[0].Command != "aos gateway restart" {
+				t.Fatalf("the one thing that helps is a restart through the supervisor, got %+v", e.Actions)
+			}
+			if strings.Contains(e.Actions[0].Label, "started by hand") {
+				t.Fatalf("nobody started this daemon by hand: %q", e.Actions[0].Label)
+			}
+			if h.machine.liveAt("aosd") != "old aosd" || h.supervisor.restarts != 0 || h.machine.backups() != 0 {
+				t.Fatal("nothing may be swapped or restarted beside a daemon the install cannot identify")
+			}
+			if _, ok := h.machine.staged["aosd"]; !ok {
+				t.Fatal("the staged release must survive the refusal")
+			}
+		})
+	}
+}
+
 // The supervisor's daemon is running and not answering: whether a restart
 // would bring the new version up cannot be seen from there.
 func TestApplyRefusesASupervisedDaemonThatDoesNotAnswer(t *testing.T) {
@@ -1582,7 +1638,10 @@ func TestApplyRefusesASupervisedDaemonThatDoesNotAnswer(t *testing.T) {
 
 	_, err := h.svc.Apply(context.Background(), update.ApplyInput{Version: "v0.10.0"})
 	e := wantCode(t, err, "UPDATE_DAEMON_NOT_ANSWERING")
-	if len(e.Actions) == 0 || e.Actions[0].Command != "aos gateway restart" {
+	// The record is looked at before it is acted on: what that process is
+	// decides whether there is a daemon to wait for at all.
+	if len(e.Actions) != 2 || e.Actions[0].Command != "aos gateway status" ||
+		e.Actions[1].Command != "aos gateway restart" {
 		t.Fatalf("calls to action = %+v", e.Actions)
 	}
 	if h.machine.liveAt("aosd") != "old aosd" || h.supervisor.restarts != 0 {

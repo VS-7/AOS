@@ -177,6 +177,22 @@ export function unsupervisedLine(offer: Offer): string | null {
 }
 
 /**
+ * What to do before the terminal command when the daemon answering cannot be
+ * matched to the process the supervisor's record names — a release from
+ * before that answer carried a pid, or a wrapper script the record names
+ * instead of the daemon under it.
+ *
+ * Nobody started this one by hand, and `unsupervisedLine` used to be shown
+ * about it: it told the reader to go and stop a terminal running `aosd serve`
+ * that does not exist, while the restart that does help went unsaid
+ * (AOS_UPDATE_DAEMON_UNIDENTIFIED).
+ */
+export function unidentifiedLine(offer: Offer): string | null {
+  if (offer.install.method !== "terminal" || !offer.install.unidentified) return null;
+  return t("This daemon does not say it is the process AOS started — it runs a release older than the binaries on disk, or it was started through a wrapper script. Restart the daemon below, then check for updates again.");
+}
+
+/**
  * The refusals that mean the call may well be running still, rather than
  * that it failed.
  *

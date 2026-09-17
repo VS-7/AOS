@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -82,6 +83,47 @@ func TestAliveIsFalseForNothingAndForGarbage(t *testing.T) {
 	for _, pid := range []int{0, -1, -12345} {
 		if procs.Alive(pid) {
 			t.Errorf("pid %d reported alive", pid)
+		}
+	}
+}
+
+// TestDescribeNamesWhatAProcessIsAndHowOldItIs is what tells a record whose
+// pid was handed out again from a daemon that is still running: the pid is
+// the same number either way, and only what it is running and how long it has
+// been running differ.
+func TestDescribeNamesWhatAProcessIsAndHowOldItIs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the platform does not answer this question here; see describe in platform_windows.go")
+	}
+	procs := supervise.NewProcesses()
+
+	pid, err := procs.Start(ctx(), gateway.Command{Path: sleepBinary(t), Args: []string{"30"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = procs.Kill(pid) })
+
+	info, err := procs.Describe(pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(info.CommandLine, "sleep") {
+		t.Errorf("the command line of a sleep is %q", info.CommandLine)
+	}
+	// Seconds is the resolution ps reports, so a process started just now is
+	// somewhere between no time at all and a moment old — but it is an
+	// answer, and a zero would be read as "the platform will not say".
+	if info.Elapsed < 0 || info.Elapsed > time.Minute {
+		t.Errorf("a process started just now has been running for %s", info.Elapsed)
+	}
+
+	// Nothing to report is reported as nothing, not as a failure: the caller
+	// takes only a mismatch as evidence, and an error it cannot act on would
+	// be one more reason to signal a pid nobody identified.
+	for _, absent := range []int{0, -1, 2147483646} {
+		info, err := procs.Describe(absent)
+		if err != nil || info != (gateway.ProcessInfo{}) {
+			t.Errorf("pid %d answered %+v, %v", absent, info, err)
 		}
 	}
 }

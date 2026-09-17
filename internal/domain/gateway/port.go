@@ -17,6 +17,18 @@ type Processes interface {
 	// Alive reports whether a process with this identifier exists.
 	Alive(pid int) bool
 
+	// Describe reports what the operating system can say about a process.
+	//
+	// It exists because a pid identifies nothing on its own. The operating
+	// system hands the same number out again, so a record left behind by a
+	// daemon that crashed can name a process that is alive and is not the
+	// daemon — and the supervisor used to signal it.
+	//
+	// A zero field means the platform would not say, which is not the same as
+	// the process being somebody else's: only a mismatch is evidence. See
+	// Service.read.
+	Describe(pid int) (ProcessInfo, error)
+
 	// Terminate asks a process to stop, politely.
 	Terminate(pid int) error
 

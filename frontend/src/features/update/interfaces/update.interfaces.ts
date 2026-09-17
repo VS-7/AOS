@@ -45,6 +45,14 @@ export interface UpdateInstall {
    * stopped where it was started first.
    */
   unsupervised?: boolean;
+  /**
+   * A daemon answers and cannot be matched to the process the supervisor's
+   * record names: it runs a release from before the health answer said which
+   * process it is, or it was started through a wrapper script the record
+   * names instead of it. Nobody started it by hand — restarting it through
+   * its supervisor is what helps.
+   */
+  unidentified?: boolean;
 }
 
 /** Which version this installation runs, and what the last check found. */

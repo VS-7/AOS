@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { CheckResult, Release, Staged, UpdateStatus } from "@/features/update/interfaces/update.interfaces";
+import type { CheckResult, Release, Staged, UpdateInstall, UpdateStatus } from "@/features/update/interfaces/update.interfaces";
 import {
   busyLine,
   canCheck,
@@ -14,6 +14,7 @@ import {
   reopenLine,
   statusLine,
   stillRunning,
+  unidentifiedLine,
   unsupervisedLine,
 } from "./updates.helper";
 
@@ -172,6 +173,28 @@ describe("a terminal install beside a daemon started by hand", () => {
     expect(unsupervisedLine(terminal(true))).toContain("stop it where it was started");
     expect(unsupervisedLine(terminal(false))).toBeNull();
     expect(unsupervisedLine(terminal(true, false))).toBeNull();
+  });
+});
+
+// W3-24: a daemon the supervisor did start, that cannot be matched to the
+// record it wrote — an older release that does not say which process it is,
+// or a wrapper script the record names instead of it. It was shown the line
+// above, about stopping a terminal running `aosd serve` that nobody is
+// running, and never the restart that does help.
+describe("a terminal install beside a daemon that cannot be identified", () => {
+  const unidentified = (install: UpdateInstall) =>
+    offerOf(check({ state: "available", release, install }), null, status())!;
+
+  it("says to restart it through its supervisor, not to go and stop it", () => {
+    const line = unidentifiedLine(unidentified({ method: "terminal", unidentified: true }));
+    expect(line).toContain("Restart the daemon");
+    expect(line).not.toContain("started by hand");
+    expect(unidentifiedLine(unidentified({ method: "terminal" }))).toBeNull();
+    expect(unidentifiedLine(unidentified({ method: "here" }))).toBeNull();
+  });
+
+  it("is not the line for a daemon somebody started by hand", () => {
+    expect(unsupervisedLine(unidentified({ method: "terminal", unidentified: true }))).toBeNull();
   });
 });
 
