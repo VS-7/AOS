@@ -112,19 +112,19 @@ func (Processes) Alive(pid int) bool {
 	return alive(pid)
 }
 
-// CommandLine reports what a process is running, as the platform describes
-// it — see commandLine in platform_unix.go and platform_windows.go.
+// Describe reports what a process is running and how long it has been
+// running — see describe in platform_unix.go and platform_windows.go.
 //
 // The gateway asks because a pid on its own identifies nothing: the record a
 // crashed daemon leaves behind names a number the kernel is free to hand out
-// again, and once it has, "alive" is true about a stranger's process. An
-// empty answer means the platform would not say, which is not evidence of
-// anything; only a mismatch is.
-func (Processes) CommandLine(pid int) (string, error) {
+// again, and once it has, "alive" is true about a stranger's process. A zero
+// field means the platform would not say, which is not evidence of anything;
+// only a mismatch is.
+func (Processes) Describe(pid int) (gateway.ProcessInfo, error) {
 	if pid <= 0 {
-		return "", nil
+		return gateway.ProcessInfo{}, nil
 	}
-	return commandLine(pid)
+	return describe(pid)
 }
 
 // Terminate asks a process to stop.

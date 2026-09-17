@@ -35,6 +35,20 @@ type Meta struct {
 	Args      []string  `json:"args,omitempty" jsonschema:"Arguments it was run with."`
 }
 
+// ProcessInfo is what the operating system says about a live process, and it
+// is only ever used to tell a daemon apart from whoever inherited its pid.
+//
+// Either field can be zero, and a zero field says nothing at all: the
+// platform does not answer the question (Windows), or the answer could not
+// be read. See Service.read.
+type ProcessInfo struct {
+	// CommandLine is the executable the process is running, with its
+	// arguments where the platform reports them.
+	CommandLine string
+	// Elapsed is how long the process has been running.
+	Elapsed time.Duration
+}
+
 // State is the answer to "what is going on", with the evidence attached.
 type State struct {
 	Status Status `json:"status" jsonschema:"stopped, stale or running."`

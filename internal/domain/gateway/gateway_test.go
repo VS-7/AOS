@@ -23,10 +23,10 @@ type fakeProcs struct {
 	alive   map[int]bool
 	nextPID int
 	started []gateway.Command
-	// lines is what each live process is running, as the operating system
-	// would report it. A pid with no line is one the platform cannot tell
-	// anything about, which is what Windows answers.
-	lines    map[int]string
+	// seen is what the operating system says about each live process. A pid
+	// with nothing recorded is one the platform cannot tell anything about,
+	// which is what Windows answers.
+	seen     map[int]gateway.ProcessInfo
 	startErr error
 
 	// ignoresTerminate models a daemon that does not shut down when asked,
@@ -42,7 +42,7 @@ type fakeProcs struct {
 }
 
 func newProcs() *fakeProcs {
-	return &fakeProcs{alive: map[int]bool{}, lines: map[int]string{}, nextPID: 1000}
+	return &fakeProcs{alive: map[int]bool{}, seen: map[int]gateway.ProcessInfo{}, nextPID: 1000}
 }
 
 func (p *fakeProcs) Start(_ context.Context, cmd gateway.Command) (int, error) {
@@ -53,7 +53,10 @@ func (p *fakeProcs) Start(_ context.Context, cmd gateway.Command) (int, error) {
 	defer p.mu.Unlock()
 	p.nextPID++
 	p.alive[p.nextPID] = true
-	p.lines[p.nextPID] = strings.TrimSpace(cmd.Path + " " + strings.Join(cmd.Args, " "))
+	p.seen[p.nextPID] = gateway.ProcessInfo{
+		CommandLine: strings.TrimSpace(cmd.Path + " " + strings.Join(cmd.Args, " ")),
+		Elapsed:     time.Second,
+	}
 	p.started = append(p.started, gateway.Command{})
 	if p.onStart != nil {
 		p.onStart(p.nextPID)
@@ -67,22 +70,23 @@ func (p *fakeProcs) Alive(pid int) bool {
 	return p.alive[pid]
 }
 
-func (p *fakeProcs) CommandLine(pid int) (string, error) {
+func (p *fakeProcs) Describe(pid int) (gateway.ProcessInfo, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.lineErr != nil {
-		return "", p.lineErr
+		return gateway.ProcessInfo{}, p.lineErr
 	}
-	return p.lines[pid], nil
+	return p.seen[pid], nil
 }
 
 // reuse models the one thing a pid guarantees nothing about: the process that
-// had this number is gone, and the number now belongs to something else.
-func (p *fakeProcs) reuse(pid int, line string) {
+// had this number is gone, and the number now belongs to something else —
+// which is running something else, and started later.
+func (p *fakeProcs) reuse(pid int, line string, elapsed time.Duration) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.alive[pid] = true
-	p.lines[pid] = line
+	p.seen[pid] = gateway.ProcessInfo{CommandLine: line, Elapsed: elapsed}
 }
 
 func (p *fakeProcs) Terminate(pid int) error {
@@ -232,10 +236,14 @@ func (c *steppingClock) Now() time.Time {
 }
 
 func (c *steppingClock) Sleep(_ context.Context, d time.Duration) error {
+	c.advance(d)
+	return nil
+}
+
+func (c *steppingClock) advance(d time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.at = c.at.Add(d)
-	return nil
 }
 
 type harness struct {
@@ -615,7 +623,8 @@ func TestARecordWhosePIDWasReusedIsStaleRatherThanRunning(t *testing.T) {
 	}
 	pid := started.Meta.PID
 	h.procs.die(pid)
-	h.procs.reuse(pid, "/bin/sleep 1000")
+	h.procs.reuse(pid, "/bin/sleep 1000", time.Second)
+	h.clock.advance(time.Hour)
 
 	state, err := h.svc.Status(ctx(), gateway.StatusInput{})
 	if err != nil {
@@ -644,27 +653,45 @@ func TestARecordWhosePIDWasReusedIsStaleRatherThanRunning(t *testing.T) {
 	}
 }
 
-// The evidence is a mismatch, and only a mismatch: a platform that cannot
-// say what a process is running (Windows), a record from before the command
-// was written down, or a wrapper script that shows up as its interpreter's
-// argument must all leave the daemon stoppable.
+// The evidence is a mismatch, and it takes two of them. A platform that will
+// not say what a process is running (Windows) or how old it is, a record from
+// before the command was written down, a read that failed — none of them is
+// evidence of anything. Neither is a command line on its own: a wrapper
+// script that exec'd the daemon leaves the same process running the daemon's
+// own path, which is not the wrapper's the record holds, and a daemon that
+// has been up as long as its record is the one it was written about.
 func TestAProcessThatCannotBeIdentifiedIsStillTheDaemon(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
-		line    string
+		info    gateway.ProcessInfo
 		lineErr error
 		command string
+		started time.Time
 	}{
-		{name: "the platform cannot tell", command: "/usr/local/bin/aosd"},
+		{name: "the platform will not say what it is running", info: gateway.ProcessInfo{Elapsed: time.Minute}, command: "/usr/local/bin/aosd"},
 		{name: "reading it failed", lineErr: errors.New("ps: not found"), command: "/usr/local/bin/aosd"},
-		{name: "a record from before commands were written down", line: "/bin/sleep 1000"},
-		{name: "a wrapper script", line: "/bin/sh /opt/aos/aosd-wrapper serve", command: "/opt/aos/aosd-wrapper"},
+		{name: "a record from before commands were written down", info: gateway.ProcessInfo{CommandLine: "/bin/sleep 1000", Elapsed: time.Minute}},
+		{
+			name:    "the platform will not say how old it is",
+			info:    gateway.ProcessInfo{CommandLine: "/bin/sleep 1000"},
+			command: "/usr/local/bin/aosd",
+			started: refTime.Add(-time.Hour),
+		},
+		{
+			name:    "a wrapper script that exec'd the daemon",
+			info:    gateway.ProcessInfo{CommandLine: "/usr/local/bin/aosd serve", Elapsed: time.Hour},
+			command: "/opt/aos/aosd-wrapper",
+			started: refTime.Add(-time.Hour),
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newHarness(t)
-			h.procs.reuse(4242, tc.line)
+			h.procs.reuse(4242, tc.info.CommandLine, tc.info.Elapsed)
 			h.procs.lineErr = tc.lineErr
-			h.store.meta = &gateway.Meta{PID: 4242, Host: "127.0.0.1", Port: 5326, Command: tc.command}
+			h.store.meta = &gateway.Meta{
+				PID: 4242, Host: "127.0.0.1", Port: 5326,
+				Command: tc.command, StartedAt: tc.started,
+			}
 
 			state, err := h.svc.Status(ctx(), gateway.StatusInput{})
 			if err != nil {
