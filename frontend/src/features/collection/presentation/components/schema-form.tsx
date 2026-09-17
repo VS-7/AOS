@@ -166,8 +166,10 @@ export function SchemaForm({
                   <FormControl>
                     <Select
                       disabled={disabled}
-                      value={field.value === undefined ? "" : JSON.stringify(field.value)}
-                      onValueChange={(nextValue) => field.onChange(JSON.parse(nextValue))}
+                      value={FormSchemaHelper.toEnumOption(field.value)}
+                      onValueChange={(nextValue) =>
+                        field.onChange(FormSchemaHelper.fromEnumOption(nextValue))
+                      }
                     >
                       <SelectTrigger className="h-11 w-full rounded-2xl border-border/70 bg-background/70 px-4 shadow-none">
                         <SelectValue placeholder={t("Select {{field}}", { field: label })} />

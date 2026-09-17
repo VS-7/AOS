@@ -70,6 +70,28 @@ describe("cleanRecordData", () => {
   it("drops an empty list rather than sending one the daemon has to store", () => {
     expect(cleanRecordData(contacts, { name: "A", tags: [] })).toEqual({ name: "A" });
   });
+
+  // The form seeds every declared field, so an untouched checkbox reads
+  // `false` like one the reader deliberately left empty. Saving a record
+  // nobody edited must not write a field into it that it never carried.
+  it("leaves out a box nobody ticked on a record that never had the field", () => {
+    expect(
+      cleanRecordData(contacts, { name: "A", active: false }, { name: "A" }),
+    ).toEqual({ name: "A" });
+  });
+
+  it("keeps a box turned off on a record that carries the field", () => {
+    expect(
+      cleanRecordData(contacts, { name: "A", active: false }, { name: "A", active: true }),
+    ).toEqual({ name: "A", active: false });
+  });
+
+  it("keeps a box the reader ticked", () => {
+    expect(cleanRecordData(contacts, { name: "A", active: true }, {})).toEqual({
+      name: "A",
+      active: true,
+    });
+  });
 });
 
 describe("recordLabel", () => {

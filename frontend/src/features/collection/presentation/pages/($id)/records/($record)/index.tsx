@@ -221,7 +221,10 @@ export const CollectionRecordUpsertPage = aos
       preventNavigation: false,
       onSubmit: async (values: CollectionUpsertFormValues) => {
         const body = {
-          data: cleanRecordData(fields, values.data),
+          // The record's own data says which fields it already carries, so a
+          // checkbox nobody ticked is not written into a record that never
+          // had it.
+          data: cleanRecordData(fields, values.data, extractRecordData(record)),
           // The body of an md record goes with its fields on both writes;
           // records-update keeps the stored body only when content is absent.
           ...(collection.format === "md"

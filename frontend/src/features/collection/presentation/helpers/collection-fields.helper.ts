@@ -102,10 +102,17 @@ export function requiredFieldCount(fields: CollectionField[]): number {
  * "": an empty string is not an enum value or a date, and for a required
  * field leaving it out is what makes the daemon name the field that is
  * missing.
+ *
+ * `stored` is the record's own data — `{}` when one is being created. An
+ * unticked checkbox reads `false` whether the reader turned it off or never
+ * touched it, so it is only sent for a record that already carries the
+ * field: saving a record nobody edited must not write data into it. Left
+ * out, every value given is cleaned as it stands.
  */
 export function cleanRecordData(
   fields: CollectionField[],
   values: Record<string, unknown> | null | undefined,
+  stored?: Record<string, unknown> | null,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const field of fields) {
@@ -119,9 +126,14 @@ export function cleanRecordData(
         if (Number.isFinite(number)) out[field.name] = number;
         break;
       }
-      case "boolean":
-        out[field.name] = raw === true || raw === "true";
+      case "boolean": {
+        const checked = raw === true || raw === "true";
+        if (!checked && stored !== undefined && !(stored !== null && field.name in stored)) {
+          continue;
+        }
+        out[field.name] = checked;
         break;
+      }
       case "list": {
         const items = (Array.isArray(raw) ? raw : [raw]).filter(
           (item) => item !== undefined && item !== null && item !== "",

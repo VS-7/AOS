@@ -218,6 +218,33 @@ export class FormSchemaHelper {
     return false;
   }
 
+  /**
+   * A choice as the select carries it, and back.
+   *
+   * Each option is its value in JSON, so a number or a boolean survives the
+   * round trip. The empty choice is "" — the blank a record that does not
+   * carry the field starts with, which is no option and no JSON: reading it
+   * back with a bare `JSON.parse` threw an uncaught SyntaxError over the
+   * whole page as soon as such a form rendered.
+   */
+  public static toEnumOption(value: unknown): string {
+    return value === undefined || value === null || value === ""
+      ? ""
+      : JSON.stringify(value);
+  }
+
+  public static fromEnumOption(option: string): unknown {
+    if (option === "") {
+      return "";
+    }
+
+    try {
+      return JSON.parse(option);
+    } catch {
+      return "";
+    }
+  }
+
   public static buildInitialValue(
     schema: Record<string, unknown> | null | undefined,
     input: Record<string, unknown> | null | undefined,
@@ -384,9 +411,17 @@ export class FormSchemaHelper {
       for (const [key, propertySchema] of Object.entries(schema.properties ?? {})) {
         const child = FormSchemaHelper.buildSchemaState(propertySchema, source[key]);
 
-        if (child !== undefined) {
-          base[key] = child;
-        }
+        // Every input the form renders registers a value of its own: an
+        // empty box is "", an unticked one `false`. A property the record
+        // does not carry used to be left out here, so react-hook-form
+        // compared these defaults with the values the inputs registered,
+        // found a key more, and called the form dirty — every record page
+        // opened reading "Unsaved changes" over a record nobody had edited,
+        // and a dirty form is also one the form builder refuses to reset.
+        base[key] =
+          child !== undefined
+            ? child
+            : FormSchemaHelper.createEmptyValue(propertySchema);
       }
 
       return base;
