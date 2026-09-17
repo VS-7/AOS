@@ -67,7 +67,15 @@ dizia que o daemon "não voltou", sobre um daemon que nunca caiu. Agora recusa
 antes (`UPDATE_DAEMON_NOT_SUPERVISED`), e o `install` do `Check`/`Status`
 avisa (`unsupervised`): pare esse daemon onde ele foi iniciado, e o comando
 sobe a nova versão sozinho. Um daemon do supervisor que não responde também
-é recusado (`UPDATE_DAEMON_NOT_ANSWERING`, com `aos gateway restart`). E o
+é recusado (`UPDATE_DAEMON_NOT_ANSWERING`, com `aos gateway restart`) — e esse
+`restart` só sinaliza o processo do registro depois de conferir que ele ainda é
+o daemon: um pid reaproveitado por outro processo é lido como registro velho,
+limpo em vez de sinalizado, mesmo no primeiro segundo de vida do estranho, em
+que o sistema ainda não informa idade nenhuma. Um daemon que responde mas não
+diz ser o processo que este supervisor iniciou (um wrapper que não faz `exec`,
+uma release antiga sem pid na saúde) é recusado separadamente
+(`UPDATE_DAEMON_UNIDENTIFIED`): nada é trocado, porque não dá para saber o que
+um reinício substituiria. E o
 install só termina quando o processo que o gateway reiniciou responde **como a
 versão staged**: um daemon que volta como outra versão (iniciado de outra
 cópia do binário, `AOS_DAEMON_PATH`) é desfeito como uma falha de saúde, e o

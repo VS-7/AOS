@@ -54,8 +54,9 @@ func (p *fakeProcs) Start(_ context.Context, cmd gateway.Command) (int, error) {
 	p.nextPID++
 	p.alive[p.nextPID] = true
 	p.seen[p.nextPID] = gateway.ProcessInfo{
-		CommandLine: strings.TrimSpace(cmd.Path + " " + strings.Join(cmd.Args, " ")),
-		Elapsed:     time.Second,
+		CommandLine:  strings.TrimSpace(cmd.Path + " " + strings.Join(cmd.Args, " ")),
+		Elapsed:      time.Second,
+		ElapsedKnown: true,
 	}
 	p.started = append(p.started, gateway.Command{})
 	if p.onStart != nil {
@@ -83,10 +84,18 @@ func (p *fakeProcs) Describe(pid int) (gateway.ProcessInfo, error) {
 // had this number is gone, and the number now belongs to something else —
 // which is running something else, and started later.
 func (p *fakeProcs) reuse(pid int, line string, elapsed time.Duration) {
+	p.reuseAged(pid, line, elapsed, true)
+}
+
+// reuseAged is reuse with the age stated as the platform states it: known,
+// even when it is zero — ps prints 00:00 through a process's first second, and
+// a just-reused pid is the youngest process there is. Pass known=false for a
+// platform that will not answer at all.
+func (p *fakeProcs) reuseAged(pid int, line string, elapsed time.Duration, known bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.alive[pid] = true
-	p.seen[pid] = gateway.ProcessInfo{CommandLine: line, Elapsed: elapsed}
+	p.seen[pid] = gateway.ProcessInfo{CommandLine: line, Elapsed: elapsed, ElapsedKnown: known}
 }
 
 func (p *fakeProcs) Terminate(pid int) error {
@@ -615,6 +624,40 @@ func TestStoppingAStaleRecordCleansIt(t *testing.T) {
 // crashed without clearing its record leaves one behind, and by the time
 // anybody asks, that number can belong to an unrelated process — which is
 // alive, so the record read as running and Stop signalled a stranger.
+// The same hazard at its worst moment: the pid was handed out again so
+// recently that the platform reports no age yet. Zero seconds is the youngest
+// a process can be, so it cannot be the daemon a record written an hour ago
+// names — but while "zero" and "the platform would not say" were the same
+// answer, this was the one shape that still read as running and still got
+// signalled.
+func TestAPIDReusedWithinTheSecondIsStillNotTheDaemon(t *testing.T) {
+	h := newHarness(t)
+	started, err := h.svc.Start(ctx(), gateway.StartInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid := started.Meta.PID
+	h.procs.die(pid)
+	h.clock.advance(time.Hour)
+	h.procs.reuseAged(pid, "/bin/sleep 600", 0, true)
+
+	state, err := h.svc.Status(ctx(), gateway.StatusInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != gateway.Stale {
+		t.Fatalf("a record naming a process born seconds ago is stale, got %q", state.Status)
+	}
+
+	if _, err := h.svc.Stop(ctx(), gateway.StopInput{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.procs.terminated) != 0 || len(h.procs.killed) != 0 {
+		t.Fatalf("a stranger that had just taken the pid was signalled: terminated %v, killed %v",
+			h.procs.terminated, h.procs.killed)
+	}
+}
+
 func TestARecordWhosePIDWasReusedIsStaleRatherThanRunning(t *testing.T) {
 	h := newHarness(t)
 	started, err := h.svc.Start(ctx(), gateway.StartInput{})
@@ -668,25 +711,27 @@ func TestAProcessThatCannotBeIdentifiedIsStillTheDaemon(t *testing.T) {
 		command string
 		started time.Time
 	}{
-		{name: "the platform will not say what it is running", info: gateway.ProcessInfo{Elapsed: time.Minute}, command: "/usr/local/bin/aosd"},
+		{name: "the platform will not say what it is running", info: gateway.ProcessInfo{Elapsed: time.Minute, ElapsedKnown: true}, command: "/usr/local/bin/aosd"},
 		{name: "reading it failed", lineErr: errors.New("ps: not found"), command: "/usr/local/bin/aosd"},
-		{name: "a record from before commands were written down", info: gateway.ProcessInfo{CommandLine: "/bin/sleep 1000", Elapsed: time.Minute}},
+		{name: "a record from before commands were written down", info: gateway.ProcessInfo{CommandLine: "/bin/sleep 1000", Elapsed: time.Minute, ElapsedKnown: true}},
 		{
 			name:    "the platform will not say how old it is",
 			info:    gateway.ProcessInfo{CommandLine: "/bin/sleep 1000"},
 			command: "/usr/local/bin/aosd",
+			// ElapsedKnown stays false here: this is the platform refusing to
+			// answer, which is no evidence, not an age of zero.
 			started: refTime.Add(-time.Hour),
 		},
 		{
 			name:    "a wrapper script that exec'd the daemon",
-			info:    gateway.ProcessInfo{CommandLine: "/usr/local/bin/aosd serve", Elapsed: time.Hour},
+			info:    gateway.ProcessInfo{CommandLine: "/usr/local/bin/aosd serve", Elapsed: time.Hour, ElapsedKnown: true},
 			command: "/opt/aos/aosd-wrapper",
 			started: refTime.Add(-time.Hour),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newHarness(t)
-			h.procs.reuse(4242, tc.info.CommandLine, tc.info.Elapsed)
+			h.procs.reuseAged(4242, tc.info.CommandLine, tc.info.Elapsed, tc.info.ElapsedKnown)
 			h.procs.lineErr = tc.lineErr
 			h.store.meta = &gateway.Meta{
 				PID: 4242, Host: "127.0.0.1", Port: 5326,

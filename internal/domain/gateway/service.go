@@ -187,7 +187,7 @@ func (s *Service) isTheRecordedDaemon(meta *Meta) bool {
 	if !s.runsSomethingElse(info.CommandLine, meta.Command) {
 		return true
 	}
-	if info.Elapsed <= 0 || meta.StartedAt.IsZero() {
+	if !info.ElapsedKnown || meta.StartedAt.IsZero() {
 		return true
 	}
 	// A process that has not been running as long as the record has existed

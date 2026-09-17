@@ -45,8 +45,15 @@ type ProcessInfo struct {
 	// CommandLine is the executable the process is running, with its
 	// arguments where the platform reports them.
 	CommandLine string
-	// Elapsed is how long the process has been running.
-	Elapsed time.Duration
+	// Elapsed is how long the process has been running, and ElapsedKnown says
+	// whether the platform answered at all.
+	//
+	// The two are separate because zero is a real age: `ps` prints 00:00 for a
+	// process in its first second, and reading that as "the platform would not
+	// say" is exactly the case pid reuse needs caught — a stranger that has
+	// just taken the recorded pid looks youngest of all.
+	Elapsed      time.Duration
+	ElapsedKnown bool
 }
 
 // State is the answer to "what is going on", with the evidence attached.

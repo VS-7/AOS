@@ -71,32 +71,37 @@ func describe(pid int) (gateway.ProcessInfo, error) {
 		return gateway.ProcessInfo{}, err
 	}
 	etime, line, _ := strings.Cut(strings.TrimSpace(string(out)), " ")
-	return gateway.ProcessInfo{CommandLine: strings.TrimSpace(line), Elapsed: parseElapsed(etime)}, nil
+	age, known := parseElapsed(etime)
+	return gateway.ProcessInfo{CommandLine: strings.TrimSpace(line), Elapsed: age, ElapsedKnown: known}, nil
 }
 
-// parseElapsed reads ps's elapsed time — [[dd-]hh:]mm:ss — and answers zero
-// for anything it does not recognise, which the caller reads as "the platform
-// would not say" rather than as an age of nothing.
-func parseElapsed(etime string) time.Duration {
+// parseElapsed reads ps's elapsed time — [[dd-]hh:]mm:ss — and reports whether
+// it understood the field at all.
+//
+// The second answer matters: 00:00 is what ps prints for a process in its
+// first second, and a zero duration on its own is indistinguishable from a
+// field this could not read. The caller treats "could not read" as no
+// evidence, so conflating them let a just-reused pid pass as the daemon.
+func parseElapsed(etime string) (time.Duration, bool) {
 	days := 0
 	if before, after, found := strings.Cut(etime, "-"); found {
 		n, err := strconv.Atoi(before)
 		if err != nil {
-			return 0
+			return 0, false
 		}
 		days, etime = n, after
 	}
 	parts := strings.Split(etime, ":")
 	if len(parts) < 2 || len(parts) > 3 {
-		return 0
+		return 0, false
 	}
 	total := time.Duration(days) * 24 * time.Hour
 	for _, unit := range []time.Duration{time.Hour, time.Minute, time.Second}[3-len(parts):] {
 		n, err := strconv.Atoi(strings.TrimSpace(parts[0]))
 		if err != nil || n < 0 {
-			return 0
+			return 0, false
 		}
 		total, parts = total+time.Duration(n)*unit, parts[1:]
 	}
-	return total
+	return total, true
 }
