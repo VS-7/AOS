@@ -45,6 +45,7 @@ import {
 import { ThemeSelector } from "@/components/ui/theme-selector";
 import { cn } from "@/lib/utils";
 import { SettingsFieldLabel } from "./components/settings-field-label";
+import { FONT_SIZE_MAX, FONT_SIZE_MIN, appearanceFormSchema } from "./appearance-form.schema";
 import { getThemePreviewColors } from "@/components/ui/theme-preview-swatch";
 import type { Theme } from "@/features/theme/interfaces/theme.interfaces";
 import { t } from "@/lib/i18n";
@@ -54,29 +55,6 @@ const SETTINGS_SELECT_TRIGGER = cn(
   SETTINGS_CONTROL_WIDTH,
   "rounded-md py-0",
 );
-
-/** The sizes the interface can be drawn at and still hold together. */
-const FONT_SIZE_MIN = 9;
-const FONT_SIZE_MAX = 24;
-
-const appearanceFormSchema = z.object({
-  mode: z.enum(["light", "dark", "system"]),
-  preset: z.string(),
-  accent: z.string(),
-  surface: z.string(),
-  ink: z.string(),
-  contrast: z.number().min(0).max(100),
-  windows: z.enum(["solid", "blur"]),
-  uiFont: z.string().optional(),
-  codeFont: z.string().optional(),
-  radius: z.enum(["none", "sm", "md", "lg"]),
-  // Bounded: an emptied field used to store 0 and report success, and the
-  // interface quietly fell back to 13px over a setting that read 0.
-  uiFontSize: z.number().min(FONT_SIZE_MIN).max(FONT_SIZE_MAX),
-  codeFontSize: z.number().min(FONT_SIZE_MIN).max(FONT_SIZE_MAX),
-  iconsSet: z.enum(["minimal", "standard", "complete", "none"]),
-  iconsColored: z.boolean(),
-});
 
 type AppearanceFormValues = z.infer<typeof appearanceFormSchema>;
 
