@@ -58,7 +58,10 @@ running on this installation, in this daemon or in a terminal
 daemon (UPDATE_RESTART_UNAVAILABLE — the daemon does not restart itself),
 when the daemon answering was not started by this installation's supervisor
 (UPDATE_DAEMON_NOT_SUPERVISED — stop it where it was started, and the
-install starts the new version itself) or the supervisor's daemon is not
+install starts the new version itself), when the daemon answering cannot
+be matched to the process the supervisor's record names
+(UPDATE_DAEMON_UNIDENTIFIED — restart it through its supervisor first) or
+the supervisor's daemon is not
 answering (UPDATE_DAEMON_NOT_ANSWERING), or when the installation is
 reinstalled whole — a bundle, a directory this account cannot write, a
 server daemon (UPDATE_REINSTALL_REQUIRED).
