@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CircleHelp, Link2, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,29 @@ export function DependenciesWidget({ task, actions }: DependenciesWidgetProps) {
   const tasks: Task[] =
     (tasksData as { tasks: Task[] } | null | undefined)?.tasks ?? [];
   const byId = new Map(tasks.map((candidate) => [candidate.id, candidate]));
+
+  // The list above is the newest 200 tasks — the picker's page, not the
+  // workspace — so an older dependency is simply not in it. Reading that
+  // absence as "deleted" announced live tasks as gone, which is why the ones
+  // the page does not carry are read back by id instead. A read the daemon
+  // refuses (the task really is gone) resolves to null, and only that says
+  // "no longer exists".
+  const missingIds = dependsOnIds.filter((id) => !byId.has(id));
+  const missingKey = [...missingIds].sort().join(",");
+  const { data: resolvedMissing } = useQuery({
+    queryKey: ["task", "dependencies", missingKey],
+    enabled: missingIds.length > 0,
+    queryFn: async () => {
+      const entries = await Promise.all(
+        missingIds.map(async (id) => {
+          const result = await aos.client.task.getById.query({ params: { task: id } });
+          const found = (result.data as { task: Task } | undefined)?.task ?? null;
+          return [id, found] as const;
+        }),
+      );
+      return Object.fromEntries(entries) as Record<string, Task | null>;
+    },
+  });
 
   const currentIds = new Set(dependsOnIds);
   const candidates = tasks.filter(
@@ -136,7 +160,8 @@ export function DependenciesWidget({ task, actions }: DependenciesWidgetProps) {
           </SplitPageLayout.WidgetItem>
         )}
         {dependsOnIds.map((id) => {
-          const dependency = byId.get(id);
+          const dependency = byId.get(id) ?? resolvedMissing?.[id] ?? undefined;
+          const known = byId.has(id) || (resolvedMissing ? id in resolvedMissing : false);
           const status = dependency ? TaskHelper.getStatus(dependency.status) : null;
           const StatusIcon = status?.icon ?? CircleHelp;
           return (
@@ -150,7 +175,7 @@ export function DependenciesWidget({ task, actions }: DependenciesWidgetProps) {
                 className="flex min-w-0 flex-1 flex-col gap-0.5"
               >
                 <span className="line-clamp-1 text-xs leading-snug">
-                  {dependency?.name ?? (tasksData ? t("A task that no longer exists") : TaskHelper.shortId(id))}
+                  {dependency?.name ?? (known ? t("A task that no longer exists") : TaskHelper.shortId(id))}
                 </span>
                 <span className="font-mono text-[10px] leading-none text-muted-foreground">
                   {TaskHelper.shortId(id)}

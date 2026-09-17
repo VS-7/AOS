@@ -43,12 +43,6 @@ export class TaskHelper {
   }
 
   /**
-   * @method groupByStatus
-   * @description Groups an array of tasks by their status, following the predefined status order.
-   * @param {Task[]} tasks - The array of tasks to group.
-   * @returns {Record<Task["status"], Task[]>} A record containing grouped tasks.
-   */
-  /**
    * The identifier a person reads: the first block of the UUID.
    *
    * Rows, cards and the page title printed all 36 characters in monospace,
@@ -85,6 +79,12 @@ export class TaskHelper {
     return new Intl.DateTimeFormat(getLocale(), midnight ? { dateStyle: "medium" } : { dateStyle: "medium", timeStyle: "short" }).format(date);
   }
 
+  /**
+   * @method groupByStatus
+   * @description Groups an array of tasks by their status, following the predefined status order.
+   * @param {Task[]} tasks - The array of tasks to group.
+   * @returns {Record<Task["status"], Task[]>} A record containing grouped tasks.
+   */
   public static groupByStatus(tasks: Task[]) {
     return TASK_STATUS_ORDER.reduce(
       (acc, status) => {

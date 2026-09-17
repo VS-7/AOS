@@ -1,4 +1,4 @@
-import { CircleDashed, CheckCircle2, MinusIcon, SignalLow, SignalMedium, SignalHigh, FlagIcon, CircleEllipsisIcon, CirclePlayIcon, CircleDotDashedIcon, CircleDashedIcon, CircleFadingPlusIcon, CircleStopIcon } from "lucide-react";
+import { Circle, CheckCircle2, MinusIcon, SignalLow, SignalMedium, SignalHigh, FlagIcon, CircleEllipsisIcon, CirclePlayIcon, CircleDotDashedIcon, CircleDashedIcon, CircleFadingPlusIcon, CircleStopIcon } from "lucide-react";
 import type { Task, TaskPriority } from "@/features/task/interfaces/task.interfaces";
 import { t } from "@/lib/i18n";
 
@@ -6,7 +6,10 @@ export const TASK_STATUS_CONFIG: Record<Task["status"], { label: string; icon: a
   suggestion: { get label() { return t("Suggestion"); }, icon: CircleFadingPlusIcon, color: "text-muted-foreground" },
   backlog: { get label() { return t("Backlog"); }, icon: CircleDashedIcon, color: "text-muted-foreground" },
   planning: { get label() { return t("Planning"); }, icon: CircleDotDashedIcon, color: "text-primary" },
-  todo: { get label() { return t("Todo"); }, icon: CircleDashed, color: "text-muted-foreground" },
+  // An empty circle, not the dashed one Backlog draws: the two were the same
+  // lucide glyph imported under two names, so a header and a row said nothing
+  // about which of the two a task was in.
+  todo: { get label() { return t("Todo"); }, icon: Circle, color: "text-muted-foreground" },
   in_progress: { get label() { return t("In Progress"); }, icon: CirclePlayIcon, color: "text-primary" },
   // Stopped shared Suggestion's icon, so a stopped task read as a new idea.
   stopped: { get label() { return t("Stopped"); }, icon: CircleStopIcon, color: "text-warning" },
