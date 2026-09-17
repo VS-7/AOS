@@ -94,6 +94,7 @@ import {
   RoutineRunHistoryToolbar,
   useRoutineRunHistoryFilters,
 } from "./components/routine-run-history";
+import { loadRoutinePage } from "./loader";
 
 export const RoutineUpsertPage = aos
   .page("/routines/$id")
@@ -102,47 +103,7 @@ export const RoutineUpsertPage = aos
     description: "Create and edit agent routines",
   })
   .use(WorkspacePageMiddleware())
-  .withLoader(async ({ client, request, response }) => {
-    const isCreate = request.params.id === "new";
-
-    // No filter: the catalogue *is* the set of events a routine can react to,
-    // so `routine: true` named a distinction Go does not make.
-    const eventsResult = await client.activity.listEvents.query({});
-    const activityEvents = eventsResult.data ?? [];
-
-    if (isCreate) {
-      return {
-        mode: "create" as const,
-        routine: null as Routine | null,
-        runs: [] as Run[],
-        activityEvents,
-      };
-    }
-
-    // The run history is its own command: `routines_get` answers the routine
-    // alone, and the page read `routine.runs`, which Go has never carried —
-    // so the history said "No runs yet" beside every run on disk.
-    const [result, runsResult] = await Promise.all([
-      client.routine.getById.query({ params: { routine: request.params.id } }),
-      client.routine.runs.query({
-        params: { routine: request.params.id },
-        query: { limit: 200 },
-      }),
-    ]);
-
-    const routine = result.data?.routine as Routine | undefined;
-
-    if (!routine) {
-      return response.notFound();
-    }
-
-    return {
-      mode: "edit" as const,
-      routine,
-      runs: (runsResult.data?.runs ?? []) as Run[],
-      activityEvents,
-    };
-  })
+  .withLoader(loadRoutinePage)
   .withComponent(({ route }) => {
     const router = useRouter();
     const { confirm } = useAlert();

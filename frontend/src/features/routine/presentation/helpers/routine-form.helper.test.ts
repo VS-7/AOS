@@ -25,6 +25,48 @@ describe("buildUpdateBody", () => {
     expect(buildUpdateBody(values, routine)).toEqual({ name: "Deploy hook v2" });
   });
 
+  // What the form actually submits is the parsed value, and zod rebuilds
+  // every object in its own field order. Comparing the two as JSON text made
+  // a no-op Save resend the schedule — and, on a routine that also filters an
+  // activity, its filters.
+  it("sends a rename and nothing else, from the value the form submits", () => {
+    const parsed = routineFormSchema.parse({ ...buildFormValues(routine), name: "Deploy hook v2" });
+    expect(buildUpdateBody(parsed, routine)).toEqual({ name: "Deploy hook v2" });
+  });
+
+  it("sends nothing at all for a Save that changed nothing", () => {
+    const withActivity: Routine = {
+      ...routine,
+      triggers: [
+        ...routine.triggers,
+        {
+          type: "activity",
+          config: { namespace: "tasks", event: "created" },
+          filters: [{ field: "status", operator: "eq", value: "todo" }],
+        },
+      ],
+    } as Routine;
+    const parsed = routineFormSchema.parse(buildFormValues(withActivity));
+    expect(buildUpdateBody(parsed, withActivity)).toEqual({});
+  });
+
+  // The collections codec ends a stored file with a newline, so a prompt
+  // typed without one is read back with one. The form keeps what was typed,
+  // and that difference used to resend the prompt on every later save.
+  it("does not resend a prompt that only gained the stored trailing newline", () => {
+    const typed = routine.content ?? "";
+    const stored: Routine = { ...routine, content: `${typed}\n` };
+    const values = { ...buildFormValues(stored), prompt: typed };
+    expect(buildUpdateBody(values, stored)).toEqual({});
+  });
+
+  it("still sends a prompt that gained a blank line", () => {
+    const typed = routine.content ?? "";
+    const stored: Routine = { ...routine, content: `${typed}\n` };
+    const values = { ...buildFormValues(stored), prompt: `${typed}\n\n` };
+    expect(buildUpdateBody(values, stored)).toEqual({ prompt: `${typed}\n\n` });
+  });
+
   it("sends the triggers once they change", () => {
     const values = buildFormValues(routine);
     values.triggers = values.triggers.filter((trigger) => trigger.type !== "scheduled");
