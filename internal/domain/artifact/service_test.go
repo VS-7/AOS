@@ -221,6 +221,133 @@ func TestSetPasswordThenAuthorizeAcceptsTheRightPasswordAndRejectsTheWrongOne(t 
 	}
 }
 
+// The New artifact dialog offered "By password — set one after creating", and
+// no screen ever set one, so such an artifact answered PASSWORD_REQUIRED to
+// everybody forever. Taking the password at creation makes the artifact
+// usable in the same call, with no window in which it exists half-configured.
+func TestCreateCanSetThePasswordInTheSameCall(t *testing.T) {
+	svc, _, _ := newService(t)
+	created, err := svc.Create(ctx(), artifact.CreateInput{
+		Name: "Shared at birth", Visibility: artifact.ByPassword, Password: "open-sesame",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := svc.Get(ctx(), artifact.GetInput{ID: created.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Authorize(ctx(), stored, artifact.AccessRequest{Password: "open-sesame"}); err != nil {
+		t.Fatalf("the password given at creation was not set: %v", err)
+	}
+	if err := svc.Authorize(ctx(), stored, artifact.AccessRequest{Password: "wrong"}); err == nil {
+		t.Fatal("the wrong password was accepted")
+	}
+}
+
+// A creation whose password cannot be hashed stores nothing: an artifact left
+// behind without the password its creator asked for is the trap being fixed.
+func TestCreateWithAPasswordThatCannotBeHashedStoresNothing(t *testing.T) {
+	repo := fakes.NewRepo[artifact.Artifact]("artifacts")
+	svc := artifact.NewService(artifact.Deps{
+		Repo: repo, Files: newFakeFiles(), Hasher: failHasher{err: errors.New("kdf exploded")},
+		Clock: clockx.Fixed{At: at}, IDs: &ids.Sequence{Prefix: "a"},
+	})
+	_, err := svc.Create(ctx(), artifact.CreateInput{Name: "Doomed", Visibility: artifact.ByPassword, Password: "long-enough-password"})
+	if got, ok := apperr.As(err); !ok || got.Code != apperr.New("ARTIFACT_HASH_FAILED").Code {
+		t.Fatalf("want ARTIFACT_HASH_FAILED, got %v", err)
+	}
+	if all, _ := svc.List(ctx(), artifact.ListInput{}); len(all) != 0 {
+		t.Fatalf("a failed creation left %d artifact(s) behind", len(all))
+	}
+}
+
+// A password is checked the same way whichever command sets it. Created with
+// artifacts_create it used to be taken as it came — blank, one character, or
+// on a private artifact nobody would ever be asked it for — while
+// set-password refused a blank one.
+func TestCreateAndSetPasswordRefuseTheSamePasswords(t *testing.T) {
+	for name, password := range map[string]string{
+		"blank":     "          ",
+		"too short": "short",
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc, _, _ := newService(t)
+			_, err := svc.Create(ctx(), artifact.CreateInput{Name: "Shared", Visibility: artifact.ByPassword, Password: password})
+			if got, ok := apperr.As(err); !ok || got.Code != apperr.New("ARTIFACT_PASSWORD_INVALID").Code {
+				t.Fatalf("Create: want ARTIFACT_PASSWORD_INVALID, got %v", err)
+			}
+			if all, _ := svc.List(ctx(), artifact.ListInput{}); len(all) != 0 {
+				t.Fatalf("a refused creation left %d artifact(s) behind", len(all))
+			}
+
+			created, err := svc.Create(ctx(), artifact.CreateInput{Name: "Shared", Visibility: artifact.ByPassword})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = svc.SetPassword(ctx(), artifact.SetPasswordInput{ID: created.ID, Password: password})
+			if got, ok := apperr.As(err); !ok || got.Code != apperr.New("ARTIFACT_PASSWORD_INVALID").Code {
+				t.Fatalf("SetPassword: want ARTIFACT_PASSWORD_INVALID, got %v", err)
+			}
+		})
+	}
+}
+
+// A password given with a visibility that never asks for one is refused, not
+// stored: whoever sent it believes the artifact is behind it.
+func TestCreateRefusesAPasswordItsVisibilityWouldNeverAskFor(t *testing.T) {
+	for _, visibility := range []artifact.Visibility{"", artifact.Private, artifact.Workspace} {
+		svc, _, _ := newService(t)
+		_, err := svc.Create(ctx(), artifact.CreateInput{Name: "Notes", Visibility: visibility, Password: "long-enough-password"})
+		if got, ok := apperr.As(err); !ok || got.Code != apperr.New("ARTIFACT_PASSWORD_UNUSED").Code {
+			t.Fatalf("visibility %q: want ARTIFACT_PASSWORD_UNUSED, got %v", visibility, err)
+		}
+	}
+}
+
+// Every read says whether a password is set. The hash itself never leaves the
+// daemon, and without this nobody could tell a by_password artifact an agent
+// created without one — which refuses everybody — from one that is shared.
+func TestReadsReportWhetherAPasswordIsSet(t *testing.T) {
+	svc, _, _ := newService(t)
+	bare, err := svc.Create(ctx(), artifact.CreateInput{Name: "Bare", Visibility: artifact.ByPassword})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bare.HasPassword {
+		t.Fatal("Create reported a password that was never given")
+	}
+	shared, err := svc.Create(ctx(), artifact.CreateInput{Name: "Shared", Visibility: artifact.ByPassword, Password: "long-enough-password"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !shared.HasPassword {
+		t.Fatal("Create did not report the password it set")
+	}
+
+	got, err := svc.Get(ctx(), artifact.GetInput{ID: bare.ID})
+	if err != nil || got.HasPassword {
+		t.Fatalf("Get(bare) = %+v, %v; want no password", got, err)
+	}
+	if _, err := svc.SetPassword(ctx(), artifact.SetPasswordInput{ID: bare.ID, Password: "set-afterwards"}); err != nil {
+		t.Fatal(err)
+	}
+	all, err := svc.List(ctx(), artifact.ListInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range all {
+		if !a.HasPassword {
+			t.Fatalf("List reports %q without a password after one was set", a.ID)
+		}
+	}
+	renamed := "Renamed"
+	updated, err := svc.Update(ctx(), artifact.UpdateInput{ID: bare.ID, Name: &renamed})
+	if err != nil || !updated.HasPassword {
+		t.Fatalf("Update = %+v, %v; want the password still reported", updated, err)
+	}
+}
+
 // TestPasswordSurvivesAFreshServiceOverTheSameStore is the regression for
 // defect #19: the original derives its by_password secret fresh on every
 // boot and never writes it down, so a link shared before a restart stops
@@ -453,7 +580,7 @@ func TestSetPasswordWrapsAHashFailure(t *testing.T) {
 		Repo: repo, Files: newFakeFiles(), Hasher: failHasher{err: errors.New("kdf exploded")},
 		Clock: clockx.Fixed{At: at}, IDs: &ids.Sequence{Prefix: "a"},
 	})
-	_, err = failing.SetPassword(ctx(), artifact.SetPasswordInput{ID: created.ID, Password: "whatever"})
+	_, err = failing.SetPassword(ctx(), artifact.SetPasswordInput{ID: created.ID, Password: "whatever-else"})
 	got, ok := apperr.As(err)
 	if !ok || got.Code != apperr.New("ARTIFACT_HASH_FAILED").Code {
 		t.Fatalf("want ARTIFACT_HASH_FAILED, got %v", err)

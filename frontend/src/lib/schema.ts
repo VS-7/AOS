@@ -225,6 +225,8 @@ export interface CommandMap {
     "id"?: string;
     /** Human-readable name. */
     "name": string;
+    /** Password to share a by_password artifact behind, hashed before it is stored. Optional: set-password can set or change it later. */
+    "password"?: string;
     /** Skill that owns this artifact, if any. */
     "skill"?: string;
     /** One of: private, workspace, by_password. Defaults to private. */
@@ -475,6 +477,8 @@ export interface CommandMap {
     "_reasoning": string;
     /** Id of the record's collection. */
     "collection": string;
+    /** The new Markdown body, for a collection of format md. Omit to keep the stored body; an empty string empties it. */
+    "content"?: unknown;
     /** The record's new fields, replacing the old ones wholesale. */
     "data": Record<string, unknown>;
     /** Identifier of the record to rewrite. */
@@ -1572,6 +1576,8 @@ export interface CommandMap {
     "input"?: Record<string, unknown>;
     /** Label of the action within the view's tree, as declared. */
     "label": string;
+    /** The skill the view ships with, when it is skill-scoped. */
+    "skill"?: string;
   }; output: unknown };
   /** Read one view's declaration. */
   "views_get": { input: {

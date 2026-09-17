@@ -18,8 +18,10 @@ else it references, registered in the workspace and served by this daemon at
 - **Publishing something for a person to open in a browser:** a dashboard,
   report or generated page an agent produced — create an artifact rather than
   describing the content in a message
-- **Sharing outside the workspace:** set visibility to by_password and call
-  set-password, then hand out the URL set-password returns
+- **Sharing outside the workspace:** set visibility to by_password and give
+  create a password of at least 8 characters (or call set-password
+  afterwards), then hand out the artifact's URL; hasPassword on every read says
+  whether one is set
 
 ## When NOT to use
 - Not for anything that should stay inside the conversation — an artifact is
@@ -33,6 +35,9 @@ Register a new artifact.
 
 Registers a new artifact and scaffolds a minimal entrypoint HTML file when
 none is given. Defaults to private visibility.
+
+A password is taken only with visibility by_password, and needs at least 8
+characters; one given with any other visibility is refused rather than stored.
 
 - publish a new dashboard
 
@@ -66,7 +71,8 @@ Set the password a by_password artifact is shared behind.
 
 Hashes the given password with argon2id and persists the hash, so the
 returned URL keeps working after a restart. Does not change visibility —
-call update first if the artifact is not already by_password.
+call update first if the artifact is not already by_password. The password
+needs at least 8 characters.
 
 - share an artifact by link
 

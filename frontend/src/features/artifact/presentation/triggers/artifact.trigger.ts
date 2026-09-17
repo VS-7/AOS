@@ -6,7 +6,9 @@ import { String } from "@/core/helpers/string";
 export const artifactGroup = AosTriggerGroup.create("Artifacts")
   .withOrder(6)
   .withLoader(({ query, stores }) => {
-    const artifacts: ArtifactListItem[] = stores.artifact.state.items;
+    // `artifact`, the key app/stores.ts registers; `artifacts` was undefined
+    // and its throw emptied the command palette.
+    const artifacts: ArtifactListItem[] = stores.artifact?.state.items ?? [];
 
     const items = !query
       ? artifacts

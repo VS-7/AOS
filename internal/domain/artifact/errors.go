@@ -45,6 +45,29 @@ func errPasswordRequired(id string) error {
 		})
 }
 
+// errPasswordInvalid refuses a password too short, or blank, to share an
+// artifact behind — from Create and SetPassword alike. It names no artifact:
+// Create refuses before one exists, often before it even has an id.
+func errPasswordInvalid(minimum int) error {
+	return apperr.New("ARTIFACT_PASSWORD_INVALID").
+		Causer("artifact.Service").
+		Msgf("a password must have at least %d characters, and not only spaces", minimum).
+		Issue("minimum", minimum).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{Label: "choose a longer password"})
+}
+
+// errPasswordUnused refuses a password given to Create for a visibility that
+// never asks for one.
+func errPasswordUnused(visibility string) error {
+	return apperr.New("ARTIFACT_PASSWORD_UNUSED").
+		Causer("artifact.Service.Create").
+		Msgf("a %s artifact never asks for a password; make it by_password to share it behind one", visibility).
+		Issue("visibility", visibility).
+		Status(apperr.StatusBadRequest).
+		CTA(apperr.CallToAction{Label: "set visibility to by_password, or leave the password out"})
+}
+
 // errUnauthorized fires when Authorize refuses a request against an
 // artifact's visibility.
 func errUnauthorized(id string) error {

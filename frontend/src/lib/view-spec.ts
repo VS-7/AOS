@@ -40,6 +40,7 @@
  */
 
 import type { Spec } from "@json-render/core";
+import { getLocale, t } from "./i18n";
 
 /** One record as `views_render` answers it (`collection.Record`). */
 export interface RenderedRecord {
@@ -157,13 +158,18 @@ function eventsOf(node: RenderedNode): Record<string, unknown> | undefined {
         ? {
             confirm: {
               title: action.label,
-              message: `Run ${action.command ?? action.label}?`,
+              message: t("Run {{command}}?", { command: action.command ?? action.label }),
+              confirmLabel: t("Confirm"),
+              cancelLabel: t("Cancel"),
             },
           }
         : {}),
     }));
   if (bindings.length === 0) return undefined;
-  return { click: bindings.length === 1 ? bindings[0] : bindings };
+  // `press`: the event the registry's Button emits and its Link listens for.
+  // Keyed under `click`, no binding ever matched and every button in a view
+  // did nothing — no request, no confirmation, no error.
+  return { press: bindings.length === 1 ? bindings[0] : bindings };
 }
 
 /** The props of one node, with its bindings pointed at one record. */
@@ -184,7 +190,14 @@ function propsOf(
   return props;
 }
 
-/** Fills a Table's rows from the records, projected onto its own columns. */
+/**
+ * Fills a Table's rows from the records, projected onto its own columns.
+ *
+ * As `string[][]`, cells in column order: the catalog's Table maps each row
+ * with `row.map(String)`. Rows built as objects threw "row.map is not a
+ * function", which json-render's per-element boundary swallowed — so the
+ * default scaffold, a table, rendered a blank page with no word of why.
+ */
 function tableProps(
   props: Record<string, unknown>,
   records: RenderedRecord[],
@@ -199,13 +212,41 @@ function tableProps(
   );
   const rows = records.map((record) => {
     const data = record.data ?? {};
-    const row: Record<string, unknown> = { id: record.id };
-    for (const column of columns) {
-      if (column) row[column] = data[column];
-    }
-    return row;
+    return columns.map((column) => formatViewValue(column ? data[column] : undefined));
   });
-  return { ...props, rows };
+  return { ...props, columns, rows };
+}
+
+const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * A record's value as a person reads it.
+ *
+ * Bound values reach the components as the JSON they are stored as, and a
+ * component renders whatever it is handed: a boolean became an empty badge,
+ * a list its items run together, a date its ISO string. A collection's `date`
+ * is an RFC 3339 timestamp; one at midnight UTC is a calendar day, and is
+ * shown as that day in UTC — in local time it would be the day before
+ * anywhere west of Greenwich.
+ */
+export function formatViewValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "boolean") return value ? t("Yes") : t("No");
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? new Intl.NumberFormat(getLocale()).format(value) : String(value);
+  }
+  if (Array.isArray(value)) return value.map(formatViewValue).filter(Boolean).join(", ");
+  if (typeof value === "string") {
+    if (!ISO_DATE_TIME.test(value)) return value;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    const midnightUTC = /T00:00(:00(\.0+)?)?(Z|\+00:00)$/.test(value);
+    return midnightUTC
+      ? new Intl.DateTimeFormat(getLocale(), { dateStyle: "medium", timeZone: "UTC" }).format(date)
+      : new Intl.DateTimeFormat(getLocale(), { dateStyle: "medium", timeStyle: "short" }).format(date);
+  }
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
 }
 
 /**

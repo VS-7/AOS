@@ -616,6 +616,13 @@ func (b brokenFS) Rename(ctx context.Context, from, to string) error {
 	return b.fakeFS.Rename(ctx, from, to)
 }
 
+func (b brokenFS) CopyFile(ctx context.Context, from, to string) error {
+	if b.on == "copy" {
+		return b.fail
+	}
+	return b.fakeFS.CopyFile(ctx, from, to)
+}
+
 func (b brokenFS) Remove(ctx context.Context, p string) error {
 	if b.on == "remove" {
 		return b.fail
@@ -864,5 +871,212 @@ func TestChangesOutsideARepositoryIsEmptyRatherThanAFailure(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("changes = %+v", got)
+	}
+}
+
+// CopyFile is the fake's exclusive copy: it refuses a destination that holds
+// anything, the same way the real adapter's O_EXCL open does, so a test that
+// proves Copy never overwrites is proving it against the port's contract.
+func (f *fakeFS) CopyFile(_ context.Context, from, to string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	e, ok := f.entries[from]
+	if !ok || e.dir {
+		return file.ErrNotExist
+	}
+	if _, taken := f.entries[to]; taken {
+		return errors.New("fake: destination exists")
+	}
+	f.ensureDirsLocked(path.Dir(to))
+	f.entries[to] = fakeEntry{data: append([]byte(nil), e.data...)}
+	return nil
+}
+
+// The explorer sent `{from: "", to: ""}` for every rename, drag and cut, and
+// both resolved to the workspace root — so the refusal the person saw was
+// `"" already exists`, a message about nothing they had asked for. An empty
+// path is a malformed request and has to say so.
+func TestMoveRefusesAnEmptyPathByName(t *testing.T) {
+	fs := newFakeFS()
+	fs.put(rel("a.txt"), []byte("hi"))
+	s := newService(fs, newFakeGit())
+
+	for _, tc := range []struct{ from, to string }{{"", "b.txt"}, {"a.txt", ""}, {"", ""}, {" ", "/"}} {
+		err := s.Move(t.Context(), tc.from, tc.to)
+		if code := codeOf(t, err); code != "AOS_FILE_PATH_REQUIRED" {
+			t.Fatalf("Move(%q, %q): code = %q, want AOS_FILE_PATH_REQUIRED", tc.from, tc.to, code)
+		}
+	}
+	if _, err := fs.Stat(t.Context(), rel("a.txt")); err != nil {
+		t.Fatal("a refused move must leave the source where it was")
+	}
+}
+
+func TestMkdirCreatesADirectoryAndItsParents(t *testing.T) {
+	fs := newFakeFS()
+	s := newService(fs, newFakeGit())
+
+	if err := s.Mkdir(t.Context(), "src/components"); err != nil {
+		t.Fatal(err)
+	}
+	info, err := fs.Stat(t.Context(), rel("src/components"))
+	if err != nil || !info.Dir {
+		t.Fatalf("src/components is not a directory after Mkdir: %+v, %v", info, err)
+	}
+}
+
+// "New Folder" used to write a zero-byte file under the folder's name. A
+// directory that is already there is a name the person has to change, not a
+// success to report.
+func TestMkdirRefusesAPathThatAlreadyExists(t *testing.T) {
+	fs := newFakeFS()
+	fs.put(rel("docs"), []byte("a file named docs"))
+	fs.mkdir(rel("src"))
+	s := newService(fs, newFakeGit())
+
+	for _, p := range []string{"docs", "src"} {
+		if code := codeOf(t, s.Mkdir(t.Context(), p)); code != "AOS_FILE_ALREADY_EXISTS" {
+			t.Fatalf("Mkdir(%q): code = %q, want AOS_FILE_ALREADY_EXISTS", p, code)
+		}
+	}
+	for _, p := range []string{"", "/", "."} {
+		if code := codeOf(t, s.Mkdir(t.Context(), p)); code != "AOS_FILE_PATH_REQUIRED" {
+			t.Fatalf("Mkdir(%q): code = %q, want AOS_FILE_PATH_REQUIRED", p, code)
+		}
+	}
+}
+
+// Create is the explorer's "New File" and the half of a paste that writes: it
+// must never replace what is there. Pasting a copy beside its original used to
+// go through Write and zero the original.
+func TestCreateWritesANewFileButNeverReplacesOne(t *testing.T) {
+	fs := newFakeFS()
+	fs.put(rel("keep.txt"), []byte("precious"))
+	s := newService(fs, newFakeGit())
+
+	if err := s.Create(t.Context(), file.WriteInput{Path: "docs/new.md", Content: "# new"}); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := fs.ReadFile(t.Context(), rel("docs/new.md"), 1<<20)
+	if err != nil || string(got) != "# new" {
+		t.Fatalf("docs/new.md = %q, %v", got, err)
+	}
+
+	err = s.Create(t.Context(), file.WriteInput{Path: "keep.txt", Content: ""})
+	if code := codeOf(t, err); code != "AOS_FILE_ALREADY_EXISTS" {
+		t.Fatalf("code = %q, want AOS_FILE_ALREADY_EXISTS", code)
+	}
+	if got, _, _ := fs.ReadFile(t.Context(), rel("keep.txt"), 1<<20); string(got) != "precious" {
+		t.Fatalf("a refused create changed the file: %q", got)
+	}
+}
+
+// Copy is done where the bytes are. The explorer used to read a file through
+// the JSON API and write back a field that was not there, so every paste made
+// an empty file, and a picture could not have survived the round trip as text
+// even when the field was right.
+func TestCopyDuplicatesAFileByteForByte(t *testing.T) {
+	fs := newFakeFS()
+	png := []byte{0x89, 'P', 'N', 'G', 0x00, 0x01}
+	fs.put(rel("pixel.png"), png)
+	s := newService(fs, newFakeGit())
+
+	if err := s.Copy(t.Context(), "pixel.png", "docs/pixel.png"); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := fs.ReadFile(t.Context(), rel("docs/pixel.png"), 1<<20)
+	if err != nil || !bytes.Equal(got, png) {
+		t.Fatalf("copy = %v, %v; want %v", got, err, png)
+	}
+	if orig, _, _ := fs.ReadFile(t.Context(), rel("pixel.png"), 1<<20); !bytes.Equal(orig, png) {
+		t.Fatal("the source changed during a copy")
+	}
+}
+
+func TestCopyDuplicatesADirectoryTree(t *testing.T) {
+	fs := newFakeFS()
+	fs.put(rel("src/a.txt"), []byte("a"))
+	fs.put(rel("src/deep/b.txt"), []byte("b"))
+	fs.mkdir(rel("src/empty"))
+	s := newService(fs, newFakeGit())
+
+	if err := s.Copy(t.Context(), "src", "dest/src"); err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]string{"dest/src/a.txt": "a", "dest/src/deep/b.txt": "b"} {
+		got, _, err := fs.ReadFile(t.Context(), rel(p), 1<<20)
+		if err != nil || string(got) != want {
+			t.Fatalf("%s = %q, %v; want %q", p, got, err, want)
+		}
+	}
+	if info, err := fs.Stat(t.Context(), rel("dest/src/empty")); err != nil || !info.Dir {
+		t.Fatalf("the empty directory was not copied: %+v, %v", info, err)
+	}
+}
+
+func TestCopyRefusesAnExistingDestinationAndACopyIntoItself(t *testing.T) {
+	fs := newFakeFS()
+	fs.put(rel("a.txt"), []byte("a"))
+	fs.put(rel("b.txt"), []byte("b"))
+	fs.put(rel("src/x.txt"), []byte("x"))
+	s := newService(fs, newFakeGit())
+
+	if code := codeOf(t, s.Copy(t.Context(), "a.txt", "b.txt")); code != "AOS_FILE_ALREADY_EXISTS" {
+		t.Fatalf("code = %q, want AOS_FILE_ALREADY_EXISTS", code)
+	}
+	if got, _, _ := fs.ReadFile(t.Context(), rel("b.txt"), 1<<20); string(got) != "b" {
+		t.Fatalf("a refused copy changed the destination: %q", got)
+	}
+	if code := codeOf(t, s.Copy(t.Context(), "src", "src/inner")); code != "AOS_FILE_COPY_INTO_ITSELF" {
+		t.Fatalf("code = %q, want AOS_FILE_COPY_INTO_ITSELF", code)
+	}
+	if code := codeOf(t, s.Copy(t.Context(), "", "c.txt")); code != "AOS_FILE_PATH_REQUIRED" {
+		t.Fatalf("code = %q, want AOS_FILE_PATH_REQUIRED", code)
+	}
+	if code := codeOf(t, s.Copy(t.Context(), "missing.txt", "c.txt")); code != "AOS_FILE_IO_FAILED" {
+		t.Fatalf("code = %q, want AOS_FILE_IO_FAILED", code)
+	}
+}
+
+func TestTheNewOperationsStayInsideTheWorkspace(t *testing.T) {
+	fs := newFakeFS()
+	fs.put(rel("a.txt"), []byte("a"))
+	s := newService(fs, newFakeGit())
+	const outside = "../../etc/passwd"
+
+	for name, err := range map[string]error{
+		"Mkdir":     s.Mkdir(t.Context(), outside),
+		"Create":    s.Create(t.Context(), file.WriteInput{Path: outside}),
+		"Copy/from": s.Copy(t.Context(), outside, "b.txt"),
+		"Copy/to":   s.Copy(t.Context(), "a.txt", outside),
+	} {
+		if code := codeOf(t, err); code != "AOS_FILE_OUTSIDE_WORKSPACE" {
+			t.Fatalf("%s: code = %q, want AOS_FILE_OUTSIDE_WORKSPACE", name, code)
+		}
+	}
+}
+
+func TestTheNewOperationsReportFilesystemFailures(t *testing.T) {
+	boom := errors.New("the device is not ready")
+	for name, tc := range map[string]struct {
+		on   string
+		call func(*file.Service) error
+	}{
+		"Mkdir/mkdir":  {"mkdir", func(s *file.Service) error { return s.Mkdir(t.Context(), "new") }},
+		"Create/write": {"write", func(s *file.Service) error { return s.Create(t.Context(), file.WriteInput{Path: "n.md"}) }},
+		"Copy/copy":    {"copy", func(s *file.Service) error { return s.Copy(t.Context(), "a.md", "b.md") }},
+		"Copy/readdir": {"readdir", func(s *file.Service) error { return s.Copy(t.Context(), "dir", "dir2") }},
+		"Copy/mkdir":   {"mkdir", func(s *file.Service) error { return s.Copy(t.Context(), "dir", "dir2") }},
+		"Create/mkdir": {"mkdir", func(s *file.Service) error { return s.Create(t.Context(), file.WriteInput{Path: "x/n.md"}) }},
+		"Mkdir/stat":   {"stat", func(s *file.Service) error { return s.Mkdir(t.Context(), "new") }},
+	} {
+		fs := newFakeFS()
+		fs.put(rel("a.md"), []byte("hello"))
+		fs.put(rel("dir/c.md"), []byte("c"))
+		svc := newService2(brokenFS{fakeFS: fs, on: tc.on, fail: boom}, newFakeGit())
+
+		if code := codeOf(t, tc.call(svc)); code != "AOS_FILE_IO_FAILED" {
+			t.Fatalf("%s: code = %q, want FILE_IO_FAILED", name, code)
+		}
 	}
 }

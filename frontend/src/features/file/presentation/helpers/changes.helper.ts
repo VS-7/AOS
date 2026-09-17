@@ -4,6 +4,7 @@ import {
   formatExplorerContextLabel,
   parseExplorerContext,
 } from "@/features/file/presentation/helpers/files-explorer.helper";
+import { t } from "@/lib/i18n";
 
 export type ChangesDiffStyle = "unified" | "split";
 
@@ -28,8 +29,8 @@ export function getChangesTabContext(
 export function formatChangesContextScope(
   context: FileExplorerContext,
 ): string {
-  if (context.type === "task") return "Task";
-  return "Local";
+  if (context.type === "task") return t("Task");
+  return t("Local");
 }
 
 export function formatChangesContextRef(
@@ -44,9 +45,17 @@ export function formatChangesCountLabel(params: {
   fileCount: number;
   readOnly: boolean;
 }): string {
-  const noun = params.fileCount === 1 ? "Change" : "Changes";
-  const kind = params.readOnly ? "Branch" : "Uncommitted";
-  return `${params.fileCount} ${kind} ${noun}`;
+  // Whole sentences per case rather than words glued together: the order of
+  // count, kind and noun is not the same in every language.
+  const values = { count: params.fileCount };
+  if (params.readOnly) {
+    return params.fileCount === 1
+      ? t("{{count}} Branch Change", values)
+      : t("{{count}} Branch Changes", values);
+  }
+  return params.fileCount === 1
+    ? t("{{count}} Uncommitted Change", values)
+    : t("{{count}} Uncommitted Changes", values);
 }
 
 export function formatChangeStatusLabel(

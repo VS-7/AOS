@@ -35,10 +35,15 @@ import {
   joinWorkspacePath,
 } from "@/features/file/presentation/helpers/files-explorer.helper";
 
-const createNodeSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  type: z.enum(["file", "directory"]),
-});
+// Built when the dialog mounts rather than once at import, so the message is
+// in the language the person has now, not the one the module was loaded in; a
+// change of language remounts the whole tree (App.tsx's Localized).
+function createNodeSchema() {
+  return z.object({
+    name: z.string().trim().min(1, t("Name is required")),
+    type: z.enum(["file", "directory"]),
+  });
+}
 
 export interface FilesCreateNodeDialogProps {
   open: boolean;
@@ -46,7 +51,8 @@ export interface FilesCreateNodeDialogProps {
   defaultType?: "file" | "directory";
   explorerContext: FileExplorerContext;
   onOpenChange: (open: boolean) => void;
-  onCreated?: (path: string) => void;
+  /** Runs with what the daemon created, and whether it is a file or a folder. */
+  onCreated?: (path: string, type: "file" | "directory") => void;
 }
 
 export function FilesCreateNodeDialog({
@@ -57,8 +63,9 @@ export function FilesCreateNodeDialog({
   onOpenChange,
   onCreated,
 }: FilesCreateNodeDialogProps) {
+  const schema = React.useMemo(() => createNodeSchema(), []);
   const form = aos.useForm({
-    schema: createNodeSchema,
+    schema,
     values: {
       name: "",
       type: defaultType,
@@ -67,6 +74,7 @@ export function FilesCreateNodeDialog({
     // field — <Form> routes both here. `createNode` is declared below; this
     // only runs on a submit, long after the render that declared it.
     onSubmit: (values) => {
+      submittedType.current = values.type;
       createNode({
         body: {
           path: joinWorkspacePath(parentPath, values.name.trim()),
@@ -76,6 +84,10 @@ export function FilesCreateNodeDialog({
       });
     },
   });
+
+  // The type the person submitted, which the toast and `onCreated` report.
+  // `defaultType` is only what the dialog opened with; the select can change it.
+  const submittedType = React.useRef<"file" | "directory">(defaultType);
 
   const watchedName = form.watch("name");
   const watchedType = form.watch("type");
@@ -94,16 +106,17 @@ export function FilesCreateNodeDialog({
       onSuccess: (response) => {
         // `onSuccess` receives the full `Envelope` — see `aos-facade.ts`'s
         // `useMutation` doc comment.
-        const createdPath = response?.data?.file?.path;
+        // The daemon answers `{path}`. This read `data.file.path`, a field
+        // nothing sends, so `onCreated` never ran and a new file never opened.
+        const createdPath = response?.data?.path as string | undefined;
+        const createdType = submittedType.current;
 
-        toast.success(
-          defaultType === "directory" ? "Folder created." : "File created.",
-        );
+        toast.success(createdType === "directory" ? t("Folder created.") : t("File created."));
         form.reset({ name: "", type: defaultType });
         onOpenChange(false);
 
         if (createdPath) {
-          onCreated?.(createdPath);
+          onCreated?.(createdPath, createdType);
         }
       },
       onError: (error: unknown) => {
@@ -116,7 +129,7 @@ export function FilesCreateNodeDialog({
             ? (error as { error?: { message?: string } }).error?.message
             : error instanceof Error
               ? error.message
-              : "Unable to create item.";
+              : t("Unable to create item.");
 
         toast.error(message);
       },
@@ -132,12 +145,12 @@ export function FilesCreateNodeDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {defaultType === "directory" ? "New Folder" : "New File"}
+            {watchedType === "directory" ? t("New Folder") : t("New File")}
           </DialogTitle>
           <DialogDescription>
             {destinationFolder === "/"
-              ? "Create at the workspace root."
-              : `Create inside ${destinationFolder}.`}
+              ? t("Create at the workspace root.")
+              : t("Create inside {{folder}}.", { folder: destinationFolder })}
           </DialogDescription>
         </DialogHeader>
 

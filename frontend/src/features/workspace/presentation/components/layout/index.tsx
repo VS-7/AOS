@@ -2,6 +2,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { WorkspaceSidebar } from "../sidebar";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { WorkspaceCommander } from "../dialogs/commander";
+import { ArtifactAccessDialog } from "@/features/artifact/presentation/components/artifact-access-dialog";
 import { TaskDialog } from "../../../../task/presentation/components/dialogs/create";
 import { ApprovalDialog } from "@/features/approval/presentation/components/approval-dialog";
 import { AlertProvider } from "@/components/ui/alert-provider";
@@ -224,6 +225,8 @@ export function WorkspaceLayout() {
           <WorkspaceNavControlsShell />
           <WorkspaceSidebar />
           <WorkspaceCommander />
+          {/* Asks for a by_password artifact's password wherever one is opened. */}
+          <ArtifactAccessDialog />
           <div
             className={cn(
               "relative h-screen w-full min-h-0 bg-background shadow-xs grid grid-rows-[auto_1fr] border-l border-y",

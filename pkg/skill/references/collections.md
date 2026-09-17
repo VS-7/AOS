@@ -126,5 +126,8 @@ Replace a record's fields and revalidate them. A refusal leaves the
 stored record untouched — nothing between reading it and validating the new
 data can have written anything.
 
+The Markdown body of an md record is kept as it is unless content is given;
+give content to replace it, an empty string to empty it.
+
 - move a contact to a new stage
 

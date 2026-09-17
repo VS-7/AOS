@@ -1,4 +1,5 @@
 import { shadcnComponents } from "@json-render/shadcn";
+import { withElementBoundaries } from "./shared/element-boundary";
 import {
   BoxComponent,
   GridComponent,
@@ -43,7 +44,7 @@ import {
 /**
  * AOS View component registry — custom @app implementations layered over shadcn fallbacks.
  */
-export const viewComponents = {
+export const viewComponents = withElementBoundaries({
   ...shadcnComponents,
 
   // Layout
@@ -87,7 +88,7 @@ export const viewComponents = {
   SplitPageContent: SplitPageContentComponent,
   SplitPageContentHeader: SplitPageContentHeaderComponent,
   SplitPageContentBody: SplitPageContentBodyComponent,
-};
+} as Record<string, (props: any) => any>);
 
 export {
   BoxComponent,

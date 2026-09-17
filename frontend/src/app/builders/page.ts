@@ -162,11 +162,25 @@ export class AosPage<
    * @returns The configured {@link Route}.
    */
   build() {
+    // The page's own component, as a component of its own rather than called
+    // inside InternalComponent: its hooks are then its own, and
+    // InternalComponent may render nothing without changing how many hooks run.
+    const PageComponent = (props: { route: any; client: TClient | undefined }) => this._component(props);
+
     // [Business Rule]: Internal component wrapper to provide route-specific context and helpers.
     const InternalComponent = () => {
-      const router = useRouter();
+      useRouter();
+      const loaderData = (route as any).useLoaderData();
 
-      return this._component({
+      // A page whose loader answered "not found" once keeps its match, and
+      // going back to that address rendered the component with no loader data
+      // while the loader ran again — every page destructures it, so each
+      // revisit of a missing view or collection threw before the 404 came
+      // back. No loader returns nothing (one without a loader answers {}), so
+      // missing data only ever means there is nothing to render yet.
+      if (loaderData === undefined) return null;
+
+      return React.createElement(PageComponent, {
         route: route as any,
         client: this.config.client,
       });

@@ -20,8 +20,8 @@ type Info struct {
 // against a fake — see workspace.Scaffolder for the same reasoning, and File
 // (Go)'s own note that internal/domain may not import os/exec directly.
 //
-// wide port: Resolve plus the six plain filesystem operations is more than
-// six methods, but Tree, Read, Write, Move, Delete, and Diff each need a
+// wide port: Resolve plus the plain filesystem operations is more than
+// six methods, but Tree, Read, Write, Move, Copy, Delete, and Diff each need a
 // different subset of them — splitting this by consumer would just move the
 // reassembly into Service instead of removing it.
 type FS interface {
@@ -56,6 +56,12 @@ type FS interface {
 	Open(ctx context.Context, path string) (io.ReadSeekCloser, error)
 
 	WriteFile(ctx context.Context, path string, data []byte) error
+
+	// CopyFile copies the file at from to to, streaming it, and must fail
+	// rather than replace anything already at to. Copy relies on that as its
+	// last line of defence: the existence check before it and the write are
+	// two calls, and something can land at the destination in between.
+	CopyFile(ctx context.Context, from, to string) error
 	MkdirAll(ctx context.Context, path string) error
 	Rename(ctx context.Context, from, to string) error
 	Remove(ctx context.Context, path string) error
