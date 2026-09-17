@@ -117,8 +117,12 @@ no tool, so it records no activity.`,
 		// this exists for the desktop's toolset sheet. The HTTP surface, the CLI
 		// and the window still reach it.
 		Registry: false,
+		// Announced as the reach it is, not as the read it looks like: it
+		// starts the configured stdio command or opens the configured
+		// connection exactly as toolsets_call does, and an MCP client may
+		// approve a read-only tool without asking.
 		Annotations: command.Annotations{
-			Title: "List a toolset's tools", ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: true,
+			Title: "List a toolset's tools", DestructiveHint: true, OpenWorldHint: true,
 		},
 		Handler: svc.Tools,
 	})

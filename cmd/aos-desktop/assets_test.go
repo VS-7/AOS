@@ -301,3 +301,46 @@ func TestOnlyTheForwardedPathsLeaveTheWindow(t *testing.T) {
 		t.Error("a POST to an artifact was forwarded; only GET is")
 	}
 }
+
+// File content is served from the window's own origin, and a same-origin
+// document can set the runtime's header: an agent's HTML file opened at
+// /api/file/content in the window called DomainService.Fetch for
+// /api/auth/session and read the person back. The window sandboxes every
+// answer that could be a document running script itself, whatever the daemon
+// sent — a daemon from before the policy sends none, and one that sent a
+// laxer policy would not be believed.
+func TestFileContentThatCouldRunScriptIsSandboxedByTheWindow(t *testing.T) {
+	cases := []struct {
+		contentType, daemonCSP, wantCSP string
+	}{
+		{"text/html; charset=utf-8", "", "sandbox"},
+		{"application/xhtml+xml", "", "sandbox"},
+		{"image/svg+xml", "", "sandbox"},
+		{"text/xml", "script-src *", "sandbox"},
+		{"text/plain; charset=utf-8", "", "sandbox"},
+		{"", "", "sandbox"},
+		{"application/pdf", "", ""},
+		{"image/png", "", ""},
+		{"video/mp4", "", ""},
+	}
+	for _, tc := range cases {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if tc.daemonCSP != "" {
+				w.Header().Set("Content-Security-Policy", tc.daemonCSP)
+			}
+			w.Header().Set("Content-Type", tc.contentType)
+			_, _ = io.WriteString(w, "<script>fetch('/wails/runtime')</script>")
+		}))
+		daemon := daemonclient.New(daemonclient.Options{BaseURL: srv.URL, Token: "window-token", Workspace: "vs"})
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/file/content?path=probe", nil)
+		rec, _ := serveThrough(t, daemon, req)
+		srv.Close()
+
+		if got := rec.Header().Get("Content-Security-Policy"); got != tc.wantCSP {
+			t.Errorf("%q: Content-Security-Policy = %q, want %q", tc.contentType, got, tc.wantCSP)
+		}
+		if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("%q: X-Content-Type-Options = %q, want nosniff", tc.contentType, got)
+		}
+	}
+}

@@ -205,12 +205,26 @@ func bearerHeader(r *http.Request) string {
 //
 // Sandboxed without allow-same-origin, a request the page makes to /api is
 // cross-site: the Lax session cookie stays behind, and the answer is not
-// readable. Scripts, forms and popups (which inherit the sandbox) are what an
-// artifact is for; the top window is never its to navigate. Sent on every
-// answer, not only on HTML: an SVG or an XML file opened on its own is a
-// document that runs script too, and on a subresource the directive is
-// ignored.
-const sandbox = "sandbox allow-scripts allow-forms allow-popups"
+// readable. Sent on every answer, not only on HTML: an SVG or an XML file
+// opened on its own is a document that runs script too, and on a subresource
+// the directive is ignored.
+//
+// The token list is what an artifact is for, and nothing that grants an
+// origin or the top window:
+//
+//   - allow-scripts, allow-forms: the page's own behaviour;
+//   - allow-popups: a link opened in a new window, which inherits this
+//     sandbox (there is no allow-popups-to-escape-sandbox);
+//   - allow-modals, allow-downloads: alert/confirm/prompt and <a download>,
+//     which an artifact opened at its share link could use before it was
+//     sandboxed. Neither reads or writes anything of an origin.
+//
+// Left out on purpose: allow-same-origin, which is the whole problem above;
+// allow-top-navigation in any form, since the top window is never the
+// artifact's to navigate. Storage is a consequence rather than a token: an
+// opaque origin has none, so localStorage, sessionStorage and IndexedDB throw
+// at a share link as they already did in the application's frames.
+const sandbox = "sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads"
 
 // csp is the fixed, restrictive policy every artifact is served under: an
 // opaque origin (sandbox above), no external network, no inline script, no

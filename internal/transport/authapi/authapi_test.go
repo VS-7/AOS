@@ -563,3 +563,128 @@ func TestAPITokenIsIssuedOnceAndDescribedAfter(t *testing.T) {
 		t.Errorf("issuing without a session = %d, want 401", res.StatusCode)
 	}
 }
+
+// onboardedToken creates the account and answers the window's session token.
+func onboardedToken(t *testing.T, srv *httptest.Server) string {
+	t.Helper()
+	_, env := post(t, srv, "/onboarding", map[string]string{
+		"name": "Vitor", "email": "vitor@example.test", "password": goodPassword,
+	}, "")
+	var onboarded struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(env.Data, &onboarded); err != nil || onboarded.Token == "" {
+		t.Fatalf("onboarding = %s (%v)", env.Data, err)
+	}
+	return onboarded.Token
+}
+
+// currentAPITokenPrefix is what Settings > Developers is told, or "" when the
+// account has no API token.
+func currentAPITokenPrefix(t *testing.T, srv *httptest.Server, session string) string {
+	t.Helper()
+	_, env := get(t, srv, "/api-token", session)
+	var described struct {
+		Token *struct {
+			Prefix string `json:"prefix"`
+		} `json:"token"`
+	}
+	if err := json.Unmarshal(env.Data, &described); err != nil {
+		t.Fatalf("described = %s (%v)", env.Data, err)
+	}
+	if described.Token == nil {
+		return ""
+	}
+	return described.Token.Prefix
+}
+
+// The API token is what an MCP client or an agent is handed, and it was
+// accepted here: whoever held it could revoke the person's token and take the
+// replacement, so the credential the person gave away could lock them out of
+// every client they had configured.
+func TestTheAPITokenCannotReplaceItself(t *testing.T) {
+	srv := newServer(t)
+	session := onboardedToken(t, srv)
+	res, issued := post(t, srv, "/api-token", map[string]string{}, session)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("issuing with the session = %d", res.StatusCode)
+	}
+	var answer struct {
+		Token  string `json:"token"`
+		Prefix string `json:"prefix"`
+	}
+	if err := json.Unmarshal(issued.Data, &answer); err != nil || answer.Token == "" {
+		t.Fatalf("issued = %s (%v)", issued.Data, err)
+	}
+
+	res, env := post(t, srv, "/api-token", map[string]string{}, answer.Token)
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("issuing with the API token = %d, want %d", res.StatusCode, http.StatusForbidden)
+	}
+	if env.Error == nil || env.Error.Code != "AOS_AUTH_HTTP_API_TOKEN_CANNOT_REPLACE_ITSELF" {
+		t.Errorf("error = %+v, want AOS_AUTH_HTTP_API_TOKEN_CANNOT_REPLACE_ITSELF", env.Error)
+	}
+	if got := currentAPITokenPrefix(t, srv, session); got != answer.Prefix {
+		t.Errorf("after the refusal the API token is %q, want the one issued (%q)", got, answer.Prefix)
+	}
+	// Still a credential for everything else it is for.
+	if res, _ := get(t, srv, "/session", answer.Token); res.StatusCode != http.StatusOK {
+		t.Errorf("the API token's own session = %d, want 200", res.StatusCode)
+	}
+}
+
+// The session cookie is SameSite=Lax, and every page on another 127.0.0.1
+// port is the same site: a plain HTML form there posted to this route with the
+// cookie attached, and the person's token was replaced without a word. A form
+// cannot send application/json, and a fetch that does needs a preflight the
+// daemon's CORS policy refuses.
+func TestTheAPITokenIsNotReplacedByAFormPost(t *testing.T) {
+	srv := newServer(t)
+	session := onboardedToken(t, srv)
+
+	for _, contentType := range []string{"", "text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x"} {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api-token", strings.NewReader("{}"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
+		req.AddCookie(&http.Cookie{Name: "sessionToken", Value: session})
+		res, err := srv.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var env envelope
+		_ = json.NewDecoder(res.Body).Decode(&env)
+		_ = res.Body.Close()
+		if res.StatusCode != http.StatusBadRequest {
+			t.Errorf("%q: status = %d, want %d", contentType, res.StatusCode, http.StatusBadRequest)
+		}
+		if env.Error == nil || env.Error.Code != "AOS_AUTH_HTTP_NOT_JSON" {
+			t.Errorf("%q: error = %+v, want AOS_AUTH_HTTP_NOT_JSON", contentType, env.Error)
+		}
+	}
+	if got := currentAPITokenPrefix(t, srv, session); got != "" {
+		t.Fatalf("a form post issued an API token (%q)", got)
+	}
+
+	// The browser tab's own request: the cookie, and a JSON body.
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api-token", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	req.AddCookie(&http.Cookie{Name: "sessionToken", Value: session})
+	res, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("the browser tab's JSON request = %d, want 200", res.StatusCode)
+	}
+	if got := currentAPITokenPrefix(t, srv, session); got == "" {
+		t.Error("the browser tab's JSON request issued no API token")
+	}
+}

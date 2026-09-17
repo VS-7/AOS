@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/OWNER/aos/internal/transport/daemonclient"
+	"github.com/OWNER/aos/internal/transport/fileapi/contentpolicy"
 )
 
 // The daemon paths the window serves through its own asset host rather than
@@ -307,7 +308,8 @@ var responseHeaders = []string{
 // forward sends a GET for daemonPath (escaped) to the daemon, in workspace,
 // with the window's credential and relays the answer. An opened artifact's
 // answer (see artifactFrames) goes to any origin, with its CSP rewritten by
-// opened; every other answer goes to the window's own origin only.
+// opened; every other answer goes to the window's own origin only, and a
+// file's content under contentpolicy.
 func forward(w http.ResponseWriter, r *http.Request, daemon *daemonclient.Client, log *slog.Logger, workspace, daemonPath string, opened func(csp string) string) {
 	if r.URL.RawQuery != "" {
 		daemonPath += "?" + r.URL.RawQuery
@@ -333,6 +335,13 @@ func forward(w http.ResponseWriter, r *http.Request, daemon *daemonclient.Client
 		}
 	} else {
 		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
+	}
+	// A workspace file is whatever an agent wrote, served from the origin the
+	// bridge answers, where a same-origin script can set the runtime's header.
+	// Guarded here whatever the daemon sent: one of another version may have
+	// sent nothing.
+	if strings.HasPrefix(r.URL.Path, contentRoute) {
+		contentpolicy.Apply(w.Header())
 	}
 	w.WriteHeader(res.StatusCode)
 	if _, err := io.Copy(w, res.Body); err != nil {

@@ -245,7 +245,7 @@ func (s *Service) Call(ctx context.Context, in CallInput) (CallOutput, error) {
 	if err != nil {
 		return CallOutput{}, err
 	}
-	factory, err := s.reachable(ts)
+	factory, err := s.reachable("Call", ts)
 	if err != nil {
 		return CallOutput{}, err
 	}
@@ -261,7 +261,7 @@ func (s *Service) Call(ctx context.Context, in CallInput) (CallOutput, error) {
 		s.audit(ctx, id, tool, s.clock.Now().Sub(start), callErr)
 	}()
 
-	adapter, ctx, cerr := s.connect(ctx, ts, factory)
+	adapter, ctx, cerr := s.connect(ctx, "Call", ts, factory)
 	if cerr != nil {
 		callErr = cerr
 		return CallOutput{}, callErr
@@ -279,14 +279,15 @@ func (s *Service) Call(ctx context.Context, in CallInput) (CallOutput, error) {
 
 // reachable is what has to hold before anything is attempted against a
 // toolset: it is enabled, and this build has an adapter for its type. Neither
-// is an attempt, so Call does not audit them.
-func (s *Service) reachable(ts *Toolset) (Factory, error) {
+// is an attempt, so Call does not audit them. op is the Service method asking,
+// which its refusals name as their cause.
+func (s *Service) reachable(op string, ts *Toolset) (Factory, error) {
 	if ts.Status == StatusDisabled {
-		return nil, errDisabled(ts.ID)
+		return nil, errDisabled(op, ts.ID)
 	}
 	factory, ok := s.adapters[ts.Type]
 	if !ok {
-		return nil, errTypeNotAvailable(ts.Type)
+		return nil, errTypeNotAvailable(op, ts.Type)
 	}
 	return factory, nil
 }
@@ -296,7 +297,7 @@ func (s *Service) reachable(ts *Toolset) (Factory, error) {
 // whether it then calls a tool or only asks which tools there are. The adapter
 // comes back connected, for the caller to close; on failure it is already
 // closed. The context it returns carries the allowlist the adapter was given.
-func (s *Service) connect(ctx context.Context, ts *Toolset, factory Factory) (Adapter, context.Context, error) {
+func (s *Service) connect(ctx context.Context, op string, ts *Toolset, factory Factory) (Adapter, context.Context, error) {
 	resolved, err := interpolateToolset(*ts, s.env)
 	if err != nil {
 		return nil, ctx, err
@@ -313,11 +314,11 @@ func (s *Service) connect(ctx context.Context, ts *Toolset, factory Factory) (Ad
 	// run without a sandbox attached to ctx.
 	if ts.Skill != "" && (ts.Type == RESTAPI || ts.Type == MCPHTTP) {
 		if s.network == nil {
-			return nil, ctx, errNetworkGuardUnavailable(ts.ID)
+			return nil, ctx, errNetworkGuardUnavailable(op, ts.ID)
 		}
 		hosts, err := s.network.NetworkHosts(ctx, ts.Skill)
 		if err != nil {
-			return nil, ctx, errNetworkLookupFailed(ts.ID, ts.Skill, err)
+			return nil, ctx, errNetworkLookupFailed(op, ts.ID, ts.Skill, err)
 		}
 		ctx = WithAllowedHosts(ctx, hosts)
 	}
@@ -325,7 +326,7 @@ func (s *Service) connect(ctx context.Context, ts *Toolset, factory Factory) (Ad
 	adapter := factory()
 	if err := adapter.Connect(ctx, resolved); err != nil {
 		_ = adapter.Close()
-		return nil, ctx, errConnectFailed(ts.ID, err)
+		return nil, ctx, errConnectFailed(op, ts.ID, err)
 	}
 	return adapter, ctx, nil
 }
@@ -347,11 +348,11 @@ func (s *Service) Tools(ctx context.Context, in GetInput) (ToolsOutput, error) {
 	if err != nil {
 		return ToolsOutput{}, err
 	}
-	factory, err := s.reachable(ts)
+	factory, err := s.reachable("Tools", ts)
 	if err != nil {
 		return ToolsOutput{}, err
 	}
-	adapter, ctx, err := s.connect(ctx, ts, factory)
+	adapter, ctx, err := s.connect(ctx, "Tools", ts, factory)
 	if err != nil {
 		return ToolsOutput{}, err
 	}
