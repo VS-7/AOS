@@ -223,7 +223,7 @@ A field left nil is unchanged; paths, given at all, replaces the field wholesale
         "null",
         "string"
       ],
-      "description": "New description. Omit to leave unchanged."
+      "description": "New description. Empty string clears it. Omit to leave unchanged."
     },
     "status": {
       "type": [
@@ -257,7 +257,7 @@ A field left nil is unchanged; paths, given at all, replaces the field wholesale
         "null",
         "string"
       ],
-      "description": "New source directory — an absolute, existing path. Omit to leave unchanged."
+      "description": "New source directory — an absolute, existing path. Empty string unbinds it. Omit to leave unchanged."
     },
     "paths": {
       "type": [
@@ -274,7 +274,7 @@ A field left nil is unchanged; paths, given at all, replaces the field wholesale
         "null",
         "string"
       ],
-      "description": "New body content, in Markdown. Omit to leave unchanged."
+      "description": "New body content, in Markdown. Empty string clears it. Omit to leave unchanged."
     },
     "_reasoning": {
       "type": "string",

@@ -187,13 +187,13 @@ type UpdateInput struct {
 	ID string `json:"id" jsonschema:"Identifier of the project to update." validate:"required,notblank"`
 
 	Name        *string  `json:"name,omitempty" jsonschema:"New name. Omit to leave unchanged."`
-	Description *string  `json:"description,omitempty" jsonschema:"New description. Omit to leave unchanged."`
+	Description *string  `json:"description,omitempty" jsonschema:"New description. Empty string clears it. Omit to leave unchanged."`
 	Status      *Status  `json:"status,omitempty" jsonschema:"New lifecycle status. Omit to leave unchanged."`
 	Color       *string  `json:"color,omitempty" jsonschema:"New display color. Omit to leave unchanged."`
 	Icon        *string  `json:"icon,omitempty" jsonschema:"New display icon. Omit to leave unchanged."`
-	Source      *string  `json:"source,omitempty" jsonschema:"New source directory — an absolute, existing path. Omit to leave unchanged."`
+	Source      *string  `json:"source,omitempty" jsonschema:"New source directory — an absolute, existing path. Empty string unbinds it. Omit to leave unchanged."`
 	Paths       []string `json:"paths,omitempty" jsonschema:"New list of associated paths. Replaces the field wholesale when given."`
-	Content     *string  `json:"content,omitempty" jsonschema:"New body content, in Markdown. Omit to leave unchanged."`
+	Content     *string  `json:"content,omitempty" jsonschema:"New body content, in Markdown. Empty string clears it. Omit to leave unchanged."`
 
 	command.Reasoning
 }

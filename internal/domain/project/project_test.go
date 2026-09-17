@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"os"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -454,4 +456,32 @@ func TestCreateReportsARacedDuplicateAsAConflict(t *testing.T) {
 	}
 	_, err := svc.Create(ctx, project.CreateInput{Name: "Twice"})
 	requireCode(t, err, "PROJECT_ALREADY_EXISTS")
+}
+
+// An agent reads what a command takes from its jsonschema, and nothing else.
+// Update honours an empty string as "clear this field"
+// (TestUpdateClearsDescriptionSourceAndContentWithEmptyStrings above), but
+// the docs said only "Omit to leave unchanged" — so there was no way to learn
+// how to unbind a project's source without reading the Go.
+func TestUpdateInputDocumentsThatAnEmptyStringClears(t *testing.T) {
+	fields := reflect.VisibleFields(reflect.TypeOf(project.UpdateInput{}))
+	for _, name := range []string{"Description", "Source", "Content"} {
+		field, ok := findField(fields, name)
+		if !ok {
+			t.Fatalf("UpdateInput has no %s field", name)
+		}
+		doc := field.Tag.Get("jsonschema")
+		if !strings.Contains(doc, "Empty string") {
+			t.Errorf("%s: %q says nothing about clearing it with an empty string", name, doc)
+		}
+	}
+}
+
+func findField(fields []reflect.StructField, name string) (reflect.StructField, bool) {
+	for _, field := range fields {
+		if field.Name == name {
+			return field, true
+		}
+	}
+	return reflect.StructField{}, false
 }
